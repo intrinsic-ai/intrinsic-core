@@ -20,6 +20,7 @@ set -euo pipefail
 WORK_DIR=""
 
 NVIDIA_DRIVER_VERSION="${NVIDIA_DRIVER_VERSION:-595}"
+NVIDIA_DEVICE_PLUGIN_VERSION="0.20.1"
 
 function show_help() {
     cat << 'EOF'
@@ -130,6 +131,24 @@ EOF
     fi
 }
 
+function configure_unattended_upgrades() {
+    # An unattended upgrade of the NVIDIA packages replaces the user-space
+    # libraries while the old kernel module stays loaded, breaking nvidia-smi
+    # and GPU containers with "Driver/library version mismatch" until the next
+    # reboot. Leave upgrading them to deliberate reruns of this script, which
+    # reloads the driver (or asks for a reboot).
+    mkdir -p /etc/apt/apt.conf.d
+    cat << 'EOF' > /etc/apt/apt.conf.d/51unattended-upgrades-nvidia
+// Managed by setup_nvidia.sh. Entries are Python regular expressions matched
+// against the start of the package name.
+Unattended-Upgrade::Package-Blacklist {
+    "nvidia-";
+    "libnvidia-";
+    "linux-modules-nvidia-";
+};
+EOF
+}
+
 function configure_container_toolkit_repo() {
     mkdir -p /usr/share/keyrings
     run_silent sh -c "curl -fsSL https://nvidia.github.io/libnvidia-container/gpgkey | gpg --dearmor --yes -o /usr/share/keyrings/nvidia-container-toolkit-keyring.gpg"
@@ -139,6 +158,7 @@ function configure_container_toolkit_repo() {
 function install_dependencies() {
     echo "Installing NVIDIA driver and container toolkit..."
     configure_environment
+    configure_unattended_upgrades
     configure_container_toolkit_repo
 
     local packages=(
@@ -149,8 +169,49 @@ function install_dependencies() {
 
     run_silent apt-get update
     run_silent apt-get install -y "${packages[@]}"
+}
 
-    modprobe nvidia nvidia-uvm nvidia-modeset nvidia-drm 2>/dev/null || true
+function unload_nouveau() {
+    if [[ ! -d /sys/module/nouveau ]]; then
+        return
+    fi
+
+    # The NVIDIA driver cannot attach to a GPU that nouveau already claimed
+    # (dmesg: "NVRM: GPU 0000:01:00.0 is already bound to nouveau"). The
+    # driver packages blacklist nouveau, but that only takes effect on reboot.
+    echo "Unloading the nouveau driver..."
+    if ! modprobe -r nouveau 2>/dev/null; then
+        echo "Error: The nouveau driver is using the GPU and could not be unloaded (it is probably driving the display)." >&2
+        echo "       Reboot the system (nouveau is now blacklisted) and rerun this script." >&2
+        exit 1
+    fi
+}
+
+function load_kernel_modules() {
+    unload_nouveau
+
+    local installed_version
+    if ! installed_version=$(modinfo -F version nvidia 2>/dev/null); then
+        echo "Error: No NVIDIA kernel module is available for the running kernel ($(uname -r))." >&2
+        echo "       The DKMS build probably failed; check /var/lib/dkms/nvidia/*/build/make.log." >&2
+        exit 1
+    fi
+
+    # apt-get replaces the user-space driver libraries in place, but a
+    # previously loaded kernel module stays active. Until the system is
+    # rebooted, nvidia-smi (and therefore the device plugin) fails with
+    # "Driver/library version mismatch".
+    if [[ -f /sys/module/nvidia/version ]]; then
+        local loaded_version
+        loaded_version=$(cat /sys/module/nvidia/version)
+        if [[ "${loaded_version}" != "${installed_version}" ]]; then
+            echo "Error: NVIDIA driver ${loaded_version} is loaded, but version ${installed_version} was installed." >&2
+            echo "       Reboot the system and rerun this script." >&2
+            exit 1
+        fi
+    fi
+
+    run_silent modprobe -a nvidia nvidia-uvm nvidia-modeset nvidia-drm
 }
 
 function write_nvdp_config() {
@@ -194,18 +255,21 @@ EOF
     local nvdp_values="${WORK_DIR}/nvdp_values.yaml"
     write_nvdp_config "${nvdp_values}"
 
+    echo "Installing nvidia-device-plugin version ${NVIDIA_DEVICE_PLUGIN_VERSION}..."
     run_silent helm repo add nvdp https://nvidia.github.io/k8s-device-plugin
     run_silent helm repo update nvdp
     run_silent helm upgrade --install nvidia-device-plugin nvdp/nvidia-device-plugin \
-        --namespace kube-system -f "${nvdp_values}"
+        --namespace kube-system --version "${NVIDIA_DEVICE_PLUGIN_VERSION}" -f "${nvdp_values}"
     run_silent kubectl rollout status daemonset/nvidia-device-plugin -n kube-system --timeout=300s
 }
 
 function verify_gpu() {
     echo "Verifying GPU access..."
-    if ! nvidia-smi >/dev/null 2>&1; then
-        echo "Error: nvidia-smi failed to communicate with the NVIDIA driver." >&2
-        echo "       Please check 'dmesg | grep -i nvidia' or reboot the system." >&2
+    local output
+    if ! output=$(nvidia-smi 2>&1); then
+        echo "Error: nvidia-smi failed to communicate with the NVIDIA driver:" >&2
+        echo "${output}" >&2
+        echo "       Check 'dmesg | grep -i NVRM' or reboot the system, then rerun this script." >&2
         exit 1
     fi
 }
@@ -229,8 +293,11 @@ function main() {
 
     check_gpu
     install_dependencies
-    configure_k3s
+    load_kernel_modules
+    # Verify the driver works before touching K3s: if it doesn't, the device
+    # plugin rollout below would only fail with an opaque timeout.
     verify_gpu
+    configure_k3s
 
     echo "NVIDIA setup complete!"
     echo "GPU: $(nvidia-smi --query-gpu=name,driver_version --format=csv,noheader | head -n1)"

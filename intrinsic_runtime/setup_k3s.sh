@@ -225,6 +225,22 @@ function run_silent() {
     trap - INT TERM
 }
 
+function check_nvidia_support() {
+    # setup_nvidia.sh stores its K3s configuration (a containerd drop-in and
+    # the device plugin) in cluster state that k3s-uninstall.sh removes, so
+    # recreating the cluster silently loses GPU support. The container toolkit
+    # survives, so use it to detect that setup_nvidia.sh had been run.
+    if ! command -v nvidia-container-runtime >/dev/null 2>&1; then
+        return
+    fi
+
+    if ! helm status nvidia-device-plugin -n kube-system >/dev/null 2>&1; then
+        echo ""
+        echo "WARNING: The NVIDIA container toolkit is installed but K3s GPU support is not configured."
+        echo "         Rerun setup_nvidia.sh to restore GPU support in the cluster."
+    fi
+}
+
 function main() {
     local K3S_VERSION="v1.36.2+k3s1"
     local HELM_VERSION="v4.2.3"
@@ -278,6 +294,8 @@ function main() {
       --version "${CHART_ASSIGNMENT_CONTROLLER_VERSION}" --set webhook.enabled=false
 
     echo "Setup complete!"
+
+    check_nvidia_support
 }
 
 main "$@"
