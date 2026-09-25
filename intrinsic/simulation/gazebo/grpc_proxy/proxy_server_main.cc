@@ -46,8 +46,9 @@
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 
+// Use ingress instead of internal service address.
 ABSL_FLAG(std::string, simulation_service_address,
-          "simulation-service.app-intrinsic-base.svc.cluster.local:8088",
+          "istio-ingressgateway.app-ingress.svc.cluster.local:80",
           "Address of the simulation service.");
 
 namespace intrinsic {

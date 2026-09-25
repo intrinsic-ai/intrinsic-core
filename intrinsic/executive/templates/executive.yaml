@@ -87,7 +87,7 @@ spec:
             {{- end }}
             # Simulation service is only started if the deployment is in simulated mode.
             {{ if .Values.simulated }}
-            - --simulation_service_address=simulation-service.app-intrinsic-base.svc.cluster.local:8088
+            - --simulation_service_address=simulation-service.app-intrinsic-base.svc.cluster.local:8080
             {{- end }}
             - --conductor_service_address=conductor.app-intrinsic-base.svc.cluster.local:8080
             {{- if .Values.tracing_show_internal_clips_runs_leaking_memory }}

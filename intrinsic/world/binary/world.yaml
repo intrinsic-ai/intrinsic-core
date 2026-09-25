@@ -20,6 +20,8 @@ spec:
   selector:
     matchLabels:
       app: world
+  strategy:
+    type: Recreate
   template:
     metadata:
       labels:
@@ -52,7 +54,8 @@ spec:
             - --disable_asset_frame_edits
             # Conductor flags
             - --hss_service_address=hot-shared-state.app-intrinsic-base.svc.cluster.local:9777
-            - --sim_service_address=simulation-service.app-intrinsic-base.svc.cluster.local:8088
+            # The simulation service runs in this pod, so it is reachable over loopback.
+            - --sim_service_address=localhost:8088
             - --workcell_cluster_service=workcell-cluster-service.app-intrinsic-base.svc.cluster.local:9957
             - --asset_deployment_service=asset-deployment.app-intrinsic-base.svc.cluster.local:8080
             - --asset_instances_service=asset-instances-v1.app-intrinsic-base.svc.cluster.local:8080
@@ -66,6 +69,37 @@ spec:
           volumeMounts:
             - name: worlds
               mountPath: /mnt/worlds
+        - name: simulation-service
+          image: {{ .Values.registry }}{{ .Values.images.simulation_service }}
+          args:
+            - intrinsic/kubernetes/waitforservices/waitforservices
+            # Wait for the Zenoh router to be ready before starting the service. Else,
+            # simulation service querying for stored runtime state via kv store may
+            # falsely return key_not_found error.
+            - zenoh-router.app-intrinsic-base.svc.cluster.local:7447
+            - --
+            - /intrinsic/simulation/service/simulation_service_main
+            - --grpc_verbosity=INFO
+            - --port=8088
+            - --grpc_connect_timeout=5m
+            - --resource_registry_address=resource-registry.app-intrinsic-base.svc.cluster.local:8080
+            # The world service runs in this pod, so it is reachable over loopback.
+            - --world_service_address=localhost:8080
+            - --hss_application_service_address=hot-shared-state.app-intrinsic-base.svc.cluster.local:9777
+            {{ if .Values.feature_options.enable_gzserver_asset_service }}
+            - --simulator_from_resource_registry
+            {{ else }}
+            # Address at which the SimulationControlService is advertised in gzserver.
+            # Note: 50053 is not a declared port of the simulation-server Service. We rely on it
+            # being a headless service to connect to the port. The simulation service gracefully handles
+            # connection to this address when it is unavailable.
+            - --sim_control_address=simulation-server.app-intrinsic-app-chart.svc.cluster.local:50053
+            {{ end }}
+          volumeMounts:
+            - name: simulation-tmp
+              mountPath: /tmp
+          securityContext:
+            readOnlyRootFilesystem: true
       securityContext:
         runAsUser: 65532
         runAsGroup: 65532
@@ -73,6 +107,9 @@ spec:
         - name: worlds
           persistentVolumeClaim:
             claimName: world-storage-claim
+        - name: simulation-tmp
+          emptyDir:
+            medium: Memory
 ---
 # TODO: anyone -- We don't really need to be using a persistent volume here. The
 # goal in the future is to remove this claim and to instead use a long-running
@@ -128,6 +165,60 @@ spec:
       targetPort: 8082
   selector:
     app: world
+---
+# TODO(b/566183116): temporary workaround for seamless updates for existing
+# deployments since Kubernetes does not allow changing an existing headless
+# service to ClusterIP (clusterIP is immutable).
+apiVersion: v1
+kind: Service
+metadata:
+  name: simulation-service
+spec:
+  type: ExternalName
+  externalName: simulation-service2.app-intrinsic-base.svc.cluster.local
+---
+apiVersion: v1
+kind: Service
+metadata:
+  name: simulation-service2
+  labels:
+    app: simulation-service
+spec:
+  type: ClusterIP
+  ports:
+    - port: 8080
+      name: grpc-simulation-service
+      targetPort: 8088
+    # Backwards compatibility for executive.
+    - port: 8088
+      name: grpc-simulation-legacy
+      targetPort: 8088
+  selector:
+    app: world
+---
+apiVersion: networking.istio.io/v1beta1
+kind: VirtualService
+metadata:
+  name: simulation-service
+spec:
+  # hosts & gateways are boilerplate required for externally-reachable VirtualServices.
+  hosts:
+    - "*"
+  gateways:
+    - app-ingress/gateway
+  http:
+    - match:
+        - uri:
+            prefix: /intrinsic_proto.simulation.first_party.SimulationService/
+        - uri:
+            prefix: /intrinsic_proto.simulation.v1.SimulationService/
+        - uri:
+            prefix: /intrinsic_proto.simulation.v1.SimulatorWorldSync/
+      route:
+        - destination:
+            host: simulation-service2
+            port:
+              number: 8088
 ---
 apiVersion: networking.istio.io/v1beta1
 kind: VirtualService

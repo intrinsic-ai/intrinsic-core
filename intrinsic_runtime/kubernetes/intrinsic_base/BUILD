@@ -87,7 +87,6 @@ helm_chart(
         "//intrinsic/resources/service:runtime_db_template",
         "//intrinsic/resources:resource-registry-template",
         "//intrinsic/scene/service:scene_object_import_template",  # needed for scene_object_import
-        "//intrinsic/simulation/templates:simulation-service-template",
         "//intrinsic/skills/templates:skill-registry-template",
         "//intrinsic/storage/artifacts:artifacts-service-template",
         "//intrinsic/world/binary:world-template",
