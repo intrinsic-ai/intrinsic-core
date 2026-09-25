@@ -40,6 +40,7 @@
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/python/gil_aware_pubsub.h"
 #include "intrinsic/platform/pubsub/subscription.h"
+#include "intrinsic/platform/pubsub/zenoh_util/zenoh_handle.h"
 #include "pybind11/cast.h"
 #include "pybind11/native_enum.h"
 #include "pybind11_abseil/absl_casters.h"
@@ -453,6 +454,14 @@ struct PyLivelinessSubscriptionDeleter {
   }
 };
 
+template <typename T>
+struct PyReleaseGilDeleter {
+  void operator()(T* p) const {
+    pybind11::gil_scoped_release release_gil;
+    delete p;
+  }
+};
+
 }  // namespace
 
 PYBIND11_MODULE(pubsub, m) {
@@ -470,12 +479,17 @@ PYBIND11_MODULE(pubsub, m) {
 
   pybind11::class_<LivelinessQuery>(m, "LivelinessQuery");
 
-  pybind11::class_<GilAwarePubSub>(m, "PubSub")
+  pybind11::class_<
+      GilAwarePubSub,
+      std::unique_ptr<GilAwarePubSub, PyReleaseGilDeleter<GilAwarePubSub>>>(
+      m, "PubSub")
       .def(pybind11::init<>())
       .def(pybind11::init<std::string_view>(),
            pybind11::arg("participant_name"))
       .def(pybind11::init<std::string_view, std::string_view>(),
            pybind11::arg("participant_name"), pybind11::arg("config"))
+      .def_static("DestroySessionWhenUnused", &PubSub::DestroySessionWhenUnused,
+                  pybind11::call_guard<pybind11::gil_scoped_release>())
       // Cast required for overloaded methods:
       // https://pybind11.readthedocs.io/en/stable/classes.html#overloaded-methods
       .def("CreatePublisher", &GilAwarePubSub::CreatePublisher,
@@ -500,7 +514,9 @@ PYBIND11_MODULE(pubsub, m) {
       .def("LivelinessGetAllSynchronous", &LivelinessGetAllSynchronous,
            pybind11::arg("keyexpr"));
 
-  pybind11::class_<Publisher>(m, "Publisher")
+  pybind11::class_<Publisher,
+                   std::unique_ptr<Publisher, PyReleaseGilDeleter<Publisher>>>(
+      m, "Publisher")
       .def("Publish",
            static_cast<absl::Status (Publisher::*)(
                const google::protobuf::Message&) const>(&Publisher::Publish),
@@ -590,7 +606,8 @@ PYBIND11_MODULE(pubsub, m) {
                    std::unique_ptr<Subscription, PySubscriptionDeleter>>(
       m, "Subscription")
       .def("TopicName", &Subscription::TopicName)
-      .def("Unsubscribe", &Subscription::Unsubscribe);
+      .def("Unsubscribe", &Subscription::Unsubscribe,
+           pybind11::call_guard<pybind11::gil_scoped_release>());
 
   // The python GIL does not need to be locked during the entire destructor
   // of this class. Instead, the custom deleter provided during its
@@ -601,12 +618,14 @@ PYBIND11_MODULE(pubsub, m) {
       std::unique_ptr<LivelinessSubscription, PyLivelinessSubscriptionDeleter>>(
       m, "LivelinessSubscription")
       .def("KeyExpression", &LivelinessSubscription::KeyExpression)
-      .def("Unsubscribe", &LivelinessSubscription::Unsubscribe);
+      .def("Unsubscribe", &LivelinessSubscription::Unsubscribe,
+           pybind11::call_guard<pybind11::gil_scoped_release>());
 
   // Helper function for passing command line flags from Python code
   // to C++. Can be used in Python tests which start their own Zenoh routers,
   // and need to pass their URLs to C++ code.
   m.def("parse_command_line", &ParseCommandLine);
+  m.def("imw_is_initialized", []() { return Zenoh().imw_is_initialized(); });
 }
 
 }  // namespace pubsub

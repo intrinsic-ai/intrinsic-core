@@ -71,6 +71,11 @@ struct imw_query_options_t {
 
 imw_ret_t imw_init(const char* config);
 imw_ret_t imw_fini();
+// Destroys the session immediately if no active init references or child
+// entities (publishers, subscriptions, queryables) remain, or arms a sticky
+// per-session latch to destroy the session as soon as both counts reach zero.
+imw_ret_t imw_destroy_session_when_unused();
+bool imw_is_initialized();
 imw_ret_t imw_create_publisher(const char* keyexpr, const char* qos);
 imw_ret_t imw_destroy_publisher(const char* keyexpr);
 imw_ret_t imw_publish(const char* keyexpr, const void* bytes,

@@ -106,6 +106,13 @@ class PubSub {
   PubSub& operator=(PubSub&&) = default;
   virtual ~PubSub();
 
+  // Hints that the underlying Zenoh session should be torn down when no PubSub
+  // instances or child entities (publishers, subscriptions, queryables)
+  // remain. If the session is currently unused, it is torn down immediately.
+  // Otherwise, a sticky per-session latch is armed and teardown is deferred
+  // until the last active PubSub instance and child entity are destroyed.
+  static void DestroySessionWhenUnused();
+
   absl::StatusOr<Publisher> CreatePublisher(absl::string_view topic,
                                             const TopicConfig& config) const;
 

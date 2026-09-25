@@ -27,9 +27,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/platform/pubsub/zenoh_util:zenoh_config",
         "//intrinsic_sdk/intrinsic/platform/pubsub/zenoh_util:zenoh_handle",
         "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/synchronization",
     ],
 )
 

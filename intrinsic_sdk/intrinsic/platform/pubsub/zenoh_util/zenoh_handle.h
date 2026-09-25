@@ -69,6 +69,10 @@ struct ZenohHandle {
 
   std::add_pointer_t<imw_ret_t()> imw_fini;
 
+  std::add_pointer_t<imw_ret_t()> imw_destroy_session_when_unused;
+
+  std::add_pointer_t<bool()> imw_is_initialized;
+
   std::add_pointer_t<imw_ret_t(const char* keyexpr, const char* qos)>
       imw_create_publisher;
 

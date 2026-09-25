@@ -38,7 +38,6 @@ import (
 	"errors"
 	"flag"
 	"fmt"
-	"runtime"
 	"runtime/cgo"
 	"strings"
 	"sync"
@@ -174,7 +173,8 @@ func validZenohKey(key string) error {
 // Handle represents an instance of a Fast DDS pubsub adapter, as exposed via
 // the interface defined in pubsubinterface.PubSub.
 type Handle struct {
-	mutex sync.Mutex
+	mutex     sync.Mutex
+	closeOnce sync.Once
 
 	zenohHandle zenohHandle
 }
@@ -342,7 +342,9 @@ func (ps *Handle) NewLivelinessSubscription(keyExpr string, notifyAboutExistingT
 }
 
 func (q *livelinessQueryHandle) Close() {
-	q.queryHandle.Delete()
+	q.closeOnce.Do(func() {
+		q.queryHandle.Delete()
+	})
 }
 
 // LivelinessGet fetches currently available liveliness tokens matching the given key expression.
@@ -484,10 +486,13 @@ func (ps *Handle) KVStoreWithPrefix(prefix string) kvstore.KVStore {
 	return &kvStoreHandle{ps: ps, zenohHandle: ps.zenohHandle, keyPrefix: prefix}
 }
 
-// Close the PubSub connection, unsubscribe from all topics, and free the
-// associated resources.
+// Close the PubSub connection and free associated resources.
+// Note: The underlying Zenoh session is kept alive by default for the lifetime
+// of the process.
 func (ps *Handle) Close() {
-	ps.zenohHandle.Destroy()
+	ps.closeOnce.Do(func() {
+		_ = ps.zenohHandle.ImwFini()
+	})
 }
 
 type subscriptionHandle struct {
@@ -500,18 +505,18 @@ type subscriptionHandle struct {
 	exemplar    proto.Message
 
 	subHandle cgo.Handle
+	closeOnce sync.Once
 }
 
 func (s *subscriptionHandle) TopicName() string { return s.topicName }
 
 func (s *subscriptionHandle) Close() {
-	inKeyExprString := C.CString(s.fullTopicName)
-	defer C.free(unsafe.Pointer(inKeyExprString))
-
-	if err := s.zenohHandle.ImwDestroySubscription(s.fullTopicName, s); err != nil {
-		panic(err)
-	}
-	s.subHandle.Delete()
+	s.closeOnce.Do(func() {
+		if err := s.zenohHandle.ImwDestroySubscription(s.fullTopicName, s); err != nil {
+			panic(err)
+		}
+		s.subHandle.Delete()
+	})
 }
 
 // livelinessSubscriptionHandle is a handle for a subscription to
@@ -524,14 +529,17 @@ type livelinessSubscriptionHandle struct {
 	callbackPtr unsafe.Pointer
 
 	subHandle cgo.Handle
+	closeOnce sync.Once
 }
 
 // Close unsubscribes from liveliness notifications.
 func (s *livelinessSubscriptionHandle) Close() {
-	if err := s.zenohHandle.ImwDestroyLivelinessSubscription(s.keyExpr, s); err != nil {
-		panic(err)
-	}
-	s.subHandle.Delete()
+	s.closeOnce.Do(func() {
+		if err := s.zenohHandle.ImwDestroyLivelinessSubscription(s.keyExpr, s); err != nil {
+			panic(err)
+		}
+		s.subHandle.Delete()
+	})
 }
 
 // livelinessQueryHandle is a handle for LivelinessGet queries.
@@ -540,11 +548,13 @@ type livelinessQueryHandle struct {
 	onDone   func(keyexpr string)
 
 	queryHandle cgo.Handle
+	closeOnce   sync.Once
 }
 
 type publisherHandle struct {
 	topicName   string
 	zenohHandle zenohHandle
+	closeOnce   sync.Once
 }
 
 func (p *publisherHandle) TopicName() string { return p.topicName }
@@ -584,9 +594,11 @@ func (p *publisherHandle) HasMatchingSubscribers() (bool, error) {
 }
 
 func (p *publisherHandle) Close() {
-	if err := p.zenohHandle.ImwDestroyPublisher(addTopicPrefix(p.topicName)); err != nil {
-		panic(err)
-	}
+	p.closeOnce.Do(func() {
+		if err := p.zenohHandle.ImwDestroyPublisher(addTopicPrefix(p.topicName)); err != nil {
+			panic(err)
+		}
+	})
 }
 
 type kvStoreHandle struct {
@@ -736,11 +748,14 @@ type queryHandle struct {
 	query func(keyexpr string, bytes []byte)
 	done  func(keyexpr string)
 
-	handle cgo.Handle
+	handle    cgo.Handle
+	closeOnce sync.Once
 }
 
 func (q *queryHandle) Close() {
-	q.handle.Delete()
+	q.closeOnce.Do(func() {
+		q.handle.Delete()
+	})
 }
 
 type queryableHandle struct {
@@ -748,6 +763,7 @@ type queryableHandle struct {
 	keyexpr     string
 	callback    func(key string, query []byte, context unsafe.Pointer)
 	handle      cgo.Handle
+	closeOnce   sync.Once
 }
 
 func (q *queryableHandle) Reply(key string, context unsafe.Pointer, reply proto.Message) error {
@@ -767,10 +783,12 @@ func (q *queryableHandle) Reply(key string, context unsafe.Pointer, reply proto.
 }
 
 func (q *queryableHandle) Close() {
-	if err := q.zenohHandle.ImwDestroyQueryable(q.keyexpr, q); err != nil {
-		panic(err)
-	}
-	q.handle.Delete()
+	q.closeOnce.Do(func() {
+		if err := q.zenohHandle.ImwDestroyQueryable(q.keyexpr, q); err != nil {
+			panic(err)
+		}
+		q.handle.Delete()
+	})
 }
 
 //export intrinsic_ImwQueryableStaticCallback
@@ -1053,9 +1071,9 @@ func (kv *kvStoreHandle) GetGlobalReplicationNamespace() string {
 }
 
 type zenohHandle interface {
-	Destroy()
 	ImwInit(config string) error
 	ImwFini() error
+	ImwDestroySessionWhenUnused() error
 	ImwCreatePublisher(keyExpr string, qos string) error
 	ImwDestroyPublisher(keyExpr string) error
 	ImwPublish(keyExpr string, bytes []byte) error
@@ -1080,48 +1098,46 @@ type zenohHandleImpl struct {
 }
 
 var (
-	globalZenohHandle   *zenohHandleImpl
-	zenohHandleRefCount int64 = 0
-	zenohHandleMutex    sync.Mutex
+	globalZenohHandle *zenohHandleImpl
+	zenohHandleMutex  sync.Mutex
 )
 
 func getZenohHandle() (zenohHandle, error) {
 	zenohHandleMutex.Lock()
 	defer zenohHandleMutex.Unlock()
 
-	if zenohHandleRefCount == 0 {
+	if globalZenohHandle == nil {
 		ptr := C.NewZenohHandle()
 		if ptr == nil {
-			return nil, fmt.Errorf("something went wrong")
+			return nil, fmt.Errorf("failed to create Zenoh handle")
 		}
 
 		globalZenohHandle = &zenohHandleImpl{
 			ptr: ptr,
 		}
-
-		// Unconditionally close the zenoh handle when the pointer to
-		// it is garbage collected. This case can occur if the refcount
-		// never goes to zero before a program terminates.
-		runtime.AddCleanup(globalZenohHandle, func(ptr unsafe.Pointer) {
-			_ = C.ZenohHandleImwFini(ptr)
-		}, globalZenohHandle.ptr)
-	} else if globalZenohHandle == nil {
-		panic(fmt.Errorf("reference count is nonzero, but globalZenohHandle is nil"))
 	}
 
 	return globalZenohHandle, nil
 }
 
-func (z *zenohHandleImpl) Destroy() {
+// DestroySessionWhenUnused hints that the Zenoh session should be closed when
+// no active PubSub handles or child entities (publishers, subscriptions,
+// queryables) remain.
+func DestroySessionWhenUnused() error {
 	zenohHandleMutex.Lock()
-	defer zenohHandleMutex.Unlock()
-
-	zenohHandleRefCount--
-	if zenohHandleRefCount == 0 {
-		z.ImwFini()
-		C.DestroyZenohHandle(z.ptr)
-		globalZenohHandle = nil
+	zh := globalZenohHandle
+	zenohHandleMutex.Unlock()
+	if zh == nil {
+		return nil
 	}
+	return zh.ImwDestroySessionWhenUnused()
+}
+
+func (z *zenohHandleImpl) ImwDestroySessionWhenUnused() error {
+	if res := C.ZenohHandleImwDestroySessionWhenUnused(z.ptr); res != 0 {
+		return errorFromImwRet(res)
+	}
+	return nil
 }
 
 // String type is no bueno here, pass a struct

@@ -64,6 +64,10 @@ PubSub::PubSub(absl::string_view participant_name, absl::string_view config)
 
 PubSub::~PubSub() = default;
 
+void PubSub::DestroySessionWhenUnused() {
+  Zenoh().imw_destroy_session_when_unused();
+}
+
 absl::StatusOr<Publisher> PubSub::CreatePublisher(
     absl::string_view topic_name, const TopicConfig& config) const {
   auto prefixed_name = ZenohHandle::add_topic_prefix(topic_name);

@@ -35,9 +35,16 @@
 
 namespace intrinsic {
 
-Publisher::Publisher(Publisher&&) = default;
+Publisher::Publisher(Publisher&& other)
+    : topic_name_(std::move(other.topic_name_)),
+      publisher_data_(std::move(other.publisher_data_)) {
+  other.topic_name_.clear();
+}
 
 absl::StatusOr<bool> Publisher::HasMatchingSubscribers() {
+  if (!publisher_data_) {
+    return absl::FailedPreconditionError("Publisher was moved from.");
+  }
   bool result;
   // check error
   if (imw_ret_t status = Zenoh().imw_publisher_has_matching_subscribers(
@@ -49,11 +56,13 @@ absl::StatusOr<bool> Publisher::HasMatchingSubscribers() {
 }
 
 Publisher& Publisher::operator=(Publisher&& other) {
+  if (this == &other) return *this;
   if (publisher_data_ && !publisher_data_->prefixed_name.empty()) {
     Zenoh().imw_destroy_publisher(publisher_data_->prefixed_name.c_str());
   }
   topic_name_ = std::move(other.topic_name_);
   publisher_data_ = std::move(other.publisher_data_);
+  other.topic_name_.clear();
   return *this;
 }
 
@@ -76,6 +85,9 @@ absl::Status Publisher::Publish(const google::protobuf::Message& message,
 
 absl::Status Publisher::Publish(google::protobuf::Any message,
                                 absl::Time event_time) const {
+  if (!publisher_data_) {
+    return absl::FailedPreconditionError("Publisher was moved from.");
+  }
   thread_local intrinsic_proto::pubsub::PubSubPacket wrapper;
   *wrapper.mutable_payload() = std::move(message);
   // When the pubsub message was sent out.
