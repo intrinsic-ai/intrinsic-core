@@ -29,7 +29,7 @@ https://github.com/intrinsic-ai/intrinsic-core/blob/b6962e49811f366faa8ea815bfa8
 # head and not on release branches themselves.
 # TODO(b/424923989): when this is updated nightly remove the warning not to
 # rely on it being update to date.
-PLATFORM_RELEASE_NIGHTLY = "0.20260924.0-RC00"
+PLATFORM_RELEASE_NIGHTLY = "0.20260925.0-RC00"
 
 # WARNING: This string is currently updated manually by the RelEng team. It
 # may not represent the absolute most recent prod release and is only
