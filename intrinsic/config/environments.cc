@@ -80,6 +80,18 @@ std::string PortalDomain(absl::string_view env) {
   }
 }
 
+std::string EquipmentDomain(absl::string_view env) {
+  if (env == kProd) {
+    return kEquipmentDomainProd;
+  } else if (env == kStaging) {
+    return kEquipmentDomainStaging;
+  } else if (env == kDev) {
+    return kEquipmentDomainDev;
+  } else {
+    return "";
+  }
+}
+
 std::string AccountsDomain(absl::string_view env) {
   if (env == kProd) {
     return kAccountsDomainProd;
