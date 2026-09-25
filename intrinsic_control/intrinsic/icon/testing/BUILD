@@ -57,7 +57,6 @@ cc_library(
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log:check",
         "@com_google_googletest//:gtest",
-        "@gperftools//:libraries",
     ],
 )
 

@@ -83,14 +83,6 @@ filegroup(
         urls = ["https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver/archive/refs/tags/4.1.0.tar.gz"],
     )
 
-    http_archive(
-        name = "gperftools",
-        build_file = Label("//intrinsic/production/external:gperftools.BUILD.bazel"),
-        integrity = "sha256-uxcqVDEvYjtT2LlMqwQCSMVZ3s24dXTthz6AtRbm6Os=",
-        strip_prefix = "gperftools-2.17.2",
-        urls = ["https://github.com/gperftools/gperftools/releases/download/gperftools-2.17.2/gperftools-2.17.2.tar.gz"],
-    )
-
     # TODO build kubectl from source (go package "k8s.io/kubernetes/cmd/kubectl")
     # - https://github.com/bazel-contrib/bazel-gazelle/issues/1392#issuecomment-2642983316
     http_archive(

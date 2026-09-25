@@ -494,6 +494,7 @@ bazel_dep(name = "googleapis", version = "0.0.0-20260825-d10ac924", repo_name = 
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", repo_name = "com_google_googletest")
 bazel_dep(name = "grpc_ecosystem_grpc_gateway", version = "2.29.0.bcr.3", repo_name = "com_github_grpc_ecosystem_grpc_gateway_v2")
 bazel_dep(name = "grpc", version = "1.74.0", repo_name = "com_github_grpc_grpc")
+bazel_dep(name = "gperftools", version = "2.18.1")  
 bazel_dep(name = "gz-common", version = "7.4.0")  
 bazel_dep(name = "gz-math", version = "9.3.0")
 bazel_dep(name = "gz-msgs", version = "12.0.2")
@@ -619,7 +620,6 @@ use_repo(
     "cgal",
     "coal",
     "firestore_emulator",
-    "gperftools",
     "kubebuilder_test_tools",
     "kubernetes_json_schema",
     "sysroot_glvnd_stubs",

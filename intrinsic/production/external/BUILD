@@ -68,12 +68,9 @@ java_binary(
 cc_test(
     name = "gperftools_test",
     srcs = ["gperftools_test.cc"],
-    linkopts = [
-        "-lprofiler",
-        "-ltcmalloc",
-    ],
     deps = [
         "@com_google_googletest//:gtest_main",
-        "@gperftools",
+        "@gperftools//:cpu_profiler",
+        "@tcmalloc//tcmalloc",
     ],
 )
