@@ -459,7 +459,7 @@ bazel_dep(name = "com_github_mvukov_rules_ros2", version = "0.0.0-20260718-352a8
 bazel_dep(name = "cpp-httplib", version = "0.46.0")  
 bazel_dep(name = "cppitertools", version = "2.2")  
 bazel_dep(name = "cppregpattern", version = "1.0.1")  
-bazel_dep(name = "curl", version = "8.21.0.bcr.2", repo_name = "com_github_curl_curl")  
+bazel_dep(name = "curl", version = "8.22.0", repo_name = "com_github_curl_curl")  
 bazel_dep(name = "dumb-init", version = "1.2.5")
 bazel_dep(name = "egl-registry", version = "0.0.0-20250527", repo_name = "egl_registry")  
 bazel_dep(name = "eigen", version = "5.0.1.bcr.2", repo_name = "com_gitlab_libeigen_eigen")
