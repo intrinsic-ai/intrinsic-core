@@ -44,6 +44,9 @@
 #include "intrinsic/executive/clips_cpp/environment.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
 #include "intrinsic/executive/clips_cpp/value.h"
+
+#include "intrinsic/executive/proto/executive_events.pb.h"
+
 #include "intrinsic/executive/proto/run_metadata.pb.h"
 #include "intrinsic/executive/proto/run_response.pb.h"
 #include "intrinsic/executive/proto/world_query.pb.h"
@@ -94,6 +97,7 @@ std::vector<std::string> BehaviorTreeClipsFiles() {
           "behavior_tree/stepwise.clp",
           "behavior_tree/import_behavior_call.clp",
           "behavior_tree/import_code_execution.clp",
+          "behavior_tree/operation_events.clp",
           "behavior_tree/state_proto_update.clp",
           "behavior_tree/import.clp",
           "behavior_tree/behavior_tree_check.clp",
@@ -208,6 +212,10 @@ absl::Status InitClipsBehaviorTreeSupportImpl(Environment* env,
   google::protobuf::LinkMessageReflection<
       intrinsic_proto::executive::RunResponse>();
   google::protobuf::LinkMessageReflection<google::rpc::Status>();
+
+  google::protobuf::LinkMessageReflection<
+      intrinsic_proto::executive::OperationEvents>();
+
   google::protobuf::LinkMessageReflection<
       intrinsic_proto::executive::WorldQuery>();
   for (const std::string& file : BehaviorTreeClipsFiles()) {

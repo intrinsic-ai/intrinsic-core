@@ -166,7 +166,7 @@
 (defrule behavior-tree-state-proto-update-node
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  ?node <- (behavior-tree-node (tree-id ?tree-id) (state ?state)
+  ?node <- (behavior-tree-node (tree-id ?tree-id) (id ?node-id) (state ?state)
                                (failure-reason ?failure-reason)
                                (run-metadata-proto-state ?proto-state&~?state)
                                (run-metadata-proto-recovered-state
@@ -178,12 +178,14 @@
   (if (eq ?s-state CANCELING_CONDITION) then (bind ?s-state CANCELING))
   (run-metadata-proto-update-field ?path ?s-state ?op)
 
+  (bind ?was-recovered FALSE)
   (if (neq ?run-metadata-proto-recovered-state NONE) then
     (bind ?s-path-recovered (proto-path-join ?run-metadata-proto-path "recovered"))
     (if (eq ?state ?run-metadata-proto-recovered-state)
       then
         ; Update from recovery
         (run-metadata-proto-update-field ?s-path-recovered TRUE ?op)
+        (bind ?was-recovered TRUE)
       else
         ; State was recovered before, but now the node is executing to a
         ; different state. Thus clear the recovered flag as its now based on
@@ -201,6 +203,8 @@
 
   (modify ?node (run-metadata-proto-state ?state)
                 (run-metadata-proto-recovered-state ?run-metadata-proto-recovered-state))
+  (operation-events-add-node-state-change-event ?op ?tree-id ?node-id
+                                                ?s-state ?was-recovered)
 )
 
 (defrule behavior-tree-state-proto-update-condition

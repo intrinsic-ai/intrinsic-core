@@ -39,6 +39,7 @@ cc_library(
         "//intrinsic/executive/clips_cpp",
         "//intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic/executive/clips_cpp:context",
+        "//intrinsic/executive/proto:executive_events_cc_proto",
         "//intrinsic/executive/proto:process_tree_cc_proto",  # fixdeps: keep
         "//intrinsic/executive/proto:run_metadata_cc_proto",
         "//intrinsic/util/path_resolver",

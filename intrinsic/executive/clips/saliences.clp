@@ -78,5 +78,6 @@
  ; ?*SALIENCE-NORMAL*                       =      0
  ?*SALIENCE-LOW*                            =  -2000
  ?*SALIENCE-LOWER*                          =  -5000
+ ?*SALIENCE-COLLECT-EVENTS*                 =  -8000
  ?*SALIENCE-LAST*                           = -10000
 )
