@@ -321,7 +321,7 @@
 (defrule behavior-tree-state-proto-update-loop-num-times
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  ?node <- (behavior-tree-node (tree-id ?tree-id) (type LOOP)
+  ?node <- (behavior-tree-node (tree-id ?tree-id) (id ?node-id) (type LOOP)
                       (loop-num-times ?loop-num-times)
                       (run-metadata-proto-num-iterations
                         ?proto-num-times&~?loop-num-times)
@@ -330,12 +330,14 @@
   (bind ?path (proto-path-join ?run-metadata-proto-path "loop.num_times"))
   (run-metadata-proto-update-field ?path ?loop-num-times ?op)
   (modify ?node (run-metadata-proto-num-iterations ?loop-num-times))
+  (operation-events-add-counter-change-event
+    ?op ?tree-id ?node-id ?loop-num-times)
 )
 
 (defrule behavior-tree-state-proto-update-retry-num-tries
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  ?node <- (behavior-tree-node (tree-id ?tree-id) (type RETRY)
+  ?node <- (behavior-tree-node (tree-id ?tree-id) (id ?node-id) (type RETRY)
                       (retry-num-tries ?retry-num-tries)
                       (run-metadata-proto-num-iterations
                         ?proto-num-times&~?retry-num-tries)
@@ -344,6 +346,8 @@
   (bind ?path (proto-path-join ?run-metadata-proto-path "retry.num_tries"))
   (run-metadata-proto-update-field ?path ?retry-num-tries ?op)
   (modify ?node (run-metadata-proto-num-iterations ?retry-num-tries))
+  (operation-events-add-counter-change-event
+    ?op ?tree-id ?node-id ?retry-num-tries)
 )
 
 (defrule behavior-tree-state-proto-update-breakpoint
