@@ -34,7 +34,6 @@ import (
 	"intrinsic/skills/skillbundle"
 	"intrinsic/util/proto/descriptor"
 
-	"github.com/google/safearchive/tar"
 	"google.golang.org/protobuf/proto"
 
 	acpb "intrinsic/assets/catalog/proto/v1/asset_catalog_go_proto"
@@ -121,7 +120,7 @@ func detectBundleType(ctx context.Context, path string) (bundleType, error) {
 
 	var bt bundleType
 	var found int
-	if err := ioutils.WalkTarFile(ctx, tar.NewReader(f), ioutils.WithFallbackHandler(func(_ context.Context, path string, _ io.Reader) error {
+	if err := ioutils.WalkTarFile(ctx, f, ioutils.WithFallbackHandler(func(_ context.Context, path string, _ io.Reader) error {
 		if val, ok := lookup[path]; ok {
 			found++
 			bt = val

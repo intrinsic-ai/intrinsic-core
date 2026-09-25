@@ -111,16 +111,36 @@ func MakeCollectInlinedFallbackHandler() (map[string][]byte, WalkTarFileFallback
 	return inlined, fallback
 }
 
+// readerAtSeeker is an io.Reader that also supports random access and seeking.
+type readerAtSeeker interface {
+	io.Reader
+	io.ReaderAt
+	io.Seeker
+}
+
 // WalkTarFile walks through a tar file and invokes handlers on specific filenames.
 //
 // fallback can be nil.
 //
+// If r supports random access (io.ReaderAt and io.Seeker), handlers receive an
+// *io.SectionReader over the entry's bytes in r, which they may re-read or pass
+// to readeropener.New. Otherwise, handlers receive a forward-only reader.
+//
 // Returns an error if all handlers in handlers are not invoked.  It ignores all non-regular files.
-func WalkTarFile(ctx context.Context, t *tar.Reader, options ...WalkTarFileOption) error {
+func WalkTarFile(ctx context.Context, r io.Reader, options ...WalkTarFileOption) error {
+	// WalkTarFile previously took a *tar.Reader. Wrapping one in another
+	// tar.NewReader would silently see an empty archive, so reject it.
+	if _, ok := r.(*tar.Reader); ok {
+		return fmt.Errorf("WalkTarFile: pass the underlying reader, not a *tar.Reader")
+	}
+
 	opts := &walkTarFileOptions{}
 	for _, opt := range options {
 		opt(opts)
 	}
+
+	t := tar.NewReader(r)
+	ras, _ := r.(readerAtSeeker)
 
 	handlers := opts.handlers
 
@@ -136,14 +156,30 @@ func WalkTarFile(ctx context.Context, t *tar.Reader, options ...WalkTarFileOptio
 			continue
 		}
 
+		// When r supports random access, expose each tar entry as an
+		// *io.SectionReader over its byte range in the outer archive. Because tar
+		// stores file payloads uncompressed immediately after each header block,
+		// handlers (such as image processors) can re-read large entries directly
+		// from disk without copying them into memory or /tmp. SectionReader uses
+		// ReadAt (pread), so it does not disturb r's seek offset when t.Next()
+		// advances to the next header.
+		var entryReader io.Reader = t
+		if ras != nil {
+			offset, err := ras.Seek(0, io.SeekCurrent)
+			if err != nil {
+				return fmt.Errorf("failed to get current offset in tar stream: %w", err)
+			}
+			entryReader = io.NewSectionReader(ras, offset, hdr.Size)
+		}
+
 		n := hdr.Name
 		if h, ok := handlers[n]; ok {
 			delete(handlers, n)
-			if err := h(ctx, t); err != nil {
+			if err := h(ctx, entryReader); err != nil {
 				return fmt.Errorf("error processing file %q: %v", n, err)
 			}
 		} else if opts.fallback != nil {
-			if err := opts.fallback(ctx, n, t); err != nil {
+			if err := opts.fallback(ctx, n, entryReader); err != nil {
 				return fmt.Errorf("error processing file %q: %v", n, err)
 			}
 		}
