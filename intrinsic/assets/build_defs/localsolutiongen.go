@@ -49,7 +49,6 @@ var (
 	defaultOperationMode   = flag.String("default_operation_mode", "", "Operation mode of the app. Can be 'sim' or 'real'.")
 	output                 = flag.String("output", "", "Output LocalSolution proto path.")
 	displayName            = flag.String("display_name", "", "Display name of the PPR component.")
-	buildTarget            = flag.String("build_target", "", "Build target of the PPR component.")
 )
 
 func main() {
@@ -140,7 +139,6 @@ func main() {
 		ObjectWorldUpdates:   objectWorldUpdates,
 		DefaultOperationMode: defaultOpMode,
 		DisplayName:          *displayName,
-		BuildTarget:          *buildTarget,
 	})
 	if err != nil {
 		log.Exitf("could not create LocalSolution proto: %v", err)

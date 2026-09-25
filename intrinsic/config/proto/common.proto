@@ -43,9 +43,6 @@ message Metadata {
   // Resource name.
   string name = 13;
 
-  // Build target when built by bazel, otherwise empty.
-  string build_target = 7;
-
   // Auto-populated with server timestamp on update.
   google.protobuf.Timestamp update_time = 2;
 
@@ -71,7 +68,7 @@ message Metadata {
   // across updates until the deployment is stopped/deleted.
   string solution_deployment_id = 17;
 
-  reserved "docs", "environment", "origin", "owner_org", "parent",
-      "thumbnail_uri", "version";
-  reserved 5, 6, 8, 9, 10, 11, 12, 16;
+  reserved "build_target", "docs", "environment", "origin", "owner_org",
+      "parent", "thumbnail_uri", "version";
+  reserved 5, 6, 7, 8, 9, 10, 11, 12, 16;
 }

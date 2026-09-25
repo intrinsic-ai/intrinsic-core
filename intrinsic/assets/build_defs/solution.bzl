@@ -71,9 +71,6 @@ def _intrinsic_solution_impl(ctx):
     ).add(
         "--display_name",
         _display_name(ctx.label),
-    ).add(
-        "--build_target",
-        ctx.label if not ctx.label.repo_name else "@@%s//%s:%s" % (ctx.label.repo_name, ctx.label.package, ctx.label.name),  # buildifier: disable=canonical-repository
     )
     for a in ctx.attr.assets:
         if AssetLocalInfo in a:

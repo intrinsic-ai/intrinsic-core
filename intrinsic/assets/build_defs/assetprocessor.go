@@ -368,7 +368,6 @@ func (proc *Processor) Process(ctx context.Context, sa *assetpb.LocalSolution) (
 	return &apppb.Application{
 		Metadata: &commonpb.Metadata{
 			DisplayName: sa.GetDisplayName(),
-			BuildTarget: sa.GetBuildTarget(),
 			Category:    commonpb.Metadata_TEMPLATE,
 		},
 		// TODO: b/394317777 - Leave process unspecified if not provided.

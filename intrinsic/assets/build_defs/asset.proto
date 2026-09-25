@@ -78,7 +78,6 @@ message AssetInstanceInfo {
 message LocalSolution {
   // Solution metadata.
   string display_name = 5;
-  string build_target = 6;
 
   // An asset that was compiled locally or is a reference to an item in the
   // asset catalog.
@@ -100,7 +99,7 @@ message LocalSolution {
   // The default mode in which to start this solution.
   intrinsic_proto.config.OperationMode default_operation_mode = 7;
 
-  reserved 3, 4, 8;
-  reserved "product", "process", "version";
+  reserved 3, 4, 6, 8;
+  reserved "build_target", "product", "process", "version";
 }
 
