@@ -31,6 +31,7 @@
 #include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -296,6 +297,68 @@ std::string GenerateTreeIdPrefixForNode(absl::string_view tree_id,
   return absl::StrFormat("%s:%d/", tree_id, node_id);
 }
 
+absl::StatusOr<BehaviorTree::NodeIdentifier> GenerateNodeIdentifier(
+    absl::string_view tree_id, uint32_t node_id) {
+  BehaviorTree::NodeIdentifier result;
+  BehaviorTree::NodeIdentifier* current = &result;
+  absl::string_view remaining = tree_id;
+  while (true) {
+    size_t slash_pos = remaining.find('/');
+    if (slash_pos == absl::string_view::npos) {
+      current->set_tree_id(remaining);
+      current->set_node_id(node_id);
+      break;
+    }
+    absl::string_view prefix_part = remaining.substr(0, slash_pos);
+    remaining.remove_prefix(slash_pos + 1);
+
+    size_t colon_pos = prefix_part.rfind(':');
+    if (colon_pos == absl::string_view::npos) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Missing ':' in prefix part '", prefix_part,
+                       "' of tree id '", tree_id, "'"));
+    }
+    uint32_t task_node_id = 0;
+    if (!absl::SimpleAtoi(prefix_part.substr(colon_pos + 1), &task_node_id)) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Failed to parse node id from '", prefix_part.substr(colon_pos + 1),
+          "' in prefix part '", prefix_part, "' of tree id '", tree_id, "'"));
+    }
+    current->set_tree_id(prefix_part.substr(0, colon_pos));
+    current->set_node_id(task_node_id);
+    current = current->mutable_node_within_task_node();
+  }
+  return result;
+}
+
+absl::Status SetNodeIdentifier(clips::ProtobufManager* proto_mgr,
+                               clips::ProtoMessageId proto_id,
+                               absl::string_view proto_path,
+                               absl::string_view tree_id, uint32_t node_id) {
+  if (proto_mgr == nullptr) {
+    return absl::InvalidArgumentError("proto_mgr must not be null");
+  }
+
+  INTR_ASSIGN_OR_RETURN(BehaviorTree::NodeIdentifier node_identifier,
+                        GenerateNodeIdentifier(tree_id, node_id));
+
+  if (proto_path.empty()) {
+    INTR_ASSIGN_OR_RETURN(
+        BehaviorTree::NodeIdentifier * target,
+        proto_mgr->GetMutableProtoAs<BehaviorTree::NodeIdentifier>(proto_id));
+    *target = std::move(node_identifier);
+    return absl::OkStatus();
+  }
+
+  clips::ProtoMessageId temp_id =
+      proto_mgr->AddGeneratedProto(std::move(node_identifier));
+  absl::Status status = proto_mgr->SetFieldFromProto(
+      proto_id, proto_path, clips::ProtobufManager::kGeneratedDescriptorPoolId,
+      temp_id);
+  proto_mgr->RemoveProto(temp_id);
+  return status;
+}
+
 absl::Status AddClipsIdHandlingFunctions(clips::Environment* env,
                                          clips::ProtobufManager* proto_mgr)
     ABSL_EXCLUSIVE_LOCKS_REQUIRED(env->mutex()) {
@@ -377,6 +440,24 @@ absl::Status AddClipsIdHandlingFunctions(clips::Environment* env,
         }
         return {clips::Symbol::False(), clips::Value(key_valid.message())};
       }));
+
+  std::function set_node_identifier_func(
+      [proto_mgr](int64_t proto_id, const std::string& proto_path,
+                  const std::string& tree_id,
+                  int64_t node_id) -> clips::Symbol {
+        absl::Status status = SetNodeIdentifier(
+            proto_mgr, clips::ProtoMessageId(proto_id), proto_path, tree_id,
+            static_cast<uint32_t>(node_id));
+        if (!status.ok()) {
+          LOG_EVERY_N_SEC(ERROR, 5)
+              << "Failed to set node identifier on field '" << proto_path
+              << "' in proto " << proto_id << ": " << status;
+          return clips::Symbol::False();
+        }
+        return clips::Symbol::True();
+      });
+  INTR_RETURN_IF_ERROR(
+      env->AddFunction("set-node-identifier-proto", set_node_identifier_func));
 
   return absl::OkStatus();
 }
