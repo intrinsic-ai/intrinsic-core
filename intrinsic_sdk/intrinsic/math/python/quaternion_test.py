@@ -420,6 +420,94 @@ class QuaternionTest(parameterized.TestCase, math_test.TestCase):
         ValueError, quaternion.QUATERNION_ZERO_MESSAGE, quat.check_non_zero
     )
 
+  @parameterized.parameters(0.0, 0.05, 0.1)
+  def test_check_non_zero_rejects_at_or_below_custom_tolerance(self, magnitude):
+    quat = quaternion.Quaternion([0, 0, 0, magnitude])
+
+    self.assertRaisesRegex(
+        ValueError,
+        quaternion.QUATERNION_ZERO_MESSAGE + '.*custom tolerance',
+        quat.check_non_zero,
+        norm_epsilon=0.1,
+        err_msg='custom tolerance',
+    )
+
+  @parameterized.parameters((0.2, 0.1), (1e-9, 1e-10), (1e-9, 0.0))
+  def test_check_non_zero_accepts_above_custom_tolerance(
+      self, magnitude, tolerance
+  ):
+    quat = quaternion.Quaternion([0, 0, 0, magnitude])
+
+    quat.check_non_zero(norm_epsilon=tolerance)
+
+  @parameterized.named_parameters(
+      ('tiny_axis', [1e-200, 0, 0, 0], 1e-201),
+      ('tiny_all_components', [1e-200] * 4, 1e-200),
+      ('smallest_subnormal', [np.nextafter(0.0, 1.0), 0, 0, 0], 0.0),
+      ('large_axis', [1e200, 0, 0, 0], 1e199),
+      ('large_all_components', [1e200] * 4, 1e200),
+  )
+  def test_check_non_zero_accepts_extreme_magnitudes(self, xyzw, tolerance):
+    quaternion.Quaternion(xyzw).check_non_zero(norm_epsilon=tolerance)
+
+  @parameterized.parameters(1e-200, 1e200)
+  def test_check_non_zero_rejects_extreme_magnitudes_below_tolerance(
+      self, magnitude
+  ):
+    quat = quaternion.Quaternion([magnitude] * 4)
+    self.assertRaisesRegex(
+        ValueError,
+        'extreme tolerance',
+        quat.check_non_zero,
+        norm_epsilon=3 * magnitude,
+        err_msg='extreme tolerance',
+    )
+
+  def test_check_non_zero_reports_stable_norm(self):
+    quat = quaternion.Quaternion([1e200] * 4)
+    self.assertRaisesRegex(
+        ValueError,
+        r'= 2e\+200 <= 3e\+200.*extreme tolerance',
+        quat.check_non_zero,
+        norm_epsilon=3e200,
+        err_msg='extreme tolerance',
+    )
+
+  @parameterized.parameters(-1.0, -np.inf, np.inf, np.nan)
+  def test_check_non_zero_rejects_invalid_tolerance(self, tolerance):
+    for xyzw in ([0, 0, 0, 0], [0, 0, 0, 1]):
+      with self.subTest(xyzw=xyzw):
+        self.assertRaisesRegex(
+            ValueError,
+            'norm_epsilon.*invalid tolerance',
+            quaternion.Quaternion(xyzw).check_non_zero,
+            norm_epsilon=tolerance,
+            err_msg='invalid tolerance',
+        )
+
+  @parameterized.parameters(0.0, -0.0)
+  def test_check_non_zero_rejects_zero_at_zero_tolerance(self, tolerance):
+    self.assertRaisesRegex(
+        ValueError,
+        quaternion.QUATERNION_ZERO_MESSAGE,
+        quaternion.Quaternion([0, 0, 0, 0]).check_non_zero,
+        norm_epsilon=tolerance,
+    )
+
+  @parameterized.parameters(1e-8, 0.1)
+  def test_check_non_zero_exact_boundary(self, tolerance):
+    for magnitude in (np.nextafter(tolerance, 0.0), tolerance):
+      with self.subTest(magnitude=magnitude):
+        self.assertRaisesRegex(
+            ValueError,
+            quaternion.QUATERNION_ZERO_MESSAGE,
+            quaternion.Quaternion([0, -magnitude, 0, 0]).check_non_zero,
+            norm_epsilon=tolerance,
+        )
+    quaternion.Quaternion(
+        [0, -np.nextafter(tolerance, np.inf), 0, 0]
+    ).check_non_zero(norm_epsilon=tolerance)
+
   @parameterized.named_parameters(*_NON_ZERO_QUATERNIONS)
   def test_check_normalized_close(self, quat):
     quat_normalized = quat.normalize()
