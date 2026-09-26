@@ -234,6 +234,22 @@ class ProtoConversionTest(parameterized.TestCase):
     pose_proto = proto_conversion.pose_to_proto(pose)
     self.assertEqual(pose_proto, pose_proto_expected)
 
+  @parameterized.parameters(1 + 1e-6, 1 - 1e-6, 1 + 1e-10, 1 - 1e-10)
+  def test_pose_to_proto_normalizes_near_unit_quaternion(self, scale):
+    xyzw = np.array([0.5, -0.5, 0.5, -0.5]) * scale
+    pose = data_types.Pose3(
+        translation=[1, 2, 3],
+        rotation=data_types.Rotation3(quat=data_types.Quaternion(xyzw)),
+    )
+
+    pose_proto = proto_conversion.pose_to_proto(pose)
+    restored_pose = proto_conversion.pose_from_proto(pose_proto)
+
+    np.testing.assert_allclose(
+        restored_pose.matrix4x4(), pose.matrix4x4(), rtol=0, atol=1e-14
+    )
+    np.testing.assert_array_equal(pose.quaternion.xyzw, xyzw)
+
   def test_pose_roundtrip(self):
     pose_proto = pose_pb2.Pose(
         position=point_pb2.Point(x=-1.32635246, y=-0.20890486, z=-0.16996824),
