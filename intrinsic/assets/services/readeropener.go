@@ -17,38 +17,68 @@
 package readeropener
 
 import (
+	"bytes"
 	"fmt"
 	"io"
+	"os"
 )
 
 // Opener is a function that returns an io.ReadCloser. It can be called
 // multiple times.
 type Opener func() (io.ReadCloser, error)
 
-type readerAtSeeker interface {
-	io.ReaderAt
-	io.Seeker
-}
+// Cleanup is a function that does cleanup work.
+type Cleanup func()
 
-// New takes an io.Reader that supports random access (io.ReaderAt and io.Seeker)
-// and returns an Opener function that can be called multiple times without
-// copying data to memory or temporary files.
-func New(r io.Reader) (Opener, error) {
-	ras, ok := r.(readerAtSeeker)
-	if !ok {
-		return nil, fmt.Errorf("reader of type %T must implement io.ReaderAt and io.Seeker", r)
+// New takes an io.Reader and returns an Opener function that can be called
+// multiple times. This is done by reading its contents into a byte slice. If
+// the size of the byte slice becomes too large (>maxInMemorySize), then this
+// function writes it out to disk in a temp file. Cleanup should be called once
+// the returned Opener and any of its readers are done.
+func New(r io.Reader, maxInMemorySize int64) (Opener, Cleanup, error) {
+	bb := bytes.NewBuffer(nil)
+	_, err := io.CopyN(bb, r, maxInMemorySize)
+	if err == io.EOF {
+		// If we receive an EOF error then the reader's size is deemed small enough
+		// to fit in a byte buffer.
+		opener := func() (io.ReadCloser, error) {
+			// We create a new byte buffer each time to allow multiple reads.
+			return io.NopCloser(bytes.NewBuffer(bb.Bytes())), nil
+		}
+		cleanup := func() {}
+		return opener, cleanup, nil
+	} else if err != nil {
+		return nil, nil, err
 	}
-	start, err := ras.Seek(0, io.SeekCurrent)
+
+	// For larger data we write it out to disk to avoid out-of-memory errors.
+	f, err := os.CreateTemp(os.TempDir(), "read-opener-")
 	if err != nil {
-		return nil, fmt.Errorf("failed to seek to current offset: %w", err)
+		return nil, nil, fmt.Errorf("could not create temp file: %w", err)
 	}
-	end, err := ras.Seek(0, io.SeekEnd)
-	if err != nil {
-		return nil, fmt.Errorf("failed to seek to end: %w", err)
+
+	cleanup := func() {
+		os.Remove(f.Name())
 	}
-	size := end - start
+	cancellableCleanup := cleanup
+	defer func() {
+		if cancellableCleanup != nil {
+			cancellableCleanup()
+		}
+	}()
+	defer f.Close()
+
+	if _, err := io.Copy(f, bb); err != nil {
+		return nil, nil, fmt.Errorf("failed to write buffered data to temp file: %w", err)
+	}
+	if _, err := io.Copy(f, r); err != nil {
+		return nil, nil, fmt.Errorf("failed to write reader data to temp file: %w", err)
+	}
+
+	cancellableCleanup = nil
+
 	opener := func() (io.ReadCloser, error) {
-		return io.NopCloser(io.NewSectionReader(ras, start, size)), nil
+		return os.Open(f.Name())
 	}
-	return opener, nil
+	return opener, cleanup, nil
 }

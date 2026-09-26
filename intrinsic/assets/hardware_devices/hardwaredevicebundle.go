@@ -167,7 +167,7 @@ func Read(ctx context.Context, r io.Reader, options ...ReadOption) (*HardwareDev
 		}
 		return fmt.Errorf("unexpected file %q", n)
 	}
-	if err := ioutils.WalkTarFile(ctx, r,
+	if err := ioutils.WalkTarFile(ctx, tar.NewReader(r),
 		ioutils.WithHandlers(map[string]ioutils.WalkTarFileHandler{
 			hardwareDeviceManifestFileName: manifestHandler,
 		}),

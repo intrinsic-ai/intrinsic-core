@@ -176,7 +176,7 @@ func Read(ctx context.Context, r io.Reader, options ...ReadOption) (*SceneObject
 		inlined, fallback = ioutils.MakeCollectInlinedFallbackHandler()
 		walkTarOpts = append(walkTarOpts, ioutils.WithFallbackHandler(fallback))
 	}
-	if err := ioutils.WalkTarFile(ctx, r, walkTarOpts...); err != nil {
+	if err := ioutils.WalkTarFile(ctx, tar.NewReader(r), walkTarOpts...); err != nil {
 		return nil, fmt.Errorf("failed to walk tar file: %w", err)
 	}
 
@@ -242,7 +242,7 @@ func Process(ctx context.Context, r io.Reader, options ...ProcessOption) (*sompb
 	// Read the manifest and then reset the file once we have the information about the bundle we're
 	// going to process.
 	manifest, handlers := makeOnlySceneObjectManifestHandlers()
-	if err := ioutils.WalkTarFile(ctx, rs, ioutils.WithHandlers(handlers)); err != nil {
+	if err := ioutils.WalkTarFile(ctx, tar.NewReader(rs), ioutils.WithHandlers(handlers)); err != nil {
 		return nil, fmt.Errorf("failed to walk tar file to read manifest: %w", err)
 	}
 	if _, err := rs.Seek(0, io.SeekStart); err != nil {
@@ -255,7 +255,7 @@ func Process(ctx context.Context, r io.Reader, options ...ProcessOption) (*sompb
 	if err != nil {
 		return nil, fmt.Errorf("failed to make handlers: %w", err)
 	}
-	if err := ioutils.WalkTarFile(ctx, rs,
+	if err := ioutils.WalkTarFile(ctx, tar.NewReader(rs),
 		ioutils.WithHandlers(handlers),
 		ioutils.WithFallbackHandler(ioutils.AlwaysErrorAsUnexpected),
 	); err != nil {

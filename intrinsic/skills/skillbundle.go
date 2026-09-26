@@ -172,7 +172,7 @@ func Read(ctx context.Context, r io.Reader, options ...ReadOption) (*SkillBundle
 		walkTarOpts = append(walkTarOpts, ioutils.WithFallbackHandler(fallback))
 	}
 
-	if err := ioutils.WalkTarFile(ctx, r, walkTarOpts...); err != nil {
+	if err := ioutils.WalkTarFile(ctx, tar.NewReader(r), walkTarOpts...); err != nil {
 		return nil, fmt.Errorf("failed to walk tar file: %w", err)
 	}
 
@@ -224,7 +224,7 @@ func Process(ctx context.Context, r io.ReadSeeker, options ...ProcessOption) (*p
 	// Read the manifest and then reset the file once we have the information about the bundle we're
 	// going to process.
 	manifest, handlers := makeOnlySkillManifestHandlers()
-	if err := ioutils.WalkTarFile(ctx, r, ioutils.WithHandlers(handlers)); err != nil {
+	if err := ioutils.WalkTarFile(ctx, tar.NewReader(r), ioutils.WithHandlers(handlers)); err != nil {
 		return nil, fmt.Errorf("failed to walk tar file to read manifest: %w", err)
 	}
 	if _, err := r.Seek(0, io.SeekStart); err != nil {
@@ -234,7 +234,7 @@ func Process(ctx context.Context, r io.ReadSeeker, options ...ProcessOption) (*p
 	// Initialize handlers for when we walk through the file again now that we know what we're looking
 	// for, but error on unexpected files this time.
 	processedAssets, handlers := makeSkillAssetHandlers(manifest, opts)
-	if err := ioutils.WalkTarFile(ctx, r,
+	if err := ioutils.WalkTarFile(ctx, tar.NewReader(r),
 		ioutils.WithHandlers(handlers),
 		ioutils.WithFallbackHandler(ioutils.AlwaysErrorAsUnexpected),
 	); err != nil {
