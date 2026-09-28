@@ -17,6 +17,9 @@
 common --enable_bzlmod
 common --enable_workspace=false
 
+# Resolve ROS packages from the ROS Central Registry, then other modules from BCR.
+common --registry=https://bazel.ros.org --registry=https://bcr.bazel.build
+
 # Custom downloader configs. This makes it so that external URLs to download dependencies from
 # can be rewritten at build time and, for example, support custom mirrors.
 # For more info, see go/intrinsic-content-mirror 
@@ -25,6 +28,8 @@ common:strict_mirror --downloader_config=bazel/content_mirror/strict.cfg
 
 # Static linking to workaround OpenCV symbol lookup errors: https://github.com/bazelbuild/rules_foreign_cc/issues/1164
 common --dynamic_mode=off
+# Keep Cyclone DDS and statically link the RCR middleware and typesupport.
+common --@rosdistro//:rmw=rmw_cyclonedds_cpp
 
 # Always use the pre-configured toolchain.
 common --repo_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1

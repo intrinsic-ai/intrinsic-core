@@ -41,7 +41,7 @@
 #include "intrinsic/world/internal/world_acl.h"
 #include "intrinsic/world/world_acl_spec.h"
 #include "intrinsic/world/world_entity_acl_spec.h"
-#include "tf2/include/tf2/buffer_core.h"
+#include "tf2/buffer_core.hpp"
 
 namespace intrinsic {
 namespace world_internal {
