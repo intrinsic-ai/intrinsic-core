@@ -295,7 +295,8 @@ class PubSub {
               *response_packet.mutable_error() =
                   ToGoogleRpcStatus(response_status);
             } else {
-              response_packet.mutable_response()->PackFrom(response);
+              static_cast<void>(
+                  response_packet.mutable_response()->PackFrom(response));
             }
             return response_packet;
           };
@@ -328,7 +329,8 @@ class PubSub {
               *response_packet.mutable_error() =
                   ToGoogleRpcStatus(response_status);
             } else {
-              response_packet.mutable_response()->PackFrom(response);
+              static_cast<void>(
+                  response_packet.mutable_response()->PackFrom(response));
             }
             return response_packet;
           };
@@ -604,7 +606,7 @@ class PubSub {
       const google::protobuf::Message& request, const QueryOptions& options) {
     intrinsic_proto::pubsub::PubSubQueryRequest request_packet =
         PrepareRequestPacket(options);
-    request_packet.mutable_request()->PackFrom(request);
+    static_cast<void>(request_packet.mutable_request()->PackFrom(request));
     return request_packet;
   }
 

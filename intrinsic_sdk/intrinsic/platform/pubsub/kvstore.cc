@@ -521,8 +521,8 @@ absl::StatusOr<KVQuery> KeyValueStore::GetAll(absl::string_view keyexpr,
                                        const void* response_bytes,
                                        const size_t response_bytes_len) {
         auto value = std::make_unique<google::protobuf::Any>();
-        value->ParseFromString(absl::string_view(
-            static_cast<const char*>(response_bytes), response_bytes_len));
+        static_cast<void>(value->ParseFromString(absl::string_view(
+            static_cast<const char*>(response_bytes), response_bytes_len)));
         callback(key, std::move(value));
       });
   auto on_done_functor = std::make_unique<imw_on_done_functor_t>(
