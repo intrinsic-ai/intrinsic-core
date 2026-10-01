@@ -42,7 +42,6 @@
 #include "intrinsic/skills/cc/skill_logging_context.h"
 #include "intrinsic/skills/internal/execute_context_impl.h"
 #include "intrinsic/skills/internal/get_footprint_context_impl.h"
-#include "intrinsic/skills/internal/predict_context_impl.h"  
 #include "intrinsic/skills/internal/preview_context_impl.h"
 #include "intrinsic/skills/proto/skill_manifest.pb.h"
 #include "intrinsic/util/file_helpers.h"  
@@ -100,7 +99,6 @@ ExecuteRequest SkillTestFactory::MakeExecuteRequest(
     ::google::protobuf::Message* param_defaults) {
   // clang-format off
   return ExecuteRequest(
-      "",  
       params, param_defaults);
   // clang-format on
 }
@@ -110,7 +108,6 @@ PreviewRequest SkillTestFactory::MakePreviewRequest(
     ::google::protobuf::Message* param_defaults) {
   // clang-format off
   return PreviewRequest(
-      "",  
       params, param_defaults);
   // clang-format on
 }
@@ -120,7 +117,6 @@ GetFootprintRequest SkillTestFactory::MakeGetFootprintRequest(
     ::google::protobuf::Message* param_defaults) {
   // clang-format off
   return GetFootprintRequest(
-      "",  
       params, param_defaults);
   // clang-format on
 }
@@ -228,30 +224,6 @@ std::unique_ptr<GetFootprintContext> SkillTestFactory::MakeGetFootprintContext(
   );
   // clang-format on
 }
-
-
-std::unique_ptr<PredictContext> SkillTestFactory::MakePredictContext(
-    const PredictContextInitializer& initializer) {
-  auto motion_planner_service = MaybeMock<MotionPlannerService::StubInterface,
-                                          MockMotionPlannerServiceStub>(
-      initializer.motion_planner_service);
-
-  auto object_world_service =
-      MaybeMock<ObjectWorldService::StubInterface, MockObjectWorldServiceStub>(
-          initializer.object_world_service);
-
-  return std::make_unique<PredictContextImpl>(
-      initializer.equipment_pack.value_or(EquipmentPack()),
-      motion_planning::MotionPlannerClient(initializer.world_id,
-                                           motion_planner_service),
-      world::ObjectWorldClient(initializer.world_id, object_world_service)
-
-      ,
-      *geometry_library_
-
-  );
-}
-
 
 intrinsic_proto::resources::ResourceHandle SkillTestFactory::RunService(
     grpc::Service* service) {

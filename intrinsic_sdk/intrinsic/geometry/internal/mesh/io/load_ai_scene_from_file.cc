@@ -36,6 +36,7 @@
 #include "assimp/mesh.h"
 #include "assimp/scene.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/geometry/internal/mesh/io/restrict_importer.h"
 #include "intrinsic/geometry/internal/point_cloud/pts_to_ai_scene.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "ortools/base/helpers.h"
@@ -47,6 +48,7 @@ namespace {
 
 // Note that the returned `scene` is owned by `importer`.
 absl::StatusOr<const aiScene*> LoadAiSceneFromFile(const std::string& filename,
+                                                   const std::string& extension,
                                                    Assimp::Importer& importer,
                                                    bool remove_point_clouds) {
   // Make sure no extra transform is added by assimp.
@@ -57,6 +59,8 @@ absl::StatusOr<const aiScene*> LoadAiSceneFromFile(const std::string& filename,
   } else {
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE);
   }
+
+  RestrictImporterToExtension(importer, extension);
 
   auto read_options = aiProcess_CalcTangentSpace | aiProcess_Triangulate |
                       aiProcess_JoinIdenticalVertices | aiProcess_SortByPType |
@@ -96,7 +100,7 @@ absl::StatusOr<std::unique_ptr<aiScene>> LoadAiSceneFromFile(
   Assimp::Importer importer;
   INTR_ASSIGN_OR_RETURN(
       const aiScene* tmp_scene,
-      LoadAiSceneFromFile(filename, importer, remove_point_clouds));
+      LoadAiSceneFromFile(filename, extension, importer, remove_point_clouds));
   Assimp::SceneCombiner::CopyScene(&scene, tmp_scene);
   scene->mRootNode->mTransformation[0][0] *= scale[0];
   scene->mRootNode->mTransformation[1][1] *= scale[1];

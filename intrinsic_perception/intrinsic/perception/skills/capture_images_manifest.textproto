@@ -72,14 +72,6 @@ options {
     create_skill: "::intrinsic::skills::CaptureImages::CreateSkill"
   }
 }
-dependencies {
-  required_equipment {
-    key: "camera"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-}
 parameter {
   message_full_name: "intrinsic_proto.skills.CaptureImagesParams"
   default_value {

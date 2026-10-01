@@ -59,6 +59,13 @@ const (
 	// PortalDomainProd is the domain for the portal service in prod.
 	PortalDomainProd = "flowstate.intrinsic.ai"
 
+	// EquipmentDomainDev is the parent domain for per-cluster UIs in dev.
+	EquipmentDomainDev = "dev.intrinsic.equipment"
+	// EquipmentDomainStaging is the parent domain for per-cluster UIs in staging.
+	EquipmentDomainStaging = "qa.intrinsic.equipment"
+	// EquipmentDomainProd is the parent domain for per-cluster UIs in prod.
+	EquipmentDomainProd = "intrinsic.equipment"
+
 	// AssetsProjectDev is the project for the asset service in dev.
 	AssetsProjectDev = "intrinsic-assets-dev"
 	// AssetsProjectStaging is the project for the asset service in staging.
@@ -194,6 +201,21 @@ func PortalDomain(env string) string {
 		return PortalDomainStaging
 	case Dev:
 		return PortalDomainDev
+	default:
+		return ""
+	}
+}
+
+// EquipmentDomain returns the parent domain for per-cluster UIs
+// (<cluster>.<domain>) for the given environment.
+func EquipmentDomain(env string) string {
+	switch env {
+	case Prod:
+		return EquipmentDomainProd
+	case Staging:
+		return EquipmentDomainStaging
+	case Dev:
+		return EquipmentDomainDev
 	default:
 		return ""
 	}

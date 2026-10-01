@@ -573,16 +573,3 @@
   (pb-remove ?log-context)
   (modify ?cei (logged-completion TRUE))
 )
-
-(defrule log-selected-predict-action
-  "Log logged operation when a predict action was selected for prediction"
-  (declare (salience ?*SALIENCE-LOGGING*))
-  (world (id ?world-id))
-  (executive-state (session-log-id ?session-log-id&~0))
-  (behavior-tree (plan-id ?plan-id) (log-id ?bt-log-id&~0))
-  ?pa <- (predict-action (plan-id ?plan-id) (state SELECTED) (log-id 0))
- =>
-  ; TODO(stoyang): Mirror log-selected-action and do the actual logging
-  (bind ?action-log-id (log-gen-uid))
-  (modify ?pa (log-id ?action-log-id))
-)

@@ -292,8 +292,6 @@ class ExecutionContextOperation {
 ConductorImpl::ConductorImpl(ConductorOptions opts)
     : kv_store_(std::move(opts.kv_store)),
       execution_context_(std::move(opts.execution_context)),
-      save_scene_monitor_(std::move(opts.save_scene_monitor)),
-      ec_op_(nullptr),
       resource_world_(std::move(opts.resource_world)),
       world_service_(opts.world_service),
       sim_service_stub_(std::move(opts.sim_service_stub)),
@@ -303,9 +301,14 @@ ConductorImpl::ConductorImpl(ConductorOptions opts)
       asset_deployment_lro_stub_(std::move(opts.asset_deployment_lro_stub)),
       installed_assets_stub_(std::move(opts.installed_assets_stub)),
       installed_assets_lro_stub_(std::move(opts.installed_assets_lro_stub)),
-      pause_sim_(opts.enable_sim_pause) {}
+      pause_sim_(opts.enable_sim_pause),
+      ec_op_(nullptr),
+      save_scene_monitor_(std::move(opts.save_scene_monitor)) {}
 
-ConductorImpl::~ConductorImpl() = default;
+ConductorImpl::~ConductorImpl() {
+  save_scene_monitor_.reset();
+  CancelExecutionContextOperation(/*context=*/nullptr, /*wait=*/true);
+}
 
 grpc::Status ConductorImpl::StartSolution(
     grpc::ServerContext* context, const ConductorStartSolutionRequest* request,

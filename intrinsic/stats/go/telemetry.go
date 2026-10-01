@@ -12,8 +12,10 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package telemetry sets up OpenCensus tracing and metrics.
-// In the process of migrating to OpenTelemetry.
+// Package telemetry configures OpenTelemetry tracing and Prometheus/OpenCensus metrics for Go services.
+//
+// For quick-start recipes on writing new OpenTelemetry code (spans, gRPC, HTTP), see README.md.
+// For migrating legacy OpenCensus code or debugging cross-language traces, see MIGRATION.md.
 package telemetry
 
 import (
@@ -36,20 +38,29 @@ import (
 	"go.opentelemetry.io/otel"
 	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/bridge/opencensus"
+	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/propagation"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	oteltrace "go.opentelemetry.io/otel/trace"
+	grpccodes "google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 )
 
 type localSamplerKey struct{}
 
 var (
-	// HTTPPropagator is a composite propagator for HTTP services.
-	// With this we can support multiple trace context formats (both opencensus and opentelemetry).
-	// WARNING: We can't set a global propagator with all formatters because the binary format could break HTTP headers.
+	// HTTPPropagator is a composite propagator for HTTP services supporting both W3C TraceContext
+	// (traceparent) and OpenCensus B3 multi-header formats.
+	//
+	// Prefer [NewOtelHTTPHandler] and [NewOtelHTTPTransport], which pass this
+	// propagator for you.
+	//
+	// WARNING: Because telemetry.Initialize() does not set a global propagator,
+	// you MUST explicitly pass otelhttp.WithPropagators(telemetry.HTTPPropagator) to every
+	// otelhttp.NewHandler and otelhttp.NewTransport call, or trace context will be silently dropped.
 	HTTPPropagator = propagation.NewCompositeTextMapPropagator(
 		// Default propagator for opentelemetry, uses traceparent header
 		propagation.TraceContext{},
@@ -58,8 +69,16 @@ var (
 		b3prop.New(b3prop.WithInjectEncoding(b3prop.B3MultipleHeader)),
 	)
 
-	// GRPCPropagator is a composite propagator for gRPC services.
-	// With this we can support multiple trace context formats (both opencensus and opentelemetry).
+	// GRPCPropagator is a composite propagator for gRPC services supporting both W3C TraceContext
+	// (traceparent) and OpenCensus binary (grpc-trace-bin) formats.
+	//
+	// Prefer [NewOtelGRPCServerOptions] and [NewOtelGRPCClientOptions], which pass
+	// this propagator for you.
+	//
+	// WARNING: Because telemetry.Initialize() does not set a global propagator,
+	// you MUST explicitly pass otelgrpc.WithPropagators(telemetry.GRPCPropagator) to every
+	// otelgrpc.NewClientHandler and otelgrpc.NewServerHandler call (or use NewOtelGRPCServerOptions()),
+	// or trace context will be silently dropped.
 	GRPCPropagator = propagation.NewCompositeTextMapPropagator(
 		// Default propagator for opentelemetry, uses traceparent header
 		propagation.TraceContext{},
@@ -462,12 +481,20 @@ func DefaultHandler(serviceName string) http.Handler {
 	return ServiceNameHandler(serviceName, TraceIDHandler(http.DefaultServeMux))
 }
 
+// StartSpan starts a new OpenTelemetry span using the global TracerProvider.
+func StartSpan(ctx context.Context, spanName string, opts ...oteltrace.SpanStartOption) (context.Context, oteltrace.Span) {
+	return otel.Tracer("intrinsic").Start(ctx, spanName, opts...)
+}
+
 // ServiceNameHandler returns a handler which annotates the current span with the given service
 // name.
+//
+// Note: Prefer configuring the service name once at startup via
+// [WithServiceName] rather than per-request HTTP middleware.
 func ServiceNameHandler(serviceName string, h http.Handler) http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		if span := trace.FromContext(r.Context()); span != nil {
-			span.AddAttributes(trace.StringAttribute("service.name", serviceName))
+		if span := oteltrace.SpanFromContext(r.Context()); span.IsRecording() {
+			span.SetAttributes(semconv.ServiceName(serviceName))
 		}
 		h.ServeHTTP(w, r)
 	})
@@ -475,8 +502,8 @@ func ServiceNameHandler(serviceName string, h http.Handler) http.Handler {
 
 // TraceID returns the current trace identifier if tracing is active.
 func TraceID(ctx context.Context) string {
-	if span := trace.FromContext(ctx); span != nil && span.SpanContext().IsSampled() {
-		return span.SpanContext().TraceID.String()
+	if span := oteltrace.SpanFromContext(ctx); span.SpanContext().IsSampled() {
+		return span.SpanContext().TraceID().String()
 	}
 	return ""
 }
@@ -495,8 +522,19 @@ func TraceIDHandler(h http.Handler) http.Handler {
 	})
 }
 
+// setSpanErrorStatus marks span as failed with the given code and description.
+func setSpanErrorStatus(span oteltrace.Span, code grpccodes.Code, description string) {
+	span.SetAttributes(
+		semconv.ErrorTypeKey.String(code.String()),
+	)
+	span.SetStatus(codes.Error, description)
+}
+
 // SetError sets the error status code and message for the given span.
 // The helper avoids the string-formatting operation for the error if the span is not recorded.
+//
+// Deprecated: Use native OpenTelemetry [trace.Span.SetStatus] instead.
+// If you really need to attach code to the span, use [SetSpanError].
 func SetError(span *trace.Span, statusCode int, message string, err error) {
 	if !span.IsRecordingEvents() {
 		return
@@ -504,8 +542,21 @@ func SetError(span *trace.Span, statusCode int, message string, err error) {
 	span.SetStatus(trace.Status{Code: int32(statusCode), Message: fmt.Sprintf("%s: %v", message, err)})
 }
 
+// SetSpanError marks span as failed with the given gRPC status code and message.
+//
+// The helper avoids the string-formatting operation for the error if the span is not recorded.
+func SetSpanError(span oteltrace.Span, code grpccodes.Code, message string, err error) {
+	if !span.IsRecording() {
+		return
+	}
+	setSpanErrorStatus(span, code, fmt.Sprintf("%s: %v", message, err))
+}
+
 // SetErrorf sets the error status code and message for the given span.
 // The helper avoids the string-formatting operation for the error if the span is not recorded.
+//
+// Deprecated: Use native OpenTelemetry [trace.Span.SetStatus] instead.
+// If you really need to attach code to the span, use [SetSpanErrorf].
 func SetErrorf(span *trace.Span, statusCode int, format string, a ...any) {
 	if !span.IsRecordingEvents() {
 		return
@@ -513,8 +564,20 @@ func SetErrorf(span *trace.Span, statusCode int, format string, a ...any) {
 	span.SetStatus(trace.Status{Code: int32(statusCode), Message: fmt.Sprintf(format, a...)})
 }
 
+// SetSpanErrorf marks span as failed with the given gRPC status code and the formatted message.
+//
+// The helper avoids the string-formatting operation if the span is not recorded.
+func SetSpanErrorf(span oteltrace.Span, code grpccodes.Code, format string, a ...any) {
+	if !span.IsRecording() {
+		return
+	}
+	setSpanErrorStatus(span, code, fmt.Sprintf(format, a...))
+}
+
 // StatusWithError takes span and error and treats error as grpc status
 // to set status on the span. Returns error for easy daisy-chaining.
+//
+// Deprecated: Use [SpanStatusWithError] instead.
 func StatusWithError(span *trace.Span, err error) error {
 	if err != nil {
 		errStat, _ := status.FromError(err)
@@ -526,14 +589,34 @@ func StatusWithError(span *trace.Span, err error) error {
 	return err
 }
 
+// SpanStatusWithError marks span as failed, treating err as a gRPC status to
+// derive the error code. Returns err for easy daisy-chaining.
+func SpanStatusWithError(span oteltrace.Span, err error) error {
+	if err == nil || !span.IsRecording() {
+		return err
+	}
+	// FromError never returns a nil status for a non-nil error.
+	errStat, _ := status.FromError(err)
+	setSpanErrorStatus(span, errStat.Code(), errStat.Message())
+	return err
+}
+
 // ContextSpanAddAttributes adds attributes to the current span in the context.
 // If there is no current span, this is a no-op.
+//
+// Deprecated: Use [AddSpanAttributes] instead.
 func ContextSpanAddAttributes(ctx context.Context, attributes ...trace.Attribute) {
 	span := trace.FromContext(ctx)
 	if span == nil {
 		return
 	}
 	span.AddAttributes(attributes...)
+}
+
+// AddSpanAttributes adds attributes to the current span in the context.
+// If there is no current span, this is a no-op.
+func AddSpanAttributes(ctx context.Context, attributes ...attribute.KeyValue) {
+	oteltrace.SpanFromContext(ctx).SetAttributes(attributes...)
 }
 
 // LocalBased returns a sampler that delegates to a sampler stored in the context

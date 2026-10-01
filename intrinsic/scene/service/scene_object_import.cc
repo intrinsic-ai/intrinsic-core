@@ -24,7 +24,6 @@
 #include <vector>
 
 #include "absl/base/nullability.h"
-#include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/hash/hash.h"
@@ -74,6 +73,7 @@
 #include "intrinsic/scene/sdf/scene_object_from_sdf.h"
 #include "intrinsic/scene/sdf/scene_object_from_zipped_sdf.h"
 #include "intrinsic/scene/sdf/scene_object_to_sdf.h"
+#include "intrinsic/scene/sdf/scene_object_to_zipped_sdf.h"
 #include "intrinsic/scene/sdf/sdf_path_resolver.h"
 #include "intrinsic/scene/sdf/sim_spec_from_sdf.h"
 #include "intrinsic/scene/service/generate_import_metadata.h"
@@ -98,7 +98,6 @@
 #include "ortools/base/path.h"
 #include "ortools/base/temp_path.h"
 #include "tiny_gltf.h"
-#include "zip.h"
 
 namespace intrinsic {
 
@@ -111,6 +110,9 @@ using internal::SceneFileTypes;
 
 namespace {
 
+using ::intrinsic::scene_object::SceneObjectToZippedSdf;
+using ::intrinsic::sdf::SceneObjectToSdf;
+using ::intrinsic::sdf::SceneObjectToSdfOptions;
 using ::intrinsic_proto::geometry::GeometryService;
 using ::intrinsic_proto::scene_object::v1::ExportRequest;
 using ::intrinsic_proto::scene_object::v1::ExportResponse;
@@ -242,103 +244,6 @@ void ApplyUserData(
     scene_object.mutable_user_data()->insert(user_data.begin(),
                                              user_data.end());
   }
-}
-
-absl::StatusOr<std::string> CreateUniqueTempDir(absl::string_view prefix) {
-  const auto& temp_dir = std::filesystem::temp_directory_path().string();
-  int i = 0;
-  while (++i < 1000) {
-    std::string path = file::JoinPath(
-        temp_dir,
-        absl::StrCat(prefix, "_", absl::GetCurrentTimeNanos(), "_", i));
-    if (!std::filesystem::exists(path)) {
-      INTR_RETURN_IF_ERROR(file::RecursivelyCreateDir(path, file::Defaults()));
-      return path;
-    }
-  }
-
-  return absl::InternalError("Failed to create a unique temporary directory.");
-}
-
-absl::StatusOr<std::string> CreateUniqueTempFile(absl::string_view prefix,
-                                                 absl::string_view extension) {
-  const auto& temp_dir = std::filesystem::temp_directory_path().string();
-  int i = 0;
-  while (++i < 1000) {
-    std::string path = file::JoinPath(
-        temp_dir, absl::StrCat(prefix, "_", absl::GetCurrentTimeNanos(), "_", i,
-                               extension));
-    if (!std::filesystem::exists(path)) {
-      // Creates it right away.
-      std::ofstream of(path, std::ios::binary);
-      return path;
-    }
-  }
-
-  return absl::InternalError("Failed to create a unique file.");
-}
-
-// Zips all files in `directory` into `zip_path`.
-// We may want to move this into a common library.
-absl::Status ZipDirectory(absl::string_view directory,
-                          absl::string_view zip_path) {
-  std::filesystem::path abs_dir = std::filesystem::absolute(directory);
-  std::filesystem::path abs_zip = std::filesystem::absolute(zip_path);
-
-  auto [it_zip, it_dir] =
-      std::mismatch(abs_dir.begin(), abs_dir.end(), abs_zip.begin());
-  if (it_dir == abs_dir.end()) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("zip_path (", zip_path, ") cannot be inside directory (",
-                     directory, ")"));
-  }
-
-  int err_code = 0;
-  zip_t* archive = zip_open(std::string(zip_path).c_str(),
-                            ZIP_CREATE | ZIP_TRUNCATE, &err_code);
-  if (archive == nullptr) {
-    return absl::InternalError(
-        absl::StrCat("Failed to open zip archive, error code: ", err_code));
-  }
-
-  for (const auto& entry :
-       std::filesystem::recursive_directory_iterator(directory)) {
-    if (!entry.is_regular_file()) {
-      continue;
-    }
-    const std::string& file_path = entry.path().string();
-    const std::string& relative_path =
-        std::filesystem::relative(entry.path(), directory).string();
-
-    zip_source_t* src = zip_source_file(archive, file_path.c_str(), 0, 0);
-    if (src == nullptr) {
-      zip_discard(archive);
-      return absl::InternalError(
-          absl::StrCat("Failed to create zip source for: ", file_path));
-    }
-
-    zip_int64_t ix =
-        zip_file_add(archive, relative_path.c_str(), src, ZIP_FL_ENC_UTF_8);
-    if (ix < 0) {
-      zip_source_free(src);
-      zip_discard(archive);
-      return absl::InternalError(
-          absl::StrCat("Failed to add file to zip: ", relative_path));
-    }
-
-    // Uses highest compression possible.
-    if (zip_set_file_compression(archive, ix, ZIP_CM_DEFLATE, 9) < 0) {
-      zip_discard(archive);
-      return absl::InternalError(
-          absl::StrCat("Failed to set compression for: ", relative_path));
-    }
-  }
-
-  if (zip_close(archive) < 0) {
-    return absl::InternalError("Failed to close and save zip archive");
-  }
-
-  return absl::OkStatus();
 }
 
 }  // namespace
@@ -496,55 +401,28 @@ absl::StatusOr<ExportResponse> SceneObjectImportImpl::Export(
     fds = request->fds();
     MergeFileDescriptorSet<google::protobuf::Struct>(fds);
   }
-  sdf::SceneObjectToSdfOptions sdf_options = {
+  SceneObjectToSdfOptions sdf_options = {
       .serialize_user_data = request->include_user_data(),
       .user_data_fds = fds,
   };
 
   const auto& scene_object = request->scene_object().proto();
   if (request->include_geometries()) {
-    INTR_ASSIGN_OR_RETURN(const std::string base_path,
-                          CreateUniqueTempDir("export"));
-    absl::Cleanup cleanup = [&base_path]() {
-      std::filesystem::remove_all(base_path);
-    };
-
-    const std::string sdf_path = file::JoinPath(base_path, "model.sdf");
-    const std::string meshes_dir = file::JoinPath(base_path, "meshes");
-
-    INTR_RETURN_IF_ERROR(
-        file::RecursivelyCreateDir(meshes_dir, file::Defaults()));
-
-    sdf_options.save_geopath = meshes_dir;
+    if (geometry_library_ == nullptr) {
+      return absl::InternalError("Geometry library is not initialized.");
+    }
     sdf_options.geometry_deserializer = &geometry_library_->Deserializer();
-    INTR_ASSIGN_OR_RETURN(std::string sdf_content,
-                          sdf::SceneObjectToSdf(scene_object, sdf_options));
-
-    // Makes the mesh URIs relative to the SDF.
-    absl::StrReplaceAll({{meshes_dir, "meshes"}}, &sdf_content);
-    INTR_RETURN_IF_ERROR(
-        file::SetContents(sdf_path, sdf_content, file::Defaults()));
-
-    // Zips the entire base_path directory.
-    INTR_ASSIGN_OR_RETURN(const std::string zip_path,
-                          CreateUniqueTempFile("export_", ".zip"));
-    absl::Cleanup del_zip = [&zip_path]() {
-      std::filesystem::remove(zip_path);
-    };
-
-    INTR_RETURN_IF_ERROR(ZipDirectory(base_path, zip_path));
-
     ExportResponse response;
-    INTR_RETURN_IF_ERROR(file::GetContents(
-        zip_path, response.mutable_zip_archive(), file::Defaults()));
-    return response;
-  } else {
-    INTR_ASSIGN_OR_RETURN(std::string sdf_content,
-                          sdf::SceneObjectToSdf(scene_object, sdf_options));
-    ExportResponse response;
-    response.set_sdf(std::move(sdf_content));
+    INTR_ASSIGN_OR_RETURN(*response.mutable_zip_archive(),
+                          SceneObjectToZippedSdf(scene_object, sdf_options));
     return response;
   }
+
+  INTR_ASSIGN_OR_RETURN(std::string sdf_content,
+                        SceneObjectToSdf(scene_object, sdf_options));
+  ExportResponse response;
+  response.set_sdf(std::move(sdf_content));
+  return response;
 }
 
 absl::StatusOr<google::longrunning::Operation>

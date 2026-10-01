@@ -23,8 +23,8 @@ function helm {
   "$(rlocation "${HELM_BIN}")" "$@"
 }
 
-function kubeval {
-  "$(rlocation "${KUBEVAL_BIN}")" "$@"
+function kubeconform {
+  "$(rlocation "${KUBECONFORM_BIN}")" "$@"
 }
 
 function yamllint {
@@ -47,7 +47,7 @@ function lint_yaml {
 
   tmpdir="$(mktemp -d)"
   trap "rm -rf ${tmpdir}" EXIT
-  schema_tgz="$(rlocation "${KUBEVAL_JSON_SCHEMA}")"
+  schema_tgz="$(rlocation "${KUBECONFORM_JSON_SCHEMA}")"
 
   schema_dir="${tmpdir}/schemas"
   mkdir "${schema_dir}"
@@ -86,9 +86,9 @@ function lint_yaml {
     "${helm_args[@]}" "${chart}" > "${templated_yaml}"
 
   # Catches errors such as spelling hostPath with a lowercase 'P'.
-  kubeval --strict --skip-kinds "${skip_kinds}" \
-      --schema-location="file://${schema_dir}" "${templated_yaml}" \
-    | (egrep -v "\b(PASS|${skip_kinds//,/|})\b" || true) >&2
+  kubeconform -strict -skip "${skip_kinds}" \
+      -schema-location "${schema_dir}/master-standalone-strict/{{ .ResourceKind }}{{ .KindSuffix }}.json" \
+      "${templated_yaml}" >&2
   # Catches errors such as specifying duplicate keys.
   yamllint -c "${yamllint_config}" "${templated_yaml}" >&2
   # Verifies HTTPRoute and GRPCRoute have matching SecurityPolicy targetRefs.

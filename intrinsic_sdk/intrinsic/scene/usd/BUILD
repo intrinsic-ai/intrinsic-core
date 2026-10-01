@@ -14,20 +14,26 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/scene:__subpackages__"])
+package(
+    default_visibility = [
+        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/scene:__subpackages__",
+    ],
+)
 
 cc_library(
     name = "utils",
     srcs = ["utils.cc"],
     hdrs = ["utils.h"],
-    visibility = ["//intrinsic/scene:__subpackages__"],
+    visibility = [
+        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/scene:__subpackages__",
+    ],
     deps = [
         "//intrinsic/util/status:ret_check",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
         "@bazel_tools//tools/cpp/runfiles",
         "@openusd",
     ],
@@ -37,12 +43,14 @@ cc_library(
     name = "scene_object_from_usd",
     srcs = ["scene_object_from_usd.cc"],
     hdrs = ["scene_object_from_usd.h"],
-    visibility = ["//intrinsic/scene/service:__subpackages__"],
+    visibility = [
+        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/scene:__subpackages__",
+    ],
     deps = [
         ":connection_graph",
         ":entity_from_usd",
         ":utils",
-        "//intrinsic/util:file_helpers",
         "//intrinsic/util/status:ret_check",
         "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_serializer",
@@ -67,7 +75,6 @@ cc_library(
     hdrs = ["entity_from_usd.h"],
     deps = [
         ":utils",
-        "//intrinsic/util/status:ret_check",
         "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/geometry/api:io",
         "//intrinsic_sdk/intrinsic/geometry/api:renderable_generation",
@@ -81,7 +88,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/component:physics_component",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:material_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",

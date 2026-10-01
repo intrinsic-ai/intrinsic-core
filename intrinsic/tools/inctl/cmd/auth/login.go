@@ -44,13 +44,17 @@ const (
 	keyNoBrowser             = "no_browser"
 	keyInternalMockDiscovery = "internal-mock-discovery"
 
-	orgTokenURLFmt     = "https://%s/o/%s/generate-keys"
-	projectTokenURLFmt = "https://%s/project/%s/generate-keys"
 	// We are going to use system defaults to ensure we open web-url correctly.
 	// For dev container running via VS Code the sensible-browser redirects
 	// call into code client from server to ensure URL is opened in valid
 	// client browser.
 	sensibleBrowser = "/usr/bin/sensible-browser"
+
+	// placeholderorg is used when a user didn't provide an org.
+	// It was introduced to make it possible to run inctl auth login
+	// without the org and project flags, since the server returning
+	// an API key doesn't actually require an org or a project.
+	placeholderOrg = "-"
 )
 
 // Exposed for testing
@@ -60,20 +64,13 @@ var (
 
 var (
 	loginParams = viper.New()
-	loginCmd    = orgutil.WrapCmd(
+	loginCmd    = orgutil.WrapCmdOptional(
 		&cobra.Command{
 			Use:   "login",
 			Short: "Logs in user into Flowstate",
 			Long:  "Logs in user into Flowstate to allow interactions with solutions.",
 			Args:  cobra.NoArgs,
 			RunE:  loginCmdE,
-			PersistentPreRunE: func(_ *cobra.Command, _ []string) error {
-				if err := orgutil.ValidateEnvironment(loginParams); err != nil {
-					return err
-				}
-
-				return nil
-			},
 		},
 		loginParams,
 		orgutil.WithOrgExistsCheck(func() bool {
@@ -111,10 +108,12 @@ func queryForAPIKey(ctx context.Context, writer io.Writer, in *bufio.Reader, org
 	if portal == "" {
 		return "", fmt.Errorf("unknown environment %q", env)
 	}
-	authorizationURL := fmt.Sprintf(projectTokenURLFmt, portal, project)
+	targetOrg := placeholderOrg
 	if organization != "" {
-		authorizationURL = fmt.Sprintf(orgTokenURLFmt, portal, url.PathEscape(organization))
+		targetOrg = url.PathEscape(organization)
 	}
+
+	authorizationURL := fmt.Sprintf("https://%s/o/%s/generate-keys", portal, targetOrg)
 	fmt.Fprintf(writer, "Open URL in your browser to obtain authorization token: %s\n", authorizationURL)
 
 	ignoreBrowser := loginParams.GetBool(keyNoBrowser)
@@ -191,19 +190,6 @@ func loginCmdE(cmd *cobra.Command, _ []string) (err error) {
 	in := bufio.NewReader(cmd.InOrStdin())
 	isBatch := loginParams.GetBool(keyBatch)
 
-	// If we are passed a pure org without a project, check if we can resolve it from stored credentials.
-	// If the short organization name matches multiple stored credentials, fail early with an ambiguity error
-	// BEFORE asking for the API Key and printing/generating a potentially broken key link.
-	if projectName == "" && orgName != "" {
-		resolved, resolveErr := orgutil.ResolveOrg(orgName)
-		if resolveErr == nil {
-			projectName = resolved.Project
-			org = orgutil.QualifiedOrg(projectName, orgName)
-		} else if strings.Contains(resolveErr.Error(), "ambiguous") {
-			return fmt.Errorf("your organization %q uses multiple projects. Please re-run login using the fully-qualified `inctl auth login --org=%s@<PROJECT_ID>` syntax", orgName, orgName)
-		}
-	}
-
 	env := loginParams.GetString(orgutil.KeyEnvironment)
 	if env == "" {
 		env = envs.FromComputeProject(projectName)
@@ -262,12 +248,6 @@ func loginCmdE(cmd *cobra.Command, _ []string) (err error) {
 
 	if len(orgToProjects) > 0 {
 		fmt.Fprintln(writer, "Successfully logged in!")
-		// most of 3P users have acces to just one org-project, so it doesn't make sense
-		// to leak implementation details about projects here.
-		if len(orgToProjects) == 1 {
-			return
-		}
-		fmt.Fprintln(writer, "Wrote credentials for the following:")
 
 		var targets []string
 		for o, ps := range orgToProjects {
@@ -279,8 +259,14 @@ func loginCmdE(cmd *cobra.Command, _ []string) (err error) {
 				}
 			}
 		}
+		// most of the users have access to just one org-project, so it doesn't make sense
+		// to repeat the target here when it matches the requested --org.
+		if len(targets) == 1 && targets[0] == orgName && hasRequestedAccess(orgToProjects, orgName, projectName) {
+			return nil
+		}
 		slices.Sort(targets)
 
+		fmt.Fprintln(writer, "Wrote credentials for the following targets:")
 		for _, t := range targets {
 			fmt.Fprintf(writer, "  - %s\n", t)
 		}

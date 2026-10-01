@@ -89,15 +89,23 @@ function validate_env() {
 }
 
 function run_silent() {
+    if [[ "${EUID}" -ne 0 ]]; then
+        sudo -v
+    fi
+
     local log_file
     log_file=$(mktemp "${WORK_DIR}/cmd_XXXXXX.log")
 
-    if ! "$@" > "${log_file}" 2>&1; then
+    trap 'echo ""; echo "Command interrupted: $*"; echo "Logs:"; cat "${log_file}"; exit 130' INT TERM
+
+    if ! "$@" < /dev/null > "${log_file}" 2>&1; then
+        trap - INT TERM
         echo "Command failed: $*"
         echo "Logs:"
         cat "${log_file}"
         exit 1
     fi
+    trap - INT TERM
 }
 
 function install_dependencies() {
@@ -164,11 +172,45 @@ EOF
     run_silent systemctl daemon-reload
 }
 
-function configure_base_profile() {
+function configure_kernel_cmdline() {
     local hk_cpus
     hk_cpus=$(get_housekeeping_cpus)
+    local cfg_file="/etc/default/grub.d/99-intrinsic-realtime.cfg"
+    echo "Tuning kernel for real-time execution (isolated cores: ${IOC_RT_CORES})..."
+
+    # The kernel command line is deliberately not left to the TuneD bootloader
+    # plugin. TuneD only keeps these parameters in /etc/tuned/bootcmdline while it
+    # is running, and blanks that file when it stops ("rolling back all changes").
+    # The next run of update-grub, e.g. from an automatic kernel upgrade, then
+    # silently drops them and the following boot comes up without isolated cores.
+    # A static drop-in is independent of any running daemon and survives kernel
+    # updates.
+    local params=(
+        # Equivalent to the TuneD 'network-latency' profile.
+        "skew_tick=1"
+        "tsc=reliable"
+        "rcupdate.rcu_normal_after_boot=1"
+        # Equivalent to the TuneD 'realtime' profile (with isolate_managed_irq=Y).
+        "isolcpus=managed_irq,domain,${IOC_RT_CORES}"
+        "intel_pstate=disable"
+        "nosoftlockup"
+        # Read by the Intrinsic runtime to determine the real-time cores.
+        "rcu_nocbs=${IOC_RT_CORES}"
+        "irqaffinity=${hk_cpus}"
+    )
+
+    mkdir -p /etc/default/grub.d
+    cat << EOF > "${cfg_file}"
+# Managed by setup_realtime.sh. Do not edit.
+GRUB_CMDLINE_LINUX_DEFAULT="\${GRUB_CMDLINE_LINUX_DEFAULT:+\$GRUB_CMDLINE_LINUX_DEFAULT }${params[*]}"
+EOF
+
+    run_silent update-grub
+}
+
+function configure_base_profile() {
     local profile_dir="/etc/tuned/profiles/intrinsic-realtime"
-    echo "Creating base TuneD profile 'intrinsic-realtime' (isolated cores: ${IOC_RT_CORES})..."
+    echo "Tuning userspace for real-time execution (isolated cores: ${IOC_RT_CORES})..."
 
     mkdir -p "${profile_dir}"
     cat << EOF > "${profile_dir}/tuned.conf"
@@ -180,12 +222,30 @@ isolate_managed_irq=Y
 isolated_cores=${IOC_RT_CORES}
 
 [bootloader]
-cmdline=+rcu_nocbs=${IOC_RT_CORES} irqaffinity=${hk_cpus}
+# The kernel command line is owned by /etc/default/grub.d/99-intrinsic-realtime.cfg
+# (see configure_kernel_cmdline), so keep TuneD away from the bootloader. The
+# cmdline fragments inherited from the 'realtime' and 'network-latency' profiles
+# are blanked as well, otherwise TuneD would still write them to
+# /etc/tuned/bootcmdline and they would end up duplicated in grub.cfg.
+skip_grub_config=1
+cmdline_realtime=
+cmdline_network_latency=
 EOF
     # Some tooling, documentation, and upstream TuneD defaults look in /etc/tuned/<name>
     # while Debian/Ubuntu packages configure profile_dirs to search /etc/tuned/profiles/<name>.
     # Symlink to /etc/tuned/<name> so both paths resolve.
     ln -sfn "${profile_dir}" "/etc/tuned/intrinsic-realtime"
+
+    # power-profiles-daemon declares 'Conflicts=tuned.service', and GNOME/GDM
+    # activates it over D-Bus a few seconds into every boot. systemd then stops
+    # TuneD, which rolls back the entire profile (CPU governor, IRQ affinity,
+    # sysctls, NIC tuning), leaving the machine untuned. Mask it before TuneD is
+    # started so the profile stays active.
+    if systemctl list-unit-files power-profiles-daemon.service --no-legend 2> /dev/null | grep -q .; then
+        # Mask before stopping, so that a pending D-Bus request cannot restart it.
+        run_silent systemctl mask power-profiles-daemon.service
+        systemctl stop power-profiles-daemon.service 2> /dev/null || true
+    fi
 }
 
 function configure_ethercat_profile() {
@@ -329,6 +389,7 @@ function main() {
     # disabling SMT).
     check_smt
     configure_systemd_affinity
+    configure_kernel_cmdline
     configure_base_profile
 
     if [[ -n "${IOC_ETHERCAT_NIC}" ]]; then

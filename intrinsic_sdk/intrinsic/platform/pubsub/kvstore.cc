@@ -63,6 +63,7 @@ using platform::proto::WorkcellInfo;
 namespace {
 constexpr absl::Duration kHighConsistencyInitialGetTimeout = absl::Seconds(10);
 constexpr absl::Duration kVerificationGetTimeout = absl::Milliseconds(100);
+constexpr absl::Duration kVerificationRetryInterval = absl::Milliseconds(500);
 constexpr absl::Duration kVerificationRetryDelayMin = absl::Milliseconds(10);
 constexpr absl::Duration kVerificationRetryDelayMax = absl::Milliseconds(2500);
 constexpr double kVerificationRetryDelayFactor = 5.0;
@@ -347,7 +348,7 @@ absl::Status KeyValueStore::VerifyFirstReply(const std::string& prefixed_name,
       return VerificationTimeoutError(VerificationMode::kFirstReply, key);
     }
     absl::StatusOr<std::string> raw_result = GetRawWithRawKey(
-        prefixed_name, std::min(kVerificationGetTimeout, remaining));
+        prefixed_name, std::min(kVerificationRetryInterval, remaining));
     if (raw_result.ok()) {
       return absl::OkStatus();
     }
@@ -380,7 +381,7 @@ absl::Status KeyValueStore::VerifyHighConsistency(
     absl::StatusOr<std::optional<std::string>> current_state =
         FetchCurrentRawState(
             GetRawWithRawKey(prefixed_name,
-                             std::min(kVerificationGetTimeout, remaining)),
+                             std::min(kVerificationRetryInterval, remaining)),
             key);
 
     if (!absl::IsDeadlineExceeded(current_state.status())) {
@@ -721,7 +722,9 @@ absl::StatusOr<Subscription> KeyValueStore::CreateSubscription(
       [value_callback, deletion_callback](const char* keyexpr, const void* blob,
                                           const size_t blob_len) {
         if (blob == nullptr || blob_len == 0) {
-          deletion_callback(keyexpr);
+          if (deletion_callback != nullptr) {
+            deletion_callback(keyexpr);
+          }
           return;
         }
         google::protobuf::Any msg;

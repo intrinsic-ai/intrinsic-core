@@ -263,7 +263,7 @@ TEST_P(MotionPlannerTest, CheckPathConstraintSatisfaction) {
       -1.5830168625113954, -1.570702106934764, -1.5706219444277991,
       -1.5707054917593837, 1.5706998190287802, 1.5707031008962957};
 
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -312,7 +312,7 @@ TEST_P(MotionPlannerTest, CheckPlanWithPathConstraints) {
 
   ASSERT_OK_AND_ASSIGN(auto motion_planner,
                        MotionPlanner::Create(motion_planner_flags_));
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -373,7 +373,7 @@ TEST_P(MotionPlannerTest, CheckPlanWithPathConstraints) {
 }
 
 TEST_P(MotionPlannerTest, ReturnsInvalidArgumentForEmptyMotionSegments) {
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits));
 
   // Empty motion specification
@@ -392,7 +392,7 @@ TEST_P(MotionPlannerTest, ReturnsInvalidArgumentForEmptyMotionSegments) {
 }
 
 TEST_P(MotionPlannerTest, FailsForLinearMoveSegmentWithoutTargetSet) {
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits));
 
   auto* motion_segment = motion_spec_.add_motion_segments();
@@ -413,7 +413,7 @@ TEST_P(MotionPlannerTest, WorksForLinearMoveSegmentWithJointTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -440,7 +440,7 @@ TEST_P(MotionPlannerTest, LinearMoveWorksForSinglePoseTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -482,7 +482,7 @@ TEST_P(MotionPlannerTest, LinearMoveWorksForMultiplePoseTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -530,7 +530,7 @@ TEST_P(MotionPlannerTest, LinearMoveFailsForDifferentDynamicLimitSettings) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -571,7 +571,7 @@ TEST_P(MotionPlannerTest, LinearMoveFailsForDifferentCollisionSettings) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -612,7 +612,7 @@ TEST_P(MotionPlannerTest, LinearMoveWorksForCustomedJointLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -669,7 +669,7 @@ TEST_P(MotionPlannerTest, LinearMoveFailsWithDifferentJointLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -719,7 +719,7 @@ TEST_P(MotionPlannerTest, LinearMoveWorksForCustomedPositionLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -895,7 +895,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -939,7 +939,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -987,7 +987,7 @@ TEST_P(MotionPlannerTest, LinearMoveFailsForDifferrentPositionLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1036,7 +1036,7 @@ TEST_P(MotionPlannerTest, LinearMoveFailsForWrongPositionLimitsDimension) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1081,7 +1081,7 @@ TEST_P(MotionPlannerTest, LinearMoveWorksForCartesianCurveParameters) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {0.0374165, -1.97835,  2.08278,
                                              0.344806,  -0.110898, -0.34285};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1129,7 +1129,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForSinglePoseTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1184,7 +1184,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForMultiplePoseTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1229,7 +1229,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForSingleJointTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1271,7 +1271,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForMultipleJointTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1315,7 +1315,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForMixedTargets) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1362,7 +1362,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForCustomedJointLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1424,7 +1424,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForCustomedPositionLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1550,7 +1550,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksWithDifferentJointLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1593,7 +1593,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1635,7 +1635,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForDifferentPositionLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1761,7 +1761,7 @@ TEST_P(MotionPlannerTest, JointMoveFailsForInvalidPositionLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1802,7 +1802,7 @@ TEST_P(MotionPlannerTest, JointMoveFailsForInvalidPositionLimitsDimensions) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1841,7 +1841,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForCartesianLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1927,7 +1927,7 @@ TEST_P(MotionPlannerTest, MotionPlannerFailsForInvalidCartesianLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -1969,7 +1969,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksWhenSettingCartesianCurveParameters) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2005,7 +2005,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForJointCurveParameters) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2050,7 +2050,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForSmallCollisionMargins) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2098,7 +2098,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksForLargeCollisionMargins) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2140,7 +2140,7 @@ TEST_P(MotionPlannerTest, CollisionCheckingIsEnabledByDefault) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2170,7 +2170,7 @@ TEST_P(MotionPlannerTest, DisablingCollisionCheckingLocallyWorksForJointMove) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2227,7 +2227,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   const eigenmath::Vector6d init_joint_config = {-0.10, 0.48, -1.36,
                                                  -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             init_joint_config));
 
@@ -2297,7 +2297,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2341,7 +2341,7 @@ TEST_P(MotionPlannerTest, DisablingCollisionCheckingWorks) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2407,7 +2407,7 @@ TEST_P(MotionPlannerTest, PlannedMoveWorksIfStraightLinePossible) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2450,7 +2450,7 @@ TEST_P(MotionPlannerTest, PlannedMoveWorksIfStraightLineNotPossible) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2487,7 +2487,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2650,7 +2650,7 @@ TEST_P(MotionPlannerTest, GetEmptyTrajectoryIfStartAndGoalAreIdendical) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2678,7 +2678,7 @@ TEST_P(MotionPlannerTest, GetEmptyTrajectoryIfStartAndGoalAreApproximate) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2710,7 +2710,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksIfWaypointHasNoMotion) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2744,7 +2744,7 @@ TEST_P(MotionPlannerTest, JointMoveWorksIfWaypointIsCloseToPrevious) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2785,7 +2785,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2823,7 +2823,7 @@ TEST_P(MotionPlannerTest, SettingPlanningTimeOutWorksForBigLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2861,7 +2861,7 @@ TEST_P(MotionPlannerTest, SettingPlanningTimeOutTimesOutForSmallLimits) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2895,7 +2895,7 @@ TEST_P(MotionPlannerTest, PlannedMoveWorksWithCollisionCheckingDisabled) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -2938,7 +2938,7 @@ TEST_P(MotionPlannerTest, PlannedMoveWorksForMultipleIdenticalPoseTargets) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3055,7 +3055,7 @@ TEST_P(MotionPlannerTest, LinearMoveWorksForMultipleIdenticalPoseTargets) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3190,7 +3190,7 @@ TEST_P(MotionPlannerTest, LocalCollisionSettingsWorksForJointAndPlannedMove) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {0.000000, -2.000000, 2.000000,
                                              0.000000, 0.000000,  0.000000};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3308,7 +3308,7 @@ TEST_P(MotionPlannerTest, PathSegmentTypesAreSetCorrectly) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
   std::vector<Pose3d> waypoints;
@@ -3356,7 +3356,7 @@ TEST_P(MotionPlannerTest, LowLevelJointBlendingsAreSetCorrectly) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
   std::vector<Pose3d> waypoints;
@@ -3395,7 +3395,7 @@ TEST_P(MotionPlannerTest, WorksForCombiningMotionTypesSharpVMove) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3514,7 +3514,7 @@ TEST_P(MotionPlannerTest, CollisionRuleSetSizesAreCorrectInPathSegments) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3586,7 +3586,7 @@ TEST_P(MotionPlannerTest, CreateKinematicsProxyFromPathSegmentsWorks) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3633,7 +3633,7 @@ TEST_P(MotionPlannerTest, MotionPlanningWorksForPoseInversionPointEdgeCase) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3688,7 +3688,7 @@ TEST_P(MotionPlannerTest, MotionPlanningWorksForJointInversionPointEdgeCase) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3742,7 +3742,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3865,7 +3865,7 @@ TEST_P(MotionPlannerTest, MotionPlanningWorksForCombiningMotionTypesWideV) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -3991,7 +3991,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4050,7 +4050,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4122,7 +4122,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4193,7 +4193,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4267,7 +4267,7 @@ TEST_P(MotionPlannerTest, MotionPlanningWorksLinearSquareMove) {
   // final waypoint.
   eigenmath::Vector6d joint_configuration = {1.1916,   -1.47557, 1.94578,
                                              -1.78062, -1.02402, -0.450497};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4322,7 +4322,7 @@ TEST_P(MotionPlannerTest, WorksJointSquareMove) {
   // final waypoint.
   eigenmath::Vector6d joint_configuration = {1.1916,   -1.47557, 1.94578,
                                              -1.78062, -1.02402, -0.450497};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4376,7 +4376,7 @@ TEST_P(MotionPlannerTest, PlanningErrorsStateMotionSegment) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.10, 0.48, -1.36,
                                              -0.77, 0.83, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4475,7 +4475,7 @@ TEST_P(MotionPlannerTest, StatusWithErrorProtoForSegmentId) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {-0.1,    0.4787, -1.3599,
                                              -0.7566, 0.8293, -1.0};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4529,7 +4529,7 @@ TEST_P(MotionPlannerTest, SegmentSpecificCollisionSettingsWorkForMotionTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {0.0374165, -1.97835,  2.08278,
                                              0.344806,  -0.110898, -0.34285};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4592,7 +4592,7 @@ TEST_P(MotionPlannerTest,
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {0.0374165, -1.97835,  2.08278,
                                              0.344806,  -0.110898, -0.34285};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4654,7 +4654,7 @@ TEST_P(MotionPlannerTest, SettingPlannerStepSizeWorks) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {0.000000, -2.000000, 2.000000,
                                              0.000000, 0.000000,  0.000000};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4769,7 +4769,7 @@ TEST_P(MotionPlannerTest, RelativeMoveWorks) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4841,7 +4841,7 @@ TEST_P(MotionPlannerTest, RelativePoseEqualityWrtFixedFrame) {
   const eigenmath::Vector6d joint_configuration = {
       0.0374165, -1.97835, 2.08278, 0.344806, -0.110898, -0.34285};
 
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -4929,7 +4929,7 @@ TEST_P(MotionPlannerTest, RelativePositionEqualityWrtFixedFrame) {
   const eigenmath::Vector6d joint_configuration = {
       0.0374165, -1.97835, 2.08278, 0.344806, -0.110898, -0.34285};
 
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -5002,7 +5002,7 @@ TEST_P(MotionPlannerTest, RelativeRotationEqualityWrtFixedFrame) {
   const eigenmath::Vector6d joint_configuration = {
       0.0374165, -1.97835, 2.08278, 0.344806, -0.110898, -0.34285};
 
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -5081,7 +5081,7 @@ TEST_P(MotionPlannerTest, SmallRelativeMotionWorks) {
   const eigenmath::Vector6d joint_configuration = {
       0.0374165, -1.97835, 2.08278, 0.344806, -0.110898, -0.34285};
 
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -5148,7 +5148,7 @@ class MotionPlannerPathTest : public MotionPlannerBaseTest,
 TEST_F(MotionPlannerPathTest, ReturnsInvalidArgumentForEmptyMotionSegments) {
   topp_test_params_.set_infinite_jerk_limits = true;
   topp_test_params_.test_name = "InvalidArgumentForEmptyMotionSegments";
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits));
 
   // Empty motion specification
@@ -5168,7 +5168,7 @@ TEST_F(MotionPlannerPathTest, ReturnsInvalidArgumentForEmptyMotionSegments) {
 
 TEST_F(MotionPlannerPathTest, FailsForLinearMoveSegmentWithoutTargetSet) {
   topp_test_params_.set_infinite_jerk_limits = true;
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits));
 
   auto* motion_segment = motion_spec_.add_motion_segments();
@@ -5193,7 +5193,7 @@ TEST_F(MotionPlannerPathTest, WorksForLinearMoveSegmentWithJointTarget) {
                        MotionPlanner::Create(motion_planner_flags_));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -5240,7 +5240,7 @@ TEST_F(MotionPlannerPathTest,
                        MotionPlanner::Create(motion_planner_flags));
   eigenmath::Vector6d joint_configuration = {0.000000, -2.000000, 2.000000,
                                              0.000000, 0.000000,  0.000000};
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -5294,7 +5294,7 @@ TEST_F(MotionPlannerPathTest,
                        MotionPlanner::Create(motion_planner_flags));
   eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
                                              -1.78568, -1.57508, -0.28733};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -5330,7 +5330,7 @@ TEST_F(MotionPlannerPathTest, MotionPathPlanningDefaultsToNoBlending) {
   // final waypoint.
   eigenmath::Vector6d joint_configuration = {1.1916,   -1.47557, 1.94578,
                                              -1.78062, -1.02402, -0.450497};
-  ASSERT_OK(InitializeWorld(RobotType::UR, "my_robot",
+  ASSERT_OK(InitializeWorld(kUrTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             joint_configuration));
 
@@ -5389,7 +5389,7 @@ TEST_F(MotionPlannerPathTest, CollisionCheckSpacingAffectsAnyPlanning) {
       -0.28733;
   eigenmath::VectorNd goal_configuration(6);
   goal_configuration << -0.900000, 0.4, -0.1194, -0.705302, 0.673298, -1.554707;
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             start_configuration));
 
@@ -5440,7 +5440,7 @@ TEST_F(MotionPlannerPathTest, CollisionCheckSpacingAffectsJointPlanning) {
       -0.28733;
   eigenmath::VectorNd goal_configuration(6);
   goal_configuration << -0.900000, 0.4, -0.1194, -0.705302, 0.673298, -1.554707;
-  ASSERT_OK(InitializeWorld(RobotType::AGILUS, "agilus-04",
+  ASSERT_OK(InitializeWorld(kAgilusTestParams,
                             topp_test_params_.set_infinite_jerk_limits,
                             start_configuration));
 

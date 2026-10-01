@@ -46,6 +46,7 @@
 #include "intrinsic/assets/proto/v1/asset_instances.pb.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
+#include "intrinsic/logging/proto/context.pb.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto/pose.pb.h"
 #include "intrinsic/math/proto_conversion.h"
@@ -61,6 +62,7 @@
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/cameras/capture_result_helper.h"
 #include "intrinsic/perception/core/camera_params.h"
+#include "intrinsic/perception/core/config_name_utils.h"
 #include "intrinsic/perception/core/drawing.h"
 #include "intrinsic/perception/core/eigen_types.h"
 #include "intrinsic/perception/core/image_traits.h"
@@ -68,6 +70,7 @@
 #include "intrinsic/perception/core/operators.h"
 #include "intrinsic/perception/core/post_processing.h"
 #include "intrinsic/perception/core/range_tools.h"
+#include "intrinsic/perception/logging/sensor_image.h"
 #include "intrinsic/perception/proto/v1/camera_params.pb.h"
 #include "intrinsic/perception/proto/v1/camera_setup.pb.h"
 #include "intrinsic/perception/proto/v1/camera_to_robot_calibration.pb.h"
@@ -367,6 +370,26 @@ absl::StatusOr<double> SensorImageSharpness(
     return absl::InvalidArgumentError("Unsupported image type.");
   }
 }
+
+// Returns the blob name prefix under which the raw image of a capture is
+// logged. The pattern detector logs the matching annotated image under
+// `<config_prefix>annotated/`, so raw images end up in a sibling `raw/` folder.
+std::string RawImageLogPrefix(absl::string_view config_prefix) {
+  return absl::StrCat(config_prefix, "raw/");
+}
+
+// Returns the logging context to attach to a logged calibration image.
+// The calibration-specific labels are added so that logged frames can be
+// filtered by calibration session, capture, and camera.
+intrinsic_proto::data_logger::Context ImageLogContext(
+    absl::string_view session_id, absl::string_view capture_id,
+    absl::string_view camera_name) {
+  intrinsic_proto::data_logger::Context context;
+  (*context.mutable_labels())["calibration_session_id"] = session_id;
+  (*context.mutable_labels())["calibration_capture_id"] = capture_id;
+  (*context.mutable_labels())["camera"] = camera_name;
+  return context;
+}
 }  // namespace
 
 CalibrationServiceImpl::CalibrationServiceImpl(
@@ -529,8 +552,9 @@ grpc::Status CalibrationServiceImpl::Initialize(
     }
   }
 
-  // Finish all scheduled coverage map processing tasks, before we reinitialize
-  // the coverage maps and their publishers, so we won't work on different ones.
+  // Finish all scheduled coverage map processing and logging tasks, before we
+  // reinitialize the coverage maps and their publishers, so we won't work on
+  // different ones.
   INTR_RETURN_IF_ERROR_GRPC(executor_.WaitForOutstandingTasks());
   absl::MutexLock coverage_lock(coverage_mutex_);
   coverage_maps_.clear();
@@ -633,6 +657,8 @@ grpc::Status CalibrationServiceImpl::CaptureData(
     calibration_data_point.base_t_flange = base_t_flange;
   }
 
+  calibration_data_point.capture_id = std::format("{:04}", next_capture_id_++);
+
   std::vector<intrinsic_proto::perception::v1::ImageBuffer>
       annotated_image_buffers;
   annotated_image_buffers.reserve(camera_info_.size());
@@ -677,6 +703,23 @@ grpc::Status CalibrationServiceImpl::CaptureData(
         (GetFirstSensorImageOfType<Rgb8u, Gray8u, Gray32f>(capture_result)));
     calibration_data_point.camera_params_from_capture.push_back(
         sensor_image->camera_params());
+
+    // Log the raw (unannotated) image. The corresponding annotated image is
+    // logged by the pattern detector. Logging failures are not fatal for the
+    // data collection.
+    if (const absl::StatusOr<std::string> filename = LogSensorImage(
+            executor_, *sensor_image,
+            RawImageLogPrefix(
+                ExtractPrefixFromConfigName(pattern_detection_config_.name())),
+            ImageLogContext(session_id_, calibration_data_point.capture_id,
+                            camera_name));
+        filename.ok()) {
+      LOG(INFO) << "Logging raw image of camera " << camera_name << " as "
+                << *filename;
+    } else {
+      LOG(WARNING) << "Failed to log raw image of camera " << camera_name
+                   << ": " << filename.status();
+    }
 
     INTR_ASSIGN_OR_RETURN_GRPC(
         intrinsic_proto::perception::v1::PatternDetectionResult
@@ -784,8 +827,6 @@ grpc::Status CalibrationServiceImpl::CaptureData(
         intrinsic_proto::perception::v1::CaptureDataResponse::
             CAPTURE_DATA_STATUS_NO_ERRORS);
   }
-
-  calibration_data_point.capture_id = std::format("{:04}", next_capture_id_++);
 
   INTR_RETURN_IF_ERROR_GRPC(ScheduleCoverageMapsUpdate(
       ImagePointsPerCamera(calibration_data_point.pattern_detections),

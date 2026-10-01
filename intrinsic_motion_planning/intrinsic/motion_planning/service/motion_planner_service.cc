@@ -44,7 +44,9 @@
 #include "grpcpp/support/status.h"
 #include "intrinsic/assets/id_utils.h"
 #include "intrinsic/eigenmath/types.h"
-#include "intrinsic/geometry/proto/transformed_geometry_storage_refs.pb.h"
+#include "intrinsic/geometry/api/affine_transform_of_geometry.h"
+#include "intrinsic/geometry/api/io.h"
+#include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
 #include "intrinsic/icon/proto/joint_space.pb.h"
@@ -232,22 +234,18 @@ absl::StatusOr<std::unique_ptr<object_world::ObjectWorld>> GetObjectWorldView(
   return object_world;
 }
 
-absl::StatusOr<
-    std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>>
+absl::StatusOr<std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>>
 ComputeSweptVolume(const World& world, const RobotCollectionsEntityId& robot_id,
                    GeometrySerializer& geolib, const PointPath& path) {
   INTR_ASSIGN_OR_RETURN(const auto shape_data,
                         ComputeSweptVolumeFromPath(world, robot_id, path));
 
-  std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs> result;
+  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> result;
   result.reserve(shape_data.size());
-  for (const auto& shape : shape_data) {
-    intrinsic_proto::geometry::TransformedGeometryStorageRefs shape_proto;
-    INTR_ASSIGN_OR_RETURN(const auto geometry_storage_ref,
-                          geolib.SaveGeometry(shape.shape()));
-    *shape_proto.mutable_geometry_storage_refs() = geometry_storage_ref;
-    *shape_proto.mutable_ref_t_shape_aff() =
-        intrinsic::ToProto(shape.ref_t_shape());
+  for (const TransformedGeometry& shape : shape_data) {
+    INTR_ASSIGN_OR_RETURN(
+        intrinsic_proto::geometry::v1::TransformedGeometry shape_proto,
+        intrinsic::geo::ToProto(shape, &geolib));
     result.push_back(std::move(shape_proto));
   }
   return result;
@@ -267,8 +265,7 @@ PointPath PathSegmentsToPath(const std::vector<PathSegment>& path_segments) {
   return path;
 }
 
-absl::StatusOr<
-    std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>>
+absl::StatusOr<std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>>
 ComputeSweptVolume(const World& world, const RobotCollectionsEntityId& robot_id,
                    GeometrySerializer& geolib,
                    const JointTrajectoryPVA& trajectory) {
@@ -285,15 +282,14 @@ absl::Status ComputeSweptVolumeForPathAndAssignToResponse(
     const World& world, const RobotCollectionsEntityId& robot_id,
     GeometrySerializer& geolib, const PointPath& path,
     intrinsic_proto::motion_planning::v1::PathPlanningResponse* response) {
-  std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>
-      swept_volumes;
+  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> swept_volumes;
   {
     INTR_ASSIGN_OR_RETURN(swept_volumes,
                           ComputeSweptVolume(world, robot_id, geolib, path));
   }
 
   for (auto& swept_volume : swept_volumes) {
-    *response->add_swept_volume() = std::move(swept_volume);
+    *response->add_swept_volumes() = std::move(swept_volume);
   }
   return absl::OkStatus();
 }
@@ -303,15 +299,14 @@ absl::Status ComputeSweptVolumeAndAssignToResponse(
     GeometrySerializer& geolib, const JointTrajectoryPVA& trajectory,
     intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse*
         response) {
-  std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>
-      swept_volumes;
+  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> swept_volumes;
   {
     INTR_ASSIGN_OR_RETURN(
         swept_volumes, ComputeSweptVolume(world, robot_id, geolib, trajectory));
   }
 
   for (auto& swept_volume : swept_volumes) {
-    *response->add_swept_volume() = std::move(swept_volume);
+    *response->add_swept_volumes() = std::move(swept_volume);
   }
   return absl::OkStatus();
 }

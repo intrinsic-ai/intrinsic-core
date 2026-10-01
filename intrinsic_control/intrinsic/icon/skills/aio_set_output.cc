@@ -80,7 +80,8 @@ AioSetOutput::Execute(const ExecuteRequest& request, ExecuteContext& context) {
 
     AnalogDigitalIOInterface::AnalogOutputBlock block;
     block.name = p.block_name();
-    // Error checking is done in the helper class.
+    // Error checking (including duplicate block names) is done in the helper
+    // class.
     for (uint32_t i = 0; i < p.indices_size(); ++i) {
       const uint32_t aio_index = p.indices(i);
       const double aio_value = p.values(i);

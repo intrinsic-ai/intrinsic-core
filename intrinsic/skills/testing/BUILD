@@ -32,7 +32,6 @@ py_library(
         "//intrinsic/geometry/proto:geometry_service_py_pb2_grpc",
         "//intrinsic/skills/internal:execute_context_impl_py",
         "//intrinsic/skills/internal:get_footprint_context_impl_py",
-        "//intrinsic/skills/internal:predict_context_impl_py",
         "//intrinsic/skills/internal:preview_context_impl_py",
         "//intrinsic/world/proto:object_world_service_py_pb2_grpc",
         "//intrinsic_control/intrinsic/icon/release:file_helpers_py",
@@ -40,7 +39,6 @@ py_library(
         "//intrinsic_sdk/intrinsic/motion_planning:motion_planner_client_py",
         "//intrinsic_sdk/intrinsic/skills/python:execute_request",
         "//intrinsic_sdk/intrinsic/skills/python:get_footprint_request",
-        "//intrinsic_sdk/intrinsic/skills/python:predict_request",
         "//intrinsic_sdk/intrinsic/skills/python:preview_request",
         "//intrinsic_sdk/intrinsic/skills/python:skill_canceller",
         "//intrinsic_sdk/intrinsic/skills/python:skill_interface",
@@ -65,7 +63,6 @@ cc_library(
     deps = [
         "//intrinsic/skills/internal:execute_context_impl",
         "//intrinsic/skills/internal:get_footprint_context_impl",
-        "//intrinsic/skills/internal:predict_context_impl",
         "//intrinsic/skills/internal:preview_context_impl",
         "//intrinsic/util:file_helpers",
         "//intrinsic/util/path_resolver",

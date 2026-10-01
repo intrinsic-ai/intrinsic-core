@@ -37,7 +37,6 @@
 )
 
 ; This template is used to communicate from the ClipsSkillDispatcher.
-; Only one of 'status' and 'predict-state' can be set at one time.
 (deftemplate skill-status
   ; UID for this action (scoped to the lifetime of the executive)
   (slot action-id (type SYMBOL))
@@ -53,15 +52,10 @@
         (allowed-values UNKNOWN PROJECTED RUNNING CANCELING
                         CANCELING-EXECUTION-TIMEOUT
                         FAILED SUCCEEDED CANCELED))
-  ; New predict state of the skill.
-  (slot predict-state (type SYMBOL) (default UNKNOWN)
-        (allowed-values UNKNOWN RUNNING SUCCEEDED FAILED))
   ; An optional error message if the skill failed
   (slot message (type STRING))
   ; The resulting return value, set if the skill produced a return value.
   (slot return-value-proto-id (type INTEGER))
-  ; The resulting prediction proto, set if the skill produced a prediction.
-  (slot prediction-proto-id (type INTEGER))
 
   ; If the skill failed may contain an ExtendedStatus proto with detailed error
   ; information to propagate in the behavior tree.

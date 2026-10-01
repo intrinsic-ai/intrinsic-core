@@ -779,6 +779,28 @@ RtclControllerFakeSession::PollReactions() {
       }
     }
   }
+  // Mirror ICON's behavior: activating multiple actions that claim the same
+  // part in the same cycle is rejected with RESOURCE_EXHAUSTED, so tests catch
+  // such conflicts instead of silently passing.
+  absl::flat_hash_map<absl::string_view, ActionInstanceId> part_to_action;
+  for (const ActionInstanceId& next_action_id : next_action_ids) {
+    const auto action_it = actions_by_id_.find(next_action_id);
+    if (action_it == actions_by_id_.end()) {
+      continue;
+    }
+    for (const auto& [slot_name, part_name] :
+         action_it->second.description.slot_part_map) {
+      const auto [inserted_it, inserted] =
+          part_to_action.try_emplace(part_name, next_action_id);
+      if (!inserted && inserted_it->second != next_action_id) {
+        return absl::ResourceExhaustedError(absl::StrCat(
+            "Part '", part_name,
+            "' is requested by multiple actions during reaction handling: ",
+            inserted_it->second.value(), " and ", next_action_id.value()));
+      }
+    }
+  }
+
   if (activate_next_behavior) {
     INTR_RETURN_IF_ERROR(ActivateNextBehavior());
   }

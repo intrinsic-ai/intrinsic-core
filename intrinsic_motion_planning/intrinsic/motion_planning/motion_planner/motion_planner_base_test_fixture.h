@@ -46,10 +46,25 @@ absl::Status SetRobotConfig(RobotCollectionsEntityId robot_id,
 inline constexpr char kUr5eTestWorldGzfPath[] =
     "intrinsic/skills/apps/test_data/ur5e_world.gzf";
 
-// Supported robot models that can be loaded and initialized in test fixtures.
-enum class RobotType {
-  UR,
-  AGILUS,
+// Struct holding per-robot-type configuration for test fixtures.
+struct RobotTestParams {
+  std::string world_gzf_path;
+  std::string robot_name;
+
+  bool operator==(const RobotTestParams& other) const = default;
+};
+
+inline constexpr char k4RobotsCubeWorldGzfPath[] =
+    "intrinsic/world/test_data/4_robots_cube_world.gzf";
+
+inline const RobotTestParams kUrTestParams = {
+    .world_gzf_path = kUr5eTestWorldGzfPath,
+    .robot_name = "my_robot",
+};
+
+inline const RobotTestParams kAgilusTestParams = {
+    .world_gzf_path = k4RobotsCubeWorldGzfPath,
+    .robot_name = "agilus-04",
 };
 
 // Creates a `DynamicCartesianLimits` proto with the specified maximum
@@ -76,17 +91,22 @@ CreateJointLimitsUpdateProto(
 class MotionPlannerBaseTest {
  public:
   MotionPlannerBaseTest();
+  explicit MotionPlannerBaseTest(RobotTestParams robot_params);
   virtual ~MotionPlannerBaseTest() = default;
 
  protected:
   // Loads the test world and initializes kinematic object references, frames,
   // planning/system joint limits, and default cartesian limits for the given
-  // robot `type` and `robot_name`. If `set_infinite_jerk_limits` is true, jerk
-  // limits are set to infinity. If `start_configuration` is provided, sets the
-  // robot's initial joint configuration (returning an error if its size does
-  // not match the robot's degrees of freedom).
+  // `robot_params`. If `set_infinite_jerk_limits` is true, jerk limits are set
+  // to infinity. If `start_configuration` is provided, sets the robot's initial
+  // joint configuration (returning an error if its size does not match the
+  // robot's degrees of freedom).
   absl::Status InitializeWorld(
-      const RobotType type, absl::string_view robot_name,
+      const RobotTestParams& robot_params, bool set_infinite_jerk_limits,
+      std::optional<eigenmath::VectorNd> start_configuration = std::nullopt);
+
+  // Overload using `robot_params_` configured on the fixture.
+  absl::Status InitializeWorld(
       bool set_infinite_jerk_limits,
       std::optional<eigenmath::VectorNd> start_configuration = std::nullopt);
 
@@ -96,6 +116,7 @@ class MotionPlannerBaseTest {
   CreateJointPositionLimitsProto(const eigenmath::VectorNd& min_position,
                                  const eigenmath::VectorNd& max_position);
 
+  RobotTestParams robot_params_;
   World world_;
   std::unique_ptr<object_world::ObjectWorld> object_world_;
   object_world::KinematicObject* robot_ = nullptr;

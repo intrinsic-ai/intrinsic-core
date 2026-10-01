@@ -170,11 +170,6 @@
   ; started.
   (multislot projection-running-actions (type INTEGER))
 
-  ; World that can by used by prediction, if projection finishes before a
-  ; running prediction. It is the world before initiating projection. It will be
-  ; a unique cloned ID before start and has not been used further.
-  ; It is usually only set during projection.
-  (slot world-id-prediction (type STRING))
   ; Temporary world used for projection. It will be cloned from the main world
   ; before projection and has a unique ID. After projection success or failure
   ; it will not be used any further and will be deleted.
@@ -244,9 +239,6 @@
     (if (neq ?pa:behavior-call-proto-id 0) then
       (pb-remove ?pa:behavior-call-proto-id))
     (if (neq ?pa:footprint-proto 0) then (pb-remove ?pa:footprint-proto))
-    (if (neq ?pa:world-id-prediction "") then
-      (assert (world-request (type DELETE)
-                             (world-id ?pa:world-id-prediction))))
     (if (neq ?pa:world-id-projection "") then
       (assert (world-request (type DELETE)
                              (world-id ?pa:world-id-projection))))
@@ -269,9 +261,6 @@
   )
   (delayed-do-for-all-facts ((?pa plan-action)) (eq ?pa:plan-id ?plan-id)
     (plan-action-remove ?pa:uid)
-  )
-  (delayed-do-for-all-facts ((?pa predict-action)) (eq ?pa:plan-id ?plan-id)
-    (predict-action-remove ?pa:uid)
   )
   (return TRUE)
 )
@@ -315,15 +304,6 @@
   ?pf <- (plan-action (plan-id ?plan-id) (id ?id) (uid AUTOMATIC))
  =>
   (modify ?pf (uid (plan-action-uid ?plan-id ?id)))
-)
-
-(defrule plan-set-predict-action-uid
-  "For newly asserted plans set predict-action UID"
-  (declare (salience ?*SALIENCE-HIGH*))
-  (plan (id ?plan-id))
-  ?pf <- (predict-action (plan-id ?plan-id) (id ?id) (uid AUTOMATIC))
- =>
-  (modify ?pf (uid (predict-action-uid ?plan-id ?id)))
 )
 
 (defrule plan-action-failed-because-selected-but-not-executable

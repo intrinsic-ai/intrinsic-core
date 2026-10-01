@@ -84,12 +84,6 @@
   ; only valid during execution, ?*TRACING-INVALID-SPAN-ID* otherwise
   (slot span-reference-id (type INTEGER) (default ?*TRACING-INVALID-SPAN-ID*))
 
-  ; Span reference ID for a parent span that collects all skill predictions.
-  ; This is usually a child of the execution span referenced by
-  ; span-reference-id.
-  (slot predictions-span-reference-id (type INTEGER)
-    (default ?*TRACING-INVALID-SPAN-ID*))
-
   ; Trace ID and URL as hex of the current or last active trace.
   ; This data will be set (or updated) when entering the RUNNING state. It will
   ; not be flushed in order to have valid TracingInfo in the ExecutiveState also

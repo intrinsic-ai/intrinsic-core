@@ -406,12 +406,15 @@ class MoveRobotFixtureTest
         if (!test_params.test_move_to_signal) {
           action_will.ReportStateVariables({
               {icon::kIsDone, false},
+              {icon::TrajectoryTrackingActionInfo::kTrajectoryProgress, 0.0},
               {icon::TrajectoryTrackingActionInfo::kTrajectoryDoneForSeconds,
                0},
               {icon::TrajectoryTrackingActionInfo::kIsSettled, false},
           });
           action_will.ReportStateVariables({
               {icon::kIsDone, test_params.report_tracking_done},
+              {icon::TrajectoryTrackingActionInfo::kTrajectoryProgress,
+               test_params.report_tracking_done ? 1.0 : 0.0},
               {icon::TrajectoryTrackingActionInfo::kTrajectoryDoneForSeconds,
                test_params.report_elapsed_stop_time_seconds},
               {icon::TrajectoryTrackingActionInfo::kIsSettled,
@@ -420,6 +423,7 @@ class MoveRobotFixtureTest
         } else {
           action_will.ReportStateVariables({
               {intrinsic::icon::kIsDone, false},
+              {icon::TrajectoryTrackingActionInfo::kTrajectoryProgress, 0.0},
               {icon::TrajectoryTrackingActionInfo::kTrajectoryDoneForSeconds,
                0},
               {icon::TrajectoryTrackingActionInfo::kIsSettled, false},
@@ -429,6 +433,7 @@ class MoveRobotFixtureTest
           });
           action_will.ReportStateVariables({
               {intrinsic::icon::kIsDone, true},
+              {icon::TrajectoryTrackingActionInfo::kTrajectoryProgress, 0.0},
               {icon::TrajectoryTrackingActionInfo::kTrajectoryDoneForSeconds,
                0},
               {icon::TrajectoryTrackingActionInfo::kIsSettled, true},

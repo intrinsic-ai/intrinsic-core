@@ -100,12 +100,6 @@
   ; 0 means that the behavior tree has not yet been logged.
   (slot log-id (type INTEGER))
 
-  ; The current generation id for the predict calls to use. We will use this to
-  ; ensure that when a prediction is wrong, we can repredict all of the rest of
-  ; the nodes again with the correct starting point. This also serves as a way
-  ; to stop prediction from continuing down a path that is known to be incorrect
-  (slot predict-generation-id (type INTEGER))
-
   ; The span-reference-id for behavior tree tracing of this tree.
   (slot span-reference-id (type INTEGER))
 )
@@ -356,34 +350,6 @@
   ; node to succeed. This is the decorator condition.
   (slot condition-id (type SYMBOL))     ; references behavior-tree-condition
 
-  ; Specific fields related to preemptive prediction
-  ; The generation id to use when checking if a previous prediction is still
-  ; valid.
-  (slot predict-generation-id (type INTEGER))
-
-  ; IDLE:   The initial state of the node, the node can be selected.
-  ; SELECTED:   The node has been selected for prediction and needs to be
-  ;             processed depending on its type. For a TASK node, this triggers
-  ;             action prediction. If a node is selected and its condition is
-  ;             not satisfied, it immediately switches to FAILED.
-  ;             For a node to be in the selected state it's prediction world
-  ;             must have been computed already.
-  ; PREDICTING: The node is currently being predicted. For all composite node
-  ;             types, this means at least one child has been selected and may
-  ;             be predicting. For a task node, this means a plan-action has
-  ;             been selected and may be running.
-  ; SUCCEEDED:  Prediction of the node has terminated successfully.
-  ; FAILED:     Prediction failed, e.g., because the prediction of a plan-action
-  ;             failed.
-  (slot predict-state (type SYMBOL) (default IDLE)
-        (allowed-values IDLE SELECTED PREDICTING SUCCEEDED FAILED))
-
-  ; The world to use for preemptive prediction calls
-  (slot prediction-world-id (type STRING))
-
-  ; This is the message ID for the associated Prediction proto.
-  (slot prediction-proto-id (type INTEGER))
-
   ; Reference to the behavior-tree-condition representing "if" in a branch node
   (slot branch-if-id (type SYMBOL))     ; references behavior-tree-condition
   (slot branch-then-id (type INTEGER))  ; references behavior-tree-node
@@ -455,8 +421,6 @@
   ; The behavior call associated with a TASK node
   (slot behavior-call-instance-uid (type SYMBOL)) ; references
                                                   ; behavior-call-instance
-  ; The predict action state being tracked
-  (slot predict-action-uid (type SYMBOL))         ; references predict-action
 
   (slot data-blackboard-key (type STRING))
   (slot data-operation (type SYMBOL)
@@ -1019,7 +983,6 @@
   (bind ?loop-while-id (fact-slot-value ?node loop-while-id))
   (bind ?loop-for-each-generator-expression
     (fact-slot-value ?node loop-for-each-generator-expression))
-  (bind ?prediction-world-id (fact-slot-value ?node prediction-world-id))
   (bind ?run-metadata-proto-path (fact-slot-value ?node run-metadata-proto-path))
   (bind ?es-proto-id (fact-slot-value ?node extended-status-proto-id))
   (bind ?on-failure-emit-es-to-blackboard-key
@@ -1031,9 +994,6 @@
     (behavior-tree-condition-reset ?branch-if-id ?operation-name ?keep-counters))
   (if (neq ?loop-while-id nil) then
     (behavior-tree-condition-reset ?loop-while-id ?operation-name ?keep-counters))
-  (if (neq ?prediction-world-id "") then
-    (assert (world-request (type DELETE)
-                           (world-id ?prediction-world-id))))
 
   ; Remove and clear ExtendedStatus data
   (pb-remove ?es-proto-id)
@@ -1060,10 +1020,6 @@
     (if (neq (fact-slot-value ?node behavior-call-instance-uid) nil) then
       (behavior-call-instance-reset
         (fact-slot-value ?node behavior-call-instance-uid) ?keep-counters))
-    (if (neq (fact-slot-value ?node predict-action-uid) nil) then
-      (predict-action-remove (fact-slot-value ?node predict-action-uid)))
-    (if (neq (fact-slot-value ?node prediction-proto-id) 0) then
-      (pb-remove (fact-slot-value ?node prediction-proto-id)))
 
     (do-for-fact ((?bt behavior-tree)) (eq ?bt:id ?tree-id)
       (code-execution-instance-reset ?bt:operation-name ?tree-id ?node-id)
@@ -1100,11 +1056,7 @@
                 (retry-num-tries ?retry-num-tries)
                 (loop-num-times ?loop-num-times)
                 (task-action-uid nil)
-                (predict-action-uid nil)
-                (predict-state IDLE) (predict-generation-id 0)
                 (breakpoint-triggered FALSE)
-                (prediction-proto-id 0)
-                (prediction-world-id "")
                 (stepwise-state NONE)
                 (extended-status-proto-id 0))
 
@@ -1139,8 +1091,7 @@
        (bind ?s-path (proto-path-join ?tree:run-metadata-proto-path "state"))
        (run-metadata-proto-update-field ?s-path ACCEPTED ?tree:operation-name)
     )
-    (modify ?tree (state ACCEPTED) (run-metadata-proto-state ACCEPTED)
-                  (predict-generation-id 0))
+    (modify ?tree (state ACCEPTED) (run-metadata-proto-state ACCEPTED))
   )
   ; Reset all nodes in the tree.
   ; These do not need to reset all their children as that is already part of
@@ -1252,9 +1203,6 @@
       (behavior-call-instance-remove ?node:behavior-call-instance-uid))
     (code-execution-instance-remove ?operation-name ?id ?node:id)
 
-    (if (neq ?node:predict-action-uid nil) then
-      (predict-action-remove ?node:predict-action-uid))
-    (pb-remove ?node:prediction-proto-id)
     (foreach ?loop-input-proto ?node:loop-for-each-input-protos
       (pb-remove ?loop-input-proto))
     (foreach ?loop-proto ?node:loop-for-each-loop-protos
@@ -1364,32 +1312,4 @@
   (modify ?start-node (state CANCELING)
           (canceling-span-reference-id
             (tracing-start-canceling-span ?start-node)))
-)
-
-; If the child completed prediction, usually happens because projection has
-(defrule behavior-tree-node-propagate-prediction-state-predicted
-  "When a child is marked as predicted or predicting we need the parent to also
-   be marked accordingly. This usually happens when the child has completed its
-   projection step and is also marked as predicted. This is indicates that
-   prediction can progress from this point forward and that also usually means
-   the parent may not have been marked as predicting and so we do that here."
-  ?tree <- (behavior-tree (id ?tree-id))
-  ?node <- (behavior-tree-node (id ?node-id) (tree-id ?tree-id)
-                               (predict-state IDLE))
-  (behavior-tree-node (tree-id ?tree-id)
-                      (predict-generation-id ?predict-generation-id)
-                      (parent-id ?node-id) (predict-state SUCCEEDED))
-  (world (id ?world-id))
- =>
-  ; If the child completed prediction, usually happens because projection has
-  ; completed, mark the node as selected. This will allow the node to continue
-  ; processing any other children and then mark itself as predicted too once all
-  ; children have completed. Which in turn will trigger this rule and mark the
-  ; next parent as selected until the root has been selected and from there we
-  ; proceed as normal.
-  (bind ?node-predict-world-id
-    (world-clone ?world-id "propagate_predict" ?*TRACING-INVALID-SPAN-ID*))
-  (modify ?node (predict-state SELECTED)
-                (predict-generation-id ?predict-generation-id)
-                (prediction-world-id ?node-predict-world-id))
 )

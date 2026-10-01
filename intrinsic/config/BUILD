@@ -37,8 +37,6 @@ go_library(
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
         "//intrinsic/config/proto:any_wrapper_go_proto",
-        "//intrinsic/config/proto:application_go_proto",
-        "//intrinsic/config/proto:common_go_proto",
         "//intrinsic/kubernetes/workcell_spec:workcellspec",
         "@com_google_cloud_go_firestore//:firestore",
         "@in_gopkg_yaml_v3//:go_default_library",

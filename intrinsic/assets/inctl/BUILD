@@ -74,6 +74,7 @@ go_library(
         "//intrinsic/assets:idutils",
         "//intrinsic/assets:imagetransfer",
         "//intrinsic/assets:referenceddata",
+        "//intrinsic/assets:throttle",
         "//intrinsic/assets/platformlevelswitch",
         "//intrinsic/assets/proto:installed_assets_go_proto",
         "//intrinsic/assets/scene_objects:gzfprocessor",
@@ -89,6 +90,7 @@ go_library(
         "@intrinsic_apis//intrinsic/assets/proto/v1:reference_go_proto",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
         "@org_golang_google_grpc//status:go_default_library",
+        "@org_golang_x_sync//errgroup:go_default_library",
     ],
 )
 
@@ -155,6 +157,7 @@ go_library(
         "//intrinsic/assets:cmdutils",
         "//intrinsic/assets:imagetransfer",
         "//intrinsic/assets:imageutils",
+        "//intrinsic/assets:throttle",
         "//intrinsic/assets/catalog:releaseasset",
         "//intrinsic/skills/tools/skill/cmd/directupload",
         "//intrinsic/tools/inctl/cmd:root",

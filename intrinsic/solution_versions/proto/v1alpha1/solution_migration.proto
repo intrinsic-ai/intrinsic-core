@@ -1,0 +1,71 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.solution_versions.v1alpha1;
+
+import "intrinsic/solution_versions/proto/v1/snapshot_source.proto";
+import "intrinsic/solution_versions/proto/v1alpha1/motion_planner_service_migration.proto";
+
+option go_package = "intrinsic/solution_versions/proto/v1alpha1/solution_migration_go_proto";
+
+// SolutionMigration provides automated migrations for cloud-based Solutions
+// (or Solutions accessible from the Portal).
+service SolutionMigration {
+  // Migrate executes a Solution migration on a Solution deployment branch. In
+  // dry_run mode, runs the migration without saving changes. When dry_run is
+  // false and the migration modifies the Solution, saves the migrated Solution
+  // as a new snapshot on the deployment branch. Migrate does not commit to the
+  // upstream version branch, so the user can review the changes and commit them
+  // in Portal. If the Solution is already up to date, no new snapshot is
+  // created.
+  rpc Migrate(MigrateRequest) returns (MigrateResponse);
+}
+
+// MigrateRequest is the request to execute a Solution migration.
+message MigrateRequest {
+  // Identifier of the deployment branch associated with the Solution to inspect
+  // or migrate. If a version branch is specified, the RPC fails with an
+  // INVALID_ARGUMENT error.
+  string branch_id = 1;
+
+  // Optional snapshot ID to migrate. If omitted, uses the tip snapshot of the
+  // branch. When this is an older snapshot and dry_run is false, the saved
+  // snapshot is based on that snapshot, so it does not include changes made
+  // after it.
+  string snapshot_id = 2;
+
+  // If true, runs the migration without saving changes. If false, applies
+  // changes and saves a new snapshot to the deployment branch.
+  bool dry_run = 3;
+
+  // Strongly-typed configuration for the selected Solution migration.
+  oneof migration_type {
+    // Configuration for the Motion Planner Service migration.
+    MotionPlannerServiceMigration motion_planner_service = 4;
+  }
+}
+
+// MigrateResponse contains the outcome of a Solution migration.
+message MigrateResponse {
+  // Snapshot saved by the migration and the deployment branch it was saved to,
+  // when dry_run is false and the migration changed the Solution. Empty when
+  // dry_run is true or when the Solution is already up to date and no changes
+  // were needed.
+  intrinsic_proto.solution_versions.v1.SnapshotSource snapshot_source = 1;
+
+  // Human-readable summary of the changes performed by the migration.
+  string migration_summary = 2;
+}

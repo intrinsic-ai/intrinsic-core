@@ -26,14 +26,6 @@ SolutionInfo = provider(
     },
 )
 
-def _display_name(f):
-    """
-    Generates a display name from a bazel label.
-
-    E.g. //intrinsic/apps/bluebird_caw:bb04 --> bluebird_caw:bb04
-    """
-    return f.package.split("/")[-1] + ":" + f.name
-
 def _intrinsic_solution_impl(ctx):
     out = ctx.actions.declare_file(ctx.label.name + ".local_solution.binpb")
     assets = [
@@ -70,10 +62,7 @@ def _intrinsic_solution_impl(ctx):
         ctx.attr.default_operation_mode,
     ).add(
         "--display_name",
-        _display_name(ctx.label),
-    ).add(
-        "--build_target",
-        ctx.label if not ctx.label.repo_name else "@@%s//%s:%s" % (ctx.label.repo_name, ctx.label.package, ctx.label.name),  # buildifier: disable=canonical-repository
+        ctx.attr.display_name or ctx.label.name,
     )
     for a in ctx.attr.assets:
         if AssetLocalInfo in a:
@@ -139,7 +128,7 @@ def _intrinsic_solution_impl(ctx):
     ctx.actions.write(
         out_executable,
         content = """{header}
-exec "$(rlocation "{target}")" "{app}" "$@"
+exec "$(rlocation "{target}")" "$(rlocation "{app}")" "$@"
 """.format(
             header = WRAPPER_HEADER,
             target = to_rlocation_path(ctx, ctx.executable._solution_update),

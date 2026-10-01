@@ -30,23 +30,25 @@ Subscription::Subscription(absl::string_view topic_name,
     : topic_name_(topic_name),
       subscription_data_(std::move(subscription_data)) {}
 
-Subscription::Subscription(Subscription&&) = default;
+Subscription::Subscription(Subscription&& other)
+    : topic_name_(std::move(other.topic_name_)),
+      subscription_data_(std::move(other.subscription_data_)) {
+  other.topic_name_.clear();
+}
 
 Subscription& Subscription::operator=(Subscription&& other) {
-  if (!topic_name_.empty()) {
-    Zenoh().imw_destroy_subscription(
-        subscription_data_->prefixed_name.c_str(), zenoh_static_callback,
-        subscription_data_->callback_functor.get());
-  }
+  if (this == &other) return *this;
+  Unsubscribe();
   topic_name_ = std::move(other.topic_name_);
   subscription_data_ = std::move(other.subscription_data_);
+  other.topic_name_.clear();
   return *this;
 }
 
 Subscription::~Subscription() { Unsubscribe(); }
 
 void Subscription::Unsubscribe() {
-  if (!topic_name_.empty()) {
+  if (!topic_name_.empty() && subscription_data_ != nullptr) {
     Zenoh().imw_destroy_subscription(
         subscription_data_->prefixed_name.c_str(), zenoh_static_callback,
         subscription_data_->callback_functor.get());

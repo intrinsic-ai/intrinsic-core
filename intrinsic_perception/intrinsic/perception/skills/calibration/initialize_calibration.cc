@@ -15,6 +15,7 @@
 #include "intrinsic/perception/skills/calibration/initialize_calibration.h"
 
 #include <memory>
+#include <string>
 
 #include "absl/algorithm/container.h"
 #include "absl/log/log.h"
@@ -23,6 +24,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "google/protobuf/message.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "grpcpp/client_context.h"
 #include "intrinsic/assets/data/proto/v1/data_assets.grpc.pb.h"
 #include "intrinsic/assets/data/proto/v1/data_assets.pb.h"
@@ -32,17 +34,22 @@
 #include "intrinsic/icon/equipment/equipment_utils.h"
 #include "intrinsic/icon/skills/util/position_part_util.h"
 #include "intrinsic/perception/asset_utils.h"
+#include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/pose_estimator_id_utils.h"
 #include "intrinsic/perception/proto/v1/calibration_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/calibration_service.pb.h"
+#include "intrinsic/perception/proto/v1/camera_config.pb.h"
 #include "intrinsic/perception/proto/v1/pattern_detection_config.pb.h"
 #include "intrinsic/perception/proto/v1/perception_model.pb.h"
 #include "intrinsic/perception/proto/v1/pose_estimation_config.pb.h"
 #include "intrinsic/perception/proto/v1/pose_estimator_id.pb.h"
 #include "intrinsic/perception/skills/calibration/initialize_calibration.pb.h"
+#include "intrinsic/resources/proto/resource_handle.pb.h"
 #include "intrinsic/skills/cc/equipment_pack.h"
 #include "intrinsic/skills/cc/skill_interface.h"
+#include "intrinsic/skills/cc/skill_utils.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
+#include "intrinsic/util/grpc/connection_params.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/util/object_reference_utils.h"
@@ -103,6 +110,64 @@ GetPatternDetectionConfigFromDataAssets(
   return pattern_detection_config;
 }
 
+absl::StatusOr<intrinsic_proto::resources::ResourceHandle>
+GetCameraResourceHandle(
+    const intrinsic_proto::assets::v1::ResolvedDependency& camera,
+    absl::string_view camera_name, const perception::GrpcCamera& grpc_camera) {
+  INTR_ASSIGN_OR_RETURN(
+      const ConnectionParams config_params,
+      skills::GetConnectionParamsFromResolvedDependency(
+          camera, perception::CameraConfigServiceInterfaceUri()));
+  INTR_ASSIGN_OR_RETURN(
+      const intrinsic_proto::perception::v1::CameraConfig camera_config,
+      grpc_camera.GetCameraConfig(config_params));
+  INTR_ASSIGN_OR_RETURN(const ConnectionParams camera_params,
+                        skills::GetConnectionParamsFromResolvedDependency(
+                            camera, perception::CameraServiceInterfaceUri()));
+
+  intrinsic_proto::resources::ResourceHandle camera_handle;
+  camera_handle.set_name(camera_name);
+  camera_handle.mutable_connection_info()->mutable_grpc()->set_address(
+      camera_params.address);
+  camera_handle.mutable_connection_info()->mutable_grpc()->set_server_instance(
+      camera_params.instance_name);
+  camera_handle.mutable_connection_info()->mutable_grpc()->set_header(
+      camera_params.header);
+  (*camera_handle.mutable_resource_data())["CameraConfig"]
+      .mutable_contents()
+      ->PackFrom(camera_config);
+  return camera_handle;
+}
+
+absl::StatusOr<google::protobuf::RepeatedPtrField<
+    intrinsic_proto::resources::ResourceHandle>>
+GetCameraResourceHandles(
+    const google::protobuf::RepeatedPtrField<
+        intrinsic_proto::assets::v1::ResolvedDependency>& cameras) {
+  perception::GrpcCamera grpc_camera;
+  google::protobuf::RepeatedPtrField<intrinsic_proto::resources::ResourceHandle>
+      camera_handles;
+  for (const auto& camera : cameras) {
+    const std::string& camera_name = !camera.object().name().empty()
+                                         ? camera.object().name()
+                                         : camera.name();
+    if (absl::c_any_of(camera_handles, [&](const auto& existing) {
+          return existing.name() == camera_name;
+        })) {
+      continue;
+    }
+    INTR_ASSIGN_OR_RETURN(
+        *camera_handles.Add(),
+        GetCameraResourceHandle(camera, camera_name, grpc_camera));
+  }
+  if (camera_handles.empty()) {
+    return absl::InvalidArgumentError(
+        "At least one camera config is required to initialize a calibration "
+        "session.");
+  }
+  return camera_handles;
+}
+
 absl::Status ValidateParams(
     const intrinsic_proto::skills::InitializeCalibrationParams& params) {
   if (params.has_pose_estimator() && params.pose_estimator().id().empty()) {
@@ -160,23 +225,8 @@ InitializeCalibration::Execute(const ExecuteRequest& request,
   initialize_request.mutable_pattern_detection_config()
       ->set_publish_annotated_image(true);
 
-  for (const auto& camera_slot : kCameraEquipmentSlots) {
-    if (auto status_or_handle = equipment_pack.GetHandle(camera_slot);
-        status_or_handle.ok()) {
-      if (!absl::c_any_of(initialize_request.camera_resource_handles(),
-                          [&](const auto& existing) {
-                            return existing.name() == status_or_handle->name();
-                          })) {
-        *initialize_request.add_camera_resource_handles() =
-            *std::move(status_or_handle);
-      }
-    }
-  }
-  if (initialize_request.camera_resource_handles().empty()) {
-    return absl::InvalidArgumentError(
-        "At least one camera config is required to initialize a calibration "
-        "session.");
-  }
+  INTR_ASSIGN_OR_RETURN(*initialize_request.mutable_camera_resource_handles(),
+                        GetCameraResourceHandles(params.cameras()));
 
   // Extract the robot arm with respect to which the camera pose will be
   // defined.

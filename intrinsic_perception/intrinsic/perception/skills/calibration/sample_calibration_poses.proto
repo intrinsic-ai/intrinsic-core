@@ -73,6 +73,14 @@ message SampleCalibrationPosesParams {
     skill_annotations: { always_provide_connection_info: true }
   }];
 
+  // Camera used for calibration.
+  intrinsic_proto.assets.v1.ResolvedDependency camera = 9
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.perception.v1.CameraService",
+        requires_object: {},
+        skill_annotations: { fallback_manifest_dependency_key: "camera" }
+      }];
+
   // Specifies whether the camera is stationary in the workcell (while the
   // robot moves the calibration object) or mounted on the robot's flange
   // (while the calibration object is stationary). Used for all robot-assisted

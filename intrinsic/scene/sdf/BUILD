@@ -128,3 +128,24 @@ cc_library(
         "@or_tools//ortools/base:temp_path",
     ],
 )
+
+cc_library(
+    name = "scene_object_to_zipped_sdf",
+    srcs = ["scene_object_to_zipped_sdf.cc"],
+    hdrs = ["scene_object_to_zipped_sdf.h"],
+    visibility = ["//intrinsic/scene/service:__subpackages__"],
+    deps = [
+        ":scene_object_to_sdf",
+        "//intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/cleanup",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/time",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
+        "@libzip",
+        "@or_tools//ortools/base:file",
+        "@or_tools//ortools/base:path",
+    ],
+)

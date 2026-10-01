@@ -18,7 +18,6 @@
 #include <memory>
 #include <optional>
 #include <random>
-#include <string>
 #include <vector>
 
 #include "absl/algorithm/container.h"
@@ -32,6 +31,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "google/protobuf/message.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/cc_client/client.h"
 #include "intrinsic/icon/equipment/channel_factory.h"
@@ -66,6 +66,7 @@
 #include "intrinsic/world/objects/frame.h"
 #include "intrinsic/world/objects/kinematic_object.h"
 #include "intrinsic/world/objects/object_world_client.h"
+#include "intrinsic/world/objects/object_world_ids.h"
 #include "intrinsic/world/objects/transform_node.h"
 #include "intrinsic/world/objects/world_object.h"
 #include "intrinsic/world/proto/collision_settings.pb.h"
@@ -531,16 +532,10 @@ SampleCalibrationPoses::ExecuteWithRandomEngine(const ExecuteRequest& request,
         base_t_flange_initial, sampling_strategy_params.max_distance(),
         sampling_strategy_params.max_angle_degrees());
   } else if (params.has_randomized_box_params()) {
-    // The camera ID from which we perform the pose estimation.
-    // This ID must exist and be queryable in the world. It matches the name of
-    // the equipment ('value') in the equipment config.
-    INTR_ASSIGN_OR_RETURN(const auto camera_handle,
-                          equipment_pack.GetHandle(kCameraEquipmentSlot));
-
-    INTR_ASSIGN_OR_RETURN(const world::WorldObject camera,
-                          world.GetObject(camera_handle));
-    INTR_ASSIGN_OR_RETURN(const world::Frame camera_frame,
-                          camera.GetFrame(SensorFrameName()));
+    INTR_ASSIGN_OR_RETURN(
+        const world::Frame camera_frame,
+        world.GetFrame(WorldObjectName(params.camera().object().name()),
+                       SensorFrameName()));
     const ::intrinsic_proto::skills::RandomizedBoxParams&
         sampling_strategy_params = params.randomized_box_params();
     const eigenmath::VectorXd sample_box_halfsize = RepeatedDoubleToVectorXd(

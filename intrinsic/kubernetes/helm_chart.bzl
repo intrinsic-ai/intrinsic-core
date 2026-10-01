@@ -605,19 +605,21 @@ def helm_chart(
     )
 
     if lint_test:
-        test_kwargs = {}
-        if "visibility" in kwargs:
-            test_kwargs["visibility"] = kwargs["visibility"]
-        if "tags" in kwargs:
-            test_kwargs["tags"] = kwargs["tags"]
         helm_chart_lint_test(
             name = name + "_helm_lint_test",
             chart = ":" + name,
-            **test_kwargs
+            tags = kwargs.get("tags"),
+            visibility = kwargs.get("visibility"),
         )
 
 def _helm_chart_lint_test_impl(ctx):
-    chart_file = ctx.attr.chart[HelmChartInfo].chart
+    if HelmChartInfo in ctx.attr.chart:
+        chart_file = ctx.attr.chart[HelmChartInfo].chart
+    else:
+        tgz_files = [f for f in ctx.files.chart if f.path.endswith(".tgz")]
+        if not tgz_files:
+            fail("Expected chart target to provide HelmChartInfo or a .tgz file in DefaultInfo.files")
+        chart_file = tgz_files[0]
     lint_tool = ctx.attr._lint_tool[DefaultInfo].files_to_run.executable
     lint_env = ctx.attr._lint_tool[RunEnvironmentInfo].environment
 
@@ -662,7 +664,7 @@ exec $(rlocation "{lint_tool}") $(rlocation "{chart}") {context} $(rlocation "{v
         ),
     ]
 
-helm_chart_lint_test = rule(
+_helm_chart_lint_test = rule(
     implementation = _helm_chart_lint_test_impl,
     test = True,
     doc = """Creates a test that utilizes the helm binary to check the validity
@@ -670,7 +672,7 @@ helm_chart_lint_test = rule(
     attrs = {
         "chart": attr.label(
             doc = "The helm chart to be linted",
-            providers = [HelmChartInfo],
+            allow_files = True,
         ),
         "context": attr.string(
             doc = "The kube-context parameter that should be passed to helm",
@@ -692,3 +694,15 @@ helm_chart_lint_test = rule(
         ),
     },
 )
+
+def helm_chart_lint_test(name, chart, context = None, values = None, **kwargs):
+    """Macro for creating a Helm chart lint test target."""
+    _helm_chart_lint_test(
+        name = name,
+        chart = chart,
+        context = context,
+        values = values,
+        tags = kwargs.get("tags"),
+        testonly = kwargs.get("testonly"),
+        visibility = kwargs.get("visibility"),
+    )

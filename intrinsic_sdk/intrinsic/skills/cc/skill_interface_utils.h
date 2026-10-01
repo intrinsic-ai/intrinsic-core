@@ -24,7 +24,6 @@
 #include "intrinsic/skills/cc/equipment_pack.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/internal/execute_context_view.h"
-#include "intrinsic/skills/internal/predict_context_view.h"  
 #include "intrinsic/util/proto/any.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -50,47 +49,6 @@ absl::StatusOr<std::unique_ptr<::google::protobuf::Message>> PreviewViaExecute(
     SkillExecuteInterface& skill, const PreviewRequest& request,
     PreviewContext& context);
 
-
-// Implements SkillInterface::Preview() as the most likely outcome of
-// SkillInterface::Predict().
-//
-// A skill can use this function to implement Preview() by calling
-// PreviewViaPredict() from within its implementation. E.g.:
-// ```
-// absl::StatusOr<std::unique_ptr<::google::protobuf::Message>>
-// MySkill::Preview(
-//     const PreviewRequest& request, PreviewContext& context) {
-//     ...
-//     return PreviewViaPredict<MyResult>(*this, request, context);
-// }
-// ```
-// Or, for a skill with no result:
-// ```
-// absl::StatusOr<std::unique_ptr<::google::protobuf::Message>>
-// MySkill::Preview(
-//     const PreviewRequest& request, PreviewContext& context) {
-//     ...
-//     INTR_RETURN_IF_ERROR(PreviewViaPredict(*this, request, context));
-//     return nullptr;
-// }
-// ```
-absl::Status PreviewViaPredict(SkillInterface& skill,
-                               const PreviewRequest& request,
-                               PreviewContext& context,
-                               ::google::protobuf::Any* result_any = nullptr);
-
-template <typename TResult>
-absl::StatusOr<std::unique_ptr<TResult>> PreviewViaPredict(
-    SkillInterface& skill, const PreviewRequest& request,
-    PreviewContext& context) {
-  ::google::protobuf::Any result_any;
-  INTR_RETURN_IF_ERROR(PreviewViaPredict(skill, request, context, &result_any));
-  auto result = std::make_unique<TResult>();
-  INTR_RETURN_IF_ERROR(UnpackAny(result_any, *result));
-  return result;
-}
-
-
 // Converts a PreviewRequest to an ExecuteRequest.
 absl::StatusOr<ExecuteRequest> PreviewToExecuteRequest(
     const PreviewRequest& request);
@@ -101,20 +59,6 @@ absl::StatusOr<ExecuteRequest> PreviewToExecuteRequest(
 // input preview context exists.
 absl::StatusOr<ExecuteContextView> PreviewToExecuteContext(
     PreviewContext& context, const EquipmentPack& equipment);
-
-
-// Converts a PreviewRequest to a PredictRequest.
-absl::StatusOr<PredictRequest> PreviewToPredictRequest(
-    const PreviewRequest& request);
-
-// Converts a PreviewContext to a PredictContextView.
-//
-// NOTE that the returned predict context will only be valid as long as the
-// input preview context exists.
-absl::StatusOr<PredictContextView> PreviewToPredictContext(
-    PreviewContext& context, const EquipmentPack& equipment);
-
-
 }  // namespace skills
 }  // namespace intrinsic
 

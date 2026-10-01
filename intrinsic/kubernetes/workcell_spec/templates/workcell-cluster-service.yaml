@@ -151,7 +151,7 @@ spec:
             - --init_resource_instance_data_files_image={{ .Values.registry }}{{ .Values.images.init_resource_instance_data_files }}
             - --asset_catalog_address={{ $asset_catalog_address }}
             - --resource_catalog_address={{ $resource_catalog_address }}
-            - --conductor_service_address=world.app-intrinsic-base.svc.cluster.local:8082
+            - --conductor_service_address=conductor.app-intrinsic-base.svc.cluster.local:8080
             - --object_world_service_address=world.app-intrinsic-base.svc.cluster.local:8080
             # TODO - b/447219121: Remove simulation client from ADS.
             - --sim_service_address=istio-ingressgateway.app-ingress.svc.cluster.local:80

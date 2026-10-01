@@ -32,8 +32,8 @@ import (
 	"intrinsic/assets/scene_objects/sceneobjectbundle"
 	"intrinsic/assets/services/servicebundle"
 	"intrinsic/skills/skillbundle"
+	"intrinsic/util/proto/descriptor"
 
-	"github.com/google/safearchive/tar"
 	"google.golang.org/protobuf/proto"
 
 	acpb "intrinsic/assets/catalog/proto/v1/asset_catalog_go_proto"
@@ -93,6 +93,10 @@ const (
 var (
 	errNoValidTypeDetected   = errors.New("no recognized manifest detected")
 	errMultipleTypesDetected = errors.New("invalid bundle")
+
+	// ErrMissingProvider is returned when a CatalogFileDescriptorProvider is required to fetch
+	// catalog references (such as in a hardware device bundle) but none was provided.
+	ErrMissingProvider = errors.New("missing catalog file descriptor provider")
 )
 
 // detectBundleType will return the type of bundle a file represents.  It does
@@ -116,7 +120,7 @@ func detectBundleType(ctx context.Context, path string) (bundleType, error) {
 
 	var bt bundleType
 	var found int
-	if err := ioutils.WalkTarFile(ctx, tar.NewReader(f), ioutils.WithFallbackHandler(func(_ context.Context, path string, _ io.Reader) error {
+	if err := ioutils.WalkTarFile(ctx, f, ioutils.WithFallbackHandler(func(_ context.Context, path string, _ io.Reader) error {
 		if val, ok := lookup[path]; ok {
 			found++
 			bt = val
@@ -154,12 +158,21 @@ type VersionDetails struct {
 	ReleaseMetadata *rmpb.ReleaseMetadata
 }
 
+// CatalogFileDescriptorProvider provides file descriptor sets for catalog assets.
+type CatalogFileDescriptorProvider interface {
+	BatchGet(ctx context.Context, idVersions []*idpb.IdVersion) ([]*dpb.FileDescriptorSet, error)
+}
+
 // ProcessedBundle is a bundle that has been processed and can be viewed as a
 // message for use in different outbound requests.
 type ProcessedBundle interface {
 	// Install returns a processed asset in the form required to be installed in
 	// a solution.
 	Install() *iapb.CreateInstalledAssetRequest_Asset
+
+	// InstallBatch returns a processed asset in the form required to be installed in
+	// a batch installation.
+	InstallBatch() *iapb.CreateInstalledAssetsRequest_Asset
 
 	// Install returns a processed asset in the form required to be released to
 	// the catalog.
@@ -176,9 +189,11 @@ type ProcessedBundle interface {
 
 
 	// FileDescriptorSet may return nil for asset types that do not have a file
-	// descriptor set or do not have one available from the given information
-	// (due to referencing catalog assets).
-	FileDescriptorSet() *dpb.FileDescriptorSet
+	// descriptor set or do not have one available from the given information.
+	// The implementation may use provider to fetch descriptor sets for referenced
+	// catalog assets. If provider is required, but is nil, then the implementation
+	// returns ErrMissingProvider.
+	FileDescriptorSet(ctx context.Context, provider CatalogFileDescriptorProvider) (*dpb.FileDescriptorSet, error)
 }
 
 type processedDataBundle struct {
@@ -188,6 +203,14 @@ type processedDataBundle struct {
 func (b processedDataBundle) Install() *iapb.CreateInstalledAssetRequest_Asset {
 	return &iapb.CreateInstalledAssetRequest_Asset{
 		Variant: &iapb.CreateInstalledAssetRequest_Asset_Data{
+			Data: cloneOf(b.da),
+		},
+	}
+}
+
+func (b processedDataBundle) InstallBatch() *iapb.CreateInstalledAssetsRequest_Asset {
+	return &iapb.CreateInstalledAssetsRequest_Asset{
+		Variant: &iapb.CreateInstalledAssetsRequest_Asset_Data{
 			Data: cloneOf(b.da),
 		},
 	}
@@ -234,8 +257,8 @@ func (b processedDataBundle) DeployApp() *apppb.Application_Asset {
 
 
 
-func (b processedDataBundle) FileDescriptorSet() *dpb.FileDescriptorSet {
-	return cloneOf(b.da.GetFileDescriptorSet())
+func (b processedDataBundle) FileDescriptorSet(ctx context.Context, provider CatalogFileDescriptorProvider) (*dpb.FileDescriptorSet, error) {
+	return cloneOf(b.da.GetFileDescriptorSet()), nil
 }
 
 type processedHardwareDeviceBundle struct {
@@ -245,6 +268,14 @@ type processedHardwareDeviceBundle struct {
 func (b processedHardwareDeviceBundle) Install() *iapb.CreateInstalledAssetRequest_Asset {
 	return &iapb.CreateInstalledAssetRequest_Asset{
 		Variant: &iapb.CreateInstalledAssetRequest_Asset_HardwareDevice{
+			HardwareDevice: cloneOf(b.manifest),
+		},
+	}
+}
+
+func (b processedHardwareDeviceBundle) InstallBatch() *iapb.CreateInstalledAssetsRequest_Asset {
+	return &iapb.CreateInstalledAssetsRequest_Asset{
+		Variant: &iapb.CreateInstalledAssetsRequest_Asset_HardwareDevice{
 			HardwareDevice: cloneOf(b.manifest),
 		},
 	}
@@ -295,8 +326,55 @@ func (b processedHardwareDeviceBundle) Solution() *assetpb.Asset {
 	}
 }
 
-func (b processedHardwareDeviceBundle) FileDescriptorSet() *dpb.FileDescriptorSet {
-	return nil
+func (b processedHardwareDeviceBundle) FileDescriptorSet(ctx context.Context, provider CatalogFileDescriptorProvider) (*dpb.FileDescriptorSet, error) {
+	if b.manifest == nil {
+		return nil, nil
+	}
+
+	var fdss []*dpb.FileDescriptorSet
+	var mergeKeys []string
+	var catalogIdVersions []*idpb.IdVersion
+	var catalogKeys []string
+	for k, asset := range b.manifest.GetAssets() {
+		switch v := asset.GetVariant().(type) {
+		case *hdmpb.ProcessedHardwareDeviceManifest_ProcessedAsset_Service:
+			fdss = append(fdss, v.Service.GetAssets().GetFileDescriptorSet())
+			mergeKeys = append(mergeKeys, k)
+		case *hdmpb.ProcessedHardwareDeviceManifest_ProcessedAsset_SceneObject:
+			fdss = append(fdss, v.SceneObject.GetAssets().GetFileDescriptorSet())
+			mergeKeys = append(mergeKeys, k)
+		case *hdmpb.ProcessedHardwareDeviceManifest_ProcessedAsset_Data:
+			fdss = append(fdss, v.Data.GetFileDescriptorSet())
+			mergeKeys = append(mergeKeys, k)
+		case *hdmpb.ProcessedHardwareDeviceManifest_ProcessedAsset_Catalog:
+			catalogIdVersions = append(catalogIdVersions, v.Catalog.GetIdVersion())
+			catalogKeys = append(catalogKeys, k)
+		}
+	}
+
+	if len(catalogIdVersions) > 0 {
+		if provider == nil {
+			return nil, ErrMissingProvider
+		}
+		catalogFDSs, err := provider.BatchGet(ctx, catalogIdVersions)
+		if err != nil {
+			return nil, fmt.Errorf("failed to get catalog file descriptor sets: %w", err)
+		}
+		if len(catalogFDSs) != len(catalogIdVersions) {
+			return nil, fmt.Errorf("provider returned %d file descriptor sets, expected %d", len(catalogFDSs), len(catalogIdVersions))
+		}
+		fdss = append(fdss, catalogFDSs...)
+		mergeKeys = append(mergeKeys, catalogKeys...)
+	}
+
+	merged, err := descriptor.MergeFileDescriptorSets(fdss, descriptor.WithKeys(mergeKeys))
+	if err != nil {
+		return nil, fmt.Errorf("failed to merge file descriptor sets: %w", err)
+	}
+	if len(merged.GetFile()) == 0 {
+		return nil, nil
+	}
+	return merged, nil
 }
 
 
@@ -317,6 +395,14 @@ type processedProcessBundle struct {
 func (b processedProcessBundle) Install() *iapb.CreateInstalledAssetRequest_Asset {
 	return &iapb.CreateInstalledAssetRequest_Asset{
 		Variant: &iapb.CreateInstalledAssetRequest_Asset_Process{
+			Process: cloneOf(b.pa),
+		},
+	}
+}
+
+func (b processedProcessBundle) InstallBatch() *iapb.CreateInstalledAssetsRequest_Asset {
+	return &iapb.CreateInstalledAssetsRequest_Asset{
+		Variant: &iapb.CreateInstalledAssetsRequest_Asset_Process{
 			Process: cloneOf(b.pa),
 		},
 	}
@@ -364,8 +450,8 @@ func (b processedProcessBundle) DeployApp() *apppb.Application_Asset {
 
 
 
-func (b processedProcessBundle) FileDescriptorSet() *dpb.FileDescriptorSet {
-	return nil
+func (b processedProcessBundle) FileDescriptorSet(ctx context.Context, provider CatalogFileDescriptorProvider) (*dpb.FileDescriptorSet, error) {
+	return nil, nil
 }
 
 type processedSceneObjectBundle struct {
@@ -375,6 +461,14 @@ type processedSceneObjectBundle struct {
 func (b processedSceneObjectBundle) Install() *iapb.CreateInstalledAssetRequest_Asset {
 	return &iapb.CreateInstalledAssetRequest_Asset{
 		Variant: &iapb.CreateInstalledAssetRequest_Asset_SceneObject{
+			SceneObject: cloneOf(b.manifest),
+		},
+	}
+}
+
+func (b processedSceneObjectBundle) InstallBatch() *iapb.CreateInstalledAssetsRequest_Asset {
+	return &iapb.CreateInstalledAssetsRequest_Asset{
+		Variant: &iapb.CreateInstalledAssetsRequest_Asset_SceneObject{
 			SceneObject: cloneOf(b.manifest),
 		},
 	}
@@ -429,8 +523,8 @@ func (b processedSceneObjectBundle) DeployApp() *apppb.Application_Asset {
 
 
 
-func (b processedSceneObjectBundle) FileDescriptorSet() *dpb.FileDescriptorSet {
-	return cloneOf(b.manifest.GetAssets().GetFileDescriptorSet())
+func (b processedSceneObjectBundle) FileDescriptorSet(ctx context.Context, provider CatalogFileDescriptorProvider) (*dpb.FileDescriptorSet, error) {
+	return cloneOf(b.manifest.GetAssets().GetFileDescriptorSet()), nil
 }
 
 type processedServiceBundle struct {
@@ -440,6 +534,14 @@ type processedServiceBundle struct {
 func (b processedServiceBundle) Install() *iapb.CreateInstalledAssetRequest_Asset {
 	return &iapb.CreateInstalledAssetRequest_Asset{
 		Variant: &iapb.CreateInstalledAssetRequest_Asset_Service{
+			Service: cloneOf(b.manifest),
+		},
+	}
+}
+
+func (b processedServiceBundle) InstallBatch() *iapb.CreateInstalledAssetsRequest_Asset {
+	return &iapb.CreateInstalledAssetsRequest_Asset{
+		Variant: &iapb.CreateInstalledAssetsRequest_Asset_Service{
 			Service: cloneOf(b.manifest),
 		},
 	}
@@ -494,8 +596,8 @@ func (b processedServiceBundle) DeployApp() *apppb.Application_Asset {
 
 
 
-func (b processedServiceBundle) FileDescriptorSet() *dpb.FileDescriptorSet {
-	return cloneOf(b.manifest.GetAssets().GetFileDescriptorSet())
+func (b processedServiceBundle) FileDescriptorSet(ctx context.Context, provider CatalogFileDescriptorProvider) (*dpb.FileDescriptorSet, error) {
+	return cloneOf(b.manifest.GetAssets().GetFileDescriptorSet()), nil
 }
 
 type processedSkillBundle struct {
@@ -505,6 +607,14 @@ type processedSkillBundle struct {
 func (b processedSkillBundle) Install() *iapb.CreateInstalledAssetRequest_Asset {
 	return &iapb.CreateInstalledAssetRequest_Asset{
 		Variant: &iapb.CreateInstalledAssetRequest_Asset_Skill{
+			Skill: cloneOf(b.manifest),
+		},
+	}
+}
+
+func (b processedSkillBundle) InstallBatch() *iapb.CreateInstalledAssetsRequest_Asset {
+	return &iapb.CreateInstalledAssetsRequest_Asset{
+		Variant: &iapb.CreateInstalledAssetsRequest_Asset_Skill{
 			Skill: cloneOf(b.manifest),
 		},
 	}
@@ -558,8 +668,8 @@ func (b processedSkillBundle) DeployApp() *apppb.Application_Asset {
 
 
 
-func (b processedSkillBundle) FileDescriptorSet() *dpb.FileDescriptorSet {
-	return cloneOf(b.manifest.GetAssets().GetFileDescriptorSet())
+func (b processedSkillBundle) FileDescriptorSet(ctx context.Context, provider CatalogFileDescriptorProvider) (*dpb.FileDescriptorSet, error) {
+	return cloneOf(b.manifest.GetAssets().GetFileDescriptorSet()), nil
 }
 
 // Process auto-detects a bundle type and processes it to be sent to an

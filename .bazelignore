@@ -20,9 +20,7 @@ intrinsic_apis/intrinsic/
 sdk-examples/
 developer_resources/docs/generators/grpc/
 
-# do not run bazel for Portal external dependencies
-incode/portal/frontend/node_modules/
-incode/portal/frontend/dist/
+# do not run bazel for local node_modules directories
 developer_resources/docs/node_modules/
 node_modules/
 

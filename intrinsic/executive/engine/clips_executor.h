@@ -445,9 +445,11 @@ class ClipsExecutor {
       const std::vector<clips::Fact>& facts_before, const clips::Trace& trace)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(clips_->mutex());
 
-  // Adds additional debug information and legacy errors from (error) facts as
-  // context to the given ExtendedStatus.
-  void AddExtendedStatusDebugAndLegacyErrors(
+  // Adds additional debug information to the given ExtendedStatus.
+  //
+  // This is only available after a run has finished, as it reports on the facts
+  // and the trace of that run.
+  void AddExtendedStatusDebugInformation(
       intrinsic_proto::status::ExtendedStatus& es,
       const std::vector<clips::Fact>& facts_before, const clips::Trace& trace)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(clips_->mutex());
@@ -477,10 +479,6 @@ class ClipsExecutor {
       ABSL_ASSERT_EXCLUSIVE_LOCK(clips_->mutex());
   intrinsic_proto::data_logger::Context GetStateLogContextNoLock(
       std::string_view operation_name)
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(clips_->mutex());
-  // Retrieves the extended status on the operation-envelope
-  absl::StatusOr<intrinsic_proto::status::ExtendedStatus>
-  GetOperationExtendedStatusNoLock(std::string_view operation_name)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(clips_->mutex());
   absl::Status SetWorldId(absl::string_view flag_name,
                           absl::string_view world_id)

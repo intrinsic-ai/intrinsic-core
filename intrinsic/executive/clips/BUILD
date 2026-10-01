@@ -33,12 +33,14 @@ cc_library(
     ],
     deps = [
         "//intrinsic/executive/clips/cc:id_handling",
+        "//intrinsic/executive/clips/cc:operation_error",
         "//intrinsic/executive/clips/cc:recovery",
         "//intrinsic/executive/clips/cc:time",
         "//intrinsic/executive/clips/cc:tracing",
         "//intrinsic/executive/clips_cpp",
         "//intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic/executive/clips_cpp:context",
+        "//intrinsic/executive/proto:executive_events_cc_proto",
         "//intrinsic/executive/proto:process_tree_cc_proto",  # fixdeps: keep
         "//intrinsic/executive/proto:run_metadata_cc_proto",
         "//intrinsic/util/path_resolver",

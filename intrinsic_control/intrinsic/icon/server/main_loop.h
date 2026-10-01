@@ -231,6 +231,7 @@ class MainLoop {
       double control_frequency_hz, absl::Duration hard_cycle_time_timeout,
       absl::Duration read_write_timeout, const Context& context,
       std::unique_ptr<icon::RealtimeControlManager> realtime_control_manager,
+      std::unique_ptr<ServiceCollection> service_collection,
       std::unique_ptr<icon::HardwareModuleManager> hardware_module_manager,
       std::variant<InternalClockParams, std::unique_ptr<RemoteClock>>
           clock_data,

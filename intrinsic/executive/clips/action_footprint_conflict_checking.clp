@@ -154,7 +154,6 @@
   ; from here.
   (if (<> ?bc-proto 0) then
     (pb-clear-field ?bc-proto "skill_execution_data.footprint")
-    (pb-clear-field ?bc-proto "skill_execution_data.internal_data")
   )
   (modify ?af (state SELECTED))
 )

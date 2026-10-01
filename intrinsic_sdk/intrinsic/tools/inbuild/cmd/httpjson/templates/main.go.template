@@ -21,6 +21,7 @@ import (
 	"encoding/base64"
 	"fmt"
 	"log"
+	"math"
 	"net/http"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
@@ -73,6 +74,7 @@ func main() {
 	grpcAddr := fmt.Sprintf("0.0.0.0:%d", rc.GetPort())
 	opts := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt)),
 	}
 
 	log.Printf("Connecting to gRPC Service: %v", grpcAddr)

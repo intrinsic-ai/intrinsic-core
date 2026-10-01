@@ -49,8 +49,6 @@ cc_library(
         ":execute_request",
         ":get_footprint_context",
         ":get_footprint_request",
-        ":predict_context",
-        ":predict_request",
         ":preview_context",
         ":preview_request",
         "//intrinsic/skills/proto:skill_service_cc_proto",
@@ -75,8 +73,6 @@ cc_library(
         ":equipment_pack",
         ":skill_interface",
         "//intrinsic/skills/internal:execute_context_view",
-        "//intrinsic/skills/internal:predict_context_view",
-        "//intrinsic/skills/proto:prediction_cc_proto",
         "//intrinsic/skills/proto:skill_service_cc_proto",
         "//intrinsic/util:proto_time",
         "//intrinsic/util/proto:any",
@@ -86,35 +82,6 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
-        "@com_google_protobuf//:protobuf",
-    ],
-)
-
-cc_library(
-    name = "predict_context",
-    hdrs = ["predict_context.h"],
-    deps = [
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/geometry/storage:geometry_library",
-        "//intrinsic_sdk/intrinsic/motion_planning:motion_planner_client",
-        "//intrinsic_sdk/intrinsic/world/objects:frame",
-        "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
-        "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
-        "//intrinsic_sdk/intrinsic/world/objects:world_object",
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings:string_view",
-    ],
-)
-
-cc_library(
-    name = "predict_request",
-    hdrs = ["predict_request.h"],
-    deps = [
-        "//intrinsic/util/proto:any",
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings:string_view",
         "@com_google_protobuf//:protobuf",
     ],
 )

@@ -90,6 +90,8 @@ class AnalogDigitalIOInterface {
   //
   // The size of `output_block_names`, `output_masks`, and `values` must be
   // the same.
+  // Each block in `output_blocks` must have a unique `name`. Returns
+  // `AlreadyExistsError` on duplicate names.
   virtual absl::Status SetDigitalOutputs(
       absl::Span<const DigitalOutputBlock> output_blocks) = 0;
 
@@ -98,6 +100,8 @@ class AnalogDigitalIOInterface {
   //
   // The size of `output_block_names`, `output_masks`, and `values` must be
   // the same.
+  // Each block in `output_blocks` must have a unique `name`. Returns
+  // `AlreadyExistsError` on duplicate names.
   virtual absl::Status SetAnalogOutputs(
       absl::Span<const AnalogOutputBlock> output_blocks) = 0;
 

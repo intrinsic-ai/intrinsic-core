@@ -121,11 +121,8 @@ message BehaviorCall {
     // The footprint (required resources etc.) of the skill.
     intrinsic_proto.skills.Footprint footprint = 1;
 
-    // Arbitrary internal data from prediction. This could be anything and you
-    // cannot make any assumptions on the structure. Since it's passed from a
-    // call to predict to the call of execute on the exact same skill, it can
-    // know what to expect.
-    bytes internal_data = 2;
+    reserved 2;
+    reserved "internal_data";
 
     reserved 3;
     reserved "prediction_outcomes";

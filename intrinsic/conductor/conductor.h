@@ -194,14 +194,9 @@ class ConductorImpl final
       const intrinsic_proto::conductor::PrepareProcessStartRequest* request,
       bool reset) ABSL_LOCKS_EXCLUDED(mu_);
   std::shared_ptr<intrinsic::KeyValueStore> kv_store_;
-  std::unique_ptr<ExecutionContext> execution_context_ ABSL_GUARDED_BY(mu_);
-  std::unique_ptr<SaveSceneMonitor> save_scene_monitor_;
   absl::Mutex mu_;
-
-  absl::Mutex ec_op_mu_;
-  std::unique_ptr<ExecutionContextOperation> ec_op_ ABSL_GUARDED_BY(ec_op_mu_);
+  std::unique_ptr<ExecutionContext> execution_context_ ABSL_GUARDED_BY(mu_);
   std::unique_ptr<ResourceWorld> resource_world_;
-
   intrinsic_proto::world::ObjectWorldService::Service& world_service_;
   std::unique_ptr<
       intrinsic_proto::simulation::first_party::SimulationService::Stub>
@@ -217,8 +212,11 @@ class ConductorImpl final
       installed_assets_stub_;
   std::unique_ptr<google::longrunning::Operations::Stub>
       installed_assets_lro_stub_;
-
   [[maybe_unused]] bool pause_sim_;
+
+  absl::Mutex ec_op_mu_;
+  std::unique_ptr<ExecutionContextOperation> ec_op_ ABSL_GUARDED_BY(ec_op_mu_);
+  std::unique_ptr<SaveSceneMonitor> save_scene_monitor_;
 
   grpc::Status ResetWorldService(
       const std::vector<std::string>& worlds_to_not_delete);

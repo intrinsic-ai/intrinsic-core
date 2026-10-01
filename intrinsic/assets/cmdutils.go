@@ -26,14 +26,14 @@ import (
 	"intrinsic/assets/viewutils"
 	"intrinsic/tools/inctl/util/orgutil"
 
-	atypepb "intrinsic/assets/proto/asset_type_go_proto"
-	iapb "intrinsic/assets/proto/installed_assets_go_proto"
-	viewpb "intrinsic/assets/proto/view_go_proto"
-
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
 	"golang.org/x/exp/maps"
+
+	atypepb "intrinsic/assets/proto/asset_type_go_proto"
+	iapb "intrinsic/assets/proto/installed_assets_go_proto"
+	viewpb "intrinsic/assets/proto/view_go_proto"
 )
 
 const (
@@ -66,10 +66,16 @@ const (
 	// keyPolicy defines the flag used to specify the policy option when
 	// interacting with the installed asset service.
 	keyPolicy = "policy"
+	// keyProcessingConcurrency is the name of the processing concurrency flag.
+	keyProcessingConcurrency = "processing_concurrency"
 	// keyProject is used as central flag name for passing a project name to inctl.
 	keyProject = orgutil.KeyProject
 	// KeyProvides is the name of the provided interfaces flag.
 	KeyProvides = "provides"
+	// keyRateBurst is the name of the rate burst flag.
+	keyRateBurst = "rate_burst"
+	// keyRateLimit is the name of the rate limit flag.
+	keyRateLimit = "rate_limit"
 	// keyRegistry is the name of the registry flag.
 	keyRegistry = "registry"
 	// keyReleaseNotes is the name of the release notes flag.
@@ -218,7 +224,7 @@ func (cf *CmdFlags) GetFlagIgnoreExisting() bool {
 
 // AddFlagImageUploadParallelism adds flag for modifying image upload parallelism.
 func (cf *CmdFlags) AddFlagImageUploadParallelism(defVal int) {
-	cf.optionalInt(keyImageUploadParallelism, defVal, "The number of image layers uploaded in parallel.")
+	cf.OptionalInt(keyImageUploadParallelism, defVal, "The number of image layers uploaded in parallel.")
 }
 
 // GetFlagImageUploadParallelism returns number of image layers which should be uploaded in parallel.
@@ -351,6 +357,32 @@ func (cf *CmdFlags) GetFlagProvides() ([]string, error) {
 	}
 
 	return provides, nil
+}
+
+// AddFlagProcessingConcurrency adds a flag for the processing concurrency limit with a default value.
+func (cf *CmdFlags) AddFlagProcessingConcurrency(defaultLimit int) {
+	cf.OptionalInt(keyProcessingConcurrency, defaultLimit, "Maximum number of concurrent processing operations. Set <= 0 to disable.")
+}
+
+// GetFlagProcessingConcurrency gets the value of the processing concurrency flag added by AddFlagProcessingConcurrency.
+func (cf *CmdFlags) GetFlagProcessingConcurrency() int {
+	return cf.GetInt(keyProcessingConcurrency)
+}
+
+// AddFlagsRateLimit adds flags for gRPC connection rate limiting with default values.
+func (cf *CmdFlags) AddFlagsRateLimit(defaultLimit float64, defaultBurst int) {
+	cf.OptionalFloat64(keyRateLimit, defaultLimit, "Maximum gRPC requests per second. Set <= 0 to disable.")
+	cf.OptionalInt(keyRateBurst, defaultBurst, "Maximum gRPC burst size.")
+}
+
+// GetFlagRateLimit gets the value of the rate limit flag added by AddFlagsRateLimit.
+func (cf *CmdFlags) GetFlagRateLimit() float64 {
+	return cf.GetFloat64(keyRateLimit)
+}
+
+// GetFlagRateBurst gets the value of the rate burst flag added by AddFlagsRateLimit.
+func (cf *CmdFlags) GetFlagRateBurst() int {
+	return cf.GetInt(keyRateBurst)
 }
 
 // AddFlagRegistry adds a flag for the registry when side-loading an asset.
@@ -517,14 +549,30 @@ func (cf *CmdFlags) Int(name string, value int, usage string) {
 	cf.viperLocal.BindPFlag(name, cf.cmd.PersistentFlags().Lookup(name))
 }
 
-// optionalInt adds a new optional int flag.
-func (cf *CmdFlags) optionalInt(name string, value int, usage string) {
+// OptionalInt adds a new optional int flag.
+func (cf *CmdFlags) OptionalInt(name string, value int, usage string) {
 	cf.Int(name, value, fmt.Sprintf("(optional) %s", usage))
 }
 
 // GetInt gets the value of an int flag.
 func (cf *CmdFlags) GetInt(name string) int {
 	return cf.viperLocal.GetInt(name)
+}
+
+// Float64 adds a new float64 flag.
+func (cf *CmdFlags) Float64(name string, value float64, usage string) {
+	cf.cmd.PersistentFlags().Float64(name, value, usage)
+	cf.viperLocal.BindPFlag(name, cf.cmd.PersistentFlags().Lookup(name))
+}
+
+// OptionalFloat64 adds a new optional float64 flag.
+func (cf *CmdFlags) OptionalFloat64(name string, value float64, usage string) {
+	cf.Float64(name, value, fmt.Sprintf("(optional) %s", usage))
+}
+
+// GetFloat64 gets the value of a float64 flag.
+func (cf *CmdFlags) GetFloat64(name string) float64 {
+	return cf.viperLocal.GetFloat64(name)
 }
 
 // StringSlice adds a new string slice flag.

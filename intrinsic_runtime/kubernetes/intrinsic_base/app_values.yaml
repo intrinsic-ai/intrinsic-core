@@ -94,9 +94,13 @@ motion_planning_object_store_cache_size_mb: 500
 # Application-level configuration
 ################################################################################
 
-# A random application deployment UUID filled in when the application is rendered. It is used to
-# enforce pod restart on application switch.
+# A random application deployment UUID filled in when the application is rendered. It is
+# regenerated on every update to enforce pod restarts on application switch/update.
 app_deployment_id: ""
+# A random solution deployment UUID generated when a solution deployment is created. Unlike
+# app_deployment_id, it persists across updates from creation to deletion and indicates whether
+# a solution deployment is actively applied.
+solution_deployment_id: ""
 
 ################################################################################
 # Values filled by app start are listed here to satisfy the linter.

@@ -132,23 +132,6 @@ class ClipsWorld {
                                  const clips::Values& running_action_uids,
                                  const clips::Values& running_footprints);
 
-  // Clones the given world id and applies the updates from the given prediction
-  // proto ID into it and returns the new world id.
-  absl::StatusOr<std::string> CloneWorldAndApplyPrediction(
-      const std::string& world_id,
-      const clips::ProtoMessageId& prediction_proto_id);
-
-  // Merge multiple predictions into one. This is useful when combining
-  // predictions for collection style behavior node (sequence/parallel).
-  absl::StatusOr<clips::ProtoMessageId> MergePredictions(
-      const clips::Values& prediction_proto_ids);
-
-  // Merge multiple predictions into one. This is useful when combining
-  // predictions for collection style behavior node (sequence/parallel).
-  absl::StatusOr<clips::ProtoMessageId> MergePredictions(
-      const clips::ProtoMessageId& prediction_proto_id_1,
-      const clips::ProtoMessageId& prediction_proto_id_2);
-
   clips::EnvironmentAssertFacade* assert_facade_;  // externally owned
   clips::ProtobufManager* proto_manager_;          // externally owned
   clips::TraceSpanManager* span_manager_;          // externally owned

@@ -102,6 +102,43 @@ class MathTypesTest(math_test.TestCase, parameterized.TestCase):
     self._get_matching_arrays_check_equal_shape(1, 0)
     self._get_matching_arrays_check_equal_shape((1, 2, 3, 4), 0)
 
+  @parameterized.named_parameters(
+      ('integer_list', [1, 2, 3]),
+      ('integer_matrix', np.array([[1, 2], [3, 4]])),
+      ('boolean_list', [True, False]),
+  )
+  def test_get_matching_arrays_preserves_fractional_scalar(self, values):
+    original = np.array(values, copy=True)
+    expected = np.full(original.shape, 0.5)
+
+    array, scalar = math_types.get_matching_arrays(values, 0.5)
+    self.assert_all_equal(array, original)
+    self.assert_all_equal(scalar, expected)
+
+    scalar, array = math_types.get_matching_arrays(0.5, values)
+    self.assert_all_equal(scalar, expected)
+    self.assert_all_equal(array, original)
+    self.assert_all_equal(values, original)
+
+  def test_get_matching_arrays_preserves_large_integer_scalar(self):
+    values = np.array([1, 2], dtype=np.int8)
+    expected = np.array([1000, 1000])
+
+    array, scalar = math_types.get_matching_arrays(values, 1000)
+    self.assert_all_equal(array, values)
+    self.assert_all_equal(scalar, expected)
+
+    scalar, array = math_types.get_matching_arrays(1000, values)
+    self.assert_all_equal(scalar, expected)
+    self.assert_all_equal(array, values)
+
+  @parameterized.parameters((1, 0.5), (0.5, 1))
+  def test_get_matching_arrays_preserves_mixed_scalars(self, lhs, rhs):
+    lhs_array, rhs_array = math_types.get_matching_arrays(lhs, rhs)
+
+    self.assert_all_equal(lhs_array, np.asarray(lhs))
+    self.assert_all_equal(rhs_array, np.asarray(rhs))
+
   def test_get_matching_arrays_wrong_size(self):
     """Checks when inputs have different numbers of elements."""
     self.assertRaisesRegex(

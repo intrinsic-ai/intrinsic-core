@@ -19,6 +19,7 @@ package intrinsic_proto.skills;
 import "google/protobuf/empty.proto";
 import "intrinsic/kubernetes/generator/proto/auth_options.proto";
 import "intrinsic/skills/proto/skill_registry_config.proto";
+import "intrinsic/skills/proto/skills.proto";
 
 option go_package = "intrinsic/skills/proto/behavior_tree_registry_go_proto";
 
@@ -34,6 +35,13 @@ message UnregisterBehaviorTreeRequest {
   string id = 1;
 }
 
+message ListBehaviorTreeSkillsRequest {}
+
+message ListBehaviorTreeSkillsResponse {
+  // The skill descriptions of all registered pBTs.
+  repeated intrinsic_proto.skills.Skill skills = 1;
+}
+
 service BehaviorTreeRegistry {
   // Auth annotations for consumption by the following helm_chart:
   //   cs/symbol://intrinsic/kubernetes/api_relay/cloud:api-relay
@@ -47,4 +55,11 @@ service BehaviorTreeRegistry {
   // Unregister a BehaviorTree skill from the skill registry.
   rpc UnregisterBehaviorTree(UnregisterBehaviorTreeRequest)
       returns (google.protobuf.Empty) {}
+
+  // TODO(b/459765477): Remove this method once all legacy pBTs have been
+  // migrated to Process assets.
+  // Lists the skill descriptions of all legacy pBTs currently registered in
+  // the skill registry.
+  rpc ListBehaviorTreeSkills(ListBehaviorTreeSkillsRequest)
+      returns (ListBehaviorTreeSkillsResponse) {}
 }

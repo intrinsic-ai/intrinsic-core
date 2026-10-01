@@ -20,25 +20,28 @@
 #include <utility>
 #include <vector>
 
-#include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/notification.h"
-#include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "google/protobuf/duration.pb.h"
+#include "google/protobuf/message.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "google/protobuf/util/message_differencer.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
+#include "intrinsic/logging/proto/context.pb.h"
 #include "intrinsic/math/pose3.h"
+#include "intrinsic/math/proto/pose.pb.h"
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/proto/v1/camera_config.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
+#include "intrinsic/perception/proto/v1/camera_settings.pb.h"
 #include "intrinsic/perception/proto/v1/capture_data.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/camera_identifier.h"
 #include "intrinsic/perception/skills/capture_images.pb.h"
 #include "intrinsic/platform/pubsub/storage_location.pb.h"
-#include "intrinsic/resources/proto/resource_handle.pb.h"
 #include "intrinsic/skills/cc/execute_context.h"
 #include "intrinsic/skills/cc/execute_request.h"
 #include "intrinsic/skills/cc/get_footprint_context.h"
@@ -48,7 +51,6 @@
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/cc/skill_utils.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
-#include "intrinsic/skills/proto/skill_service.pb.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/grpc/connection_params.h"
 #include "intrinsic/util/proto/repeated_field_util.h"
@@ -59,7 +61,10 @@
 #include "intrinsic/util/thread/thread_pool.h"
 #include "intrinsic/util/time/deadline_timeout.h"
 #include "intrinsic/world/objects/object_world_client.h"
+#include "intrinsic/world/objects/object_world_ids.h"
+#include "intrinsic/world/objects/transform_node.h"
 #include "intrinsic/world/objects/world_object.h"
+#include "intrinsic/world/proto/object_world_refs.pb.h"
 
 namespace intrinsic::skills {
 
@@ -212,14 +217,19 @@ struct CaptureResult {
 
 absl::StatusOr<CaptureResult> Capture(
     const intrinsic_proto::skills::CaptureImagesParams& params,
-    const intrinsic_proto::resources::ResourceHandle& camera_handle,
     const intrinsic_proto::data_logger::Context& data_logger_context,
     perception::GrpcCamera& grpc_camera) {
   INTR_ASSIGN_OR_RETURN(
+      const ConnectionParams config_params,
+      skills::GetConnectionParamsFromResolvedDependency(
+          params.camera(), perception::CameraConfigServiceInterfaceUri()));
+  INTR_ASSIGN_OR_RETURN(
       const intrinsic_proto::perception::v1::CameraConfig camera_config,
-      perception::GetCameraConfigFromHandle(camera_handle));
-  INTR_ASSIGN_OR_RETURN(const ConnectionParams connection_params,
-                        skills::GetConnectionParamsFromHandle(camera_handle));
+      grpc_camera.GetCameraConfig(config_params));
+  INTR_ASSIGN_OR_RETURN(
+      const ConnectionParams connection_params,
+      skills::GetConnectionParamsFromResolvedDependency(
+          params.camera(), perception::CameraServiceInterfaceUri()));
 
   INTR_ASSIGN_OR_RETURN(
       intrinsic_proto::perception::v1::CaptureResponse capture_response,
@@ -241,10 +251,11 @@ absl::StatusOr<CaptureResult> Capture(
 }
 
 absl::StatusOr<intrinsic_proto::Pose> GetWorldTCamera(
-    const intrinsic_proto::resources::ResourceHandle& camera_handle,
+    const intrinsic_proto::assets::v1::ResolvedDependency& camera_dependency,
     const world::ObjectWorldClient& world) {
-  INTR_ASSIGN_OR_RETURN(const world::WorldObject camera,
-                        world.GetObject(camera_handle));
+  INTR_ASSIGN_OR_RETURN(
+      const world::WorldObject camera,
+      world.GetObject(WorldObjectName(camera_dependency.object().name())));
   INTR_ASSIGN_OR_RETURN(const Pose3d world_t_camera,
                         world.GetTransform(camera));
   return ToProto(world_t_camera);
@@ -256,11 +267,12 @@ absl::StatusOr<intrinsic_proto::Pose> GetWorldTCamera(
 // prevents temporal synchronization issues and joint jitter that occur if
 // factoring the transform through the world root at different timestamps.
 absl::StatusOr<intrinsic_proto::Pose> GetReferenceTCamera(
-    const intrinsic_proto::resources::ResourceHandle& camera_handle,
+    const intrinsic_proto::assets::v1::ResolvedDependency& camera_dependency,
     const intrinsic_proto::world::TransformNodeReference& reference_frame,
     const world::ObjectWorldClient& world) {
-  INTR_ASSIGN_OR_RETURN(const world::WorldObject camera,
-                        world.GetObject(camera_handle));
+  INTR_ASSIGN_OR_RETURN(
+      const world::WorldObject camera,
+      world.GetObject(WorldObjectName(camera_dependency.object().name())));
   INTR_ASSIGN_OR_RETURN(const world::TransformNode reference_node,
                         world.GetTransformNode(reference_frame));
   INTR_ASSIGN_OR_RETURN(const Pose3d ref_t_camera,
@@ -280,9 +292,6 @@ std::unique_ptr<SkillInterface> CaptureImages::CreateSkill() {
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 CaptureImages::Execute(const ExecuteRequest& request, ExecuteContext& context) {
   INTR_ASSIGN_OR_RETURN(
-      const intrinsic_proto::resources::ResourceHandle camera_handle,
-      context.equipment().GetHandle(CaptureImages::kCameraEquipment));
-  INTR_ASSIGN_OR_RETURN(
       const auto params,
       request.params<intrinsic_proto::skills::CaptureImagesParams>());
 
@@ -293,9 +302,8 @@ CaptureImages::Execute(const ExecuteRequest& request, ExecuteContext& context) {
   INTR_RETURN_IF_ERROR(thread_pool_.Schedule([&]() {
     const stats::ScopedSpan capture_span("CaptureImages::Capture",
                                          capture_images_span.span());
-    capture_result =
-        Capture(params, camera_handle,
-                context.logging_context().data_logger_context, grpc_camera_);
+    capture_result = Capture(
+        params, context.logging_context().data_logger_context, grpc_camera_);
     capture_done.Notify();
   }));
 
@@ -304,10 +312,10 @@ CaptureImages::Execute(const ExecuteRequest& request, ExecuteContext& context) {
   {
     const stats::ScopedSpan get_transform_span("CaptureImages::GetTransforms",
                                                capture_images_span.span());
-    world_t_camera = GetWorldTCamera(camera_handle, context.object_world());
+    world_t_camera = GetWorldTCamera(params.camera(), context.object_world());
     if (params.has_reference_frame()) {
       reference_t_camera = GetReferenceTCamera(
-          camera_handle, params.reference_frame(), context.object_world());
+          params.camera(), params.reference_frame(), context.object_world());
     }
   }
 

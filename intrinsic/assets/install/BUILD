@@ -154,6 +154,7 @@ go_library(
         "//intrinsic/assets/errors:report",
         "//intrinsic/assets/proto:installation_origin_go_proto",
         "//intrinsic/assets/proto:installed_assets_go_proto",
+        "//intrinsic/assets/proto/v1:asset_go_proto",
         "//intrinsic/assets/scene_objects:sceneobjectvalidate",
         "//intrinsic/assets/services:servicevalidate",
         "//intrinsic/config/proto:application_go_proto",

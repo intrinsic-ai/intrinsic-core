@@ -42,6 +42,11 @@ PORTAL_DOMAIN_DEV = "flowstate-dev.intrinsic.ai"
 PORTAL_DOMAIN_STAGING = "flowstate-qa.intrinsic.ai"
 PORTAL_DOMAIN_PROD = "flowstate.intrinsic.ai"
 
+# Equipment domain constants (parent domains for per-cluster UIs)
+EQUIPMENT_DOMAIN_DEV = "dev.intrinsic.equipment"
+EQUIPMENT_DOMAIN_STAGING = "qa.intrinsic.equipment"
+EQUIPMENT_DOMAIN_PROD = "intrinsic.equipment"
+
 # Assets project constants
 ASSETS_PROJECT_DEV = "intrinsic-assets-dev"
 ASSETS_PROJECT_STAGING = "intrinsic-assets-staging"
@@ -145,6 +150,17 @@ def portal_domain(env: str) -> str:
     return PORTAL_DOMAIN_STAGING
   if env == DEV:
     return PORTAL_DOMAIN_DEV
+  raise ValueError(f"Unknown environment: {env}")
+
+
+def equipment_domain(env: str) -> str:
+  """Returns the equipment domain for a given environment."""
+  if env == PROD:
+    return EQUIPMENT_DOMAIN_PROD
+  if env == STAGING:
+    return EQUIPMENT_DOMAIN_STAGING
+  if env == DEV:
+    return EQUIPMENT_DOMAIN_DEV
   raise ValueError(f"Unknown environment: {env}")
 
 

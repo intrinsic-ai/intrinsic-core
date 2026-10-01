@@ -16,7 +16,10 @@
 #define INTRINSIC_ICON_CONTROL_SERVICES_KINEMATICS_SERVICE_H_
 
 #include <memory>
+#include <string>
+#include <vector>
 
+#include "absl/base/attributes.h"
 #include "absl/strings/string_view.h"
 #include "intrinsic/kinematics/ik/inverse_kinematics_interface.h"
 #include "intrinsic/kinematics/skeleton.h"
@@ -53,7 +56,7 @@ class KinematicsService {
   // Returns a pointer to the ModelInterface for the part, or nullptr if the
   // part is not found or it does not have an associated kinematics model.
   virtual const kinematics::ModelInterface* GetKinematicsModelForPart(
-      absl::string_view part_name) const = 0;
+      absl::string_view part_name) const ABSL_ATTRIBUTE_LIFETIME_BOUND = 0;
 
   // Lists all available part names that can be used as `part_name`.
   //

@@ -26,7 +26,6 @@ from intrinsic.geometry.api.python import conversion_utils
 from intrinsic.geometry.proto import geometry_service_pb2_grpc
 from intrinsic.geometry.proto.v1 import geometry_pb2
 from intrinsic.math.python import proto_conversion
-from intrinsic.perception.client.v1.python.camera import cameras
 from intrinsic.perception.client.v1.python.camera import data_classes
 from intrinsic.perception.proto.v1 import capture_data_pb2
 from intrinsic.perception.proto.v1 import capture_result_pb2
@@ -34,7 +33,6 @@ from intrinsic.perception.proto.v1 import pose_estimate_in_root_pb2
 from intrinsic.perception.proto.v1 import target_pb2
 from intrinsic.platform.pubsub.python import pubsub
 from intrinsic.skills.proto import footprint_pb2
-from intrinsic.skills.python import skill_interface as skl
 from intrinsic.world.proto import object_world_refs_pb2
 from intrinsic.world.python import geometry_component_utils
 from intrinsic.world.python import geometry_types
@@ -170,44 +168,6 @@ def object_reference_to_reservation(
           object_name=world_node.name
       )
   )
-
-
-def filter_camera_slots(
-    context: skl.ExecuteContext,
-    camera_slots: list[str],
-) -> list[str]:
-  """Filter camera slots and return unique camera slots."""
-  unique_camera_slots = []
-  camera_names = []
-  for name in camera_slots:
-    if name in context.resource_handles:
-      resource_handle = context.resource_handles[name]
-      if resource_handle.name not in camera_names:
-        unique_camera_slots.append(name)
-        camera_names.append(resource_handle.name)
-  return unique_camera_slots
-
-
-def get_input_cameras(
-    context: skl.ExecuteContext,
-    unique_camera_slots: list[str],
-) -> list[cameras.Camera]:
-  """Prepare inputs for pose estimation and check if they are all the same type."""
-  input_cameras = []
-  camera_identifiers = set()
-  for slot in unique_camera_slots:
-    input_camera = cameras.Camera.create(context, slot)
-    input_cameras.append(input_camera)
-    camera_identifier = input_camera.config.proto.identifier.WhichOneof(
-        "drivers"
-    )
-    camera_identifiers.add(camera_identifier)
-
-  if len(camera_identifiers) > 1:
-    raise skl.InvalidSkillParametersError(
-        "Invalid cameras, all passed cameras should be of the same type."
-    )
-  return input_cameras
 
 
 # TODO(feuer): Add an end-to-end test, similar to cl/730766172.

@@ -69,29 +69,6 @@ absl::Status SetRobotConfig(RobotCollectionsEntityId robot_id,
 
 namespace {
 
-// Loads and returns a reference test world with 4 robots.
-absl::StatusOr<World> Load4RobotsWorld() {
-  std::string world_gzf_filename = PathResolver::ResolveRunfilesPathForTest(
-      "intrinsic/world/test_data/4_robots_cube_world.gzf");
-  INTR_ASSIGN_OR_RETURN(std::unique_ptr<GZFile> gz_file,
-                        GZFile::Open(world_gzf_filename));
-  return World::FromFile(*gz_file);
-}
-
-// Loads and returns a new World instance from the default test gzf file for
-// the specified robot `type`.
-absl::StatusOr<World> LoadRobotWorld(const RobotType type) {
-  switch (type) {
-    case RobotType::UR:
-      return testing::LoadTestWorld(kUr5eTestWorldGzfPath);
-    case RobotType::AGILUS:
-      return Load4RobotsWorld();
-    default:
-      return absl::InvalidArgumentError(
-          absl::StrCat("Unknown RobotType: ", type));
-  }
-}
-
 // Creates a new `JointLimits` object from the given `dof_view`.
 // Preserves the application limits on joint position and torque from the view
 // while overriding velocity, acceleration, and jerk limits with the provided
@@ -142,16 +119,28 @@ absl::StatusOr<JointLimits> CreateJointLimits(
 MotionPlannerBaseTest::MotionPlannerBaseTest()
     : world_(World::CreateEmptyWorld()) {}
 
+MotionPlannerBaseTest::MotionPlannerBaseTest(RobotTestParams robot_params)
+    : robot_params_(std::move(robot_params)),
+      world_(World::CreateEmptyWorld()) {}
+
 absl::Status MotionPlannerBaseTest::InitializeWorld(
-    const RobotType type, const absl::string_view robot_name,
     const bool set_infinite_jerk_limits,
     const std::optional<eigenmath::VectorNd> start_configuration) {
-  INTR_ASSIGN_OR_RETURN(world_, LoadRobotWorld(type));
+  return InitializeWorld(robot_params_, set_infinite_jerk_limits,
+                         start_configuration);
+}
+
+absl::Status MotionPlannerBaseTest::InitializeWorld(
+    const RobotTestParams& robot_params, const bool set_infinite_jerk_limits,
+    const std::optional<eigenmath::VectorNd> start_configuration) {
+  robot_params_ = robot_params;
+  INTR_ASSIGN_OR_RETURN(world_,
+                        testing::LoadTestWorld(robot_params.world_gzf_path));
 
   INTR_ASSIGN_OR_RETURN(object_world_,
                         object_world::ObjectWorld::CreateView(world_));
-  INTR_ASSIGN_OR_RETURN(
-      robot_, object_world_->GetKinematicObject(WorldObjectName(robot_name)));
+  INTR_ASSIGN_OR_RETURN(robot_, object_world_->GetKinematicObject(
+                                    WorldObjectName(robot_params.robot_name)));
 
   INTR_ASSIGN_OR_RETURN(const eigenmath::VectorXd& world_configuration,
                         robot_->GetJointPositions());
@@ -167,7 +156,7 @@ absl::Status MotionPlannerBaseTest::InitializeWorld(
                                         *start_configuration, &world_));
   }
   INTR_ASSIGN_OR_RETURN(tip_frame_, robot_->GetSingleIsoFlangeFrame());
-  robot_name_ = robot_name;
+  robot_name_ = robot_params.robot_name;
 
   // Create some default planning limits.
   eigenmath::VectorNd velocity(num_dof);

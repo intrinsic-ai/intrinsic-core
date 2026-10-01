@@ -28,14 +28,12 @@ from intrinsic.assets.proto import id_pb2
 from intrinsic.assets.proto.v1 import resolved_dependency_pb2
 from intrinsic.logging.proto import context_pb2
 from intrinsic.math.python import proto_conversion
-from intrinsic.perception.client.v1.python.camera import cameras
 from intrinsic.perception.client.v1.python.camera import data_classes
 from intrinsic.perception.proto.v1 import capture_data_pb2
 from intrinsic.perception.proto.v1 import capture_result_pb2
 from intrinsic.perception.proto.v1 import pose_estimation_service_pb2
 from intrinsic.perception.proto.v1 import pose_estimator_id_pb2
 from intrinsic.perception.proto.v1 import pose_priors_pb2
-from intrinsic.perception.service.multi_view import camera_capture_utils
 from intrinsic.resources.proto import resource_handle_pb2
 from intrinsic.util.grpc import connection
 from intrinsic.util.grpc import interceptor
@@ -46,7 +44,7 @@ _GRPC_OPTIONS = [
     ("grpc.max_message_length", 1000 * 1024 * 1024),
 ]
 _LOGGING_CONTEXT_METADATA_KEY = "x-intrinsic-logging-context"
-_DEFAULT_TIMEOUT_IN_SECONDS = 300
+_DEFAULT_TIMEOUT_IN_SECONDS = 900
 _INGRESS_ADDRESS = "istio-ingressgateway.app-ingress.svc.cluster.local:80"
 
 
@@ -155,18 +153,6 @@ def create_channel_from_resolved_dependency(
       grpc_options=_GRPC_OPTIONS,
   )
   return _add_logging_context_to_channel(channel, data_logger_context)
-
-
-def _get_capture_slots_for_camera(camera: cameras.Camera) -> List[str]:
-  """Returns the capture slots (sensor names) corresponding to the camera type."""
-  camera_identifier = camera.config.proto.identifier.WhichOneof("drivers")
-  if camera_identifier == "plenoptic_unit":
-    return ["L_P0", "R_P0"]
-  elif camera_identifier == "genicam":
-    return ["color"]
-  elif camera_identifier == "ros":
-    return ["P0"]
-  return []
 
 
 def run_pose_estimation_request_from_capture_data(
@@ -282,51 +268,6 @@ def run_pose_estimation_request_from_capture_results(
   )
 
   return request
-
-
-def run_pose_estimation_request_from_cameras(
-    asset_id: id_pb2.Id,
-    input_cameras: List[cameras.Camera],
-    roi: Optional[object] = None,
-    inference_timeout_secs: Optional[int] = None,
-    publish_annotated_image: bool = False,
-    data_logger_context: Optional[context_pb2.Context] = None,
-    log_full_request: bool = False,
-) -> pose_estimation_service_pb2.RunPoseEstimationRequest:
-  """Prepares the RunPoseEstimationRequest by capturing from cameras.
-
-  Args:
-    asset_id: The asset id of the pose estimator.
-    input_cameras: List of camera instances to capture from.
-    roi: Optional region of interest to restrict estimation to.
-    inference_timeout_secs: Optional timeout in seconds for running inference.
-    publish_annotated_image: If true, publishes the annotated frames.
-    data_logger_context: Optional logging context metadata.
-    log_full_request: If true, logs full debug request/result on service.
-
-  Returns:
-    A RunPoseEstimationRequest proto.
-  """
-  if not input_cameras:
-    raise ValueError("No input cameras provided.")
-
-  sensor_names = None
-  for camera in input_cameras:
-    sensor_names = _get_capture_slots_for_camera(camera)
-  capture_results = camera_capture_utils.gather_cameras_data_concurrent(
-      input_cameras=input_cameras,
-      sensor_names=sensor_names,
-  )
-
-  return run_pose_estimation_request_from_capture_results(
-      asset_id=asset_id,
-      capture_results=capture_results,
-      roi=roi,
-      inference_timeout_secs=inference_timeout_secs,
-      publish_annotated_image=publish_annotated_image,
-      data_logger_context=data_logger_context,
-      log_full_request=log_full_request,
-  )
 
 
 def get_connection_params(

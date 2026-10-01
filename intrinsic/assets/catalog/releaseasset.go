@@ -26,6 +26,7 @@ import (
 	"intrinsic/assets/referenceddata"
 	"intrinsic/assets/scene_objects/gzfprocessor"
 	"intrinsic/assets/services/bundleimages"
+	"intrinsic/assets/throttle"
 	"intrinsic/storage/content_addressable_storage/pkg/filetocas" 
 	"intrinsic/tools/inctl/util/casgeometryuploader"              
 
@@ -41,29 +42,24 @@ import (
 	lropb "cloud.google.com/go/longrunning/autogen/longrunningpb"
 )
 
-const (
-	// Asset releases may be run in parallel, so we can't introduce additional parallelization for
-	// geometry uploads without potentially violating concurrency limits in the AssetArtifacts server.
-	numGeoUploadWorkers = 1
-)
-
 // Printer is a function that prints a formatted status message about the release.
 type Printer func(format string, a ...any)
 
 type fromBundleOptions struct {
-	aaClient        assetartifactspb.AssetArtifactsClient
-	acClient        acpb.AssetCatalogClient
-	casClient       caspb.ContentAddressableStorageServiceClient 
-	dryRun          bool
-	flagDefault     bool
-	flagOrgPrivate  bool
-	ignoreExisting  bool
-	imageTransferer imagetransfer.Transferer
-	lroClient       lropb.OperationsClient
-	printer         Printer
-	progressWriter  io.Writer
-	releaseNotes    string
-	version         string
+	aaClient           assetartifactspb.AssetArtifactsClient
+	acClient           acpb.AssetCatalogClient
+	casClient          caspb.ContentAddressableStorageServiceClient 
+	concurrencyLimiter *throttle.ConcurrencyLimiter
+	dryRun             bool
+	flagDefault        bool
+	flagOrgPrivate     bool
+	ignoreExisting     bool
+	imageTransferer    imagetransfer.Transferer
+	lroClient          lropb.OperationsClient
+	printer            Printer
+	progressWriter     io.Writer
+	releaseNotes       string
+	version            string
 }
 
 // FromBundleOption is an option for FromBundle.
@@ -95,7 +91,7 @@ func WithCASClient(casc caspb.ContentAddressableStorageServiceClient) FromBundle
 
 
 // WithConnection specifies the connection to use for all gRPC clients.
-func WithConnection(conn *grpc.ClientConn) FromBundleOption {
+func WithConnection(conn grpc.ClientConnInterface) FromBundleOption {
 	return func(opts *fromBundleOptions) {
 		opts.aaClient = assetartifactspb.NewAssetArtifactsClient(conn)
 		opts.acClient = acpb.NewAssetCatalogClient(conn)
@@ -174,9 +170,18 @@ func WithVersion(version string) FromBundleOption {
 	}
 }
 
+// WithProcessingConcurrencyLimiter specifies the ConcurrencyLimiter to use to limit the concurrency
+// of Asset processing.
+func WithProcessingConcurrencyLimiter(limiter *throttle.ConcurrencyLimiter) FromBundleOption {
+	return func(opts *fromBundleOptions) {
+		opts.concurrencyLimiter = limiter
+	}
+}
+
 func FromBundle(ctx context.Context, path string, options ...FromBundleOption) error {
 	opts := &fromBundleOptions{
-		printer: nullPrinter,
+		concurrencyLimiter: throttle.NewConcurrencyLimiter(1),
+		printer:            nullPrinter,
 	}
 	for _, opt := range options {
 		opt(opts)
@@ -219,7 +224,7 @@ func FromBundle(ctx context.Context, path string, options ...FromBundleOption) e
 		GZFProcessor: gzfprocessor.New(
 			rdProcessor,
 			gzfprocessor.WithLegacyUploader(geometryUploader), 
-			gzfprocessor.WithConcurrencyLimit(numGeoUploadWorkers),
+			gzfprocessor.WithConcurrencyLimiter(opts.concurrencyLimiter),
 		),
 	}
 

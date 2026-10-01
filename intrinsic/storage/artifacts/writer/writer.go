@@ -42,6 +42,9 @@ var (
 	// ErrAlreadyFinalized indicates that writer was finalized and
 	// cannot perform more operations.
 	ErrAlreadyFinalized = errors.New("writer already finalized")
+	// ErrInvalidReference indicates that the provided reference is invalid or
+	// contains path traversal sequences.
+	ErrInvalidReference = errors.New("invalid reference: path traversal detected")
 )
 
 // UpdateWriter writes blobs into underlying storage. Writer is fully responsible

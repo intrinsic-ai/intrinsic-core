@@ -44,7 +44,7 @@ static void ZenohQueryableCallback(const char* keyexpr, const void* query_bytes,
   internal::QueryableLink* link =
       static_cast<internal::QueryableLink*>(user_context);
   intrinsic_proto::pubsub::PubSubQueryResponse response_packet =
-      link->queryable->Invoke(keyexpr, request_packet);
+      link->callback(keyexpr, request_packet);
 
   // Encode and send response
   std::string reply_message;
@@ -63,20 +63,37 @@ static void ZenohQueryableCallback(const char* keyexpr, const void* query_bytes,
 
 }  // namespace
 
+Queryable::Queryable(Queryable&& other) noexcept
+    : keyexpr_(std::move(other.keyexpr_)), link_(std::move(other.link_)) {
+  other.keyexpr_.clear();
+}
+
+Queryable& Queryable::operator=(Queryable&& other) noexcept {
+  if (this == &other) return *this;
+  Reset();
+  keyexpr_ = std::move(other.keyexpr_);
+  link_ = std::move(other.link_);
+  other.keyexpr_.clear();
+  return *this;
+}
+
 absl::StatusOr<Queryable> Queryable::Create(
     std::string_view key, internal::GeneralQueryableCallback callback) {
-  Queryable queryable(key, callback);
+  Queryable queryable(key, std::move(callback));
   if (imw_ret_t rv = Zenoh().imw_create_queryable(
           queryable.GetKeyExpression().data(), &ZenohQueryableCallback,
           queryable.link_.get(), nullptr);
       rv != IMW_OK) {
+    queryable.link_.reset();
     return absl::InvalidArgumentError(absl::StrFormat(
         "Failed to create queryable for key '%s' (code %d)", key, rv));
   }
   return queryable;
 }
 
-Queryable::~Queryable() {
+Queryable::~Queryable() { Reset(); }
+
+void Queryable::Reset() {
   // link_ may be nullptr when this is the left-over shell of a moved object
   if (link_) {
     // If this is NOT_INITIALIZED it means that the pubsub system has already
@@ -87,13 +104,15 @@ Queryable::~Queryable() {
       LOG(ERROR) << absl::StrFormat(
           "Failed to destroy queryable for '%s' (code %d)", keyexpr_, rv);
     }
+    link_.reset();
+    keyexpr_.clear();
   }
 }
 
 intrinsic_proto::pubsub::PubSubQueryResponse Queryable::Invoke(
     std::string_view keyexpr,
     const intrinsic_proto::pubsub::PubSubQueryRequest& request_packet) {
-  return callback_(keyexpr, request_packet);
+  return link_->callback(keyexpr, request_packet);
 }
 
 }  // namespace intrinsic

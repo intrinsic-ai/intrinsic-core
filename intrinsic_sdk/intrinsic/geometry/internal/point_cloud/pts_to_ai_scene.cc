@@ -36,6 +36,7 @@
 #include "assimp/vector3.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/geometry/api/material.h"
+#include "intrinsic/geometry/internal/point_cloud/validate_pts.h"
 #include "intrinsic/geometry/shapes/point_cloud.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -111,16 +112,9 @@ absl::StatusOr<std::unique_ptr<aiScene>> ToAiScene(
 absl::StatusOr<std::unique_ptr<aiScene>> PtsFileToAiScene(
     const std::string& file_content, eigenmath::Vector3d scale) {
   std::stringstream stream(file_content);
-  // Get the vertex count from the first line;
-  int num_vertices = 0;
-  stream >> num_vertices;
-  if (stream.bad() || stream.fail()) {
-    return absl::InvalidArgumentError("Bad point count");
-  }
-  if (num_vertices <= 0) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("Invalid point count: ", num_vertices));
-  }
+  INTR_ASSIGN_OR_RETURN(
+      const int num_vertices,
+      ParseAndValidatePtsPointCount(stream, file_content.size()));
   return ToAiScene(
       num_vertices,
       [&stream, &scale](size_t i) -> absl::StatusOr<std::array<double, 3>> {

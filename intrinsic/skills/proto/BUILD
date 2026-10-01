@@ -43,6 +43,7 @@ proto_library(
         ":skill_registry_config_proto",
         "@com_google_protobuf//:empty_proto",
         "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:skills_proto",
     ],
 )
 

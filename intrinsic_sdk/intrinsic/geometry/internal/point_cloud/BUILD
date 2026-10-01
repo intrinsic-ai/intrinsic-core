@@ -43,6 +43,22 @@ cc_library(
 )
 
 cc_library(
+    name = "validate_pts",
+    srcs = ["validate_pts.cc"],
+    hdrs = ["validate_pts.h"],
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+    ],
+    deps = [
+        "//intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_library(
     name = "pts_to_ai_scene",
     srcs = ["pts_to_ai_scene.cc"],
     hdrs = ["pts_to_ai_scene.h"],
@@ -51,6 +67,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [
+        ":validate_pts",
         "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:material",
@@ -71,6 +88,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [
+        ":validate_pts",
+        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/shapes",
         "@abseil-cpp//absl/status",

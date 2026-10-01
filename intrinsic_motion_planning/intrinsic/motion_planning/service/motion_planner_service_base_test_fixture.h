@@ -60,7 +60,7 @@ inline constexpr std::string_view kOtherMotionPlannerServiceAssetVersion =
     "1.20270427.1-RC31";
 
 inline const std::initializer_list<std::string> kSaveLoadMotionFieldIgnoreList =
-    {"swept_volume.geometry_storage_refs.fingerprint",
+    {"swept_volumes.geometry",
      "lock_motion_id"};
 inline const std::initializer_list<std::string>
     kSaveLoadMotionRepeatedFieldOrderingIgnoreList = {
@@ -111,7 +111,7 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
           request,
       const std::initializer_list<std::string>& field_ignore_list =
           {
-              "swept_volume.geometry_storage_refs.fingerprint"
+              "swept_volumes.geometry"
           },
       const std::initializer_list<std::string>&
           repeated_field_ordering_ignore_list = {
@@ -122,7 +122,7 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
                request,
            const std::initializer_list<std::string>& field_ignore_list =
                {
-                   "swept_volume.geometry_storage_refs.fingerprint"
+                   "swept_volumes.geometry"
                },
            const std::initializer_list<std::string>&
                repeated_field_ordering_ignore_list = {

@@ -41,6 +41,7 @@ import (
 	"github.com/intrinsic-ai/insrc/intrinsic_runtime/httpjson/webrtc"
 
 	"log/slog"
+	"math"
 
 	prggp "intrinsic/proto_tools/proto/proto_registry_go_proto"
 	soiggp "intrinsic/scene/proto/v1/scene_object_import_go_proto"
@@ -69,7 +70,10 @@ func RegisterHandlers(
 	}
 
 	var err error
-	insecureOpts := []grpc.DialOption{grpc.WithTransportCredentials(insecure.NewCredentials())}
+	insecureOpts := []grpc.DialOption{
+		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt)),
+	}
 
 	// Register handlers for the solution service
 	err = ssggp.RegisterSolutionServiceHandlerFromEndpoint(ctx, mux, cliArgs.SolutionServiceAddress, insecureOpts)

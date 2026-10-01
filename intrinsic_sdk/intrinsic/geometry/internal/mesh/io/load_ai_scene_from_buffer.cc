@@ -35,6 +35,7 @@
 #include "assimp/mesh.h"
 #include "assimp/scene.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/geometry/internal/mesh/io/restrict_importer.h"
 #include "intrinsic/geometry/internal/point_cloud/pts_to_ai_scene.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -53,6 +54,8 @@ absl::StatusOr<const aiScene*> LoadAiSceneFromBuffer(
   } else {
     importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE);
   }
+
+  RestrictImporterToExtension(importer, extension);
 
   auto read_options = aiProcess_CalcTangentSpace | aiProcess_Triangulate |
                       aiProcess_JoinIdenticalVertices | aiProcess_SortByPType |

@@ -54,6 +54,7 @@
 #include "intrinsic/geometry/internal/mesh/io/ai_scene_to_mesh.h"
 #include "intrinsic/geometry/internal/mesh/io/load_ai_scene_from_buffer.h"
 #include "intrinsic/geometry/internal/mesh/io/mesh_to_ai_scene.h"
+#include "intrinsic/geometry/internal/mesh/io/restrict_importer.h"
 #include "intrinsic/geometry/internal/mesh/mesh.h"
 #include "intrinsic/geometry/internal/point_cloud/pts_to_ai_scene.h"
 #include "intrinsic/geometry/internal/point_cloud/pts_to_point_cloud.h"
@@ -246,6 +247,8 @@ absl::StatusOr<Geometry> LoadMeshBufferToGeometry(
   // Make sure no extra transform is added by assimp.
   importer.SetPropertyInteger(AI_CONFIG_IMPORT_COLLADA_IGNORE_UP_DIRECTION, 1);
   importer.SetPropertyInteger(AI_CONFIG_PP_SBP_REMOVE, aiPrimitiveType_LINE);
+
+  RestrictImporterToExtension(importer, extension);
 
   unsigned int pFlags = aiProcess_CalcTangentSpace | aiProcess_Triangulate |
                         aiProcess_JoinIdenticalVertices |

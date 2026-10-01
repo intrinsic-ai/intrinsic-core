@@ -24,7 +24,7 @@
 #include "absl/strings/string_view.h"
 #include "google/protobuf/empty.pb.h"
 #include "intrinsic/eigenmath/types.h"
-#include "intrinsic/geometry/proto/transformed_geometry_storage_refs.pb.h"
+#include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
 #include "intrinsic/logging/proto/context.pb.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/motion_planning/proto/motion_target.pb.h"
@@ -102,7 +102,7 @@ class MotionPlannerClient {
   // trajectory.
   struct PlanTrajectoryResult {
     intrinsic_proto::icon::JointTrajectoryPVA trajectory;
-    std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>
+    std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>
         swept_volume;
     // If the motion is locked based on the request, this is the id of the
     // motion for loading later. Note this field is not set if this response is
@@ -116,7 +116,7 @@ class MotionPlannerClient {
     intrinsic_proto::motion_planning::v1::Path path;
     // The swept volume of the path. Only populated if compute_swept_volume is
     // true in the MotionPlanningOptions.
-    std::vector<intrinsic_proto::geometry::TransformedGeometryStorageRefs>
+    std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>
         swept_volume;
   };
 

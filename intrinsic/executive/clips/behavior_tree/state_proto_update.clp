@@ -166,7 +166,7 @@
 (defrule behavior-tree-state-proto-update-node
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  ?node <- (behavior-tree-node (tree-id ?tree-id) (state ?state)
+  ?node <- (behavior-tree-node (tree-id ?tree-id) (id ?node-id) (state ?state)
                                (failure-reason ?failure-reason)
                                (run-metadata-proto-state ?proto-state&~?state)
                                (run-metadata-proto-recovered-state
@@ -178,12 +178,14 @@
   (if (eq ?s-state CANCELING_CONDITION) then (bind ?s-state CANCELING))
   (run-metadata-proto-update-field ?path ?s-state ?op)
 
+  (bind ?was-recovered FALSE)
   (if (neq ?run-metadata-proto-recovered-state NONE) then
     (bind ?s-path-recovered (proto-path-join ?run-metadata-proto-path "recovered"))
     (if (eq ?state ?run-metadata-proto-recovered-state)
       then
         ; Update from recovery
         (run-metadata-proto-update-field ?s-path-recovered TRUE ?op)
+        (bind ?was-recovered TRUE)
       else
         ; State was recovered before, but now the node is executing to a
         ; different state. Thus clear the recovered flag as its now based on
@@ -201,6 +203,8 @@
 
   (modify ?node (run-metadata-proto-state ?state)
                 (run-metadata-proto-recovered-state ?run-metadata-proto-recovered-state))
+  (operation-events-add-node-state-change-event ?op ?tree-id ?node-id
+                                                ?s-state ?was-recovered)
 )
 
 (defrule behavior-tree-state-proto-update-condition
@@ -317,7 +321,7 @@
 (defrule behavior-tree-state-proto-update-loop-num-times
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  ?node <- (behavior-tree-node (tree-id ?tree-id) (type LOOP)
+  ?node <- (behavior-tree-node (tree-id ?tree-id) (id ?node-id) (type LOOP)
                       (loop-num-times ?loop-num-times)
                       (run-metadata-proto-num-iterations
                         ?proto-num-times&~?loop-num-times)
@@ -326,12 +330,14 @@
   (bind ?path (proto-path-join ?run-metadata-proto-path "loop.num_times"))
   (run-metadata-proto-update-field ?path ?loop-num-times ?op)
   (modify ?node (run-metadata-proto-num-iterations ?loop-num-times))
+  (operation-events-add-counter-change-event
+    ?op ?tree-id ?node-id ?loop-num-times)
 )
 
 (defrule behavior-tree-state-proto-update-retry-num-tries
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  ?node <- (behavior-tree-node (tree-id ?tree-id) (type RETRY)
+  ?node <- (behavior-tree-node (tree-id ?tree-id) (id ?node-id) (type RETRY)
                       (retry-num-tries ?retry-num-tries)
                       (run-metadata-proto-num-iterations
                         ?proto-num-times&~?retry-num-tries)
@@ -340,6 +346,8 @@
   (bind ?path (proto-path-join ?run-metadata-proto-path "retry.num_tries"))
   (run-metadata-proto-update-field ?path ?retry-num-tries ?op)
   (modify ?node (run-metadata-proto-num-iterations ?retry-num-tries))
+  (operation-events-add-counter-change-event
+    ?op ?tree-id ?node-id ?retry-num-tries)
 )
 
 (defrule behavior-tree-state-proto-update-breakpoint
@@ -510,8 +518,8 @@
         (pb-set-field ?operation-proto "done" TRUE)
       )
       (case FAILED then
-        ; TODO(b/493547558): Handle the FAILED state, which must set done and the
-        ; error field.
+        (operation-proto-set-error ?operation-proto ?operation-name)
+        (pb-set-field ?operation-proto "done" TRUE)
       )
       (case CANCELED then
         (bind ?error-proto (pb-create "google.rpc.Status"))
@@ -534,4 +542,3 @@
     )
   )
 )
-

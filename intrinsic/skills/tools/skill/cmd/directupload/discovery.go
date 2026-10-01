@@ -36,13 +36,13 @@ type TargetDiscovery interface {
 }
 
 // NewFromConnection creates new TargetDiscovery implementation using provided
-// grpc.ClientConnection to create a client.
-func NewFromConnection(conn *grpc.ClientConn) TargetDiscovery {
+// grpc.ClientConnInterface to create a client.
+func NewFromConnection(conn grpc.ClientConnInterface) TargetDiscovery {
 	return &staticConnection{conn: conn}
 }
 
 type staticConnection struct {
-	conn *grpc.ClientConn
+	conn grpc.ClientConnInterface
 }
 
 func (s *staticConnection) GetClient(_ context.Context) (artifactgrpcpb.ArtifactServiceApiClient, error) {
@@ -53,12 +53,12 @@ func (s *staticConnection) GetClient(_ context.Context) (artifactgrpcpb.Artifact
 // to Artifact Service for Catalogs in Cloud. ArtiCat uses different service
 // name then regular Artifacts service in order to properly reach cloud based
 // service.
-func NewCatalogTarget(conn *grpc.ClientConn) TargetDiscovery {
+func NewCatalogTarget(conn grpc.ClientConnInterface) TargetDiscovery {
 	return &catalogConnection{conn: conn}
 }
 
 type catalogConnection struct {
-	conn *grpc.ClientConn
+	conn grpc.ClientConnInterface
 }
 
 func (c *catalogConnection) GetClient(_ context.Context) (artifactgrpcpb.ArtifactServiceApiClient, error) {

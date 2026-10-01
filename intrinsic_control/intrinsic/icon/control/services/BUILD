@@ -70,6 +70,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
+        "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -168,6 +169,7 @@ cc_library(
     deps = [
         "//intrinsic_kinematics/intrinsic/kinematics:skeleton",
         "//intrinsic_kinematics/intrinsic/kinematics/ik:inverse_kinematics_interface",
+        "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/strings:string_view",
     ],
 )

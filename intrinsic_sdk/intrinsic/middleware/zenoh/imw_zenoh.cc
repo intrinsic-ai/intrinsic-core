@@ -51,8 +51,7 @@ IMWZenoh::IMWZenoh() {
 
 IMWZenoh::~IMWZenoh() {
   if (z_internal_check(session_)) {
-    LOG(ERROR) << "Found a valid session in IMWZenoh::~IMWZenoh() "
-                  "Please clean up by calling fini() before destruction.";
+    destroy_session();
   }
 }
 
@@ -277,6 +276,14 @@ imw_ret_t IMWZenoh::destroy_session() {
     }
   }
 
+  {
+    absl::MutexLock lock(&liveliness_tokens_mutex_);
+    for (auto& [keyexpr, token] : liveliness_tokens_) {
+      z_liveliness_token_drop(z_move(token->get_token()));
+    }
+    liveliness_tokens_.clear();
+  }
+
   z_drop(z_move(session_));
   return IMW_OK;
 }
@@ -311,7 +318,7 @@ imw_ret_t IMWZenoh::create_publisher(const char* keyexpr, const char* qos) {
 
 imw_ret_t IMWZenoh::destroy_publisher(const char* keyexpr) {
   if (!z_internal_check(session_)) {
-    LOG(ERROR) << "Invalid session in IMWZenoh::create_publisher";
+    LOG(ERROR) << "Invalid session in IMWZenoh::destroy_publisher";
     return IMW_ERROR;
   }
 
@@ -324,16 +331,14 @@ imw_ret_t IMWZenoh::destroy_publisher(const char* keyexpr) {
     absl::MutexLock lock(&publishers_mutex_);
     for (auto it = publishers_.begin(); it != publishers_.end(); ++it) {
       if ((*it)->get_keyexpr() != keyexpr_s) continue;
-      (*it)->marked_for_deletion_.store(true);
+      if ((*it)->marked_for_deletion_.exchange(true)) continue;
       return IMW_OK;
     }
-  }
 
-  {
-    absl::MutexLock lock(&new_publishers_mutex_);
+    absl::MutexLock new_lock(&new_publishers_mutex_);
     for (auto it = new_publishers_.begin(); it != new_publishers_.end(); ++it) {
       if ((*it)->get_keyexpr() != keyexpr_s) continue;
-      (*it)->marked_for_deletion_.store(true);
+      if ((*it)->marked_for_deletion_.exchange(true)) continue;
       return IMW_OK;
     }
   }
@@ -395,9 +400,10 @@ imw_ret_t IMWZenoh::publish(const char* keyexpr, const void* bytes,
   std::shared_ptr<IMWZenohPublisher> publisher;
   {
     absl::MutexLock lock(&publishers_mutex_);
-    publisher = resolve_pending_publishers_and_get_matching(keyexpr);
-
-    publisher->record_message_size(bytes_len);
+    publisher = resolve_pending_publishers_and_get_matching(keyexpr_s);
+    if (publisher) {
+      publisher->record_message_size(bytes_len);
+    }
   }
   if (!publisher) {
     LOG(ERROR) << "No publisher exists for keyexpr " << keyexpr;

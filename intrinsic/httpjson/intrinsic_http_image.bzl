@@ -118,7 +118,9 @@ def _intrinsic_http_image_impl(
     pkg_tar(
         name = tarbin_name,
         srcs = [":" + binfiles_name],
-        extension = "tar.gz",
+        compressor = Label("//bazel:zstd"),
+        compressor_args = "-3 -q",
+        extension = "tar.zst",
     )
 
     oci_image(

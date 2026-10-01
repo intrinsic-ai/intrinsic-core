@@ -41,7 +41,6 @@ _LISTS = {
         "//intrinsic_perception/intrinsic/perception/skills/calibration:initialize_calibration_manifest",
         "//intrinsic_perception/intrinsic/perception/skills/calibration:sample_calibration_poses_manifest",
         "//intrinsic_perception/intrinsic/perception/skills/multi_view:estimate_pose_multi_view_manifest",
-        "//intrinsic_perception/intrinsic/perception/skills:capture_images_manifest",
         "//incode/motion_planning/skills:move_robot_manifest",
         "//incode/motion_planning/skills:preplan_motion_manifest",
         # keep-sorted end

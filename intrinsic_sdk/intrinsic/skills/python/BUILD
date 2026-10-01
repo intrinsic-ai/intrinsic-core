@@ -24,8 +24,6 @@ py_library(
         ":execute_request",
         ":get_footprint_context",
         ":get_footprint_request",
-        ":predict_context",
-        ":predict_request",
         ":preview_context",
         ":preview_request",
         "//intrinsic/skills/proto:skill_service_py_pb2",
@@ -41,28 +39,9 @@ py_library(
     deps = [
         ":skill_interface",
         "//intrinsic/skills/internal:execute_context_impl_py",
-        "//intrinsic/skills/internal:predict_context_impl_py",
         "//intrinsic/skills/internal:preview_context_impl_py",
         "@intrinsic_apis//intrinsic/resources/proto:resource_handle_py_pb2",
     ],
-)
-
-py_library(
-    name = "predict_context",
-    srcs = ["predict_context.py"],
-    deps = [
-        "//intrinsic/geometry/proto:geometry_service_py_pb2_grpc",
-        "//intrinsic_sdk/intrinsic/motion_planning:motion_planner_client_py",
-        "//intrinsic_sdk/intrinsic/world/python:object_world_client",
-        "//intrinsic_sdk/intrinsic/world/python:object_world_ids",
-        "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
-    ],
-)
-
-py_library(
-    name = "predict_request",
-    srcs = ["predict_request.py"],
-    deps = ["@com_google_protobuf//:protobuf_python"],
 )
 
 py_library(

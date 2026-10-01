@@ -92,10 +92,8 @@ message EstimatePoseMultiViewParams {
       [deprecated = true];
   // Optional parameter to log images and metadata for debugging purposes.
   optional bool log_debug_data = 7;
-  // If specified, the skill uses the `capture_result_location`s within to
-  // retrieve images captured earlier.
-  //
-  // If not specified, the skill captures new images directly from the cameras.
+  // Capture data containing the `capture_result_location`s used to retrieve
+  // images captured earlier.
   repeated perception.v1.CaptureData capture_data = 8;
   // Maximum allowed time in seconds to run the pose estimation inference. This
   // includes the pose estimator creation and the actual pose estimation.

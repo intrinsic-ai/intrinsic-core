@@ -70,18 +70,21 @@ using ::intrinsic_proto::content_addressable_storage::v1::GetResponse;
     ::intrinsic_proto::content_addressable_storage::v1::
         ContentAddressableStorageService::StubInterface* cas_stub,
     ::riegeli::Reader* reader, std::size_t chunk_size) {
+  if (chunk_size == 0) {
+    return absl::InvalidArgumentError("chunk_size must be greater than 0");
+  }
+
   CreateResponse response;
   auto stream = cas_stub->Create(context, &response);
 
   CreateRequest request;
-  while (reader->available() > 0) {
-    const auto bytes_to_write = std::min(reader->available(), chunk_size);
-
-    std::string* buf = request.mutable_checksummed_data()->mutable_content();
-    buf->resize(bytes_to_write);
-    bool ok = reader->Read(bytes_to_write, buf->data());
-    if (!ok) {
-      LOG(ERROR) << "Failed to read from reader: " << reader->status();
+  while (true) {
+    std::size_t bytes_read = 0;
+    const bool read_ok = reader->Read(
+        chunk_size, *request.mutable_checksummed_data()->mutable_content(),
+        &bytes_read);
+    if (!read_ok && bytes_read == 0) {
+      break;
     }
     // TODO(b/289500064): Add checksumming.
 
@@ -89,6 +92,11 @@ using ::intrinsic_proto::content_addressable_storage::v1::GetResponse;
       return ToAbslStatus(stream->Finish());
     }
     request.Clear();
+  }
+  if (!reader->ok()) {
+    context->TryCancel();
+    stream->Finish();
+    return reader->status();
   }
   if (!stream->WritesDone()) {
     return ToAbslStatus(stream->Finish());

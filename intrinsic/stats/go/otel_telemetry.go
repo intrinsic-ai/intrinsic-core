@@ -16,6 +16,7 @@ package telemetry
 
 import (
 	"context"
+	"net/http"
 	"strconv"
 	"strings"
 	"sync/atomic"
@@ -25,6 +26,7 @@ import (
 	"go.opencensus.io/stats"
 	"go.opencensus.io/tag"
 	"go.opentelemetry.io/contrib/instrumentation/google.golang.org/grpc/otelgrpc"
+	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	grpcstats "google.golang.org/grpc/stats"
@@ -33,13 +35,57 @@ import (
 
 var opencensusRPCDataKey = &struct{}{}
 
-// NewOtelGRPCServerOptions returns a list of grpc.ServerOption configuring
-// gRPC StatsHandlers for both OpenTelemetry and backwards-compatible OpenCensus metrics.
-func NewOtelGRPCServerOptions() []grpc.ServerOption {
+// pathSpanNameFormatter names HTTP spans after the request path, which is what
+// ochttp used to do. Without it otelhttp gives every request the same static
+// name, such as "HTTP GET".
+func pathSpanNameFormatter(_ string, r *http.Request) string {
+	if r == nil || r.URL == nil || r.URL.Path == "" {
+		return "/"
+	}
+	return r.URL.Path
+}
+
+// NewOtelGRPCServerOptions returns a list of grpc.ServerOption configuring gRPC
+// StatsHandlers for OpenTelemetry tracing and backwards-compatible OpenCensus metrics.
+func NewOtelGRPCServerOptions(opts ...otelgrpc.Option) []grpc.ServerOption {
+	defaults := []otelgrpc.Option{otelgrpc.WithPropagators(GRPCPropagator)}
 	return []grpc.ServerOption{
-		grpc.StatsHandler(otelgrpc.NewServerHandler(otelgrpc.WithPropagators(GRPCPropagator))),
+		grpc.StatsHandler(otelgrpc.NewServerHandler(append(defaults, opts...)...)),
 		grpc.StatsHandler(NewOpencensusMetricsHandler()),
 	}
+}
+
+// NewOtelGRPCClientOptions returns a list of grpc.DialOption configuring a gRPC
+// StatsHandler for OpenTelemetry tracing.
+func NewOtelGRPCClientOptions(opts ...otelgrpc.Option) []grpc.DialOption {
+	defaults := []otelgrpc.Option{otelgrpc.WithPropagators(GRPCPropagator)}
+	return []grpc.DialOption{
+		grpc.WithStatsHandler(otelgrpc.NewClientHandler(append(defaults, opts...)...)),
+	}
+}
+
+// NewOtelHTTPHandler wraps handler with OpenTelemetry server instrumentation.
+func NewOtelHTTPHandler(handler http.Handler, opts ...otelhttp.Option) http.Handler {
+	defaults := []otelhttp.Option{
+		otelhttp.WithPropagators(HTTPPropagator),
+		otelhttp.WithSpanNameFormatter(pathSpanNameFormatter),
+	}
+	return otelhttp.NewHandler(
+		handler,
+		"", // Unused: the span name formatter above takes precedence.
+		append(defaults, opts...)...,
+	)
+}
+
+// NewOtelHTTPTransport wraps base with OpenTelemetry client instrumentation.
+//
+// If base is nil, http.DefaultTransport is used.
+func NewOtelHTTPTransport(base http.RoundTripper, opts ...otelhttp.Option) http.RoundTripper {
+	defaults := []otelhttp.Option{
+		otelhttp.WithPropagators(HTTPPropagator),
+		otelhttp.WithSpanNameFormatter(pathSpanNameFormatter),
+	}
+	return otelhttp.NewTransport(base, append(defaults, opts...)...)
 }
 
 // NewOpencensusMetricsHandler returns a grpcstats.Handler that records metrics

@@ -24,6 +24,13 @@ go_library(
 )
 
 go_library(
+    name = "set",
+    srcs = ["set.go"],
+    importpath = "intrinsic/util/go/set",
+    visibility = ["//intrinsic:internal_api_users"],
+)
+
+go_library(
     name = "validate",
     srcs = ["validate.go"],
     importpath = "intrinsic/util/go/validate",
@@ -37,13 +44,6 @@ go_library(
     importpath = "intrinsic/util/go/build",
     visibility = ["//visibility:public"],
     x_defs = {"label": "{BUILD_EMBED_LABEL}"},
-)
-
-go_library(
-    name = "set",
-    srcs = ["set.go"],
-    importpath = "intrinsic/util/go/set",
-    visibility = ["//intrinsic:internal_api_users"],
 )
 
 go_library(

@@ -90,13 +90,23 @@ absl::Status CheckEntityCycles(
 
   for (const Entity& e : scene_object.entities()) {
     if (walk_ancestors_detecting_cycles(e.name())) {
-      std::vector<absl::string_view> cycle_entities;
-      absl::string_view cycle_entity = e.name();
-      while (cycle_entities.empty() || cycle_entities[0] != cycle_entity) {
-        cycle_entities.push_back(cycle_entity);
-        cycle_entity = entity_names_to_parents.at(cycle_entity);
+      // The entity `e` is not necessarily in the cycle itself; it may be an
+      // ancestor or descendant that merely points into a cycle. To extract the
+      // exact cycle without looping indefinitely, `seen_in_path` tracks all
+      // visited entities along the ancestry path until a repeat node is
+      // encountered.
+      std::vector<absl::string_view> path;
+      absl::flat_hash_set<absl::string_view> seen_in_path;
+      absl::string_view curr = e.name();
+      while (seen_in_path.insert(curr).second) {
+        path.push_back(curr);
+        curr = entity_names_to_parents.at(curr);
       }
-      cycle_entities.push_back(e.name());
+      // `curr` is the first node visited a second time, marking the start
+      // and end of the cycle within `path`.
+      auto cycle_start_it = absl::c_find(path, curr);
+      std::vector<absl::string_view> cycle_entities(cycle_start_it, path.end());
+      cycle_entities.push_back(curr);
       return absl::InvalidArgumentError(
           absl::Substitute("Scene object has cycle in entity parenting: $0",
                            absl::StrJoin(cycle_entities, " -> ")));

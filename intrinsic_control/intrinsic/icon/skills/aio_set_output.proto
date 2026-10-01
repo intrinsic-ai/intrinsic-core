@@ -19,6 +19,8 @@ package intrinsic_proto.skills;
 option go_package = "intrinsic/icon/skills/aio_set_output_go_proto";
 
 message AioSetOutputParams {
+  // Analog IO output blocks to set. Each block must have a unique
+  // `block_name`. Returns `ALREADY_EXISTS` error on duplicate names.
   repeated AioOutputBlock aio_output_blocks = 1;
 }
 
@@ -27,7 +29,8 @@ message AioOutputBlock {
   // should be set. You can look up the list of block names, indices, and
   // current values of analog outputs in the Services panel, on the settings
   // page of the real-time control or robot control service, in the 'I/O
-  // mapping' window.
+  // mapping' window. Must be unique across `aio_output_blocks`. Returns
+  // `ALREADY_EXISTS` error on duplicate names.
   string block_name = 1;
 
   // Indices to set within the Analog IO (input/output) block. To set the first

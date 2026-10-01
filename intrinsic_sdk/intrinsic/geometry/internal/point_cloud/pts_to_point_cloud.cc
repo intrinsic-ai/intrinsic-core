@@ -23,7 +23,9 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/geometry/internal/point_cloud/validate_pts.h"
 #include "intrinsic/geometry/shapes/point_cloud.h"
+#include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic::geo {
 
@@ -35,16 +37,9 @@ absl::StatusOr<PointCloud> PtsFileToPointCloud(
 absl::StatusOr<PointCloud> PtsFileToPointCloud(
     const std::string& file_content, const eigenmath::Vector3d& scale) {
   std::stringstream stream(file_content);
-  // Get the vertex count from the first line;
-  int num_vertices = 0;
-  stream >> num_vertices;
-  if (stream.bad() || stream.fail()) {
-    return absl::InvalidArgumentError("Bad point count");
-  }
-  if (num_vertices <= 0) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("Invalid point count: ", num_vertices));
-  }
+  INTR_ASSIGN_OR_RETURN(
+      const int num_vertices,
+      ParseAndValidatePtsPointCount(stream, file_content.size()));
   std::vector<eigenmath::Vector3d> points;
   points.reserve(num_vertices);
 

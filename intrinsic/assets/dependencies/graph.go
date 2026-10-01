@@ -46,7 +46,7 @@ type AssetUsage struct {
 	// SourceDescription will be shown to users (e.g., in errors) as the name for
 	// where this reference is located in the Asset definition. For example, an
 	// Asset used in a skill node of a behavior tree might use 'Skill node
-	// "example_node" in Asset "ai.intrinsic.my_process"'.
+	// "example_node" in Process "ai.intrinsic.my_process"'.
 	SourceDescription string
 	// Optional config applied to the reference within the Asset. This must be
 	// resolvable using the descriptor set for the Asset being referenced.
@@ -272,7 +272,7 @@ type dependency struct {
 	on string
 	// sourceDescription is a description of the source node of the dependency.
 	// For Service/HWD instances, this would be: "Instance <instance name> of Asset <Asset ID>"
-	// For Process Assets, this would be: "Skill node <task node name> in Asset <Asset ID>".
+	// For Process Assets, this would be: "Skill node <task node name> in Process <Asset ID>".
 	sourceDescription string
 	// from contains the identifiers of the source node(s) of this dependency.
 	// For Service/HWD instances, this contains the instance name and the Asset ID.
@@ -549,6 +549,13 @@ func involvesNodes(dep *dependency, targetAsset *AssetContext, nodeNames map[str
 	return result
 }
 
+func formatTarget(instanceOrAssetName string, targetAsset *AssetContext) string {
+	if targetAsset.AssetType == atypepb.AssetType_ASSET_TYPE_DATA {
+		return fmt.Sprintf("Data %q", targetAsset.ID)
+	}
+	return fmt.Sprintf("the instance %q (Asset: %s)", instanceOrAssetName, targetAsset.ID)
+}
+
 // validateInterface validates that the target Asset satisfies the dependency's interface requirements.
 func validateInterface(dependency *dependency, targetAsset *AssetContext) error {
 	if dependency.iface.GetRequiresObject() != nil && !targetAsset.providesObject() {
@@ -561,7 +568,8 @@ func validateInterface(dependency *dependency, targetAsset *AssetContext) error 
 		if !targetAsset.ProvidesURIs[req] {
 			return dependencyerrors.Newf(
 				dependencyerrors.CodeErrInterfaceMismatch,
-				"%s requires URI %q, but %q does not provide it", dependency.sourceDescription, req, dependency.on,
+				"%s requires an Asset that provides the %q interface, but %s does not provide it. Either update %q to a version that provides that interface (if available), or replace it with another Asset that does.",
+				dependency.sourceDescription, req, formatTarget(dependency.on, targetAsset), targetAsset.ID,
 			)
 		}
 	}
@@ -617,7 +625,7 @@ func nodeFromAsset(ctx context.Context, assetID string, sc *SolutionContext) (*n
 	if len(references) == 0 {
 		return nil, nil
 	}
-	deps, err := extractDependenciesFromReferences(ctx, references, sc, assetID)
+	deps, err := extractDependenciesFromReferences(ctx, references, sc, asset)
 	if err != nil {
 		return nil, err
 	}
@@ -655,7 +663,7 @@ func collectDependencies(config *anypb.Any, fds *descriptorpb.FileDescriptorSet)
 }
 
 // extractDependenciesFromReferences collects dependent Assets from references.
-func extractDependenciesFromReferences(ctx context.Context, references map[string]ReferencedAsset, sc *SolutionContext, assetID string) ([]*dependency, error) {
+func extractDependenciesFromReferences(ctx context.Context, references map[string]ReferencedAsset, sc *SolutionContext, asset *AssetContext) ([]*dependency, error) {
 	if len(references) == 0 {
 		return nil, nil
 	}
@@ -674,9 +682,10 @@ func extractDependenciesFromReferences(ctx context.Context, references map[strin
 			}
 
 			if len(deps) > 0 {
+				assetTypeName := typeutils.AssetTypeDisplayName(asset.AssetType)
 				for _, dep := range deps {
-					dep.sourceDescription = fmt.Sprintf("%s in Asset %q", usage.SourceDescription, assetID)
-					dep.from = []string{assetID, refID}
+					dep.sourceDescription = fmt.Sprintf("%s in %s %q", usage.SourceDescription, assetTypeName, asset.ID)
+					dep.from = []string{asset.ID, refID}
 				}
 
 				dependencies = append(dependencies, deps...)

@@ -65,7 +65,7 @@ beautifulsoup4==4.13.4
 blender-headless @ https://us-central1-python.pkg.dev/intrinsic-mirror/intrinsic-public-python/blender-headless/blender_headless-4.2.6-cp311-cp311-manylinux_2_28_x86_64.whl
 cachetools==5.5.2
 cadexchanger==3.20.0.17379
-cryptography==45.0.4
+cryptography==45.0.7
 chex==0.1.89
 clu==0.0.12
 deepeval==4.0.5

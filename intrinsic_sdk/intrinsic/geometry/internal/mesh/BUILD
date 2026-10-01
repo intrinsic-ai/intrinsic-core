@@ -83,8 +83,8 @@ cc_library(
     visibility = [
         "//intrinsic/geometry:__subpackages__",
         "//intrinsic/scene/service:__pkg__",
-        "//intrinsic/scene/usd:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/scene/usd:__subpackages__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/eigenmath",

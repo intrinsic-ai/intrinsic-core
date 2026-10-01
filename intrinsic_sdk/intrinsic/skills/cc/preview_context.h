@@ -34,8 +34,6 @@
 namespace intrinsic {
 namespace skills {
 
-class PredictContextView;  
-
 // Provides extra metadata and functionality for a Skill::Preview call.
 //
 // It is provided by the skill service to a skill and allows access to the world
@@ -100,11 +98,6 @@ class PreviewContext {
   virtual absl::Status RecordWorldUpdate(
       const intrinsic_proto::world::ObjectWorldUpdate& update,
       absl::Duration elapsed, absl::Duration duration) = 0;
-
-
-  friend absl::StatusOr<PredictContextView> PreviewToPredictContext(
-      PreviewContext& context);
-
 
  private:
   virtual EquipmentPack& equipment() = 0;

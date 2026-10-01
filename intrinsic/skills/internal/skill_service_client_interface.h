@@ -46,20 +46,11 @@ class SkillServiceClientInterface {
   virtual void InitConcurrentLogging() = 0;
   virtual void TearDownConcurrentLogging() = 0;
 
-  // Invokes the Predict rpc.
-  //
-  // If timeout is omitted, a default timeout will be used.
-  virtual absl::StatusOr<intrinsic_proto::skills::PredictResult> Predict(
-      absl::string_view world_id, const google::protobuf::Any& params,
-      absl::string_view internal_data, std::optional<absl::Duration> timeout,
-      const intrinsic_proto::data_logger::Context& context) = 0;
-
   // Invokes the GetFootprint rpc.
   //
   // If timeout is omitted, a default timeout will be used.
   virtual absl::StatusOr<intrinsic_proto::skills::GetFootprintResult>
   GetFootprint(absl::string_view world_id, const google::protobuf::Any& params,
-               absl::string_view internal_data,
                std::optional<absl::Duration> timeout,
                const intrinsic_proto::data_logger::Context& context) = 0;
 
@@ -74,13 +65,13 @@ class SkillServiceClientInterface {
   // If timeout is omitted, a default timeout will be used.
   virtual absl::StatusOr<intrinsic_proto::skills::ExecuteResult> Execute(
       absl::string_view world_id, intrinsic_proto::skills::Footprint footprint,
-      const google::protobuf::Message& params, absl::string_view internal_data,
+      const google::protobuf::Message& params,
       std::optional<absl::Duration> timeout,
       const intrinsic_proto::data_logger::Context& context) = 0;
 
   virtual absl::StatusOr<intrinsic_proto::skills::ExecuteResult> Execute(
       absl::string_view world_id, intrinsic_proto::skills::Footprint footprint,
-      const google::protobuf::Any& params, absl::string_view internal_data,
+      const google::protobuf::Any& params,
       std::optional<absl::Duration> timeout,
       const intrinsic_proto::data_logger::Context& context) = 0;
 
@@ -111,7 +102,6 @@ class SkillServiceClientInterface {
   StartExecute(absl::string_view world_id,
                intrinsic_proto::skills::Footprint footprint,
                const google::protobuf::Message& params,
-               absl::string_view internal_data,
                const intrinsic_proto::data_logger::Context& context) = 0;
 
   // Returns a context which:
@@ -122,7 +112,6 @@ class SkillServiceClientInterface {
   StartExecute(absl::string_view world_id,
                intrinsic_proto::skills::Footprint footprint,
                const google::protobuf::Any& params,
-               absl::string_view internal_data,
                const intrinsic_proto::data_logger::Context& context) = 0;
 
   // Waits for skill execution operation that was started with StartExecute to
@@ -154,25 +143,25 @@ class SkillServiceClientInterface {
   // If timeout is omitted, a default timeout will be used.
   virtual absl::StatusOr<intrinsic_proto::skills::PreviewResult> Preview(
       absl::string_view world_id, intrinsic_proto::skills::Footprint footprint,
-      const google::protobuf::Message& params, absl::string_view internal_data,
+      const google::protobuf::Message& params,
       std::optional<absl::Duration> timeout,
       const intrinsic_proto::data_logger::Context& context) = 0;
 
   virtual absl::StatusOr<intrinsic_proto::skills::PreviewResult> Preview(
       absl::string_view world_id, intrinsic_proto::skills::Footprint footprint,
-      const google::protobuf::Any& params, absl::string_view internal_data,
+      const google::protobuf::Any& params,
       std::optional<absl::Duration> timeout,
       const intrinsic_proto::data_logger::Context& context) = 0;
 
   // Invokes the StartPreview rpc.
   virtual absl::Status StartPreview(
       absl::string_view world_id, intrinsic_proto::skills::Footprint footprint,
-      const google::protobuf::Message& params, absl::string_view internal_data,
+      const google::protobuf::Message& params,
       const intrinsic_proto::data_logger::Context& context) = 0;
 
   virtual absl::Status StartPreview(
       absl::string_view world_id, intrinsic_proto::skills::Footprint footprint,
-      const google::protobuf::Any& params, absl::string_view internal_data,
+      const google::protobuf::Any& params,
       const intrinsic_proto::data_logger::Context& context) = 0;
 
   // Waits for skill preview operation that was started with StartPreview to

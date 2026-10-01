@@ -29,43 +29,6 @@ import "intrinsic/util/status/extended_status.proto";
 
 option go_package = "intrinsic/skills/proto/skill_service_go_proto";
 
-message PredictRequest {
-  google.protobuf.Any parameters = 2;
-
-  // ID of the world in the world service which holds the initial world state
-  // for the prediction.
-  string world_id = 3;
-
-  intrinsic_proto.skills.SkillInstance instance = 4;
-
-  // Logging context of the operation (e.g. IDs of related plan instance,
-  // deployment configs etc.).
-  intrinsic_proto.data_logger.Context context = 5;
-
-  // Optional skill-internal data from a previous call to Predict.
-  bytes internal_data = 6;
-
-  reserved 1;
-  reserved "internal_request";
-}
-
-message PredictResult {
-  // The possible set of outcomes given the skill and its parameters. This list
-  // of outcomes should represent a probability distribution (i.e. the
-  // `probability` fields of each Prediction should sum to 1.0). Each predicted
-  // outcome contains a sequence of world updates with associated types. These
-  // updates should be confined to the resources available in the footprint that
-  // would be generated from a call to GetFootprint() with the same arguments.
-  repeated Prediction outcomes = 2;
-
-  // Skill-internal data to pass to Projector.GetFootprint and
-  // Executor.StartExecute.
-  bytes internal_data = 3;
-
-  reserved 1;
-  reserved "initial_world_snapshot_id";
-}
-
 message GetFootprintRequest {
   google.protobuf.Any parameters = 1;
 
@@ -79,8 +42,8 @@ message GetFootprintRequest {
   // deployment configs etc.).
   intrinsic_proto.data_logger.Context context = 4;
 
-  // Skill-internal data from a previous call to Predict.
-  bytes internal_data = 5;
+  reserved 5;
+  reserved "internal_data";
 }
 
 message GetFootprintResult {
@@ -88,10 +51,6 @@ message GetFootprintResult {
 }
 
 service Projector {
-  // Returns a distribution of possible states that the world could be in after
-  // executing the skill with the provided parameters.
-  rpc Predict(PredictRequest) returns (PredictResult) {}
-
   // Returns the anticipated resources needed, given the nominal initial world.
   rpc GetFootprint(GetFootprintRequest) returns (GetFootprintResult) {}
 }
@@ -101,8 +60,8 @@ message ExecuteRequest {
 
   intrinsic_proto.skills.Footprint footprint = 2;
 
-  // Skill-internal data from a previous call to Projector.Predict.
-  bytes internal_data = 3;
+  reserved 3;
+  reserved "internal_data";
 
   // ID of the world in the world service which holds the initial world state
   // for the skill execution.
@@ -134,8 +93,8 @@ message PreviewRequest {
 
   intrinsic_proto.skills.Footprint footprint = 2;
 
-  // Skill-internal data from a previous call to Projector.Predict.
-  bytes internal_data = 3;
+  reserved 3;
+  reserved "internal_data";
 
   // ID of the world in the world service which holds the initial world state
   // for the skill preview.
@@ -234,24 +193,6 @@ service SkillInformation {
   rpc GetSkillInfo(google.protobuf.Empty) returns (SkillInformationResult) {}
 }
 
-// Logged by the skills client library after a skill prediction.
-message PredictionSummary {
-  intrinsic_proto.skills.SkillInstance instance = 1;
-
-  intrinsic_proto.skills.PredictResult result = 2;
-
-  google.protobuf.Duration duration = 3;
-
-  // Error information if the request failed for any reason.
-  // error_code and error_message are not set if extended_status is set.
-  int32 error_code = 4;
-  string error_message = 5;
-  SkillErrorInfo error_info = 6;
-
-  // On error, optionally detailed error information.
-  intrinsic_proto.status.ExtendedStatus extended_status = 7;
-}
-
 // Logged by the skills client library after a skill get footprint.
 message FootprintSummary {
   intrinsic_proto.skills.SkillInstance instance = 1;
@@ -315,59 +256,4 @@ message PreviewSummary {
 
   // On error, optionally detailed error information.
   intrinsic_proto.status.ExtendedStatus extended_status = 8;
-}
-
-message ProjectRequest {
-  option deprecated = true;
-
-  google.protobuf.Any parameters = 6;
-
-  // Id of the world in the world service which holds the initial world state
-  // for the skill projection.
-  string world_id = 4;
-
-  intrinsic_proto.skills.SkillInstance instance = 3;
-
-  // OPTIONAL. Context of the projection of the skill instance (e.g. IDs of
-  // related plan instance, deployment configs etc.).
-  intrinsic_proto.data_logger.Context context = 5;
-
-  // OPTIONAL. Skill-internal data about the outcome of planning the skill. This
-  // data is optional and if provided can be used to make planning faster. It is
-  // intended to be used if the skill was previously planned and needs
-  // replanning.
-  bytes internal_data = 7;
-
-  reserved "fields", "initial_world_state";  
-  reserved 1, 2;                             
-}
-
-message ProjectResult {
-  option deprecated = true;
-
-  intrinsic_proto.skills.Footprint footprint = 2;
-
-  // Skill-internal data about the outcome of planning the skill. Attempting to
-  // execute a skill without passing this data may result in behavior that does
-  // not match this ProjectResult.
-  bytes internal_data = 5;
-
-  reserved 1, 3, 4;   
-  reserved "status";  
-}
-
-// Logged by the skills client library after a skill projection.
-message ProjectionSummary {
-  option deprecated = true;
-
-  intrinsic_proto.skills.SkillInstance instance = 1;
-
-  intrinsic_proto.skills.ProjectResult result = 2;
-
-  google.protobuf.Duration duration = 3;
-
-  // Error information if the request failed for any reason.
-  int32 error_code = 4;
-  string error_message = 5;
-  SkillErrorInfo error_info = 6;
 }

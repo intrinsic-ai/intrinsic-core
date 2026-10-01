@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 
 	"google.golang.org/grpc"
@@ -103,6 +104,7 @@ func NewProtoRegistryResolver(protoRegistryAddress string) (*ProtoRegistryResolv
 	}
 	options := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt)),
 	}
 	grpcClient, err := grpc.NewClient(protoRegistryAddress, options...)
 	if err != nil {

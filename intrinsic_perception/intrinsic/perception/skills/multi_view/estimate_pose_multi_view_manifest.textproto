@@ -108,7 +108,7 @@ extended_documentation {
 }
 options {
   execution_timeout: {
-    seconds: 600
+    seconds: 900
   }
   supports_cancellation: true
   python_config {
@@ -118,30 +118,6 @@ options {
   }
 }
 dependencies {
-  required_equipment {
-    key: "camera_1"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-  required_equipment {
-    key: "camera_2"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-  required_equipment {
-    key: "camera_3"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-  required_equipment {
-    key: "camera_4"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
   required_equipment {
     key: "perception"
     value {

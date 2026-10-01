@@ -80,7 +80,8 @@ DioSetOutput::Execute(const ExecuteRequest& request, ExecuteContext& context) {
 
     AnalogDigitalIOInterface::DigitalOutputBlock block;
     block.name = p.block_name();
-    // Error checking is done in the helper class.
+    // Error checking (including duplicate block names) is done in the helper
+    // class.
     for (uint32_t i = 0; i < p.indices_size(); ++i) {
       const uint32_t dio_index = p.indices(i);
       const bool dio_value = p.values(i);

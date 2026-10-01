@@ -47,9 +47,6 @@ class EquipmentPack {
           resource_handles);
 
   static absl::StatusOr<EquipmentPack> GetEquipmentPack(
-      const intrinsic_proto::skills::PredictRequest& request);
-
-  static absl::StatusOr<EquipmentPack> GetEquipmentPack(
       const intrinsic_proto::skills::GetFootprintRequest& request);
 
   static absl::StatusOr<EquipmentPack> GetEquipmentPack(

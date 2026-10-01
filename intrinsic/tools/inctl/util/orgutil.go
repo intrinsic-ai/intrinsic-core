@@ -448,6 +448,9 @@ func WrapCmd(cmd *cobra.Command, vipr *viper.Viper, options ...WrapCmdOption) *c
 // QualifiedOrg returns a "unique" org name, adding an @project suffix for orgs that are present in
 // multiple projects. This undoes the "cleaning" applied by preRunOrganization when using WrapCmd().
 func QualifiedOrg(projectName, orgName string) string {
+	if projectName == "" && orgName == "" {
+		return ""
+	}
 	if orgName == "" { // fallback, not sure if this is really required
 		return fmt.Sprintf("intrinsic@%s", projectName)
 	}

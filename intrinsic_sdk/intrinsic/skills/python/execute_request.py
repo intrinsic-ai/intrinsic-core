@@ -32,7 +32,4 @@ class ExecuteRequest(Generic[TParamsType]):
       parameterized with the required type of this message.
   """
 
-
-  internal_data: bytes  # pylint: disable=g-missing-from-attributes
-
   params: TParamsType

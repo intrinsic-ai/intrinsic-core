@@ -117,27 +117,6 @@ class ClipsSkillDispatcher {
 
   // Non-blocking.
   // This will run a "what-if" request to the skill service to determine the
-  // nominal outcome world, and possibly internal_data (e.g., a computed
-  // trajectory which Execute() would then follow). It sets the internal_data
-  // field on the behavior_call proto referenced by the behavior_call_proto_id.
-  // 'action_id' must have CLIPS symbol syntax, i.e. start with a character.
-  // 'proto_id' must be a valid ID that yields a 'intrinsic_proto::BehaviorCall'
-  // message from protobuf_manager_. parent_span should usually be a valid
-  // TraceSpanReferenceId and chosen as the parent span of the Predict span. If
-  // it is not valid, a new trace is created for this call.
-  // This is called in an async fashion to the normal flow of the behavior tree.
-  // It is used to do background pre-emptive planning for skills. Does not
-  // affect the skill status of the action being used.
-  void StartSkillPreemptivePrediction(
-      const std::string& action_id, absl::string_view world_id,
-      clips::ProtoMessageId behavior_call_proto_id,
-      clips::ProtoMessageId context_proto_id,
-      clips::TraceSpanReferenceId parent_span,
-      clips::DescriptorPoolId descriptor_pool_id)
-      ABSL_EXCLUSIVE_LOCKS_REQUIRED(GetAssertFacade()->GetClipsMutex());
-
-  // Non-blocking.
-  // This will run a "what-if" request to the skill service to determine the
   // nominal outcome world, a footprint, and possibly internal_data (e.g., a
   // computed trajectory which Execute() would then follow).
   // It sets the footprint and internal_data field on the BehaviorCall proto
@@ -171,9 +150,6 @@ class ClipsSkillDispatcher {
   static constexpr absl::string_view kSkillStatusFailed = "FAILED";
   static constexpr absl::string_view kSkillStatusCancelingExecutionTimeout =
       "CANCELING-EXECUTION-TIMEOUT";
-  // Must be in sync with allowed values for status (plan.clp)
-  static constexpr absl::string_view kSkillPredictStatusSucceeded = "SUCCEEDED";
-  static constexpr absl::string_view kSkillPredictStatusFailed = "FAILED";
 
  private:
   // Start a tracing span for project or execute.

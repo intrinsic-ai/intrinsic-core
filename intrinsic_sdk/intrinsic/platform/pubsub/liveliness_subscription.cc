@@ -32,25 +32,26 @@ LivelinessSubscription::LivelinessSubscription(
     : key_expression_(key_expression),
       subscription_data_(std::move(subscription_data)) {}
 
-LivelinessSubscription::LivelinessSubscription(LivelinessSubscription&&) =
-    default;
+LivelinessSubscription::LivelinessSubscription(LivelinessSubscription&& other)
+    : key_expression_(std::move(other.key_expression_)),
+      subscription_data_(std::move(other.subscription_data_)) {
+  other.key_expression_.clear();
+}
 
 LivelinessSubscription& LivelinessSubscription::operator=(
     LivelinessSubscription&& other) {
-  if (!key_expression_.empty()) {
-    Zenoh().imw_destroy_subscription(
-        subscription_data_->key_expression.c_str(), zenoh_static_callback,
-        subscription_data_->callback_functor.get());
-  }
+  if (this == &other) return *this;
+  Unsubscribe();
   key_expression_ = std::move(other.key_expression_);
   subscription_data_ = std::move(other.subscription_data_);
+  other.key_expression_.clear();
   return *this;
 }
 
 LivelinessSubscription::~LivelinessSubscription() { Unsubscribe(); }
 
 void LivelinessSubscription::Unsubscribe() {
-  if (!key_expression_.empty()) {
+  if (!key_expression_.empty() && subscription_data_ != nullptr) {
     Zenoh().imw_destroy_liveliness_subscription(
         subscription_data_->key_expression.c_str(),
         zenoh_static_liveliness_callback,

@@ -78,11 +78,13 @@ MainLoop::MainLoop(
     double control_frequency_hz, absl::Duration hard_cycle_time_timeout,
     absl::Duration read_write_timeout, const Context& context,
     std::unique_ptr<RealtimeControlManager> realtime_control_manager,
+    std::unique_ptr<ServiceCollection> service_collection,
     std::unique_ptr<HardwareModuleManager> hardware_module_manager,
     std::variant<InternalClockParams, std::unique_ptr<RemoteClock>> clock_data,
     MainLoop::ClockMode clock_mode, ThreadOptions main_loop_thread_options,
     bool malloc_guarded)
     : hardware_module_manager_(std::move(hardware_module_manager)),
+      service_collection_(std::move(service_collection)),
       context_(context),
       realtime_control_manager_(std::move(realtime_control_manager)),
       clock_data_(std::move(clock_data)),
@@ -191,8 +193,9 @@ absl::StatusOr<std::unique_ptr<MainLoop>> MainLoop::Create(
   return absl::WrapUnique(new MainLoop(
       control_frequency_hz, hard_cycle_time_timeout, read_write_timeout,
       context, std::move(realtime_control_manager),
-      std::move(hardware_module_manager), std::move(clock_data), clock_mode,
-      std::move(main_loop_thread_options), malloc_guarded));
+      std::move(service_collection), std::move(hardware_module_manager),
+      std::move(clock_data), clock_mode, std::move(main_loop_thread_options),
+      malloc_guarded));
 }
 
 RealtimeStatus MainLoop::Read() {

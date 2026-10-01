@@ -14,26 +14,9 @@
 
 ; Consistency checks for execution tracing.
 
-; Similar to the fact that RUNNING nodes should be children of RUNNING nodes
-; skill status types are not allowed to have both a status and predict state.
-; We check for this condition to ensure that it does not happen.
-
 ; This file checks whether those assumptions are satisfied.
 
 ; ----------------------------------- RULES -----------------------------------
-
-(defrule skill-status-check-non-conflicting-status-and-predict-state
-  "Check for a skill status with a status and predict-state"
-  (skill-status (status ?status&~UNKNOWN)
-                (predict-state ?predict-state&~UNKNOWN))
- =>
-  (assert (error (name SKILL-STATUS-CHECK-CONFLICTING-STATUS-AND-PREDICT-STATE)
-                 (type RECOVERABLE)
-                 (message (str-cat "Skill status has both a status (" ?status
-                   ") and predict state (" ?predict-state "). This should not "
-                   "happen as the skill-status type is meant to convey one of "
-                   "the two status changes not both."))))
-)
 
 (defrule skill-info-ambiguous-ids
   "There should only be one skill-info per skill-id."

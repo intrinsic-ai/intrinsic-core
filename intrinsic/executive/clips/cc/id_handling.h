@@ -111,6 +111,35 @@ absl::Status EnsureValidIds(intrinsic_proto::executive::BehaviorTree& tree,
 std::string GenerateTreeIdPrefixForNode(absl::string_view tree_id,
                                         uint32_t node_id);
 
+// Generates a NodeIdentifier proto for the given tree_id and node_id.
+// tree_id can be the tree id of a process tree or a nested tree id within a
+// reusable process.
+//
+// Example:
+// tree_id: main_tree:43/reusable_tree node: 42
+// -> NodeIdentifier:
+//    tree_id: main_tree node_id: 43
+//    node_within_task_node { tree_id: reusable_tree node_id: 42 }
+absl::StatusOr<intrinsic_proto::executive::BehaviorTree::NodeIdentifier>
+GenerateNodeIdentifier(absl::string_view tree_id, uint32_t node_id);
+
+// Sets the generated NodeIdentifier for tree_id and node_id on the field
+// specified by proto_path in the proto identified by proto_id.
+// If proto_path is empty, proto_id itself must identify a NodeIdentifier proto.
+//
+// Exposed in CLIPS as set-node-identifier-proto.
+// Args:
+//   ?proto_id: Proto ID of the message to modify
+//   ?proto_path: Field path pointing to a NodeIdentifier field
+//   ?tree_id: Tree ID (possibly prefixed)
+//   ?node_id: Node ID
+// Returns:
+//   TRUE on success, FALSE on failure.
+absl::Status SetNodeIdentifier(clips::ProtobufManager* proto_mgr,
+                               clips::ProtoMessageId proto_id,
+                               absl::string_view proto_path,
+                               absl::string_view tree_id, uint32_t node_id);
+
 // Adds the main id handling functions to the CLIPS environment.
 // The ProtobufManager must be available as long as the functions are registered
 // in the environment.

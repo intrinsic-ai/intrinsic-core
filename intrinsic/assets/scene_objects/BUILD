@@ -22,6 +22,7 @@ go_library(
     deps = [
         ":gzffile",
         "//intrinsic/assets:referenceddata",
+        "//intrinsic/assets:throttle",
         "//intrinsic/tools/inctl/util:casgeometryuploader",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:referenced_data_go_proto",
@@ -35,7 +36,6 @@ go_library(
         "@org_golang_google_grpc//metadata:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",
         "@org_golang_google_protobuf//proto",
-        "@org_golang_x_sync//errgroup",
     ],
 )
 

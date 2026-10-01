@@ -28,9 +28,9 @@ extern "C" {
 ABSL_ATTRIBUTE_UNUSED char* GetZenohPeerConfigWrapper(
     const char* router_override);
 ABSL_ATTRIBUTE_UNUSED void* NewZenohHandle();
-ABSL_ATTRIBUTE_UNUSED void DestroyZenohHandle(void* handle);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwInit(void* handle, const char* config);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwFini(void* handle);
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroySessionWhenUnused(void* handle);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreatePublisher(void* handle,
                                                         const char* keyexpr,
                                                         const char* qos);

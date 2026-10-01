@@ -30,6 +30,7 @@ go_library(
         "//intrinsic/tools/inctl/cmd/solution/delete",
         "//intrinsic/tools/inctl/cmd/solution/get",
         "//intrinsic/tools/inctl/cmd/solution/list",
+        "//intrinsic/tools/inctl/cmd/solution/migrate",
         "//intrinsic/tools/inctl/cmd/solution/share",
         "//intrinsic/tools/inctl/cmd/solution/start",
         "//intrinsic/tools/inctl/cmd/solution/stop",

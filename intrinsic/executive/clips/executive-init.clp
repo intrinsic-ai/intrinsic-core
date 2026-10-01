@@ -33,7 +33,6 @@
    "state_export.clp"
    "logging.clp"
    "world_service.clp"
-   "action_prediction_skills.clp"
    "action_projection_skills.clp"
    "action_execution_skills.clp"
    "action_execution_noop.clp"

@@ -51,7 +51,6 @@
 #include "intrinsic/skills/internal/error_utils.h"
 #include "intrinsic/skills/internal/execute_context_impl.h"
 #include "intrinsic/skills/internal/get_footprint_context_impl.h"
-#include "intrinsic/skills/internal/predict_context_impl.h"  
 #include "intrinsic/skills/internal/preview_context_impl.h"
 #include "intrinsic/skills/internal/runtime_data.h"
 #include "intrinsic/skills/internal/skill_repository.h"
@@ -372,23 +371,8 @@ SkillProjectorServiceImpl::ProtoToGetFootprintRequest(
                         skill_repository_.GetSkillRuntimeData(skill_name));
 
   return GetFootprintRequest(
-      request.internal_data(),  
       request.parameters(), runtime_data.GetParameterData().GetDefault());
 }
-
-
-absl::StatusOr<PredictRequest> SkillProjectorServiceImpl::ProtoToPredictRequest(
-    const intrinsic_proto::skills::PredictRequest& request) {
-  INTR_ASSIGN_OR_RETURN(std::string id,
-                        RemoveVersionFrom(request.instance().id_version()));
-  INTR_ASSIGN_OR_RETURN(std::string skill_name, NameFrom(id));
-  INTR_ASSIGN_OR_RETURN(internal::SkillRuntimeData runtime_data,
-                        skill_repository_.GetSkillRuntimeData(skill_name));
-
-  return PredictRequest(request.internal_data(), request.parameters(),
-                        runtime_data.GetParameterData().GetDefault());
-}
-
 
 grpc::Status SkillProjectorServiceImpl::GetFootprint(
     grpc::ServerContext* context,
@@ -473,92 +457,6 @@ grpc::Status SkillProjectorServiceImpl::GetFootprint(
   return ::grpc::Status::OK;
 }
 
-
-grpc::Status SkillProjectorServiceImpl::Predict(
-    grpc::ServerContext* context,
-    const intrinsic_proto::skills::PredictRequest* request,
-    intrinsic_proto::skills::PredictResult* result) {
-
-  const stats::ScopedSpan span(
-      absl::StrCat(request->instance().id_version(), "/Predict"), context);
-
-  LOG(INFO) << "Attempting to predict '" << request->instance().id_version()
-            << "' skill with world id '" << request->world_id() << "'";
-
-  INTR_RETURN_IF_ERROR_GRPC(ValidateRequest(*request));
-
-  INTR_ASSIGN_OR_RETURN_GRPC(const std::string skill_name,
-                             NameFrom(request->instance().id_version()));
-  LOG(INFO) << "Calling predict for skill[" << skill_name << "]";
-
-  INTR_ASSIGN_OR_RETURN_GRPC(PredictRequest predict_request,
-                             ProtoToPredictRequest(*request));
-
-  INTR_ASSIGN_OR_RETURN_GRPC(EquipmentPack equipment,
-                             EquipmentPack::GetEquipmentPack(*request));
-
-  PredictContextImpl predict_context(
-      std::move(equipment),
-      /*motion_planner=*/
-      motion_planning::MotionPlannerClient(request->world_id(),
-                                           motion_planner_service_),
-      /*object_world=*/
-      world::ObjectWorldClient(request->world_id(), object_world_service_)
-
-      ,
-      geometry_library_
-
-  );
-
-  // TODO(b/263495118): change from using name in repository to using id.
-  INTR_ASSIGN_OR_RETURN_GRPC(std::unique_ptr<SkillProjectInterface> skill,
-                             skill_repository_.GetSkillProject(skill_name));
-
-  auto skill_result = skill->Predict(predict_request, predict_context);
-
-  if (skill_result.status().code() == absl::StatusCode::kUnimplemented) {
-    LOG(WARNING) << "No user supplied implementation of Predict() for skill '"
-                 << skill_name << "'. Returning empty prediction.";
-    result->set_internal_data(predict_request.internal_data());
-    result->add_outcomes()->set_probability(1.0);
-  } else if (!skill_result.ok()) {
-    INTR_ASSIGN_OR_RETURN_GRPC(
-        const std::string skill_id,
-        RemoveVersionFrom(request->instance().id_version()));
-
-    INTR_ASSIGN_OR_RETURN_GRPC(
-        internal::SkillRuntimeData runtime_data,
-        skill_repository_.GetSkillRuntimeData(skill_name));
-    std::optional<intrinsic_proto::data_logger::Context> log_context;
-    if (request->has_context()) {
-      log_context = request->context();
-    }
-    // This will exit, we have already ensured non-ok status above, but this way
-    // we can invoke LogWarning.
-    INTR_RETURN_IF_ERROR_GRPC(ToAbslStatus(CreateSkillError(
-                                  skill_result.status(), skill_id, "Predict",
-                                  runtime_data.GetStatusSpecs(), log_context)))
-        .LogWarning();
-  } else {
-    *result = std::move(skill_result).value();
-  }
-
-  return ::grpc::Status::OK;
-}
-
-// NOLINTBEGIN
-// clang-format off
-
-
-
-
-
-
-
-
-// clang-format on
-// NOLINTEND
-
 SkillExecutorServiceImpl::SkillExecutorServiceImpl(
     SkillRepository& skill_repository,
 
@@ -610,7 +508,6 @@ grpc::Status SkillExecutorServiceImpl::StartExecute(
                              skill_repository_.GetSkillExecute(skill_name));
 
   auto skill_request = std::make_unique<ExecuteRequest>(
-      request->internal_data(),  
       /*params=*/request->parameters(),
       /*param_defaults=*/
       operation->runtime_data().GetParameterData().GetDefault());
@@ -704,7 +601,6 @@ grpc::Status SkillExecutorServiceImpl::StartPreview(
                              skill_repository_.GetSkillExecute(skill_name));
 
   auto skill_request = std::make_unique<PreviewRequest>(
-      request->internal_data(),  
       /*params=*/request->parameters(),
       /*param_defaults=*/
       operation->runtime_data().GetParameterData().GetDefault());

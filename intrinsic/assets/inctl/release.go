@@ -23,6 +23,7 @@ import (
 	"intrinsic/assets/cmdutils"
 	"intrinsic/assets/imagetransfer"
 	"intrinsic/assets/imageutils"
+	"intrinsic/assets/throttle"
 	"intrinsic/skills/tools/skill/cmd/directupload/directupload"
 	"intrinsic/tools/inctl/cmd/root"
 	"intrinsic/tools/inctl/util/printer"
@@ -49,11 +50,13 @@ func GetCommand() *cobra.Command {
 			}
 
 			ctx := cmd.Context()
-			ctx, conn, err := clientutils.DialCatalogFromInctl(ctx, flags)
+			ctx, rawConn, err := clientutils.DialCatalogFromInctl(ctx, flags)
 			if err != nil {
 				return fmt.Errorf("failed to create client connection: %v", err)
 			}
-			defer conn.Close()
+			defer rawConn.Close()
+
+			conn := throttle.ConnectionWithRateLimit(rawConn, flags.GetFlagRateLimit(), flags.GetFlagRateBurst())
 
 			var transferer imagetransfer.Transferer
 
@@ -79,6 +82,7 @@ func GetCommand() *cobra.Command {
 				releaseasset.WithIgnoreExisting(flags.GetFlagIgnoreExisting()),
 				releaseasset.WithImageTransferer(transferer),
 				releaseasset.WithPrinter(printer.PrintSf),
+				releaseasset.WithProcessingConcurrencyLimiter(throttle.NewConcurrencyLimiter(flags.GetFlagProcessingConcurrency())),
 				releaseasset.WithReleaseNotes(flags.GetFlagReleaseNotes()),
 				releaseasset.WithVersion(flags.GetFlagVersion()),
 				releaseasset.WithProgressWriter(cmd.OutOrStdout()),
@@ -92,6 +96,8 @@ func GetCommand() *cobra.Command {
 	flags.AddFlagImageUploadParallelism(1)
 	flags.AddFlagOrganizationOptional()
 	flags.AddFlagOrgPrivate()
+	flags.AddFlagsRateLimit(throttle.CloudRateLimit, throttle.CloudBurst)
+	flags.AddFlagProcessingConcurrency(throttle.ReleaseProcessingConcurrency)
 	flags.AddFlagReleaseNotes("asset")
 	flags.AddFlagVersion("asset")
 

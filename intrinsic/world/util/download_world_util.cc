@@ -27,7 +27,6 @@
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/util/grpc/grpc.h"
-#include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/component/geometry_component.h"
@@ -67,45 +66,52 @@ absl::Status DeserializeWorldGeometries(
 absl::StatusOr<ObjectWorldProto> DownloadWorldProtoFromObjectWorldService(
     absl::string_view world_id,
     ObjectWorldService::StubInterface& object_world_service) {
-  auto* async_stub = object_world_service.async();
-  INTR_RET_CHECK_NE(async_stub, nullptr);
-
   grpc::ClientContext list_ctx;
   ConfigureClientContext(&list_ctx);
   ListObjectsRequest list_objects_request;
   list_objects_request.set_world_id(std::string(world_id));
   list_objects_request.set_view(ObjectView::FULL);
   ListObjectsResponse list_objects_response;
-  grpc::Status list_status;
-  absl::Notification list_done;
 
   grpc::ClientContext col_ctx;
   ConfigureClientContext(&col_ctx);
   GetCollisionSettingsRequest get_collision_settings_request;
   get_collision_settings_request.set_world_id(std::string(world_id));
   CollisionSettings collision_settings;
-  grpc::Status col_status;
-  absl::Notification col_done;
 
-  async_stub->ListObjects(&list_ctx, &list_objects_request,
-                          &list_objects_response,
-                          [&list_status, &list_done](grpc::Status status) {
-                            list_status = std::move(status);
-                            list_done.Notify();
-                          });
-  async_stub->GetCollisionSettings(
-      &col_ctx, &get_collision_settings_request, &collision_settings,
-      [&col_status, &col_done](grpc::Status status) {
-        col_status = std::move(status);
-        col_done.Notify();
-      });
-  list_done.WaitForNotification();
-  col_done.WaitForNotification();
+  auto* async_stub = object_world_service.async();
+  if (async_stub != nullptr) {
+    grpc::Status list_status;
+    absl::Notification list_done;
+    grpc::Status col_status;
+    absl::Notification col_done;
 
-  INTR_RETURN_IF_ERROR(ToAbslStatus(list_status));
-  INTR_RETURN_IF_ERROR(ToAbslStatus(col_status));
+    async_stub->ListObjects(&list_ctx, &list_objects_request,
+                            &list_objects_response,
+                            [&list_status, &list_done](grpc::Status status) {
+                              list_status = std::move(status);
+                              list_done.Notify();
+                            });
+    async_stub->GetCollisionSettings(
+        &col_ctx, &get_collision_settings_request, &collision_settings,
+        [&col_status, &col_done](grpc::Status status) {
+          col_status = std::move(status);
+          col_done.Notify();
+        });
+    list_done.WaitForNotification();
+    col_done.WaitForNotification();
+
+    INTR_RETURN_IF_ERROR(ToAbslStatus(list_status));
+    INTR_RETURN_IF_ERROR(ToAbslStatus(col_status));
+  } else {
+    INTR_RETURN_IF_ERROR(ToAbslStatus(object_world_service.ListObjects(
+        &list_ctx, list_objects_request, &list_objects_response)));
+    INTR_RETURN_IF_ERROR(ToAbslStatus(object_world_service.GetCollisionSettings(
+        &col_ctx, get_collision_settings_request, &collision_settings)));
+  }
 
   ObjectWorldProto world_proto;
+  world_proto.mutable_world_metadata()->set_id(std::string(world_id));
   *world_proto.mutable_objects() =
       std::move(*list_objects_response.mutable_objects());
   *world_proto.mutable_collision_settings() = std::move(collision_settings);

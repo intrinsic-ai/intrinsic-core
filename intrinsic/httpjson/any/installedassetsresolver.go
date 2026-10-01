@@ -18,6 +18,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"math"
 	"strings"
 	"sync"
 
@@ -55,6 +56,7 @@ func NewInstalledAssetsResolver(installedAssetsAddress string) (*InstalledAssets
 	}
 	options := []grpc.DialOption{
 		grpc.WithTransportCredentials(insecure.NewCredentials()),
+		grpc.WithDefaultCallOptions(grpc.MaxCallRecvMsgSize(math.MaxInt32)),
 	}
 	grpcClient, err := grpc.NewClient(installedAssetsAddress, options...)
 	if err != nil {

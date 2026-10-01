@@ -101,7 +101,6 @@ go_binary(
         ":localsolution",
         "//intrinsic/production:intrinsic",
         "//intrinsic/util:flag",
-        "//intrinsic/util/go:build",
         "//intrinsic/util/proto:protoio",
         "//intrinsic/world/proto:object_world_updates_go_proto",
         "@com_github_golang_glog//:go_default_library",
@@ -134,6 +133,7 @@ go_library(
         ":asset_go_proto",
         "//intrinsic/assets:bundle",
         "//intrinsic/assets:idutils",
+        "//intrinsic/assets:throttle",
         "//intrinsic/config/proto:application_go_proto",
         "//intrinsic/config/proto:common_go_proto",
         "//intrinsic/config/proto:process_go_proto",
@@ -147,8 +147,8 @@ go_library(
         "@org_golang_google_protobuf//encoding/prototext:go_default_library",
         "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//reflect/protoregistry:go_default_library",
+        "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
         "@org_golang_google_protobuf//types/known/anypb",
-        "@org_golang_x_sync//errgroup:go_default_library",
     ],
 )
 
@@ -180,6 +180,7 @@ go_binary(
         "//intrinsic/assets:cmdutils",
         "//intrinsic/assets:imagetransfer",
         "//intrinsic/assets:referenceddata",
+        "//intrinsic/assets:throttle",
         "//intrinsic/assets/platformlevelswitch",
         "//intrinsic/assets/scene_objects:gzfprocessor",
         "//intrinsic/assets/services:bundleimages",

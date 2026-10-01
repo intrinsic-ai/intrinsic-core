@@ -27,13 +27,6 @@ from intrinsic.skills.python import execute_context
 from intrinsic.skills.python import execute_request
 from intrinsic.skills.python import get_footprint_context
 from intrinsic.skills.python import get_footprint_request
-
-# isort: off
-
-from intrinsic.skills.python import predict_context
-from intrinsic.skills.python import predict_request
-
-# isort: on
 from intrinsic.skills.python import preview_context
 from intrinsic.skills.python import preview_request
 from intrinsic.util.status import status_exception
@@ -43,10 +36,6 @@ ExecuteContext = execute_context.ExecuteContext
 ExecuteRequest = execute_request.ExecuteRequest
 GetFootprintContext = get_footprint_context.GetFootprintContext
 GetFootprintRequest = get_footprint_request.GetFootprintRequest
-
-PredictContext = predict_context.PredictContext
-PredictRequest = predict_request.PredictRequest
-
 PreviewContext = preview_context.PreviewContext
 PreviewRequest = preview_request.PreviewRequest
 
@@ -268,34 +257,6 @@ class SkillProjectInterface(abc.ABC, Generic[TParamsType, TResultType]):
   Raises:
     SkillError: Errors encountered while executing methods of this interface.
   """
-
-
-  def predict(
-      self, request: PredictRequest[TParamsType], context: PredictContext
-  ) -> skill_service_pb2.PredictResult:
-    """Predicts a distribution of possible outcomes when running the skill.
-
-    Skill developers should override this method with their implementation.
-
-    If a skill does override the default implementation, the skill service will
-    provide an empty prediction to any predict requests.
-
-    Args:
-      request: The predict request.
-      context: Provides access to the world and other services that a skill may
-        use.
-
-    Returns:
-      A result containing predictions of the possible outcomes of executing the
-      skill.
-    """
-    del request  # Unused in this default implementation.
-    del context  # Unused in this default implementation.
-    raise NotImplementedError(
-        f'Skill "{type(self).__name__!r} has not implemented `predict`.'
-    )
-
-
 
   def get_footprint(
       self,

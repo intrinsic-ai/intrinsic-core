@@ -24,10 +24,11 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "intrinsic/config/proto/application.proto"; 
+import "intrinsic/config/proto/operation_mode.proto";
+import "intrinsic/kubernetes/generator/proto/auth_options.proto";
 import "intrinsic/kubernetes/intrinsic_os/protos/v1/cluster.proto";
 import "intrinsic/kubernetes/intrinsic_os/protos/v1/dhcp_leases.proto";
-import "intrinsic/config/proto/application.proto"; 
-import "intrinsic/kubernetes/generator/proto/auth_options.proto";
 import "intrinsic/util/status/extended_status.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 
@@ -116,6 +117,8 @@ message UpdateProgress {
 
 message ActiveSolution {
   string branch_id = 1 [(google.api.field_behavior) = OPTIONAL];
+  intrinsic_proto.config.OperationMode operation_mode = 2
+      [(google.api.field_behavior) = OPTIONAL];
 }
 
 message HttpService {
@@ -210,6 +213,8 @@ message SolutionVersion {
   // During the deployment it will look up the tip of the branch
   // and deploy it to the IPC.
   string branch_id = 1 [(google.api.field_behavior) = OPTIONAL];
+  intrinsic_proto.config.OperationMode operation_mode = 2
+      [(google.api.field_behavior) = OPTIONAL];
 }
 
 message UpdateVersions {
@@ -334,6 +339,12 @@ message CreateClusterInfo {
   // The name of the cluster for humans
   string display_name = 6 [(google.api.field_behavior) = REQUIRED];
   string location = 7 [(google.api.field_behavior) = OPTIONAL];
+
+  // The update mode to select.
+  PlatformUpdateMode update_mode = 8 [(google.api.field_behavior) = OPTIONAL];
+
+  // The versions to install.
+  UpdateVersions versions = 9 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message CreateClusterRequest {

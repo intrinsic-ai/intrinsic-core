@@ -25,7 +25,6 @@ import (
 	"intrinsic/assets/build_defs/localsolution"
 	"intrinsic/production/intrinsic"
 	intrinsicflag "intrinsic/util/flag"
-	"intrinsic/util/go/build"
 	"intrinsic/util/proto/protoio"
 
 	log "github.com/golang/glog"
@@ -50,7 +49,6 @@ var (
 	defaultOperationMode   = flag.String("default_operation_mode", "", "Operation mode of the app. Can be 'sim' or 'real'.")
 	output                 = flag.String("output", "", "Output LocalSolution proto path.")
 	displayName            = flag.String("display_name", "", "Display name of the PPR component.")
-	buildTarget            = flag.String("build_target", "", "Build target of the PPR component.")
 )
 
 func main() {
@@ -141,8 +139,6 @@ func main() {
 		ObjectWorldUpdates:   objectWorldUpdates,
 		DefaultOperationMode: defaultOpMode,
 		DisplayName:          *displayName,
-		BuildTarget:          *buildTarget,
-		Version:              build.Label(),
 	})
 	if err != nil {
 		log.Exitf("could not create LocalSolution proto: %v", err)

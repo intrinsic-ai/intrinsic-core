@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "absl/base/attributes.h"
+#include "absl/base/no_destructor.h"
 #include "absl/base/nullability.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/log.h"
@@ -32,6 +33,7 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "grpcpp/support/client_callback.h"
+#include "intrinsic/assets/interface_utils.h"
 #include "intrinsic/icon/release/grpc_time_support.h"
 #include "intrinsic/perception/cameras/camera_factory.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
@@ -44,6 +46,7 @@
 #include "intrinsic/perception/cameras/remote_image_source.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
 #include "intrinsic/perception/proto/v1/camera_config.pb.h"
+#include "intrinsic/perception/proto/v1/camera_config_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/camera_config.h"
@@ -62,6 +65,21 @@ namespace {
 constexpr char kCameraConfigEquipmentKey[] = "CameraConfig";
 
 }  // namespace
+
+absl::string_view CameraServiceInterfaceUri() {
+  static const absl::NoDestructor<std::string> kUri(absl::StrCat(
+      intrinsic::assets::kGrpcUriPrefix,
+      intrinsic_proto::perception::v1::CameraService::service_full_name()));
+  return *kUri;
+}
+
+absl::string_view CameraConfigServiceInterfaceUri() {
+  static const absl::NoDestructor<std::string> kUri(
+      absl::StrCat(intrinsic::assets::kGrpcUriPrefix,
+                   intrinsic_proto::perception::v1::CameraConfigService::
+                       service_full_name()));
+  return *kUri;
+}
 
 absl::StatusOr<intrinsic_proto::perception::v1::CameraConfig>
 UnpackCameraConfig(const google::protobuf::Any& any) {

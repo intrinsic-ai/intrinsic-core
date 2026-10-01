@@ -265,9 +265,17 @@ IconAnalogDigitalIO::CreateSetValueParams(
           "configuration.",
           output_block.name));
     }
-    (*parts_and_params[block_to_part_name_[output_block.name]]
-          .mutable_outputs()
-          ->mutable_digital_outputs())[output_block.name] = std::move(block);
+    auto* digital_outputs =
+        parts_and_params[block_to_part_name_[output_block.name]]
+            .mutable_outputs()
+            ->mutable_digital_outputs();
+    if (digital_outputs->contains(output_block.name)) {
+      return absl::AlreadyExistsError(absl::StrFormat(
+          "Multiple digital output blocks with the same name '%s' are not "
+          "allowed.",
+          output_block.name));
+    }
+    (*digital_outputs)[output_block.name] = std::move(block);
   }
   for (const auto& output_block : analog_output_blocks) {
     intrinsic_proto::icon::actions::proto::AnalogOutputBlock block;
@@ -284,9 +292,17 @@ IconAnalogDigitalIO::CreateSetValueParams(
           "configuration.",
           output_block.name));
     }
-    (*parts_and_params[block_to_part_name_[output_block.name]]
-          .mutable_outputs()
-          ->mutable_analog_outputs())[output_block.name] = std::move(block);
+    auto* analog_outputs =
+        parts_and_params[block_to_part_name_[output_block.name]]
+            .mutable_outputs()
+            ->mutable_analog_outputs();
+    if (analog_outputs->contains(output_block.name)) {
+      return absl::AlreadyExistsError(absl::StrFormat(
+          "Multiple analog output blocks with the same name '%s' are not "
+          "allowed.",
+          output_block.name));
+    }
+    (*analog_outputs)[output_block.name] = std::move(block);
   }
   return parts_and_params;
 }

@@ -198,7 +198,6 @@ cc_library(
         "//intrinsic/choreographer/footprints:footprint",
         "//intrinsic/choreographer/footprints:object_world_reservation",
         "//intrinsic/logging:log_item_builder",
-        "//intrinsic/skills/proto:prediction_cc_proto",
         "//intrinsic/skills/proto:skill_service_cc_proto",
         "//intrinsic/stats:scoped_span",
         "//intrinsic/util:eigen",

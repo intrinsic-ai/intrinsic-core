@@ -17,6 +17,8 @@ syntax = "proto3";
 package intrinsic_proto.skills;
 
 import "google/protobuf/duration.proto";
+import "intrinsic/assets/proto/field_metadata.proto";
+import "intrinsic/assets/proto/v1/resolved_dependency.proto";
 import "intrinsic/perception/proto/v1/camera_settings.proto";
 import "intrinsic/perception/proto/v1/capture_data.proto";
 import "intrinsic/perception/proto/v1/post_processing.proto";
@@ -26,6 +28,15 @@ import "intrinsic/world/proto/object_world_refs.proto";
 option go_package = "intrinsic/perception/skills/capture_images_go_proto";
 
 message CaptureImagesParams {
+  // Camera to capture images from.
+  intrinsic_proto.assets.v1.ResolvedDependency camera = 10
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.perception.v1.CameraService",
+        requires: "grpc://intrinsic_proto.perception.v1.CameraConfigService",
+        requires_object: {},
+        skill_annotations: { fallback_manifest_dependency_key: "camera" }
+      }];
+
   // Specifies where to store the capture result. If not provided, defaults to
   // the `capture_results` in-memory store (this store currently must not be
   // altered by users) and a key corresponding to the hash of the camera

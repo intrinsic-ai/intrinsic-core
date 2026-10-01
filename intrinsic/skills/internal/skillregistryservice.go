@@ -538,6 +538,32 @@ func (s *SkillRegistryServer) UnregisterBehaviorTree(ctx context.Context, reques
 	return &emptypb.Empty{}, nil
 }
 
+// TODO(b/459765477): Remove this method once all legacy pBTs have been migrated to Process assets.
+//
+// ListBehaviorTreeSkills returns the skill descriptions for all registered
+// legacy pBTs.
+func (s *SkillRegistryServer) ListBehaviorTreeSkills(ctx context.Context, _ *btregistrypb.ListBehaviorTreeSkillsRequest) (*btregistrypb.ListBehaviorTreeSkillsResponse, error) {
+	behaviorTrees, err := s.behaviorTreeDataHandler.BehaviorTrees(ctx)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "could not retrieve behavior tree information: %v", err)
+	}
+
+	skills := make([]*skillspb.Skill, 0, len(behaviorTrees))
+	for _, br := range behaviorTrees {
+		skill := br.GetBehaviorTree().GetDescription()
+		skill.BehaviorTreeDescription = &skillspb.BehaviorTreeDescription{}
+		skills = append(skills, skill)
+	}
+
+	sort.Slice(skills, func(i, j int) bool {
+		return skills[i].GetId() < skills[j].GetId()
+	})
+
+	return &btregistrypb.ListBehaviorTreeSkillsResponse{
+		Skills: skills,
+	}, nil
+}
+
 // RegisterOrUpdateSkill registers (or updates) a skill.
 func (s *SkillRegistryServer) RegisterOrUpdateSkill(ctx context.Context, request *skillregistryinternalpb.RegisterOrUpdateSkillRequest) (*emptypb.Empty, error) {
 	if len(request.GetSkillRegistration().GetSkill().GetId()) == 0 {

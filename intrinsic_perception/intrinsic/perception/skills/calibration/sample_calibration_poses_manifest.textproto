@@ -52,12 +52,6 @@ options {
 }
 dependencies {
   required_equipment {
-    key: "camera"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-  required_equipment {
     key: "robot"
     value {
       capability_names: "intrinsic_proto.icon.v1.IconApi"

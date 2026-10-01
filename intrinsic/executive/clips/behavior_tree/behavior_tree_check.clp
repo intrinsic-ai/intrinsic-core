@@ -211,20 +211,6 @@
                                    " behavior-call-instance " ?bci-uid))))
 )
 
-(defrule behavior-tree-check-task-with-nonexistent-predict-action
-  "The predict-action referenced by a TASK node does not exist"
-  (behavior-tree-node (id ?id) (tree-id ?tree-id)
-                      (type TASK) (predict-action-uid ?action-uid&~nil))
-  (not (predict-action (uid ?action-uid)))
- =>
-  (assert (error (name BEHAVIOR-TREE-CHECK-TASK-WITH-NONEXISTENT-PREDICT-ACTION)
-                 (trigger-full-report TRUE)
-                 (type RECOVERABLE) (behavior-tree-id ?tree-id)
-                 (message (str-cat "TASK node " ?id " in " ?tree-id
-                                   " refers to non-existent predict-action "
-                                   ?action-uid))))
-)
-
 (defrule behavior-tree-check-node-with-nonexistent-condition
   "A node refers to a non-existent condition"
   (behavior-tree-node (id ?id) (tree-id ?tree-id)

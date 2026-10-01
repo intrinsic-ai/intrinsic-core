@@ -37,6 +37,7 @@ import (
 	"strconv"
 	"strings"
 
+	"github.com/klauspost/compress/zstd"
 	"gopkg.in/yaml.v3"
 )
 
@@ -124,7 +125,7 @@ func scanPath(layerPath string, cfs *containerFS) error {
 	return scanTarArchive(resolved, cfs)
 }
 
-// scanTarArchive inspects a tar (or gzipped tar) file and records all entry paths, modes, and symlinks.
+// scanTarArchive inspects a tar (or gzipped/zstd-compressed tar) file and records all entry paths, modes, and symlinks.
 func scanTarArchive(archivePath string, cfs *containerFS) error {
 	file, err := os.Open(archivePath)
 	if err != nil {
@@ -133,7 +134,7 @@ func scanTarArchive(archivePath string, cfs *containerFS) error {
 	defer file.Close()
 
 	var reader io.Reader = file
-	var magic [2]byte
+	var magic [4]byte
 	n, readErr := file.Read(magic[:])
 	if readErr != nil && !errors.Is(readErr, io.EOF) {
 		return fmt.Errorf("read magic header from %q: %w", archivePath, readErr)
@@ -143,7 +144,8 @@ func scanTarArchive(archivePath string, cfs *containerFS) error {
 		return fmt.Errorf("seek archive %q: %w", archivePath, err)
 	}
 
-	isGzip := n == 2 && magic[0] == 0x1f && magic[1] == 0x8b
+	isGzip := n >= 2 && magic[0] == 0x1f && magic[1] == 0x8b
+	isZstd := n >= 4 && magic[0] == 0x28 && magic[1] == 0xb5 && magic[2] == 0x2f && magic[3] == 0xfd
 	if isGzip {
 		gzipReader, err := gzip.NewReader(file)
 		if err != nil {
@@ -151,6 +153,13 @@ func scanTarArchive(archivePath string, cfs *containerFS) error {
 		}
 		defer gzipReader.Close()
 		reader = gzipReader
+	} else if isZstd {
+		zstdReader, err := zstd.NewReader(file)
+		if err != nil {
+			return fmt.Errorf("create zstd reader for %q: %w", archivePath, err)
+		}
+		defer zstdReader.Close()
+		reader = zstdReader
 	}
 
 	tarReader := tar.NewReader(bufio.NewReaderSize(reader, 64*1024))
@@ -161,7 +170,7 @@ func scanTarArchive(archivePath string, cfs *containerFS) error {
 			break
 		}
 		if err != nil {
-			if entriesRead > 0 || isGzip {
+			if entriesRead > 0 || isGzip || isZstd {
 				return fmt.Errorf("read tar entry from %q: %w", archivePath, err)
 			}
 			// Non-tar auxiliary files (e.g. index.json, oci-layout in OCI directories)

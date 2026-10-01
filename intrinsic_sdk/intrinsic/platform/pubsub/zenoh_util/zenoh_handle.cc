@@ -71,6 +71,9 @@ ZenohHandle* ZenohHandle::CreateZenohHandle() {
 void ZenohHandle::Initialize() {
   this->imw_init = ::intrinsic::imw_init;
   this->imw_fini = ::intrinsic::imw_fini;
+  this->imw_destroy_session_when_unused =
+      ::intrinsic::imw_destroy_session_when_unused;
+  this->imw_is_initialized = ::intrinsic::imw_is_initialized;
   this->imw_create_publisher = ::intrinsic::imw_create_publisher;
   this->imw_destroy_publisher = ::intrinsic::imw_destroy_publisher;
   this->imw_publish = ::intrinsic::imw_publish;

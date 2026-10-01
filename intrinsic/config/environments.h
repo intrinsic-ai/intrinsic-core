@@ -48,6 +48,11 @@ inline constexpr char kPortalDomainDev[] = "flowstate-dev.intrinsic.ai";
 inline constexpr char kPortalDomainStaging[] = "flowstate-qa.intrinsic.ai";
 inline constexpr char kPortalDomainProd[] = "flowstate.intrinsic.ai";
 
+// Equipment domain constants
+inline constexpr char kEquipmentDomainDev[] = "dev.intrinsic.equipment";
+inline constexpr char kEquipmentDomainStaging[] = "qa.intrinsic.equipment";
+inline constexpr char kEquipmentDomainProd[] = "intrinsic.equipment";
+
 // Assets project constants
 inline constexpr char kAssetsProjectDev[] = "intrinsic-assets-dev";
 inline constexpr char kAssetsProjectStaging[] = "intrinsic-assets-staging";
@@ -80,6 +85,7 @@ std::string FromComputeProject(absl::string_view project);
 std::string FromAnyProject(absl::string_view project);
 
 std::string PortalDomain(absl::string_view env);
+std::string EquipmentDomain(absl::string_view env);
 std::string PortalProject(absl::string_view env);
 std::string AccountsDomain(absl::string_view env);
 std::string AccountsProjectFromEnv(absl::string_view env);

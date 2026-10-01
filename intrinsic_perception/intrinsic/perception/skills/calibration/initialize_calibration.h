@@ -16,7 +16,6 @@
 #define INTRINSIC_PERCEPTION_SKILLS_CALIBRATION_INITIALIZE_CALIBRATION_H_
 
 #include <memory>
-#include <string_view>
 
 #include "absl/status/statusor.h"
 #include "google/protobuf/message.h"
@@ -28,8 +27,6 @@ namespace skills {
 
 class InitializeCalibration : public SkillInterface {
  public:
-  static constexpr std::array<std::string_view, 4> kCameraEquipmentSlots = {
-      "camera_1", "camera_2", "camera_3", "camera_4"};
   static constexpr char kRobotEquipmentSlot[] = "robot";
 
   absl::StatusOr<std::unique_ptr<google::protobuf::Message>> Execute(

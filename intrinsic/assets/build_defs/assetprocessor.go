@@ -25,13 +25,14 @@ import (
 
 	"intrinsic/assets/bundle"
 	"intrinsic/assets/idutils"
+	"intrinsic/assets/throttle"
 	"intrinsic/util/proto/registryutil"
 
 	log "github.com/golang/glog"
 	"go.opencensus.io/trace" 
-	"golang.org/x/sync/errgroup"
 	"google.golang.org/protobuf/encoding/prototext"
 	"google.golang.org/protobuf/reflect/protoregistry"
+	descriptorpb "google.golang.org/protobuf/types/descriptorpb"
 
 	assetpb "intrinsic/assets/build_defs/asset_go_proto"
 	ipb "intrinsic/assets/proto/id_go_proto"
@@ -42,10 +43,56 @@ import (
 	rspb "intrinsic/config/proto/resource_set_go_proto"
 )
 
+var (
+	// emptyTypes avoids using the GlobalTypes default resolver when
+	// unmarshalling configs.
+	emptyTypes = new(protoregistry.Types)
+)
+
 type processedAsset struct {
 	id    string
 	asset *apppb.Application_Asset
+	// fileDescriptorSet is a closure that can return a file descriptor set.  It
+	// should follow the conventions of FileDescriptorSet for processed bundle,
+	// including returning bundle.ErrMissingProvider.
+	fileDescriptorSet func(ctx context.Context, provider bundle.CatalogFileDescriptorProvider) (*descriptorpb.FileDescriptorSet, error)
+	// types is a cache of Types constructed from a successful call of
+	// fileDescriptorSet.
 	types *protoregistry.Types
+}
+
+func unmarshalConfig(b []byte, types *protoregistry.Types) (*icpb.InstanceConfig, error) {
+	unmarshalOpts := &prototext.UnmarshalOptions{}
+	if types != nil {
+		unmarshalOpts.Resolver = types
+	}
+	config := &icpb.InstanceConfig{}
+	if err := unmarshalOpts.Unmarshal(b, config); err != nil {
+		return nil, fmt.Errorf("failed to parse asset configuration: %w", err)
+	}
+	return config, nil
+}
+
+// parseConfig attempts to parse a user provided InstanceConfig textproto in a
+// way that avoids calls to the catalog if possible, but caches results for the
+// asset otherwise.
+func (pa *processedAsset) parseConfig(ctx context.Context, b []byte, provider bundle.CatalogFileDescriptorProvider) (*icpb.InstanceConfig, error) {
+	if pa.types != nil {
+		return unmarshalConfig(b, pa.types)
+	}
+	if config, err := unmarshalConfig(b, emptyTypes); err == nil || pa.fileDescriptorSet == nil {
+		return config, err
+	}
+	fds, err := pa.fileDescriptorSet(ctx, provider)
+	if err != nil {
+		return nil, fmt.Errorf("failed to get file descriptor set for Asset %s: %w", pa.id, err)
+	}
+	types, err := registryutil.NewTypesFromFileDescriptorSet(fds)
+	if err != nil {
+		return nil, fmt.Errorf("cannot parse file descriptor set protos: %w", err)
+	}
+	pa.types = types
+	return unmarshalConfig(b, pa.types)
 }
 
 func processAsset(ctx context.Context, a *assetpb.LocalSolution_Asset, proc *Processor) (*processedAsset, error) {
@@ -74,14 +121,10 @@ func processAsset(ctx context.Context, a *assetpb.LocalSolution_Asset, proc *Pro
 		if err != nil {
 			return nil, fmt.Errorf("failed to process Asset %s: %w", id, err)
 		}
-		types, err := registryutil.NewTypesFromFileDescriptorSet(processedBundle.FileDescriptorSet())
-		if err != nil {
-			return nil, fmt.Errorf("cannot parse file descriptor set protos: %w", err)
-		}
 		return &processedAsset{
-			id:    id,
-			asset: processedBundle.DeployApp(),
-			types: types,
+			id:                id,
+			asset:             processedBundle.DeployApp(),
+			fileDescriptorSet: processedBundle.FileDescriptorSet,
 		}, nil
 
 	case *assetpb.LocalSolution_Asset_Catalog:
@@ -102,6 +145,19 @@ func processAsset(ctx context.Context, a *assetpb.LocalSolution_Asset, proc *Pro
 					Catalog: idVersion,
 				},
 			},
+			fileDescriptorSet: func(ctx context.Context, provider bundle.CatalogFileDescriptorProvider) (*descriptorpb.FileDescriptorSet, error) {
+				if provider == nil {
+					return nil, bundle.ErrMissingProvider
+				}
+				fdss, err := provider.BatchGet(ctx, []*ipb.IdVersion{idVersion})
+				if err != nil {
+					return nil, fmt.Errorf("failed to get catalog file descriptor set: %w", err)
+				}
+				if len(fdss) != 1 {
+					return nil, fmt.Errorf("provider returned %d file descriptor sets, expected 1", len(fdss))
+				}
+				return fdss[0], nil
+			},
 		}, nil
 	default:
 		return nil, fmt.Errorf("unsupported solution asset variant type %T", a.GetVariant())
@@ -115,19 +171,18 @@ func convertAssets(ctx context.Context, solutionAssets []*assetpb.LocalSolution_
 
 	// NOTE: Pre-allocate all results to avoid data races in the goroutines below.
 	results := make([]*processedAsset, len(solutionAssets))
-	g, gCtx := errgroup.WithContext(ctx)
-	g.SetLimit(15)
+	fns := make([]func(context.Context) error, len(solutionAssets))
 	for i, a := range solutionAssets {
-		g.Go(func() error {
-			pa, err := processAsset(gCtx, a, proc)
+		fns[i] = func(ctx context.Context) error {
+			pa, err := processAsset(ctx, a, proc)
 			if err != nil {
 				return err
 			}
 			results[i] = pa
 			return nil
-		})
+		}
 	}
-	if err := g.Wait(); err != nil {
+	if err := proc.ConcurrencyLimiter.Do(ctx, fns...); err != nil {
 		return nil, err
 	}
 
@@ -144,7 +199,7 @@ func convertAssets(ctx context.Context, solutionAssets []*assetpb.LocalSolution_
 	return assets, nil
 }
 
-func convertInstances(instanceInfos []*assetpb.AssetInstanceInfo, assets map[string]*processedAsset, pathResolver PathResolver) (map[string]*apppb.Application_Instance, error) {
+func convertInstances(ctx context.Context, instanceInfos []*assetpb.AssetInstanceInfo, assets map[string]*processedAsset, pathResolver PathResolver, provider bundle.CatalogFileDescriptorProvider) (map[string]*apppb.Application_Instance, error) {
 	instances := map[string]*apppb.Application_Instance{}
 	for _, i := range instanceInfos {
 		asset := i.GetAsset()
@@ -171,14 +226,9 @@ func convertInstances(instanceInfos []*assetpb.AssetInstanceInfo, assets map[str
 			}
 
 			if strings.TrimSpace(string(b)) != "" {
-				unmarshalOpts := &prototext.UnmarshalOptions{}
-				if pa.types != nil {
-					unmarshalOpts.Resolver = pa.types
-				}
-
-				config = &icpb.InstanceConfig{}
-				if err := unmarshalOpts.Unmarshal(b, config); err != nil {
-					return nil, fmt.Errorf("failed to parse asset configuration: %v", err)
+				config, err = pa.parseConfig(ctx, b, provider)
+				if err != nil {
+					return nil, err
 				}
 			}
 		}
@@ -270,6 +320,8 @@ type Processor struct {
 	SolutionAssetPreprocessor
 	bundle.Processor
 	PathResolver
+	CatalogFileDescriptorProvider bundle.CatalogFileDescriptorProvider
+	ConcurrencyLimiter            *throttle.ConcurrencyLimiter
 }
 
 // Process processes the solution assets and returns the corresponding
@@ -300,7 +352,7 @@ func (proc *Processor) Process(ctx context.Context, sa *assetpb.LocalSolution) (
 	if err != nil {
 		return nil, err
 	}
-	instances, err := convertInstances(sa.GetInstances(), processedAssets, proc.PathResolver)
+	instances, err := convertInstances(ctx, sa.GetInstances(), processedAssets, proc.PathResolver, proc.CatalogFileDescriptorProvider)
 	if err != nil {
 		return nil, err
 	}
@@ -316,7 +368,6 @@ func (proc *Processor) Process(ctx context.Context, sa *assetpb.LocalSolution) (
 	return &apppb.Application{
 		Metadata: &commonpb.Metadata{
 			DisplayName: sa.GetDisplayName(),
-			BuildTarget: sa.GetBuildTarget(),
 			Category:    commonpb.Metadata_TEMPLATE,
 		},
 		// TODO: b/394317777 - Leave process unspecified if not provided.

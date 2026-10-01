@@ -47,13 +47,6 @@
     (log-context-create ?session-log-id ?bt-log-id ?action-log-id
                         ?parent-log-id ?operation-name))
 
-  (bind ?world-id-prediction "")
-  (if (any-factp ((?flag flag))
-        (and (eq ?flag:name enable_preemptive_prediction)
-              (eq ?flag:type BOOL) (eq ?flag:value TRUE))) then
-    (bind ?world-id-prediction
-      (world-clone ?world-id "project_predict" ?parent-span-id))
-  )
   (bind ?world-id-projection (world-clone ?world-id "project" ?parent-span-id))
 
   (skill-project-async ?uid
@@ -74,7 +67,6 @@
     (bind ?running-actions (append$ ?running-actions ?pa:id))
   )
   (modify ?af (state PROJECTING)
-              (world-id-prediction ?world-id-prediction)
               (world-id-projection ?world-id-projection)
               (projection-start-time (now))
               (projection-running-actions ?running-actions))
@@ -83,12 +75,10 @@
 (defrule action-projection-skill-succeeded
   "Skill projection by ClipsSkillDispatcher has completed."
   ?af <- (plan-action (id ?id) (plan-id ?plan-id) (uid ?uid) (state PROJECTING)
-                      (world-id-prediction ?plan-action-world-id-prediction)
                       (world-id-projection ?world-id-projection)
                       (skill-id ?skill-id)
                       (behavior-call-proto-id ?behavior-call-proto))
   ?sf <- (skill-status (action-id ?uid)
-                       (prediction-proto-id ?prediction-proto-id)
                        (status PROJECTED))
   (skill-info (skill-id ?skill-id))
  =>
@@ -119,50 +109,7 @@
   (modify ?af (state PROJECTED)
               (projection-end-time (now))
               (footprint-proto ?footprint-proto)
-              (world-id-prediction "")
               (world-id-projection ""))
-
-  ; Look for a predict-action that we can mark as predicted if the proper flag
-  ; is set and we have a prediction proto in the skill-status. We avoid the
-  ; predicting state to stop a race condition from happening.
-  (if (any-factp ((?flag flag))
-        (and (eq ?flag:name enable_preemptive_prediction)
-              (eq ?flag:type BOOL) (eq ?flag:value TRUE)))
-  then
-    ; This update will be the trigger for subsequent predictions
-    (do-for-fact ((?pa predict-action)) (and (eq ?pa:id ?id)
-                                              (eq ?pa:plan-id ?plan-id)
-                                              (neq ?pa:state PREDICTING))
-      (if (<> ?prediction-proto-id 0) then
-        (bind ?prediction-world-id ?pa:prediction-world-id)
-        (if (eq ?prediction-world-id "") then
-          ; Use ?world-id-prediction from the plan-action as a basis for the
-          ; prediciton proto results we got from projection if we don't have a
-          ; world already present in the predict-action.
-          (bind ?prediction-world-id ?plan-action-world-id-prediction)
-          ; Unset ?plan-action-world-id-prediction as the prediction-action
-          ; takes ownership now
-          (bind ?plan-action-world-id-prediction "")
-        )
-
-        (bind ?now (now))
-        (modify ?pa (state SUCCEEDED)
-                    (prediction-start-time ?now)
-                    (prediction-end-time ?now)
-                    (prediction-world-id ?prediction-world-id)
-                    (prediction-proto-id ?prediction-proto-id))
-      )
-    )
-  else
-    (pb-remove ?prediction-proto-id)
-  )
-
-  ; If the predict-action did not use the ?plan-action-world-id-prediction it
-  ; can be cleaned up.
-  (if (neq ?plan-action-world-id-prediction "") then
-    (assert (world-request (type DELETE)
-                           (world-id ?plan-action-world-id-prediction))))
-
   (retract ?sf)
 )
 
@@ -173,7 +120,6 @@
   ; service cannot be reached.
   ?af <- (plan-action (uid ?uid) (state ?state&PROJECTING) (skill-id ?skill-id)
                       (projection-running-actions $?running-actions)
-                      (world-id-prediction ?world-id-prediction)
                       (world-id-projection ?world-id-projection))
   ?sf <- (skill-status (action-id ?uid) (status FAILED) (message ?message)
                        (extended-status-proto-id ?es-proto))
@@ -182,12 +128,9 @@
   ; Some actions were running and thus footprints locked, so try again after
   ; those actions completed
   ; TODO(b/236694783): Re-enable retrying projection on conflict in BTs
-  (if (neq ?world-id-prediction "") then
-    (assert (world-request (type DELETE) (world-id ?world-id-prediction))))
   (if (neq ?world-id-projection "") then
     (assert (world-request (type DELETE) (world-id ?world-id-projection))))
   (modify ?af (state EXECUTION-FAILED) (projection-end-time (now))
-              (world-id-prediction "")
               (world-id-projection "")
               (extended-status-proto-id ?es-proto))
   (retract ?sf)

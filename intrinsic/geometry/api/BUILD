@@ -240,6 +240,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:ai_scene_to_mesh",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:load_ai_scene_from_buffer",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:restrict_importer",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_point_cloud",
         "//intrinsic_sdk/intrinsic/geometry/internal/util:export_as_gltf",
         "//intrinsic_sdk/intrinsic/geometry/shapes",

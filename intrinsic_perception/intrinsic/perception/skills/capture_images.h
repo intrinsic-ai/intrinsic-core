@@ -22,7 +22,6 @@
 #include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
-#include "intrinsic/skills/proto/skill_service.pb.h"
 #include "intrinsic/util/thread/thread_pool.h"
 
 namespace intrinsic::skills {
@@ -45,8 +44,6 @@ class CaptureImages : public SkillInterface {
 
   CaptureImages();
   ~CaptureImages() override = default;
-
-  static constexpr char kCameraEquipment[] = "camera";
 
  private:
   perception::GrpcCamera grpc_camera_;

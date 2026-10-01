@@ -19,6 +19,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/base/attributes.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -72,7 +73,7 @@ class KinematicsFromWorldService final
   // Returns a pointer to the ModelInterface for the part, or nullptr if the
   // part is not found or it does not have an associated kinematics model.
   const kinematics::ModelInterface* GetKinematicsModelForPart(
-      absl::string_view part_name) const override;
+      absl::string_view part_name) const ABSL_ATTRIBUTE_LIFETIME_BOUND override;
 
   std::vector<std::string> ListPartNames() const override
       INTRINSIC_NON_REALTIME_ONLY;

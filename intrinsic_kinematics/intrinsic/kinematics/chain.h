@@ -15,6 +15,7 @@
 #ifndef INTRINSIC_KINEMATICS_CHAIN_H_
 #define INTRINSIC_KINEMATICS_CHAIN_H_
 
+#include "absl/base/attributes.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -53,10 +54,11 @@ class Chain : public Group {
 
 // Convert a model to a chain. Will return an error if the model is not a
 // kinematic chain.
-absl::StatusOr<Chain> CreateChainFromModel(const ModelInterface& model);
-absl::StatusOr<Chain> CreateChainFromModel(const ModelInterface& model,
-                                           const ElementId& base_id,
-                                           const ElementId& tip_id);
+absl::StatusOr<Chain> CreateChainFromModel(
+    const ModelInterface& model ABSL_ATTRIBUTE_LIFETIME_BOUND);
+absl::StatusOr<Chain> CreateChainFromModel(
+    const ModelInterface& model ABSL_ATTRIBUTE_LIFETIME_BOUND,
+    const ElementId& base_id, const ElementId& tip_id);
 
 // Converts a model to a chain, using the model's base link and unique tip link
 // (if applicable).

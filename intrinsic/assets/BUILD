@@ -206,6 +206,18 @@ go_library(
 )
 
 go_library(
+    name = "throttle",
+    srcs = ["throttle.go"],
+    importpath = "intrinsic/assets/throttle",
+    visibility = ["//intrinsic/assets:__subpackages__"],
+    deps = [
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_x_sync//errgroup:go_default_library",
+        "@org_golang_x_time//rate:go_default_library",
+    ],
+)
+
+go_library(
     name = "typeutils",
     srcs = ["typeutils.go"],
     importpath = "intrinsic/assets/typeutils",
@@ -259,7 +271,7 @@ go_library(
         "//intrinsic/assets/services:servicebundle",
         "//intrinsic/config/proto:application_go_proto",
         "//intrinsic/skills:skillbundle",
-        "@com_github_google_safearchive//tar",
+        "//intrinsic/util/proto:descriptor",
         "@intrinsic_apis//intrinsic/assets/catalog/proto/v1:release_metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",

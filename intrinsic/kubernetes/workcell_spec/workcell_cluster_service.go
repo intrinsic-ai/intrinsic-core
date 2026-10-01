@@ -155,6 +155,7 @@ var getClusterInfo = func(ctx context.Context, crcClient versioned.Interface) tr
 	return transfersvc.ClusterInfo{
 		Name:                   "local",
 		CanDoPhysicalExecution: true,
+		CanDoSim:               true,
 		HasGpu:                 false,
 		GCPProject:             "none",
 		Registry:               "gcr.io/local",
@@ -463,7 +464,7 @@ func main() {
 		ResourceTypeRuntimeClient:     resourceTypeRuntimeClient,
 		SkillRuntimeClient:            skillRuntimeClient,
 		TransferService:               transferService,
-		ClusterName:                   clusterInfo.Name,
+		ClusterInfo:                   clusterInfo,
 		LoggerClient:                  nil,
 		OnSolutionUpdate:              onSolutionUpdate,
 		Validator:                     validator,

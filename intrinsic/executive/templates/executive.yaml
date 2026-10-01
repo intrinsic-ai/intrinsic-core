@@ -82,17 +82,14 @@ spec:
             {{- else }}
             - --novalidate_on_import
             {{- end }}
-            {{- if .Values.feature_options.enable_preemptive_prediction }}
-            - --enable_preemptive_prediction
-            {{- end }}
             {{- if .Values.feature_options.enable_executive_skill_conflict_default_wait }}
             - --enable_executive_skill_conflict_default_wait
             {{- end }}
             # Simulation service is only started if the deployment is in simulated mode.
             {{ if .Values.simulated }}
-            - --simulation_service_address=simulation-service.app-intrinsic-base.svc.cluster.local:8088
+            - --simulation_service_address=simulation-service.app-intrinsic-base.svc.cluster.local:8080
             {{- end }}
-            - --conductor_service_address=world.app-intrinsic-base.svc.cluster.local:8082
+            - --conductor_service_address=conductor.app-intrinsic-base.svc.cluster.local:8080
             {{- if .Values.tracing_show_internal_clips_runs_leaking_memory }}
             - --tracing_show_internal_calls
             - --tracing_show_internal_clips_runs_leaking_memory

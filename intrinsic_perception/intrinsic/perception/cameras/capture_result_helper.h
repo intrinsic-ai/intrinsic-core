@@ -215,6 +215,10 @@ absl::StatusOr<CaptureResult> AdjustCaptureForROI(
 absl::Status SensorImagesHaveSameTypeAndSize(
     const std::vector<const SensorImage*>& images);
 
+// Merges individual capture results into the frame of the first camera.
+CaptureResult MergeCaptureResults(std::vector<CaptureResult> capture_results,
+                                  const std::vector<Pose3d>& world_ts_camera);
+
 }  // namespace intrinsic::perception
 
 #endif  // INTRINSIC_PERCEPTION_PUBLIC_CAPTURE_RESULT_HELPER_H_

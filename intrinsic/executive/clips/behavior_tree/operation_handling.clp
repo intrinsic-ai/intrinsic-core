@@ -65,10 +65,6 @@
       (span-end-failure ?op:span-reference-id ?*TRACING-STATUS-ABORTED*
           "Aborting active span as the operation is being deleted.")
     )
-    (if (neq ?op:predictions-span-reference-id ?*TRACING-INVALID-SPAN-ID*) then
-      (span-end-failure ?op:predictions-span-reference-id ?*TRACING-STATUS-ABORTED*
-          "Aborting active span as the operation is being deleted.")
-    )
 
     (if (not ?keep-blackboard) then
       (bind ?bb-scopes
@@ -96,8 +92,7 @@
 
     (modify ?op (state ACCEPTED) (trace-id "") (trace-url "")
       (parameter-proto 0) (resources (create$ )) (return-value-proto 0)
-      (span-reference-id ?*TRACING-INVALID-SPAN-ID*)
-      (predictions-span-reference-id ?*TRACING-INVALID-SPAN-ID*) (scene-id "")
+      (span-reference-id ?*TRACING-INVALID-SPAN-ID*) (scene-id "")
       (extended-status-proto-id 0) (recovery-state-proto 0)
       (skill-instances-are-reset FALSE))
   )
@@ -125,11 +120,6 @@
     (if (neq ?op:span-reference-id ?*TRACING-INVALID-SPAN-ID*) then
       (span-end-failure ?op:span-reference-id ?*TRACING-STATUS-ABORTED*
           "Aborting active span as the operation is being deleted.")
-    )
-    (if (neq ?op:predictions-span-reference-id ?*TRACING-INVALID-SPAN-ID*) then
-      (span-end-failure ?op:predictions-span-reference-id
-        ?*TRACING-STATUS-ABORTED*
-        "Aborting active span as the operation is being deleted.")
     )
     (pb-remove ?op:parameter-proto)
 
@@ -681,8 +671,7 @@
                              (span-reference-id ?execution-span))
   (behavior-tree (id ?operation-tree-id) (blackboard-scope ?bb-scope))
   ?start-tree <- (behavior-tree (id ?start-tree-id) (state ACCEPTED)
-                   (start-node-id ?start-node-id)
-                   (predict-generation-id ?predict-generation-id))
+                   (start-node-id ?start-node-id))
   ?start-node <- (behavior-tree-node (id ?start-node-id)
                                      (tree-id ?start-tree-id))
  =>
@@ -749,10 +738,7 @@
   (if (= ?recovery-state-proto 0)
     then
       ; No recovery-state-proto => Normal start
-      ; Update the generation id for prediction since we are selecting root.
-      ; We do this so that selecting the root will have the correct generation
-      (modify ?start-tree (state RUNNING) (span-reference-id ?tree-span)
-                          (predict-generation-id (+ ?predict-generation-id 1)))
+      (modify ?start-tree (state RUNNING) (span-reference-id ?tree-span))
     else
       (printout t "Applying recovery nodes to current state before starting tree" crlf)
       (bind ?recovery-result
@@ -953,7 +939,6 @@
 (defrule operation-terminated
   "Clean up after the operation has terminated."
   ?op <- (operation-envelope (span-reference-id ?execution-span&~0)
-                             (predictions-span-reference-id ?predictions-span)
                              (state ?state&SUCCEEDED|FAILED|CANCELED)
                              (logged-completion TRUE))
  =>
@@ -976,24 +961,18 @@
   (switch ?state
     (case SUCCEEDED then
       (span-end ?execution-span)
-      (span-end ?predictions-span)
     )
     (case FAILED then
       (span-end-failure ?execution-span ?*TRACING-STATUS-ABORTED*
-        "Execution failed")
-      (span-end-failure ?predictions-span ?*TRACING-STATUS-ABORTED*
         "Execution failed")
     )
     (case CANCELED then
       (span-end-failure ?execution-span ?*TRACING-STATUS-CANCELLED*
         "Execution canceled")
-      (span-end-failure ?predictions-span ?*TRACING-STATUS-CANCELLED*
-        "Execution canceled")
     )
   )
 
-  (modify ?op (span-reference-id ?*TRACING-INVALID-SPAN-ID*)
-              (predictions-span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+  (modify ?op (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
 )
 
 ; Handle the active actions timer

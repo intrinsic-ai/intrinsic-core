@@ -34,11 +34,6 @@ ABSL_ATTRIBUTE_UNUSED void* NewZenohHandle() {
   // return new intrinsic::PubSubInterfaceWrapper(std::move(pubsub_go_handle));
 }
 
-ABSL_ATTRIBUTE_UNUSED void DestroyZenohHandle(void* handle) {
-  if (handle == nullptr) return;
-  delete static_cast<intrinsic::ZenohHandle*>(handle);
-}
-
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwInit(void* handle, const char* config) {
   intrinsic::ZenohHandle* zenoh_handle =
       static_cast<intrinsic::ZenohHandle*>(handle);
@@ -49,6 +44,12 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwFini(void* handle) {
   intrinsic::ZenohHandle* zenoh_handle =
       static_cast<intrinsic::ZenohHandle*>(handle);
   return zenoh_handle->imw_fini();
+}
+
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroySessionWhenUnused(void* handle) {
+  intrinsic::ZenohHandle* zenoh_handle =
+      static_cast<intrinsic::ZenohHandle*>(handle);
+  return zenoh_handle->imw_destroy_session_when_unused();
 }
 
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreatePublisher(void* handle,

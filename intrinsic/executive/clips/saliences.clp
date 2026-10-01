@@ -70,9 +70,6 @@
  ; Projection must be performed before execution
  ?*SALIENCE-ACTION-PROJECTION*              =    300
 
- ; Prediction must be performed before execution
- ?*SALIENCE-ACTION-PREDICTION*              =    300
-
  ; Execution monitoring must be able to preempt outcome determination
  ; to be able to initiate a recovery if possible
  ?*SALIENCE-EXECMON-PREEMPT*                =    200
@@ -81,5 +78,6 @@
  ; ?*SALIENCE-NORMAL*                       =      0
  ?*SALIENCE-LOW*                            =  -2000
  ?*SALIENCE-LOWER*                          =  -5000
+ ?*SALIENCE-COLLECT-EVENTS*                 =  -8000
  ?*SALIENCE-LAST*                           = -10000
 )

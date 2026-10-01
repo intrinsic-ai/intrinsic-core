@@ -159,8 +159,8 @@ MotionPlannerClient::PlanTrajectory(
   MotionPlannerClient::PlanTrajectoryResult result;
   result.trajectory = response.discretized();
   result.swept_volume.insert(result.swept_volume.begin(),
-                             response.swept_volume().begin(),
-                             response.swept_volume().end());
+                             response.swept_volumes().begin(),
+                             response.swept_volumes().end());
   result.lock_motion_id = response.has_lock_motion_id()
                               ? std::optional(response.lock_motion_id())
                               : std::nullopt;
@@ -187,8 +187,8 @@ MotionPlannerClient::PlanPath(
   MotionPlannerClient::PlanPathResult result;
   result.path = response.path();
   result.swept_volume.insert(result.swept_volume.begin(),
-                             response.swept_volume().begin(),
-                             response.swept_volume().end());
+                             response.swept_volumes().begin(),
+                             response.swept_volumes().end());
   return result;
 }
 

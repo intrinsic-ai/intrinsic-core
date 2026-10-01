@@ -305,10 +305,6 @@ def create_pose_estimation_pipeline(
 
   # 2. Set up estimate_pose_multi_view skill connected to IOC Pose Estimator Service
   estimate_pose_kwargs: dict[str, Any] = {
-      "camera_1": camera_resource,
-      "camera_2": camera_resource,
-      "camera_3": camera_resource,
-      "camera_4": camera_resource,
       "perception": perception_resource,
       "pose_estimator": pose_estimator_proto,
       "capture_data": [capture_images_skill.result.capture_data],

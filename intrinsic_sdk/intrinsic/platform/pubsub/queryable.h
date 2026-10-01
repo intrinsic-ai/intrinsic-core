@@ -39,8 +39,10 @@ using GeneralQueryableCallback =
     std::function<intrinsic_proto::pubsub::PubSubQueryResponse(
         std::string_view keyexpr,
         const intrinsic_proto::pubsub::PubSubQueryRequest&)>;
+// Heap-allocated via std::unique_ptr so the user_context pointer passed to
+// imw_create_queryable remains valid when Queryable is moved.
 struct QueryableLink {
-  Queryable* queryable;
+  GeneralQueryableCallback callback;
 };
 
 }  // namespace internal
@@ -51,19 +53,8 @@ class Queryable {
   Queryable(const Queryable&) = delete;
   Queryable& operator=(const Queryable&) = delete;
 
-  Queryable(Queryable&& other) noexcept
-      : keyexpr_(std::move(other.keyexpr_)),
-        callback_(std::move(other.callback_)),
-        link_(std::move(other.link_)) {
-    link_->queryable = this;
-  }
-  Queryable& operator=(Queryable&& other) noexcept {
-    keyexpr_ = std::move(other.keyexpr_);
-    callback_ = std::move(other.callback_);
-    link_ = std::move(other.link_);
-    link_->queryable = this;
-    return *this;
-  }
+  Queryable(Queryable&& other) noexcept;
+  Queryable& operator=(Queryable&& other) noexcept;
 
   virtual ~Queryable();
 
@@ -80,11 +71,12 @@ class Queryable {
   Queryable(std::string_view keyexpr,
             internal::GeneralQueryableCallback callback)
       : keyexpr_(keyexpr),
-        callback_(callback),
-        link_(new internal::QueryableLink{.queryable = this}) {}
-  std::string keyexpr_;
-  internal::GeneralQueryableCallback callback_;
+        link_(std::make_unique<internal::QueryableLink>(
+            internal::QueryableLink{.callback = std::move(callback)})) {}
 
+  void Reset();
+
+  std::string keyexpr_;
   std::unique_ptr<internal::QueryableLink> link_;
 };
 

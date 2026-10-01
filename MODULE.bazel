@@ -109,10 +109,10 @@ use_repo(
     "com_github_grpc_ecosystem_go_grpc_middleware_v2",  
     "com_github_hashicorp_golang_lru_v2",  
     "com_github_hashicorp_terraform_json",  
-    "com_github_instrumenta_kubeval",  
     "com_github_jedib0t_go_pretty_v6",  
     "com_github_jhump_protoreflect_v2",  
     "com_github_kballard_go_shellquote",  
+    "com_github_klauspost_compress",
     "com_github_kylelemons_godebug",  
     "com_github_manifoldco_promptui",  
     "com_github_masterminds_semver",
@@ -153,6 +153,7 @@ use_repo(
     "com_github_tdewolff_parse",  
     "com_github_toqueteos_webbrowser",  
     "com_github_traviswt_gke_auth_plugin",  
+    "com_github_yannh_kubeconform",  
     "com_google_cloud_go_ai",  
     "com_google_cloud_go_asset",  
     "com_google_cloud_go_bigquery",  
@@ -186,7 +187,7 @@ use_repo(
     "io_opencensus_go",
     "io_opencensus_go_contrib_exporter_prometheus",
     "io_opentelemetry_go_contrib_instrumentation_google_golang_org_grpc_otelgrpc",
-    "io_opentelemetry_go_contrib_instrumentation_net_http_otelhttp",  
+    "io_opentelemetry_go_contrib_instrumentation_net_http_otelhttp",
     "io_opentelemetry_go_contrib_propagators_b3",
     "io_opentelemetry_go_contrib_propagators_opencensus",
     "io_opentelemetry_go_otel",
@@ -196,7 +197,7 @@ use_repo(
     "io_opentelemetry_go_otel_metric",  
     "io_opentelemetry_go_otel_sdk",
     "io_opentelemetry_go_otel_sdk_metric",  
-    "io_opentelemetry_go_otel_trace",  
+    "io_opentelemetry_go_otel_trace",
     "io_opentelemetry_go_proto_otlp",
     "org_golang_google_api",  
     "org_golang_google_genproto",
@@ -212,7 +213,7 @@ use_repo(
     "org_golang_x_sys",  
     "org_golang_x_term",  
     "org_golang_x_text",
-    "org_golang_x_time",  
+    "org_golang_x_time",
     "org_golang_x_tools",  
     "org_gonum_v1_gonum",  
     "org_uber_go_atomic",
@@ -241,7 +242,7 @@ python.toolchain(
 bazel_dep(name = "pybind11_bazel", version = "3.0.1")
 bazel_dep(name = "pybind11_abseil", version = "202402.0")
 bazel_dep(name = "pybind11_protobuf", version = "0.0.0-20250210-f02a2b7")
-bazel_dep(name = "aspect_rules_lint", version = "2.9.0")  
+bazel_dep(name = "aspect_rules_lint", version = "2.9.1")  
 
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
 pip.parse(
@@ -454,11 +455,11 @@ bazel_dep(name = "ceres-solver", version = "2.2.0", repo_name = "com_google_cere
 bazel_dep(name = "clarabel", version = "0.11.1.bcr.1")  
 bazel_dep(name = "cli11", version = "2.6.2")  
 bazel_dep(name = "coacd", version = "1.0.13.bcr.1")  
-bazel_dep(name = "com_github_mvukov_rules_ros2", version = "0.0.0-20260118-78d85ff")
+bazel_dep(name = "com_github_mvukov_rules_ros2", version = "0.0.0-20260718-352a8e3")
 bazel_dep(name = "cpp-httplib", version = "0.46.0")  
 bazel_dep(name = "cppitertools", version = "2.2")  
 bazel_dep(name = "cppregpattern", version = "1.0.1")  
-bazel_dep(name = "curl", version = "8.21.0.bcr.2", repo_name = "com_github_curl_curl")  
+bazel_dep(name = "curl", version = "8.22.0", repo_name = "com_github_curl_curl")  
 bazel_dep(name = "dumb-init", version = "1.2.5")
 bazel_dep(name = "egl-registry", version = "0.0.0-20250527", repo_name = "egl_registry")  
 bazel_dep(name = "eigen", version = "5.0.1.bcr.2", repo_name = "com_gitlab_libeigen_eigen")
@@ -489,10 +490,11 @@ bazel_dep(name = "googleapis-cc", version = "1.1.5")
 bazel_dep(name = "googleapis-go", version = "1.1.5")
 bazel_dep(name = "googleapis-grpc-cc", version = "1.1.5")
 bazel_dep(name = "googleapis-python", version = "1.1.5")
-bazel_dep(name = "googleapis", version = "0.0.0-20260825-d10ac924", repo_name = "com_google_googleapis")
+bazel_dep(name = "googleapis", version = "0.0.0-20260922-d6b44118", repo_name = "com_google_googleapis")
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", repo_name = "com_google_googletest")
 bazel_dep(name = "grpc_ecosystem_grpc_gateway", version = "2.29.0.bcr.3", repo_name = "com_github_grpc_ecosystem_grpc_gateway_v2")
 bazel_dep(name = "grpc", version = "1.74.0", repo_name = "com_github_grpc_grpc")
+bazel_dep(name = "gperftools", version = "2.18.1")  
 bazel_dep(name = "gz-common", version = "7.4.0")  
 bazel_dep(name = "gz-math", version = "9.3.0")
 bazel_dep(name = "gz-msgs", version = "12.0.2")
@@ -502,7 +504,7 @@ bazel_dep(name = "gz-rendering", version = "10.0.2")
 bazel_dep(name = "gz-sim", version = "10.5.0")  
 bazel_dep(name = "gz-transport", version = "15.1.0")
 bazel_dep(name = "intrinsic-clips", version = "0.1.0")  
-bazel_dep(name = "jq.bzl", version = "0.6.2")  
+bazel_dep(name = "jq.bzl", version = "0.7.0")  
 bazel_dep(name = "jwt-cpp", version = "0.7.0.bcr.1", repo_name = "jwt-cpp")  
 bazel_dep(name = "libarchive", version = "3.8.1.bcr.3", repo_name = "com_github_libarchive")  
 bazel_dep(name = "libmodbus", version = "3.1.12")  
@@ -513,6 +515,7 @@ bazel_dep(name = "libzip", version = "1.11.4.bcr.3")
 bazel_dep(name = "llvm-project", version = "17.0.3", repo_name = "com_github_llvm_llvm-project")  
 bazel_dep(name = "magic_enum", version = "0.9.8")  
 bazel_dep(name = "mcap", version = "2.1.3")  
+bazel_dep(name = "meshoptimizer", version = "1.3.bcr.1")
 bazel_dep(name = "nanopb", version = "0.3.9.10")  
 bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.2", repo_name = "com_github_nlohmann_json")
 bazel_dep(name = "nlopt", version = "2.10.1.bcr1")  
@@ -527,7 +530,7 @@ bazel_dep(name = "opengl-registry", version = "0.0.0-20250707", repo_name = "ope
 bazel_dep(name = "openmesh", version = "11.0")  
 bazel_dep(name = "opentelemetry-cpp", version = "1.19.0", repo_name = "io_opentelemetry_cpp")  
 bazel_dep(name = "opentelemetry-proto", version = "1.8.0", repo_name = "opentelemetry_proto")  
-bazel_dep(name = "openusd", version = "25.11.bcr.3")  
+bazel_dep(name = "openusd", version = "25.11.bcr.3")
 bazel_dep(name = "or-tools", version = "9.15", repo_name = "or_tools")
 bazel_dep(name = "osqp-cpp", version = "0.0.0-20231004-4343373.bcr.2")  
 bazel_dep(name = "pcl", version = "1.15.1.bcr.4", repo_name = "com_github_pcl")  
@@ -548,7 +551,7 @@ bazel_dep(name = "rules_jsonnet", version = "0.7.2")
 bazel_dep(name = "rules_license", version = "1.0.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
 bazel_dep(name = "rules_qt", version = "0.0.7")  
-bazel_dep(name = "rules_shell", version = "0.8.0")  
+bazel_dep(name = "rules_shell", version = "0.8.0")
 bazel_dep(name = "sdformat", version = "16.1.0")
 bazel_dep(name = "soplex", version = "8.0.3")  # bumping transitive dependency to update boost to 1.89.0
 bazel_dep(name = "stb", version = "0.0.0-20251026-f1c79c0")
@@ -556,7 +559,7 @@ bazel_dep(name = "stardoc", version = "0.8.1")
 bazel_dep(name = "tar.bzl", version = "0.10.9")
 bazel_dep(name = "tcmalloc", version = "0.0.0-20250927-12f2552")
 bazel_dep(name = "tink_cc", version = "2.4.0")  
-bazel_dep(name = "tinygltf", version = "2.9.6")
+bazel_dep(name = "tinygltf", version = "2.9.6.bcr.1")
 bazel_dep(name = "tinyxml2", version = "11.0.0")
 bazel_dep(name = "tl-expected", version = "1.3.1")  
 bazel_dep(name = "toybox", version = "0.8.12.bcr.1")  
@@ -618,7 +621,6 @@ use_repo(
     "cgal",
     "coal",
     "firestore_emulator",
-    "gperftools",
     "kubebuilder_test_tools",
     "kubernetes_json_schema",
     "sysroot_glvnd_stubs",
@@ -630,8 +632,12 @@ use_repo(
 # Containers #
 ##############
 
+bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
 bazel_dep(name = "rules_oci", version = "2.3.0")
 bazel_dep(name = "rules_helm", version = "0.32.0")  
+
+aspect_toolchains = use_extension("@aspect_bazel_lib//lib:extensions.bzl", "toolchains")
+use_repo(aspect_toolchains, "zstd_linux_amd64")
 
 oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
 
@@ -651,7 +657,7 @@ oci.pull(
 )
 oci.pull(
     name = "python3",
-    digest = "sha256:caaf356f40667c496d405780745b9ac25771c189a51dfcc42430d531ea09f8a2",
+    digest = "sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/library/python",
     platforms = ["linux/amd64"],
     tag = "3-slim",  # tag needs to be specified for renovatebot to sync the digest
@@ -665,10 +671,10 @@ oci.pull(
 )
 oci.pull(
     name = "tensorflow_serving",
-    digest = "sha256:67153005c5c5dea9cde7c4dddd69f96728412699e94a4d0e9893666084e1e944",
+    digest = "sha256:3930bdf5b6f1cac4c2e2d6920da491982b8c5f68a32d2688b558c6ba97bde4cc",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/tensorflow/serving",
     platforms = ["linux/amd64"],
-    tag = "2.20.0-gpu",  # tag needs to be specified for renovatebot to sync the digest
+    tag = "2.21.0-gpu",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
     name = "terraform_base",
@@ -785,8 +791,8 @@ oci.pull(
 )
 oci.pull(
     name = "zenohd",
-    digest = "sha256:9a8195c927169365e516309d55753b9c3a7484a59825cf4fbefb9125cfbdb01d",
-    image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/zenohd:1.7.2",
+    digest = "sha256:7a720411f54349de97151a5619a1cd69c5f3eed537a1f3c79fc3137b878d373c",
+    image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/zenohd:1.8.0",
     platforms = ["linux/amd64"],
 )
 
@@ -904,20 +910,6 @@ apt.install(
 )
 use_repo(apt, "bookworm", "bullseye_mesa", "weston_chromium")
 
-bazel_dep(
-    name = "rules_bazel_integration_test",
-    version = "0.37.1",
-    dev_dependency = True,
-)
-
-bazel_binaries = use_extension(
-    "@rules_bazel_integration_test//:extensions.bzl",
-    "bazel_binaries",
-    dev_dependency = True,
-)
-bazel_binaries.download(version_file = "//:.bazelversion")
-use_repo(bazel_binaries, "bazel_binaries", "bazel_binaries_bazelisk", "build_bazel_bazel_.bazelversion")
-
 jq_toolchains = use_extension("@jq.bzl//jq:extensions.bzl", "toolchains")
 use_repo(jq_toolchains, "jq_toolchains")
 
@@ -968,16 +960,6 @@ use_repo(
     "ros2_rmw",
     "ros2_rosbag2",
     "ros2_rosidl",
-    "ros2_rosidl_typesupport",
-)
-
-# Temporary patch to make rclpy compatible with our LLVM toolchain.
-# Can be removed when https://github.com/bazelbuild/bazel-central-registry/pull/9746
-# is merged and the new version is available in the BCR.
-single_version_override(
-    module_name = "com_github_mvukov_rules_ros2",
-    patch_strip = 1,
-    patches = ["//third_party/rules_ros2:rules_ros2_atomic.patch"],
 )
 
 single_version_override(

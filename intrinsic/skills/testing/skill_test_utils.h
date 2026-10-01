@@ -217,29 +217,6 @@ absl::StatusOr<TResult> PreviewSkill(SkillExecuteInterface& skill,
 //      ASSERT_OK(skill->GetFootprint(request, context));
 //    }
 //
-
-// Predict is a 1P API currently under development b/302371944. Note that while
-// it is possible to pass `internal_data` into the PredictRequest object, the
-// `MakeExecuteRequest()` and `MakePreviewRequest()` methods do not support
-// passing `internal_data`. If you want to test that `internal_data` works when
-// passed to Execute() or Preview() on a skill that supports Predict() then the
-// test must instantiate `ExecuteRequest` and `PreviewRequest` directly instead
-// of using `MakeExecuteRequest()` and `MakePreviewRequest()`.
-//
-// Example: Test Predict method on a skill that has no dependencies in its
-//          manifest.
-//
-//    TEST(MySkillTest, Predict) {
-//      auto skill_test_factory = SkillTestFactory();
-//      auto skill = MySkill::CreateSkill();
-//      MySkillParams params;
-//
-//      PredictRequest request("", params);
-//      std::unique_ptr<PredictContext> context =
-//        skill_test_factory.MakePredictContext({});
-//      ASSERT_OK(skill->Predict(request, context));
-//    }
-
 class SkillTestFactory final {
  public:
   SkillTestFactory();
@@ -391,29 +368,6 @@ class SkillTestFactory final {
   // function.
   std::unique_ptr<GetFootprintContext> MakeGetFootprintContext(
       const GetFootprintContextInitializer& initializer);
-
-
-  // Initializes a `PredictContext` for testing a skill's Predict() method.
-  //
-  // All fields are optional. See `ExecuteContextInitializer` for the usage
-  // of the fields as they are the same for `PredictContextInitializer`.
-  struct PredictContextInitializer {
-    std::optional<EquipmentPack> equipment_pack;
-    std::string world_id = "fake_world";
-    std::shared_ptr<intrinsic_proto::motion_planning::v1::MotionPlannerService::
-                        StubInterface>
-        motion_planner_service;
-    std::shared_ptr<intrinsic_proto::world::ObjectWorldService::StubInterface>
-        object_world_service;
-  };
-
-  // Creates a `PredictContext` for testing a skill's Predict() method.
-  //
-  // See `PredictContextInitializer` to learn how to pass arguments to this
-  // function.
-  std::unique_ptr<PredictContext> MakePredictContext(
-      const PredictContextInitializer& initializer);
-
 
  private:
   std::vector<std::unique_ptr<::grpc::Server>> servers_;

@@ -167,9 +167,6 @@ ABSL_FLAG(bool, tracing_show_internal_clips_runs_leaking_memory, false,
           "If tracing_show_internal_calls is true, also add spans for each "
           "internal clips run. This feature potentially leaks memory. Never "
           "enable this in staging or prod.");
-ABSL_FLAG(bool, enable_preemptive_prediction, false,
-          "If set to true, call prediction ahead of execution (as early as "
-          "possible)");
 ABSL_FLAG(
     bool, enable_executive_skill_conflict_default_wait, false,
     "If set to true, default skill conflict handling mode for UNSPECIFIED is "
@@ -294,15 +291,6 @@ BuildExecutiveConfig() {
       flag->set_name("deployment_id");
       flag->set_string_value(deployment_id);
     }
-  }
-
-  if (absl::GetFlag(FLAGS_enable_preemptive_prediction)) {
-    LOG(INFO)
-        << "***** Enabling experimental feature PREEMPTIVE PREDICTION *****";
-    intrinsic_proto::executive::ExecutiveConfig::Flag* pp_flag =
-        config.mutable_flags()->Add();
-    pp_flag->set_name("enable_preemptive_prediction");
-    pp_flag->set_bool_value(true);
   }
 
   if (absl::GetFlag(FLAGS_enable_executive_skill_conflict_default_wait)) {
@@ -1226,6 +1214,9 @@ void ClipsExecutiveService::UpdateOperationData(
     ClipsExecutiveService::OperationData* operation_data)
     ABSL_EXCLUSIVE_LOCKS_REQUIRED(operations_mutex_)
         ABSL_SHARED_LOCKS_REQUIRED(executor_mutex_) {
+  // TODO(b/493547558): Replace the logic below by reusing the operation's
+  // Operation and RunMetadata protos in the ProtobufManager, which CLIPS
+  // already keeps up to date (see state_proto_update.clp).
   operation_data->metadata.set_behavior_tree_state(
       intrinsic_proto::executive::BehaviorTree::UNSPECIFIED);
   operation_data->metadata.set_operation_state(

@@ -27,8 +27,6 @@
 #include "intrinsic/skills/cc/equipment_pack.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/internal/execute_context_view.h"
-#include "intrinsic/skills/internal/predict_context_view.h"  
-#include "intrinsic/skills/proto/prediction.pb.h"  
 #include "intrinsic/skills/proto/skill_service.pb.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -50,83 +48,9 @@ absl::StatusOr<std::unique_ptr<::google::protobuf::Message>> PreviewViaExecute(
   return skill.Execute(execute_request, execute_context);
 }
 
-
-absl::Status PreviewViaPredict(SkillInterface& skill,
-                               const PreviewRequest& request,
-                               PreviewContext& context,
-                               ::google::protobuf::Any* result_any) {
-  INTR_ASSIGN_OR_RETURN(PredictRequest predict_request,
-                        PreviewToPredictRequest(request));
-  INTR_ASSIGN_OR_RETURN(PredictContextView predict_context,
-                        PreviewToPredictContext(context));
-  INTR_ASSIGN_OR_RETURN(intrinsic_proto::skills::PredictResult predict_result,
-                        skill.Predict(predict_request, predict_context));
-
-  if (predict_result.outcomes().empty()) {
-    return absl::InternalError("Skill produced no predictions.");
-  }
-
-  const intrinsic_proto::skills::Prediction& most_likely_outcome =
-      *std::max_element(predict_result.outcomes().begin(),
-                        predict_result.outcomes().end(),
-                        [](const intrinsic_proto::skills::Prediction& a,
-                           const intrinsic_proto::skills::Prediction& b) {
-                          return a.probability() < b.probability();
-                        });
-
-  // Record the world updates from the most likely outcome.
-  absl::Time previous_start_time;
-  absl::Duration previous_duration;
-  for (int i = 0; i < most_likely_outcome.expected_states_size(); ++i) {
-    intrinsic_proto::skills::TimedWorldUpdate expected_state =
-        most_likely_outcome.expected_states(i);
-    absl::Time start_time;
-    if (expected_state.has_start_time()) {
-      INTR_ASSIGN_OR_RETURN(start_time,
-                            ToAbslTime(expected_state.start_time()));
-    } else {
-      start_time = previous_start_time + previous_duration;
-    }
-    INTR_ASSIGN_OR_RETURN(absl::Duration duration,
-                          ToAbslDuration(expected_state.time_until_update()));
-
-    absl::Duration elapsed = start_time - previous_start_time;
-    if (elapsed < absl::ZeroDuration()) {
-      return absl::InvalidArgumentError(absl::StrFormat(
-          "Expected state start times must be monotonically increasing "
-          "(state[%d] start time: %s, state[%d] start time: %s).",
-          i, absl::FormatTime(start_time), i - 1,
-          absl::FormatTime(previous_start_time)));
-    }
-
-    for (const intrinsic_proto::world::ObjectWorldUpdate& update :
-         expected_state.world_updates().updates()) {
-      INTR_RETURN_IF_ERROR(
-          context.RecordWorldUpdate(update, elapsed, duration));
-
-      // All updates in this expected state started at the same time, so all but
-      // the first update should have `elapsed = 0`.
-      elapsed = absl::ZeroDuration();
-    }
-
-    previous_start_time = start_time;
-    previous_duration = duration;
-  }
-
-  if (result_any != nullptr) {
-    *result_any = most_likely_outcome.result();
-  }
-
-  return absl::OkStatus();
-}
-
-
 absl::StatusOr<ExecuteRequest> PreviewToExecuteRequest(
     const PreviewRequest& request) {
   return ExecuteRequest(
-
-      std::string(request.internal_data()),
-
       /*params=*/request.params_any(),
       /*param_defaults=*/std::nullopt);
 }
@@ -143,29 +67,6 @@ absl::StatusOr<ExecuteContextView> PreviewToExecuteContext(
                             ,
                             std::string(context.context_id()));
 }
-
-
-absl::StatusOr<PredictRequest> PreviewToPredictRequest(
-    const PreviewRequest& request) {
-  return PredictRequest(/*internal_data=*/std::string(request.internal_data()),
-                        /*params=*/request.params_any(),
-                        /*param_defaults=*/std::nullopt);
-}
-
-absl::StatusOr<PredictContextView> PreviewToPredictContext(
-    PreviewContext& context) {
-  PredictContextView predict_context(context.equipment(),
-                                     context.motion_planner(),
-                                     context.object_world()
-
-                                     ,
-                                     context.geometry_library()
-
-  );
-
-  return predict_context;
-}
-
 
 }  // namespace skills
 }  // namespace intrinsic

@@ -27,57 +27,6 @@
 
 ; --------------------------------- FUNCTIONS ---------------------------------
 
-; Clones and assigns protos from a prototype action to be used for prediction.
-;
-; Args:
-;   ?prototype-action: Fact address of a prototype plan-action fact.
-;   ?plan-id: Plan id of the execution plan.
-;   ?blackboard-scope: Blackboard scope to use for parameter assignments
-;
-; Returns:
-;   A multifield pair with TRUE/FALSE and
-;   on success: the cloned BehaviorCall proto.
-;   on failure: A message describing the nature of the failure.
-(deffunction behavior-tree-task-node-duplicate-predict-action-protos
-    (?prototype-action ?plan-id ?blackboard-scope ?operation-name)
-  (bind ?id (fact-slot-value ?prototype-action id))
-  (bind ?behavior-call-proto-id
-    (fact-slot-value ?prototype-action behavior-call-proto-id))
-  (bind ?skill-id (fact-slot-value ?prototype-action skill-id))
-
-  (bind ?new-behavior-call-proto-id 0)
-  (if (<> ?behavior-call-proto-id 0) then
-    (bind ?new-behavior-call-proto-id (pb-clone ?behavior-call-proto-id))
-  )
-
-  (if (<> ?new-behavior-call-proto-id 0) then
-    ; If we have a plan-action that matches this predict-action we will pull
-    ; the internal data and use it.
-    (do-for-fact ((?pa plan-action)) (and (eq ?pa:id ?id)
-                                          (eq ?pa:plan-id ?plan-id))
-      (pb-copy-bytes ?pa:behavior-call-proto-id
-                     "skill_execution_data.internal_data"
-                     ?new-behavior-call-proto-id
-                     "skill_execution_data.internal_data")
-    )
-  )
-
-  (bind ?param-assign-result (action-parameterization-assign-behavior-call-proto
-        ?new-behavior-call-proto-id ?blackboard-scope ?operation-name))
-  (if (not (result-ok ?param-assign-result)) then
-    (pb-remove ?new-behavior-call-proto-id)
-
-    (bind ?param-assign-es-proto (result-error ?param-assign-result))
-    (bind ?message (str-cat "Prediction parameterization for action " ?id
-                     " has failed: " (pb-tostring ?param-assign-es-proto)))
-    (pb-remove ?param-assign-es-proto)
-
-    (printout error ?message crlf)
-    (return (create$ FALSE ?message))
-  )
-
-  (return (create$ TRUE ?new-behavior-call-proto-id))
-)
 
 ; Prints all actions that the operation has some request running for.
 ;
@@ -250,18 +199,6 @@
   (if (<> ?behavior-call-proto-id 0) then
     (bind ?new-behavior-call-proto-id (pb-clone ?behavior-call-proto-id))
   )
-  ; If we have a predict-action that matches this plan-action we will pull
-  ; the internal data and use it.
-  (do-for-fact ((?pr-a predict-action)) (and (eq ?pr-a:id ?id)
-                                             (eq ?pr-a:plan-id ?plan-id)
-                                             (eq ?pr-a:state SUCCEEDED))
-    (if (<> ?new-behavior-call-proto-id 0) then
-      (pb-copy-bytes ?pr-a:behavior-call-proto-id
-                     "skill_execution_data.internal_data"
-                     ?new-behavior-call-proto-id
-                     "skill_execution_data.internal_data")
-    )
-  )
 
   (if (<> ?new-behavior-call-proto-id 0) then
     (bind ?param-assign-result
@@ -326,36 +263,6 @@
                                        (footprint-proto ?new-footprint-proto-id)
                                        (execution-select-time (now))))
 
-  (bind ?predict-action-uid nil)
-  (if (any-factp ((?flag flag))
-                   (and (eq ?flag:name enable_preemptive_prediction)
-                        (eq ?flag:type BOOL) (eq ?flag:value TRUE)))
-  then
-    (if (any-factp ((?pa predict-action)) (and (eq ?pa:id ?id)
-                                               (eq ?pa:plan-id ?plan-id)))
-    then
-      (do-for-fact ((?pa predict-action)) (and (eq ?pa:id ?id)
-                                               (eq ?pa:plan-id ?plan-id))
-        (bind ?predict-action-uid (fact-slot-value ?pa uid))
-      )
-    else
-      (bind ?predict-protos-result
-        (behavior-tree-task-node-duplicate-predict-action-protos
-          ?prototype-action ?plan-id ?bb-scope ?op-name))
-      ; If we got new protos use these to create the predict-action
-      (if (result-ok ?predict-protos-result) then
-        (bind ?predict-action-uid (predict-action-uid ?plan-id ?id))
-        (bind ?predict-behavior-call-proto (result-value ?predict-protos-result))
-        (assert (predict-action (id ?id)
-                                (uid ?predict-action-uid)
-                                (plan-id ?plan-id)
-                                (skill-id ?skill-id)
-                                (behavior-call-proto-id
-                                  ?predict-behavior-call-proto)))
-      )
-    )
-  )
-
   ; By default we do not embed action spans,
   ; thus creating a new trace for each action execution
   (bind ?action-parent-span ?*TRACING-INVALID-SPAN-ID*)
@@ -377,8 +284,7 @@
   )
 
   (modify ?node (state RUNNING)
-                (task-action-uid ?new-action-uid)
-                (predict-action-uid ?predict-action-uid))
+                (task-action-uid ?new-action-uid))
 )
 
 (defrule behavior-tree-task-node-behavior-call-start
@@ -1045,105 +951,4 @@
     ?node-span ?param-proto "code_execution_parameters" ?desc-pool-id)
 
   (behavior-tree-set-node-canceled ?node)
-)
-
-(defrule behavior-tree-task-node-predict-start
-  "For a selected task node, create the corresponding predict action"
-  (behavior-tree (id ?tree-id) (plan-id ?plan-id) (state ACCEPTED|RUNNING)
-                 (operation-name ?op-name)
-                 (blackboard-scope ?bb-scope))
-  ?node <- (behavior-tree-node (tree-id ?tree-id)
-                               (id ?node-id) (name ?node-name)
-                               (type TASK) (task-type CALL-BEHAVIOR)
-                               (predict-state SELECTED)
-                               (prediction-world-id ?prediction-world-id)
-                               (task-action-prototype-uid ?action-prototype-uid)
-                               (predict-action-uid ?predict-action-uid)
-                               (span-reference-id ?node-span-reference-id))
-  ?action <- (plan-action (id ?id) (uid ?action-prototype-uid)
-                          (skill-id ?skill-id))
-  (skill-info (skill-id ?skill-id))
-  (flag (name enable_preemptive_prediction) (type BOOL) (value TRUE))
- =>
-  (if (any-factp ((?pa predict-action)) (and (eq ?pa:id ?id)
-                                             (eq ?pa:plan-id ?plan-id)))
-  then
-    (do-for-fact ((?pa predict-action)) (and (eq ?pa:id ?id)
-                                             (eq ?pa:plan-id ?plan-id))
-      (bind ?predict-span (tracing-start-predict-span ?pa ?node-name ?tree-id))
-      (modify ?pa (state SELECTED)
-                  (prediction-select-time (now))
-                  (prediction-world-id ?prediction-world-id)
-                  (span-reference-id ?predict-span))
-    )
-  else
-    (bind ?predict-action-uid (predict-action-uid ?plan-id ?id))
-    (bind ?predict-protos-result
-      (behavior-tree-task-node-duplicate-predict-action-protos
-       ?action ?plan-id ?bb-scope ?op-name))
-    (if (not (result-ok ?predict-protos-result)) then
-      (printout debug "Failed to duplicate the action proto for node ("
-                      ?node-id ") " (result-error ?predict-protos-result) crlf)
-      (return)
-    )
-
-    (bind ?predict-action (assert (predict-action (id ?id)
-                            (uid ?predict-action-uid)
-                            (plan-id ?plan-id)
-                            (skill-id ?skill-id)
-                            (state SELECTED)
-                            (prediction-select-time (now))
-                            (prediction-world-id ?prediction-world-id)
-                            (behavior-call-proto-id
-                              (result-value ?predict-protos-result)))))
-    (bind ?predict-span (tracing-start-predict-span ?predict-action ?node-name
-                                                    ?tree-id))
-    (modify ?predict-action (span-reference-id ?predict-span))
-  )
-
-  (modify ?node (predict-state PREDICTING)
-                (predict-action-uid ?predict-action-uid))
-)
-
-(defrule behavior-tree-task-node-predict-succeed
-  "For a predicted plan-action, mark the task node as successfully predicted"
-  (behavior-tree (id ?tree-id) (plan-id ?plan-id))
-  ?node <- (behavior-tree-node (id ?node-id) (tree-id ?tree-id) (type TASK)
-                               (task-type CALL-BEHAVIOR)
-                               (predict-state ~SUCCEEDED)
-                               (prediction-world-id ?node-prediction-world-id)
-                               (predict-action-uid ?action-uid))
-  ?action <- (predict-action (uid ?action-uid) (state SUCCEEDED)
-                  (plan-id ?plan-id)
-                  (prediction-proto-id ?prediction-proto-id)
-                  (prediction-world-id ?action-prediction-world-id))
- =>
-  (tracing-end-predict-span ?action)
-
-  ; If the behavior-tree-node did not have a prediction-world-id we use the one
-  ; stored in the action.
-  (bind ?prediction-world-id ?node-prediction-world-id)
-  (if (eq ?prediction-world-id "") then
-    (bind ?prediction-world-id ?action-prediction-world-id)
-  )
-
-  (modify ?action (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
-  (modify ?node (predict-state SUCCEEDED)
-                (prediction-proto-id ?prediction-proto-id)
-                (prediction-world-id ?prediction-world-id))
-)
-
-(defrule behavior-tree-task-node-predict-failure
-  "For a plan-action failed prediction, mark the task node prediction as failed"
-  (behavior-tree (id ?tree-id) (plan-id ?plan-id))
-  ?node <- (behavior-tree-node (id ?node-id) (tree-id ?tree-id) (type TASK)
-                               (task-type CALL-BEHAVIOR)
-                               (predict-state ~FAILED)
-                               (predict-action-uid ?action-uid))
-  ?action <- (predict-action (uid ?action-uid) (state FAILED) (plan-id ?plan-id))
- =>
-  (tracing-end-predict-span-failure ?action ?*TRACING-STATUS-ABORTED*
-    "Prediction failed")
-  (modify ?action (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
-  (modify ?node (predict-state FAILED))
 )

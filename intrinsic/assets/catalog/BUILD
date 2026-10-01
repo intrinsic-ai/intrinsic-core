@@ -32,6 +32,7 @@ go_library(
         "//intrinsic/assets:idutils",
         "//intrinsic/assets:imagetransfer",
         "//intrinsic/assets:referenceddata",
+        "//intrinsic/assets:throttle",
         "//intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
         "//intrinsic/assets/scene_objects:gzfprocessor",
         "//intrinsic/assets/services:bundleimages",

@@ -96,6 +96,32 @@ service InstalledAssets {
     };
   }
 
+  // Updates the specified asset in the solution.
+  rpc UpdateInstalledAsset(UpdateInstalledAssetRequest)
+      returns (google.longrunning.Operation) {
+    option (google.longrunning.operation_info) = {
+      metadata_type: "UpdateInstalledAssetMetadata"
+      response_type: "InstalledAsset"
+    };
+    option (google.api.http) = {
+      patch: "/v1/installedAssets/{installed_asset.name}"
+      body: "installed_asset"
+    };
+  }
+
+  // Updates the specified assets in the solution.
+  rpc BatchUpdateInstalledAssets(BatchUpdateInstalledAssetsRequest)
+      returns (google.longrunning.Operation) {
+    option (google.longrunning.operation_info) = {
+      metadata_type: "BatchUpdateInstalledAssetsMetadata"
+      response_type: "BatchUpdateInstalledAssetsResponse"
+    };
+    option (google.api.http) = {
+      post: "/v1/installedAssets:batchUpdate"
+      body: "*"
+    };
+  }
+
   // Uninstalls the specified asset from the solution.
   rpc DeleteInstalledAsset(DeleteInstalledAssetRequest)
       returns (google.longrunning.Operation) {
@@ -360,6 +386,64 @@ message CreateInstalledAssetsMetadata {
 message CreateInstalledAssetsResponse {
   // The description of the installed assets, in the order requested for
   // installation.
+  repeated InstalledAsset installed_assets = 1;
+}
+
+message UpdateInstalledAssetRequest {
+  // The asset to update.
+  //
+  // - `installed_asset.asset` must be populated with a `catalog` or `local`
+  //   source.
+  // - `installed_asset.name` may be omitted, but if set, it must match the
+  //   asset ID (`<package>.<name>`) in `installed_asset.asset`.
+  // - All other fields on `InstalledAsset` are output-only and ignored.
+  InstalledAsset installed_asset = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // Policy governing how existing asset instances are handled. Defaults to
+  // `UPDATE_POLICY_UPDATE_COMPATIBLE` if unspecified.
+  // `UPDATE_POLICY_ADD_NEW_ONLY` is not supported and will result in an
+  // `INVALID_ARGUMENT` error.
+  UpdatePolicy policy = 2;
+
+  // If true, the asset will be installed if it is not already present in the
+  // solution. If false, attempting to update an asset that is not currently
+  // installed will fail with `NOT_FOUND`.
+  bool allow_missing = 3;
+}
+
+message UpdateInstalledAssetMetadata {
+  // Warnings associated with the update of the Asset, including any
+  // associated dependency validation errors.
+  intrinsic_proto.status.ExtendedStatus warnings = 1;
+}
+
+message BatchUpdateInstalledAssetsRequest {
+  // The individual update requests to apply. At most one version of a given
+  // asset ID may be specified across the batch.
+  repeated UpdateInstalledAssetRequest requests = 1
+      [(google.api.field_behavior) = REQUIRED];
+
+  // Default update policy for the batch. `UPDATE_POLICY_ADD_NEW_ONLY` is not
+  // supported. All requests in the batch share a single effective policy:
+  // individual `requests` should leave `policy` unspecified or set it to the
+  // same value, otherwise `INVALID_ARGUMENT` is returned.
+  UpdatePolicy policy = 2;
+
+  // If true, missing assets will be installed for all requests in the batch. If
+  // false, individual `requests` may still set `allow_missing = true` for
+  // specific assets.
+  bool allow_missing = 3;
+}
+
+message BatchUpdateInstalledAssetsMetadata {
+  // Warnings associated with the update of the Assets, including any
+  // associated dependency validation errors.
+  intrinsic_proto.status.ExtendedStatus warnings = 1;
+}
+
+message BatchUpdateInstalledAssetsResponse {
+  // The description of the updated assets, in the order requested for
+  // update.
   repeated InstalledAsset installed_assets = 1;
 }
 

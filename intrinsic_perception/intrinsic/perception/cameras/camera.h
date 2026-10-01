@@ -64,6 +64,12 @@ inline std::optional<std::string> ServerAddressOrNulloptIfEmpty(
   return std::string(server_address);
 }
 
+// Returns the gRPC interface URI for the CameraService.
+absl::string_view CameraServiceInterfaceUri();
+
+// Returns the gRPC interface URI for the CameraConfigService.
+absl::string_view CameraConfigServiceInterfaceUri();
+
 absl::StatusOr<intrinsic_proto::perception::v1::CameraConfig>
 UnpackCameraConfig(const google::protobuf::Any& any);
 

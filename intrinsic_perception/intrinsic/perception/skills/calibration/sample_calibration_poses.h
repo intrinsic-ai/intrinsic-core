@@ -23,7 +23,6 @@
 #include "intrinsic/icon/equipment/channel_factory.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
-#include "intrinsic/skills/proto/skill_service.pb.h"
 
 namespace intrinsic {
 namespace skills {
@@ -33,9 +32,7 @@ namespace skills {
 class SampleCalibrationPoses : public SkillInterface {
  public:
   // Constants for required equipment
-  static constexpr char kCameraEquipmentSlot[] = "camera";
   static constexpr char kRobotEquipmentSlot[] = "robot";
-  static constexpr char kCameraConfigEquipmentKey[] = "CameraConfig";
 
   static constexpr int kMinNumSamples = 4;
 

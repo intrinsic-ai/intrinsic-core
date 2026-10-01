@@ -21,9 +21,3 @@ filegroup(
     srcs = ["gzserver_core.yaml"],
     visibility = ["//intrinsic_runtime/kubernetes/intrinsic_base:__pkg__"],
 )
-
-filegroup(
-    name = "simulation-service-template",
-    srcs = ["simulation-service.yaml"],
-    visibility = ["//intrinsic_runtime/kubernetes/intrinsic_base:__pkg__"],
-)

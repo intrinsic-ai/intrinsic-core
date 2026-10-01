@@ -47,6 +47,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
     ],
     deps = [
+        ":restrict_importer",
         "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_ai_scene",
@@ -54,6 +55,21 @@ cc_library(
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@assimp",
+    ],
+)
+
+cc_library(
+    name = "restrict_importer",
+    srcs = ["restrict_importer.cc"],
+    hdrs = ["restrict_importer.h"],
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
+    ],
+    deps = [
         "@abseil-cpp//absl/strings",
         "@assimp",
     ],
@@ -73,6 +89,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
     ],
     deps = [
+        ":restrict_importer",
         "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_ai_scene",

@@ -25,7 +25,7 @@ import "intrinsic/world/proto/object_world_refs.proto";
 
 option go_package = "intrinsic/perception/skills/calibration/initialize_calibration_go_proto";
 
-// Next ID: 9
+// Next ID: 10
 message InitializeCalibrationParams {
   intrinsic_proto.assets.v1.ResolvedDependency data_assets_service = 5
       [(intrinsic_proto.assets.field_metadata).dependency = {
@@ -35,6 +35,14 @@ message InitializeCalibrationParams {
   intrinsic_proto.assets.v1.ResolvedDependency calibration_service = 8
       [(intrinsic_proto.assets.field_metadata).dependency = {
         requires: "grpc://intrinsic_proto.perception.v1.CalibrationService"
+      }];
+
+  // Cameras to be calibrated.
+  repeated intrinsic_proto.assets.v1.ResolvedDependency cameras = 9
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.perception.v1.CameraConfigService"
+        requires: "grpc://intrinsic_proto.perception.v1.CameraService"
+        requires_object: {}
       }];
 
   oneof detector_config {

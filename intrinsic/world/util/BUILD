@@ -168,7 +168,6 @@ cc_library(
     hdrs = ["download_world_util.h"],
     deps = [
         "//intrinsic/util/grpc",
-        "//intrinsic/util/status:ret_check",
         "//intrinsic/util/status:status_conversion_grpc",
         "//intrinsic/util/status:status_macros",
         "//intrinsic/world",

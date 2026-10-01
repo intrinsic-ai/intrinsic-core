@@ -33,8 +33,6 @@ import (
 	"gopkg.in/yaml.v3"
 
 	anywpb "intrinsic/config/proto/any_wrapper_go_proto"
-	apb "intrinsic/config/proto/application_go_proto"
-	commonpb "intrinsic/config/proto/common_go_proto"
 	datafilespb "intrinsic/config/proto/data_files_go_proto"
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -227,16 +225,4 @@ func ReadYAMLDataFiles(filePaths []string) (*datafilespb.DataFiles, error) {
 		}
 	}
 	return dataFiles, nil
-}
-
-// ClearBuildTargetInMetadatas clears out build information from the common
-// metadata for external consumption.
-func ClearBuildTargetInMetadatas(app *apb.Application) {
-	for _, m := range []*commonpb.Metadata{
-		app.GetMetadata(),
-	} {
-		if m != nil {
-			m.BuildTarget = ""
-		}
-	}
 }

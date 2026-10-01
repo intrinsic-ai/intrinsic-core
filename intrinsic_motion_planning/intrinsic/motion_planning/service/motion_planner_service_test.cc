@@ -871,7 +871,7 @@ TEST_P(MotionPlannerServiceWithoutLoggerTest,
       )pb");
   ASSERT_OK_AND_ASSIGN(auto result, PlanTrajectory(request));
   ASSERT_TRUE(result.has_discretized());
-  EXPECT_EQ(result.swept_volume_size(), 0);
+  EXPECT_EQ(result.swept_volumes_size(), 0);
   ASSERT_GE(result.discretized().state_size(), 2);
   // Check that the start and end are as expected.
   EXPECT_THAT(result.discretized().state().at(0).position(),
@@ -1158,7 +1158,7 @@ TEST_P(MotionPlannerServiceWithoutLoggerTest,
       )pb");
   ASSERT_OK_AND_ASSIGN(auto result, PlanTrajectory(request));
   ASSERT_TRUE(result.has_discretized());
-  EXPECT_EQ(result.swept_volume_size(), 0);
+  EXPECT_EQ(result.swept_volumes_size(), 0);
   ASSERT_GE(result.discretized().state_size(), 2);
   // Check that the start and end are as expected.
   EXPECT_THAT(result.discretized().state().at(0).position(),

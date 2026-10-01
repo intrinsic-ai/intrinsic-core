@@ -443,4 +443,38 @@ absl::Status SensorImagesHaveSameTypeAndSize(
   return absl::OkStatus();
 }
 
+CaptureResult MergeCaptureResults(std::vector<CaptureResult> capture_results,
+                                  const std::vector<Pose3d>& world_ts_camera) {
+  if (capture_results.empty()) {
+    return CaptureResult{};
+  }
+  if (capture_results.size() == 1) {
+    return std::move(capture_results[0]);
+  }
+
+  // Merge individual capture results.
+  const Pose3d cam_0_t_world = world_ts_camera[0].inverse();
+  CaptureResult merged_capture_results;
+  merged_capture_results.sensor_images.reserve(capture_results.size());
+  int sensor_id = 0;
+  for (int i = 0; i < capture_results.size(); ++i) {
+    CaptureResult& capture_result = capture_results[i];
+    const Pose3d cam_0_t_cam_i = cam_0_t_world * world_ts_camera[i];
+    for (SensorImage& sensor_image : capture_result.sensor_images) {
+      const Pose3d cam_i_t_sensor = sensor_image.camera_t_sensor().has_value()
+                                        ? sensor_image.camera_t_sensor().value()
+                                        : Pose3d::Identity();
+      SensorImage updated_sensor_image =
+          SensorImageBuilder()
+              .From(std::move(sensor_image))
+              .SetSensorId(sensor_id++)
+              .SetCameraTSensor(cam_0_t_cam_i * cam_i_t_sensor)
+              .Build();
+      merged_capture_results.sensor_images.push_back(
+          std::move(updated_sensor_image));
+    }
+  }
+  return merged_capture_results;
+}
+
 }  // namespace intrinsic::perception

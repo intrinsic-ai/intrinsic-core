@@ -36,12 +36,8 @@ class GetFootprintRequest {
   // `param_defaults` can specify default parameter values to merge into any
   // unset fields of `params`.
   explicit GetFootprintRequest(
-      std::string internal_data,  
       const ::google::protobuf::Message& params,
       ::google::protobuf::Message* param_defaults = nullptr)
-
-      : internal_data_(std::move(internal_data))
-
   {
     params_any_.PackFrom(params);
     if (param_defaults != nullptr) {
@@ -57,22 +53,11 @@ class GetFootprintRequest {
   // needing a message pool/factory up front, since params() is templated on the
   // target type.
   explicit GetFootprintRequest(
-      std::string internal_data,  
       google::protobuf::Any params,
       std::optional<::google::protobuf::Any> param_defaults)
-
-      : internal_data_(std::move(internal_data)),
-
-
+        :
         params_any_(std::move(params)),
         param_defaults_any_(std::move(param_defaults)) {}
-
-
-  // Skill-specific data that can be communicated from previous calls to
-  // `Predict`. Can be useful for optimizing skill execution by pre-computing
-  // plan-related information.
-  absl::string_view internal_data() const { return internal_data_; }
-
 
   // The skill parameters proto.
   template <class TParams>
@@ -81,7 +66,6 @@ class GetFootprintRequest {
   }
 
  private:
-  std::string internal_data_;  
 
   ::google::protobuf::Any params_any_;
   std::optional<::google::protobuf::Any> param_defaults_any_;

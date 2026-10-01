@@ -130,6 +130,8 @@ type ApplicationParams struct {
 	SkillDeploymentRuntimes []*SkillDeploymentRuntime
 	// AppDeploymentID specifies the application deployment ID.
 	AppDeploymentID string
+	// SolutionDeploymentID specifies the solution deployment ID.
+	SolutionDeploymentID string
 	// Simulated indicates whether the workcell is simulated.
 	Simulated bool
 
@@ -154,6 +156,7 @@ func WorkcellSpecFromApplication(params *ApplicationParams) (*transferpb.Workcel
 	if err := chartassignment.UpdateWorkcellSpec(func(_ int, ca *crcv1alpha1.ChartAssignment) error {
 		chartassignment.SetValue(ca, "simulated", params.Simulated)
 		chartassignment.SetValue(ca, "app_deployment_id", params.AppDeploymentID)
+		chartassignment.SetValue(ca, "solution_deployment_id", params.SolutionDeploymentID)
 
 		return nil
 	}, spec); err != nil {

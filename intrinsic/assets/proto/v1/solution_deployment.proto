@@ -63,8 +63,7 @@ service SolutionDeploymentService {
   }
 
   // Gets the current solution deployment, if running. Returns NotFound if there
-  // is no active solution deployment.  Returns a basic view of the solution
-  // deployment.
+  // is no active solution deployment.
   rpc GetSolutionDeployment(GetSolutionDeploymentRequest)
       returns (SolutionDeployment) {
     option (google.api.http) = {
@@ -72,9 +71,8 @@ service SolutionDeploymentService {
     };
   }
 
-  // Updates the current solution deployment, if running.  It provides the
-  // option to start a solution deployment if not.  Returns a basic view of the
-  // updated solution.
+  // Updates the current solution deployment, if running. It provides the
+  // option to start a solution deployment if not.
   rpc UpdateSolutionDeployment(UpdateSolutionDeploymentRequest)
       returns (google.longrunning.Operation) {
     option (google.longrunning.operation_info) = {
@@ -87,6 +85,21 @@ service SolutionDeploymentService {
   }
 }
 
+enum SolutionDeploymentView {
+  // The default/unset value (depends on the RPC being called).
+  SOLUTION_DEPLOYMENT_VIEW_UNSPECIFIED = 0;
+
+  // Provides minimal, basic information about the SolutionDeployment.
+  //
+  // In the basic view, solution will only contain id version and type
+  // information about assets and name and asset information for instances. No
+  // object world updates are included.
+  SOLUTION_DEPLOYMENT_VIEW_BASIC = 1;
+
+  // Provides all fields.
+  SOLUTION_DEPLOYMENT_VIEW_FULL = 6;
+}
+
 message SolutionDeployment {
   // A basic view of the solution is returned by default by create calls.  In
   // the basic view, solution will only contain id version and type information
@@ -95,14 +108,35 @@ message SolutionDeployment {
   Solution solution = 1;
   string solution_id = 2;
   intrinsic_proto.config.OperationMode operation_mode = 3;
+
+  // A server-assigned UUID that persists across updates from creation to
+  // deletion. This can be set during updates to enforce that the underlying
+  // solution deployment has not changed in the interim; if the specified name
+  // does not match the currently running deployment (or if no deployment is
+  // running), the update fails with FAILED_PRECONDITION.
+  string name = 4;
+
+  // The display name used for the solution deployment.  This may differ from
+  // the display name associated with solution_id.   Components may choose to
+  // prioritize the latter, but should indicate they are doing so to avoid
+  // confusion.
+  string display_name = 5;
 }
 
 message CreateSolutionDeploymentFromVersionedSolutionRequest {
   string solution_id = 1;
   intrinsic_proto.config.OperationMode operation_mode = 2;
+
+  // Specify the information returned in the request.
+  // SOLUTION_DEPLOYMENT_VIEW_BASIC is used by default.
+  SolutionDeploymentView view = 3;
 }
 
-message GetSolutionDeploymentRequest {}
+message GetSolutionDeploymentRequest {
+  // Specify the information returned in the request.
+  // SOLUTION_DEPLOYMENT_VIEW_FULL is used by default.
+  SolutionDeploymentView view = 1;
+}
 
 message UpdateSolutionDeploymentMetadata {
   intrinsic_proto.status.ExtendedStatus warnings = 1;
@@ -111,8 +145,15 @@ message UpdateSolutionDeploymentMetadata {
 message UpdateSolutionDeploymentRequest {
   SolutionDeployment solution_deployment = 1;
 
-  // If set to true, and no solution deployment is running, one will be created.
+  // If set to true, and no solution deployment is running, one will be created
+  // with a newly generated `solution_deployment.name` (provided
+  // `solution_deployment.name` in the request is empty; setting a non-empty
+  // `name` when no deployment is running fails with FAILED_PRECONDITION).
   bool allow_missing = 3;
+
+  // Specify the information returned in the request.
+  // SOLUTION_DEPLOYMENT_VIEW_BASIC is used by default.
+  SolutionDeploymentView view = 4;
 }
 
 message CreateSolutionDeploymentFromVersionedSolutionMetadata {

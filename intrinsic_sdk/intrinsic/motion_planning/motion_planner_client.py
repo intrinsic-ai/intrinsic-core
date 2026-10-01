@@ -32,7 +32,7 @@ import grpc
 
 from intrinsic.assets.dependencies import utils as dep_utils
 from intrinsic.assets.proto.v1 import resolved_dependency_pb2
-from intrinsic.geometry.proto import transformed_geometry_storage_refs_pb2
+from intrinsic.geometry.proto.v1 import transformed_geometry_pb2
 from intrinsic.icon.proto import joint_space_pb2
 from intrinsic.logging.proto import context_pb2
 from intrinsic.math.python import data_types
@@ -160,9 +160,7 @@ class PlanTrajectoryResult:
   """
 
   trajectory: joint_space_pb2.JointTrajectoryPVA
-  swept_volume: list[
-      transformed_geometry_storage_refs_pb2.TransformedGeometryStorageRefs
-  ]
+  swept_volume: list[transformed_geometry_pb2.TransformedGeometry]
   lock_motion_id: Optional[str] = None
 
 @dataclasses.dataclass
@@ -170,9 +168,7 @@ class PlanPathResult:
   """Wrapped result from calling plan_path."""
 
   path: motion_planning_pb2.Path
-  swept_volume: list[
-      transformed_geometry_storage_refs_pb2.TransformedGeometryStorageRefs
-  ]
+  swept_volume: list[transformed_geometry_pb2.TransformedGeometry]
 
 @dataclasses.dataclass
 class ComputeIkResult:
@@ -281,7 +277,7 @@ class MotionPlannerClient(MotionPlannerClientBase):
           options.enable_strict_trajectory_fallback
       )
     response = self._stub.PlanTrajectory(request)
-    swept_volume = list(response.swept_volume)
+    swept_volume = list(response.swept_volumes)
     lock_motion_id = (
         response.lock_motion_id if response.HasField("lock_motion_id") else None
     )
@@ -349,7 +345,7 @@ class MotionPlannerClient(MotionPlannerClientBase):
           options.collision_check_spacing_override
       )
     response = self._stub.PlanPath(request)
-    swept_volume = list(response.swept_volume)
+    swept_volume = list(response.swept_volumes)
     return PlanPathResult(
         path=response.path,
         swept_volume=swept_volume,

@@ -39,8 +39,6 @@
 #include "intrinsic/skills/cc/execute_request.h"
 #include "intrinsic/skills/cc/get_footprint_context.h"
 #include "intrinsic/skills/cc/get_footprint_request.h"
-#include "intrinsic/skills/cc/predict_context.h"  
-#include "intrinsic/skills/cc/predict_request.h"  
 #include "intrinsic/skills/cc/preview_context.h"
 #include "intrinsic/skills/cc/preview_request.h"
 // IWYU pragma: end_exports
@@ -53,34 +51,10 @@ namespace skills {
 // Implementations of SkillProjectInterface predict how a skill might behave
 // during execution. The methods of this interface should be invokable prior to
 // execution to allow a skill to:
-
-// * precompute information that can be passed to the skill at execution time;
-// * predict its behavior given current known information about the world, and
-//   any parameters that the skill depends on;
-
 // * provide an understanding of what the footprint of the skill on the workcell
 //   will be when it is executed.
 class SkillProjectInterface {
  public:
-
-  // Predicts a distribution of possible outcomes when running the skill.
-  //
-  // Skill developers should override this method with their implementation.
-  //
-  // If a skill does override the default implementation, the skill service will
-  // provide an empty prediction to any predict requests.
-  //
-  // `request` the predict request.
-  // `context` provides access to services that the skill may use.
-  //
-  // Returns a result containing predictions of the possible outcomes of
-  // executing the skill.
-  virtual absl::StatusOr<intrinsic_proto::skills::PredictResult> Predict(
-      const PredictRequest& request, PredictContext& context) const {
-    return absl::UnimplementedError("Skill has not implemented Predict()");
-  }
-
-
   // Returns the resources required for running this skill.
   //
   // Skill developers should override this method with their implementation.

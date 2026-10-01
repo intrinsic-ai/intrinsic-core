@@ -32,8 +32,6 @@ import numpy as np
 from incode.ml.services.utils import otel_tracing
 from intrinsic.geometry.proto import oriented_bounding_box_pb2
 from intrinsic.math.python import proto_conversion
-from intrinsic.perception.client.v1.python.camera import cameras
-from intrinsic.perception.client.v1.python.camera import data_classes
 from intrinsic.perception.proto.v1 import pose_estimate_in_root_pb2
 from intrinsic.perception.proto.v1 import pose_estimate_pb2
 from intrinsic.perception.service.python import pose_estimation_client_utils
@@ -48,8 +46,6 @@ from intrinsic.world.python import object_world_ids
 from intrinsic.world.python import object_world_resources
 from intrinsic.world.python.object_world_client import ObjectWorldClient
 
-N_CAMERAS = 4
-CAMERA_SLOTS = [f"camera_{i+1}" for i in range(N_CAMERAS)]
 PERCEPTION_SLOT = "perception"
 
 
@@ -132,24 +128,6 @@ def _update_object_pose(
   )
 
 
-def _get_input_cameras(
-    context: skl.ExecuteContext,
-) -> tuple[
-    list[data_classes.CaptureResult] | None, list[cameras.Camera] | None
-]:
-  """Retrieves capture results and input cameras based on request parameters."""
-  unique_camera_slots = multi_view_pose_utils.filter_camera_slots(
-      context, CAMERA_SLOTS
-  )
-  if len(unique_camera_slots) == 1:
-    raise skl.InvalidSkillParametersError(
-        "Invalid cameras. At least two cameras should be different to run"
-        " estimate_pose_multi_view."
-    )
-
-  return multi_view_pose_utils.get_input_cameras(context, unique_camera_slots)
-
-
 class EstimatePoseMultiView(skl.Skill):
   """Estimates poses of all instances of a given part using multiple cameras."""
 
@@ -174,12 +152,9 @@ class EstimatePoseMultiView(skl.Skill):
     start_skill = time.perf_counter()
 
     if not request.params.capture_data:
-      input_cameras = _get_input_cameras(context)
-      if not input_cameras:
-        raise skl.InvalidSkillParametersError(
-            "No input cameras found. Please provide capture_data or set "
-            "use_capture_data_from_context to True."
-        )
+      raise skl.InvalidSkillParametersError(
+          "No capture_data found. Please provide capture_data."
+      )
 
     perception_service_connection_info = context.resource_handles[
         PERCEPTION_SLOT
@@ -222,26 +197,15 @@ class EstimatePoseMultiView(skl.Skill):
       with otel_tracing.tracer.start_as_current_span(
           "EstimatePoseMultiView.run_pose_estimation"
       ) as span:
-        if request.params.capture_data:
-          run_request = pose_estimation_client_utils.run_pose_estimation_request_from_capture_data(
-              asset_id=asset_id,
-              capture_data=request.params.capture_data,
-              roi=roi_proto,
-              inference_timeout_secs=inference_timeout_secs,
-              publish_annotated_image=publish_annotated_image,
-              data_logger_context=context.logging_context.data_logger_context,
-              log_full_request=request.params.log_debug_data,
-          )
-        else:
-          run_request = pose_estimation_client_utils.run_pose_estimation_request_from_cameras(
-              asset_id=asset_id,
-              input_cameras=input_cameras,
-              roi=roi_proto,
-              inference_timeout_secs=inference_timeout_secs,
-              publish_annotated_image=publish_annotated_image,
-              data_logger_context=context.logging_context.data_logger_context,
-              log_full_request=request.params.log_debug_data,
-          )
+        run_request = pose_estimation_client_utils.run_pose_estimation_request_from_capture_data(
+            asset_id=asset_id,
+            capture_data=request.params.capture_data,
+            roi=roi_proto,
+            inference_timeout_secs=inference_timeout_secs,
+            publish_annotated_image=publish_annotated_image,
+            data_logger_context=context.logging_context.data_logger_context,
+            log_full_request=request.params.log_debug_data,
+        )
 
       try:
         response = client.run_pose_estimation(run_request)

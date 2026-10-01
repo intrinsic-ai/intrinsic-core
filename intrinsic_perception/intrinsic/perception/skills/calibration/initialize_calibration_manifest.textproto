@@ -27,14 +27,13 @@ vendor {
 documentation {
   description:
   "The `initialize_calibration` skill is used to start a new calibration session in the `CalibrationService`.\n"
-  "It takes as input the list of cameras to be calibrated (one to four), the robot involved in the process, and the\n"
+  "It takes as input the list of cameras to be calibrated, the robot involved in the process, and the\n"
   "configuration for the calibration pattern detector. The skill communicates with the `CalibrationService` to\n"
   "register these entities and set up the session. This step is crucial as it prepares the service for subsequent\n"
   "data collection steps. It decouples the initialization from data collection, allowing users to verify the setup\n"
   "before moving the robot. The skill succeeds if the service successfully initializes the session.\n"
   "\n"
-  "Note that all four camera config inputs must be specified even if this means repeatedly selecting\n"
-  "the same camera config(s). In case the selected robot has multiple arms, `arm_part` specifies which arm to use."
+  "In case the selected robot has multiple arms, `arm_part` specifies which arm to use."
 }
 options {
   supports_cancellation: false
@@ -43,30 +42,6 @@ options {
   }
 }
 dependencies {
-  required_equipment {
-    key: "camera_1"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-  required_equipment {
-    key: "camera_2"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-  required_equipment {
-    key: "camera_3"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
-  required_equipment {
-    key: "camera_4"
-    value {
-      capability_names: "CameraConfig"
-    }
-  }
   required_equipment {
     key: "robot"
     value {

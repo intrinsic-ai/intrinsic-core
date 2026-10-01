@@ -18,6 +18,7 @@ load("@bazel_skylib//:bzl_library.bzl", "bzl_library")
 load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
 load("@io_bazel_rules_go//proto:compiler.bzl", "go_proto_compiler")
 load("//bazel:go_macros.bzl", "go_binary", "go_test")
+load("//bazel:sh_macros.bzl", "sh_binary")
 load(":exec_properties.bzl", "DEFAULT")
 
 package(default_visibility = ["//visibility:public"])
@@ -34,11 +35,30 @@ bool_flag(
     build_setting_default = False,
 )
 
+# rules_pkg does not yet natively support zstd compression (see
+# https://github.com/bazelbuild/rules_pkg/issues/481), so we pull in a hermetic
+# prebuilt zstd binary from @aspect_bazel_lib.
+#
+# We wrap it in an sh_binary because pkg_tar's `compressor` attribute requires
+# an executable rule target (rather than a raw source file). Setting
+# `use_bash_launcher = False` is required because build_tar executes the
+# compressor as a bare subprocess without a Bazel runfiles tree, which breaks
+# the default bash launcher's rlocation resolution.
+sh_binary(
+    name = "zstd",
+    srcs = ["@zstd_linux_amd64//:zstd"],
+    use_bash_launcher = False,
+    visibility = ["//visibility:public"],
+)
+
 go_binary(
     name = "container_structure_test_runner",
     srcs = ["container_structure_test_runner.go"],
     visibility = ["//visibility:public"],
-    deps = ["@in_gopkg_yaml_v3//:yaml_v3"],
+    deps = [
+        "@com_github_klauspost_compress//zstd",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
 )
 
 go_test(
@@ -47,7 +67,10 @@ go_test(
         "container_structure_test_runner.go",
         "container_structure_test_runner_test.go",
     ],
-    deps = ["@in_gopkg_yaml_v3//:yaml_v3"],
+    deps = [
+        "@com_github_klauspost_compress//zstd",
+        "@in_gopkg_yaml_v3//:yaml_v3",
+    ],
 )
 
 exports_files(glob(["content_mirror/*"]))

@@ -52,7 +52,6 @@
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/skills/internal/conflicts.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
-#include "intrinsic/skills/proto/prediction.pb.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/grpc/grpc.h"
@@ -110,9 +109,6 @@ constexpr char kWorldDelete[] = "world-delete";
 constexpr char kWorldPauseUpdater[] = "world-updater-pause";
 constexpr char kWorldResumeUpdater[] = "world-updater-resume";
 constexpr char kCheckFootprint[] = "world-footprint-conflict";
-constexpr char kCloneWorldAndApplyPrediction[] =
-    "world-clone-and-apply-prediction";
-constexpr char kMergePredictions[] = "world-merge-predictions";
 constexpr char kWorldQuery[] = "world-query";
 
 constexpr absl::Duration kWorldUpdaterTimeout = absl::Seconds(30);
@@ -273,33 +269,6 @@ absl::Status ClipsWorld::Init(clips::EnvironmentFunctionFacade* facade) {
         CheckFootprintForConflict(
             world_id, clips::ProtoMessageId(footprint_proto_id), action_uid,
             running_action_uids, running_footprints);
-      })));
-
-  INTR_RETURN_IF_ERROR(facade->AddFunction(
-      kCloneWorldAndApplyPrediction,
-      std::function([this](const std::string& world_id,
-                           const int64_t prediction_proto_id) -> std::string {
-        INTR_ASSIGN_OR_RETURN(
-            std::string cloned_world_id,
-            CloneWorldAndApplyPrediction(
-                world_id, clips::ProtoMessageId(prediction_proto_id)),
-            (_.LogError() << "Failed to clone world for predictions '"
-                          << world_id << "'")
-                .With(Return("")));
-        return cloned_world_id;
-      })));
-
-  INTR_RETURN_IF_ERROR(facade->AddFunction(
-      kMergePredictions,
-      std::function([this](const int64_t prediction_proto_id_1,
-                           const int64_t prediction_proto_id_2) -> int64_t {
-        INTR_ASSIGN_OR_RETURN(
-            clips::ProtoMessageId result_proto_id,
-            MergePredictions(clips::ProtoMessageId(prediction_proto_id_1),
-                             clips::ProtoMessageId(prediction_proto_id_2)),
-            (_.LogError() << "Failed to merge predictions.")
-                .With(Return(clips::ProtobufManager::kInvalidId.value())));
-        return result_proto_id.value();
       })));
 
   INTR_RETURN_IF_ERROR(facade->AddFunction(
@@ -526,91 +495,6 @@ void ClipsWorld::CheckFootprintForConflict(
       !status.ok()) {
     LOG(ERROR) << "Failed to check footprint for conflict: " << status;
   }
-}
-
-absl::StatusOr<std::string> ClipsWorld::CloneWorldAndApplyPrediction(
-    const std::string& world_id,
-    const clips::ProtoMessageId& prediction_proto_id) {
-  if (world_id.empty()) {
-    return absl::InvalidArgumentError("Cannot clone world without a world id");
-  }
-
-  INTR_ASSIGN_OR_RETURN(
-      auto prediction_proto,
-      proto_manager_->GetProtoAs<intrinsic_proto::skills::Prediction>(
-          prediction_proto_id));
-
-  INTR_ASSIGN_OR_RETURN(
-      std::string cloned_world_id,
-      CloneWorld(world_id, "apply_prediction",
-                 clips::TraceSpanManager::kInvalidTraceSpanReferenceId));
-
-  intrinsic_proto::world::ObjectWorldUpdates combined_updates;
-  for (const auto& timed_state : prediction_proto->expected_states()) {
-    combined_updates.MergeFrom(timed_state.world_updates());
-  }
-
-  // We attempt to prune any redundant updates so that we can have a faster
-  // update in the world service.
-  INTR_ASSIGN_OR_RETURN(auto pruned_updates,
-                        RemoveRedundantUpdates(std::move(combined_updates)));
-
-  // If we have some updates lets process them here
-  if (pruned_updates.updates_size() != 0 ||
-      pruned_updates.entity_updates_size() != 0) {
-    grpc::ClientContext updates_context;
-    intrinsic::ConfigureClientContext(&updates_context);
-    intrinsic_proto::world::UpdateWorldResourcesRequest updates_request;
-    updates_request.set_world_id(world_id);
-    *updates_request.mutable_world_updates() = std::move(pruned_updates);
-    intrinsic_proto::world::UpdateWorldResourcesResponse updates_response;
-    INTR_RETURN_IF_ERROR(
-        ToAbslStatus(object_world_service_stub_->UpdateWorldResources(
-            &updates_context, updates_request, &updates_response)));
-  }
-
-  return cloned_world_id;
-}
-
-absl::StatusOr<clips::ProtoMessageId> ClipsWorld::MergePredictions(
-    const clips::Values& prediction_proto_ids) {
-  intrinsic_proto::skills::Prediction combined_prediction;
-  combined_prediction.set_probability(1.0);
-
-  intrinsic_proto::world::ObjectWorldUpdates combined_updates;
-
-  // Combine the world updates from the predictions into one set of updates.
-  for (const auto& prediction_proto_id_value : prediction_proto_ids) {
-    INTR_ASSIGN_OR_RETURN(const auto prediction_proto_id,
-                          prediction_proto_id_value.GetInteger());
-    INTR_ASSIGN_OR_RETURN(
-        auto prediction_proto,
-        proto_manager_->GetProtoAs<intrinsic_proto::skills::Prediction>(
-            clips::ProtoMessageId(prediction_proto_id)));
-
-    combined_prediction.set_probability(combined_prediction.probability() *
-                                        prediction_proto->probability());
-    for (const auto& timed_state : prediction_proto->expected_states()) {
-      combined_updates.MergeFrom(timed_state.world_updates());
-    }
-  }
-
-  // We try to simplify the updates before adding them to the output prediction.
-  INTR_ASSIGN_OR_RETURN(
-      intrinsic_proto::world::ObjectWorldUpdates pruned_updates,
-      RemoveRedundantUpdates(std::move(combined_updates)));
-  *combined_prediction.add_expected_states()->mutable_world_updates() =
-      std::move(pruned_updates);
-
-  return proto_manager_->AddGeneratedProto(combined_prediction);
-}
-
-absl::StatusOr<clips::ProtoMessageId> ClipsWorld::MergePredictions(
-    const clips::ProtoMessageId& prediction_proto_id_1,
-    const clips::ProtoMessageId& prediction_proto_id_2) {
-  return MergePredictions(
-      clips::Values{clips::Value(prediction_proto_id_1.value()),
-                    clips::Value(prediction_proto_id_2.value())});
 }
 
 absl::StatusOr<clips::ProtoMessageId> ClipsWorld::Query(
