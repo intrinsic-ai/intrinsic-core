@@ -118,9 +118,9 @@
 #include "intrinsic/world/proto/world_fragment.pb.h"
 #include "intrinsic/world/world.pb.h"
 #include "rclcpp/rclcpp.hpp"
-#include "tf2/include/tf2/exceptions.h"
-#include "tf2/include/tf2/transform_datatypes.h"
-#include "tf2_ros/buffer_interface.h"
+#include "tf2/exceptions.hpp"
+#include "tf2/transform_datatypes.hpp"
+#include "tf2_ros/buffer_interface.hpp"
 
 namespace intrinsic {
 using ::intrinsic_proto::TFMessage;

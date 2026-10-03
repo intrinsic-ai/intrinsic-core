@@ -145,7 +145,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/world/proto:physics_component_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:simulation_component_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:user_data_cc_proto",
-        "@ros2_geometry2//:tf2",
+        "@tf2//:tf2_library",
     ],
 )
 

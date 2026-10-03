@@ -104,7 +104,7 @@ cc_library(
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
         "@abseil-cpp//absl/types:span",
-        "@ros2_rclcpp//:rclcpp",
+        "@rclcpp//:rclcpp_library",
     ],
 )
 

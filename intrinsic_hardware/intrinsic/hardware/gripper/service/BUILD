@@ -161,17 +161,18 @@ container_image(
         "LD_LIBRARY_PATH": ":".join([
             # NOTE we are only using the workspace_root here since package is empty.
             "/%s" % package_relative_label(label_name).workspace_root
-            # NOTE since we only need the folder but not the file we only need one of the rosidl labels.
+            # Each typesupport library belongs to a separate RCR repository.
             for label_name in [
                 "@libmodbus//:modbus_shared",
-                "@ros2_rosidl//:rosidl_typesupport_introspection_c_identifier",
+                "@rosidl_typesupport_introspection_c//:rosidl_typesupport_introspection_c",
+                "@rosidl_typesupport_introspection_cpp//:rosidl_typesupport_introspection_cpp",
             ]
         ]),
     },
     files = [
         ":pinch_gripper_server_async_callback_resource_main",
-        "@ros2_rosidl//:rosidl_typesupport_introspection_c_identifier",
-        "@ros2_rosidl//:rosidl_typesupport_introspection_cpp_identifier",
+        "@rosidl_typesupport_introspection_c",
+        "@rosidl_typesupport_introspection_cpp",
     ],
     layers = [
         "//intrinsic_hardware/intrinsic/hardware/modbus_tcp:modbus-runfiles",

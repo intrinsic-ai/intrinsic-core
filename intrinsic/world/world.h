@@ -66,7 +66,7 @@
 #include "intrinsic/world/proto/tf_associations.pb.h"
 #include "intrinsic/world/proto/world_fragment.pb.h"
 #include "intrinsic/world/world.pb.h"
-#include "tf2/include/tf2/transform_datatypes.h"
+#include "tf2/transform_datatypes.hpp"
 
 namespace intrinsic {
 

@@ -18,11 +18,10 @@ def ros_camera_service_workdir(binary_label):
     """
     Calculate the workdir needed for ros_camera_service.
 
-    The ROS camera service uses rules_ros2, which will try to dynamically
-    load the ROS middleware and typesupport libraries at runtime, with paths
-    that begin with "../". For this to work, the workdir needs to be a bit
-    different from the typical usage, starting in the bazel runfiles tree
-    for the main repo.
+    Preserve the service's working directory in the main repository's runfiles
+    tree. ROS Central Registry middleware and typesupport are now statically
+    linked, but existing relative runfile paths should continue to resolve from
+    the same directory.
 
     Args:
       binary_label (Label): label of the binary running in ros_camera_service

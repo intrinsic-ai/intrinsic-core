@@ -85,12 +85,12 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "@abseil-cpp//absl/log",
         "@com_google_protobuf//:protobuf",
+        "@geometry_msgs//:cc",
         "@intrinsic_apis//intrinsic/math/proto:header_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:quaternion_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:transform_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:transform_stamped_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:vector3_cc_proto",
-        "@ros2_common_interfaces//:cpp_geometry_msgs",
     ],
 )
 

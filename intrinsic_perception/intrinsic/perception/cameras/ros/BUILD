@@ -12,30 +12,42 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Description:
-#   A set of packages which contain common interface files (.msg and .srv).
-load(
-    "@com_github_mvukov_rules_ros2//ros2:interfaces.bzl",
-    "cpp_ros2_interface_library",
-    "ros2_interface_library",
-)
+load("@rosidl_default_generators//:defs.bzl", "cc_ros_library", "ros_library")
+load("@rules_cc//cc:defs.bzl", "cc_test")
 
 package(default_visibility = ["//visibility:public"])
 
-ros2_interface_library(
+SNAPSHOT_INTERFACES = [
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/msg:DiscoveredCamera",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/msg:ImageSnapshot",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/msg:ImuSnapshot",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/msg:PointCloud2Snapshot",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/msg:SensorInfo",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/msg:TemperatureSnapshot",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/srv:Describe",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/srv:Discover",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/srv:LegacyDiscover",
+    "//intrinsic_perception/intrinsic/perception/cameras/ros/snapshot_interfaces/srv:Snapshot",
+]
+
+ros_library(
     name = "snapshot_interfaces",
-    srcs = glob([
-        "snapshot_interfaces/msg/*.msg",
-        "snapshot_interfaces/srv/*.srv",
-    ]),
-    deps = [
-        "@ros2_common_interfaces//:geometry_msgs",
-        "@ros2_common_interfaces//:sensor_msgs",
-        "@ros2_rcl_interfaces//:builtin_interfaces",
-    ],
+    deps = SNAPSHOT_INTERFACES,
 )
 
-cpp_ros2_interface_library(
+cc_ros_library(
     name = "snapshot_interfaces_cpp",
-    deps = [":snapshot_interfaces"],
+    deps = SNAPSHOT_INTERFACES,
+)
+
+# Exercise the generated code and statically linked typesupport at runtime.
+cc_test(
+    name = "snapshot_interfaces_test",
+    size = "small",
+    srcs = ["snapshot_interfaces_test.cc"],
+    deps = [
+        ":snapshot_interfaces_cpp",
+        "@rclcpp//:rclcpp_library",
+        "@rosidl_typesupport_cpp//:rosidl_typesupport_cpp_library",
+    ],
 )

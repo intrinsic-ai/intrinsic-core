@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 load("//bazel:python.bzl", "py_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -44,12 +44,19 @@ py_library(
 
 cc_library(
     name = "grpc_time_support",
-    srcs = ["grpc_time_support.cc"],
     hdrs = ["grpc_time_support.h"],
+    deps = ["@com_github_grpc_grpc//:grpc++"],
+)
+
+cc_test(
+    name = "grpc_time_support_test",
+    size = "small",
+    srcs = ["grpc_time_support_test.cc"],
     deps = [
-        "@abseil-cpp//absl/log:check",
+        ":grpc_time_support",
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:gpr",
         "@com_github_grpc_grpc//:grpc++",
+        "@com_google_googletest//:gtest_main",
     ],
 )

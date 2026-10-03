@@ -35,7 +35,7 @@
 #include "intrinsic/world/objects/object_world_ids.h"
 #include "intrinsic/world/objects/world_object_internal.h"
 #include "intrinsic/world/world.h"
-#include "tf2/include/tf2/transform_datatypes.h"
+#include "tf2/transform_datatypes.hpp"
 
 namespace intrinsic {
 namespace object_world {

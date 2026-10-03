@@ -451,7 +451,6 @@ bazel_dep(name = "ceres-solver", version = "2.2.0", repo_name = "com_google_cere
 bazel_dep(name = "clarabel", version = "0.11.1.bcr.2")  
 bazel_dep(name = "cli11", version = "2.6.2")  
 bazel_dep(name = "coacd", version = "1.0.13.bcr.1")  
-bazel_dep(name = "com_github_mvukov_rules_ros2", version = "0.0.0-20260718-352a8e3")
 bazel_dep(name = "cpp-httplib", version = "0.46.0")  
 bazel_dep(name = "cppitertools", version = "2.2")  
 bazel_dep(name = "cppregpattern", version = "1.0.1")  
@@ -489,7 +488,7 @@ bazel_dep(name = "googleapis-python", version = "1.1.5")
 bazel_dep(name = "googleapis", version = "0.0.0-20260922-d6b44118", repo_name = "com_google_googleapis")
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", repo_name = "com_google_googletest")
 bazel_dep(name = "grpc_ecosystem_grpc_gateway", version = "2.29.0.bcr.3", repo_name = "com_github_grpc_ecosystem_grpc_gateway_v2")
-bazel_dep(name = "grpc", version = "1.74.0", repo_name = "com_github_grpc_grpc")
+bazel_dep(name = "grpc", version = "1.83.0", repo_name = "com_github_grpc_grpc")
 bazel_dep(name = "gperftools", version = "2.18.1")  
 bazel_dep(name = "gz-common", version = "7.4.0")  
 bazel_dep(name = "gz-math", version = "9.3.0")
@@ -538,7 +537,7 @@ bazel_dep(name = "poco", version = "1.14.2-20250528.bcr.1")
 bazel_dep(name = "postgres", version = "18.4", repo_name = "postgres")  
 bazel_dep(name = "prometheus-cpp", version = "1.3.0.bcr.3", repo_name = "com_github_jupp0r_prometheus_cpp")  
 bazel_dep(name = "protobuf-matchers", version = "0.1.1", repo_name = "com_github_inazarenko_protobuf_matchers")  # TODO(b/229726259) Replace with official version once published. More info at https://github.com/google/googletest/issues/1761
-bazel_dep(name = "protobuf", version = "32.1", repo_name = "com_google_protobuf")
+bazel_dep(name = "protobuf", version = "35.1", repo_name = "com_google_protobuf")
 bazel_dep(name = "qhull", version = "8.0.2.bcr.2")  
 bazel_dep(name = "re2", version = "2025-11-05.bcr.1", repo_name = "com_googlesource_code_re2")
 bazel_dep(name = "riegeli", version = "0.0.0-20250822-9f2744d", repo_name = "com_google_riegeli")
@@ -933,19 +932,32 @@ single_version_override(
 
 
 
-# Needed to build rules_ros2 messages and tf2
-extension_for_rules_ros2 = use_extension("@com_github_mvukov_rules_ros2//ros2:extensions.bzl", "non_module_deps")
-use_repo(
-    extension_for_rules_ros2,
-    "ros2_common_interfaces",
-    "ros2_geometry2",
-    "ros2_rcl_interfaces",
-    "ros2_rclcpp",
-    "ros2_rclpy",
-    "ros2_rcutils",
-    "ros2_rmw",
-    "ros2_rosbag2",
-    "ros2_rosidl",
+# ROS Central Registry: pin a coherent release including messages and tf2.
+bazel_dep(name = "ros_base", version = "lyrical.2026-06-08.rcr.2")
+
+# Expose packages selected transitively by ros_base to this workspace.
+bazel_dep(name = "builtin_interfaces", version = "0.0.0")
+bazel_dep(name = "geometry_msgs", version = "0.0.0")
+bazel_dep(name = "rcl_interfaces", version = "0.0.0")
+bazel_dep(name = "rclcpp", version = "0.0.0")
+bazel_dep(name = "rcutils", version = "0.0.0")
+bazel_dep(name = "rmw", version = "0.0.0")
+bazel_dep(name = "rosdistro", version = "0.0.0")
+bazel_dep(name = "rosidl_default_generators", version = "0.0.0")
+bazel_dep(name = "rosidl_runtime_cpp", version = "0.0.0")
+bazel_dep(name = "rosidl_typesupport_cpp", version = "0.0.0")
+bazel_dep(name = "rosidl_typesupport_introspection_c", version = "0.0.0")
+bazel_dep(name = "rosidl_typesupport_introspection_cpp", version = "0.0.0")
+bazel_dep(name = "sensor_msgs", version = "0.0.0")
+bazel_dep(name = "tf2", version = "0.0.0")
+bazel_dep(name = "tf2_ros", version = "0.0.0")
+
+# Preserve runtime library dependencies when linking ROS typesupport statically
+# on macOS. RCR currently only propagates these dependencies on other platforms.
+single_version_override(
+    module_name = "rosidl_adapter",
+    patch_strip = 1,
+    patches = ["//third_party/rosidl_adapter:static_macos.patch"],
 )
 
 
