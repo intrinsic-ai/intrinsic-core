@@ -446,6 +446,38 @@ class Rotation3Test(parameterized.TestCase, math_test.TestCase):
     )
 
   @parameterized.parameters([
+      (np.diag([-1.0, 1.0, 1.0]),),
+      (np.diag([1.0, -1.0, 1.0]),),
+      (np.diag([1.0, 1.0, -1.0]),),
+      (-np.identity(3),),
+      (np.diag([-1.0, 1.0, 1.0, 1.0]),),
+      (-np.identity(4),),
+  ])
+  def test_from_matrix_reflection(self, reflection_matrix):
+    self.assertRaisesRegex(
+        ValueError,
+        rotation3.MATRIX_NOT_PROPER_ROTATION_MESSAGE,
+        rotation3.check_rotation_matrix,
+        reflection_matrix,
+    )
+    self.assertRaisesRegex(
+        ValueError,
+        rotation3.MATRIX_NOT_PROPER_ROTATION_MESSAGE,
+        rotation3.Rotation3.from_matrix,
+        reflection_matrix,
+    )
+
+  def test_from_matrix_reflection_keeps_err_msg(self):
+    with self.assertRaisesRegex(ValueError, 'caller context'):
+      rotation3.check_rotation_matrix(
+          np.diag([-1.0, 1.0, 1.0]), err_msg='caller context'
+      )
+    with self.assertRaisesRegex(ValueError, 'caller context'):
+      rotation3.Rotation3.from_matrix(
+          np.diag([-1.0, 1.0, 1.0]), err_msg='caller context'
+      )
+
+  @parameterized.parameters([
       (np.zeros((1, 2, 3)),),
       (np.zeros(7),),
       (np.identity(2),),
