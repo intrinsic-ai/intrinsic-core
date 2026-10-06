@@ -44,7 +44,7 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/world/proto:collision_checker_config_cc_proto",
         "@or_tools//ortools/base:strong_int",
-        "@ros2_geometry2//:tf2",
+        "@tf2//:tf2_library",
     ],
 )
 

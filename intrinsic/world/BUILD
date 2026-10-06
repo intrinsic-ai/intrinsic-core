@@ -142,6 +142,7 @@ cc_library(
         "@com_google_googletest//:gtest_prod",
         "@com_google_protobuf//:protobuf",
         "@com_google_protobuf//src/google/protobuf/io",
+        "@geometry_msgs//:cc",
         "@intrinsic_apis//intrinsic/math/proto:header_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:quaternion_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:tf_message_cc_proto",
@@ -152,10 +153,9 @@ cc_library(
         "@intrinsic_apis//intrinsic/world/proto:kinematics_component_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:physics_component_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:sensor_component_cc_proto",
-        "@ros2_common_interfaces//:cpp_geometry_msgs",
-        "@ros2_geometry2//:tf2",
-        "@ros2_geometry2//:tf2_ros",
-        "@ros2_rclcpp//:rclcpp",
+        "@rclcpp//:rclcpp_library",
+        "@tf2//:tf2_library",
+        "@tf2_ros//:tf2_ros_library",
     ],
 )
 

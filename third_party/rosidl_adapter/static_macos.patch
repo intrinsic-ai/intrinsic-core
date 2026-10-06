@@ -1,0 +1,19 @@
+--- a/tools.bzl
++++ b/tools.bzl
+@@ -210,6 +210,7 @@
+     ]
+ 
+     is_darwin = "apple" in cc_toolchain.target_gnu_system_name
++    is_static = ctx.fragments.cpp.dynamic_mode().lower() == "off"
+ 
+     if is_darwin:
+         dynamic_library_linking_contexts = static_linking_contexts + dynamic_linking_contexts
+@@ -222,7 +223,7 @@
+     static_linking_contexts_to_propagate = static_linking_contexts + [
+         dep.linking_context
+         for dep in header_only_deps
+-        if not is_darwin
++        if not is_darwin or is_static
+     ]
+ 
+     if not srcs:

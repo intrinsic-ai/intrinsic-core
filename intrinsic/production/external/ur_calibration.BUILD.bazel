@@ -12,6 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@rules_cc//cc:cc_library.bzl", "cc_library")
+load("@rules_cc//cc:cc_test.bzl", "cc_test")
+
 # Package to allow computing robot model corrections based on the kinematic calibration values for
 # UR robots
 load("@rules_license//rules:license.bzl", "license")
@@ -44,7 +47,7 @@ cc_library(
     deps = [
         "@abseil-cpp//absl/log",
         "@com_gitlab_libeigen_eigen//:eigen",
-        "@ros2_rclcpp//:rclcpp",
+        "@rclcpp//:rclcpp_library",
         "@yaml-cpp//:yaml-cpp",
     ],
 )
