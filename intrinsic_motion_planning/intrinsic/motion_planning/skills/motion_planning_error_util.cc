@@ -376,20 +376,6 @@ GetUserFriendlyLinearCartesianPathPlanningErrorMessage(
       intrinsic_proto::motion_planning::v1::ErrorContext::
           LINEAR_CARTESIAN_PATH_PLANNER_ERROR) {
     const std::string unit = use_rad ? "rad" : "deg";
-    if (linear_cartesian_path_planning_error.has_final_joint_positions()) {
-      INTR_ASSIGN_OR_RETURN(
-          eigenmath::VectorNd final_joint_positions,
-          icon::FromProto(
-              linear_cartesian_path_planning_error.final_joint_positions()));
-      if (!use_rad) {
-        final_joint_positions = ConvertRadiansToDegrees(final_joint_positions);
-      }
-
-      absl::StrAppend(&error_message,
-                      absl::StrFormat(" [%s] in %s",
-                                      toString(final_joint_positions), unit));
-    }
-    absl::StrAppend(&error_message, ".\n");
     if (linear_cartesian_path_planning_error.has_target_joint_positions()) {
       INTR_ASSIGN_OR_RETURN(
           eigenmath::VectorNd target_joint_positions,
@@ -399,11 +385,25 @@ GetUserFriendlyLinearCartesianPathPlanningErrorMessage(
         target_joint_positions =
             ConvertRadiansToDegrees(target_joint_positions);
       }
+
+      absl::StrAppend(&error_message,
+                      absl::StrFormat(" [%s] in %s",
+                                      toString(target_joint_positions), unit));
+    }
+    absl::StrAppend(&error_message, ".\n");
+    if (linear_cartesian_path_planning_error.has_final_joint_positions()) {
+      INTR_ASSIGN_OR_RETURN(
+          eigenmath::VectorNd final_joint_positions,
+          icon::FromProto(
+              linear_cartesian_path_planning_error.final_joint_positions()));
+      if (!use_rad) {
+        final_joint_positions = ConvertRadiansToDegrees(final_joint_positions);
+      }
       absl::StrAppend(
           &error_message,
           absl::StrFormat(
               "Planner reached final joint configuration [%s] in %s.",
-              toString(target_joint_positions), unit));
+              toString(final_joint_positions), unit));
     }
     absl::StrAppend(
         &error_message,
