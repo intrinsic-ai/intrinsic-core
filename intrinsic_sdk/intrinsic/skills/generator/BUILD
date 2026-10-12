@@ -17,7 +17,7 @@
 load("//bazel:go_macros.bzl", "go_binary", "go_library")
 load("//bazel:python.bzl", "py_library")
 load(
-    "//intrinsic/util/proto/build_defs:descriptor_set.bzl",
+    "//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl",
     "proto_source_code_info_transitive_descriptor_set",
 )
 
@@ -38,7 +38,6 @@ go_library(
     importpath = "intrinsic/skills/generator/gen",
     visibility = [
         "//intrinsic/skills:__subpackages__",
-        "//intrinsic/skills/generator:__pkg__",
         "//intrinsic_sdk/intrinsic/skills:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__",
     ],
@@ -59,10 +58,10 @@ go_binary(
     visibility = ["//visibility:public"],
     deps = [
         ":gen",
-        "//intrinsic/production:intrinsic",
-        "//intrinsic/util/proto:descriptor",
-        "//intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/skills:skillmanifest",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptor",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
         "@org_golang_google_protobuf//proto",

@@ -23,11 +23,11 @@ go_library(
     srcs = ["bundle.go"],
     importpath = "intrinsic/tools/inbuild/cmd/data/bundle",
     deps = [
-        "//intrinsic/util/proto:descriptor",
-        "//intrinsic/util/proto:registryutil",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "//intrinsic_sdk/intrinsic/assets/data:utils",
         "//intrinsic_sdk/intrinsic/assets/data/build_defs:datagen",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptor",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@com_github_spf13_cobra//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_manifest_go_proto",

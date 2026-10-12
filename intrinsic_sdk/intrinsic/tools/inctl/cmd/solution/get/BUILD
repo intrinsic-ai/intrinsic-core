@@ -19,7 +19,6 @@ go_library(
     srcs = ["get.go"],
     importpath = "intrinsic/tools/inctl/cmd/solution/get/get",
     visibility = [
-        "//intrinsic/skills/tools/skill/cmd:__pkg__",
         "//intrinsic/tools:__subpackages__",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:__pkg__",
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",

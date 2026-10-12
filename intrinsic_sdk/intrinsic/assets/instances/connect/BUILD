@@ -50,7 +50,7 @@ py_library(
     srcs = ["connect.py"],
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/util/grpc:interceptor",
+        "//intrinsic_sdk/intrinsic/util/grpc:interceptor",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl/logging",
         "@intrinsic_apis//intrinsic/assets/proto/v1:grpc_connection_py_pb2",

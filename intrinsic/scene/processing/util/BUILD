@@ -21,11 +21,11 @@ cc_library(
     srcs = ["transform_util.cc"],
     hdrs = ["transform_util.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:io",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

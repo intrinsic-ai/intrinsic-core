@@ -135,7 +135,7 @@ proto_library(
     name = "skill_registry_config_proto",
     srcs = ["skill_registry_config.proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_proto",
+        "//intrinsic_sdk/intrinsic/executive/proto:behavior_tree_proto",
         "@intrinsic_apis//intrinsic/skills/proto:skills_proto",
     ],
 )
@@ -155,7 +155,7 @@ go_proto_library(
     importpath = "intrinsic/skills/proto/skill_registry_config_go_proto",
     protos = [":skill_registry_config_proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
+        "//intrinsic_sdk/intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/skills/proto:skills_go_proto",
     ],
 )
@@ -164,7 +164,7 @@ proto_library(
     name = "prediction_proto",
     srcs = ["prediction.proto"],
     deps = [
-        "//intrinsic/world/proto:object_world_updates_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
         "@com_google_protobuf//:any_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
@@ -181,7 +181,7 @@ go_proto_library(
     importpath = "intrinsic/skills/proto/prediction_go_proto",
     protos = [":prediction_proto"],
     deps = [
-        "//intrinsic/world/proto:object_world_updates_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 

@@ -23,7 +23,7 @@ go_library(
     srcs = ["root.go"],
     importpath = "intrinsic/tools/inbuild/cmd",
     deps = [
-        "//intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/tools/inbuild/cmd/data",
         "//intrinsic_sdk/intrinsic/tools/inbuild/cmd/httpjson",
         "//intrinsic_sdk/intrinsic/tools/inbuild/cmd/service",

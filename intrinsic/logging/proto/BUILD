@@ -21,12 +21,6 @@ alias(
 )
 
 alias(
-    name = "log_dispatcher_service_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/logging/proto:log_dispatcher_service_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "log_item_proto",
     actual = "//intrinsic_sdk/intrinsic/logging/proto:log_item_proto",
     tags = ["go/intrinsic-ioc-transition-tdd"],
@@ -72,11 +66,4 @@ alias(
     name = "logger_service_py_pb2_grpc",
     actual = "//intrinsic_sdk/intrinsic/logging/proto:logger_service_py_pb2_grpc",
     tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "recording_data_categories_go",
-    actual = "//intrinsic_sdk/intrinsic/logging/proto:recording_data_categories_go",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//visibility:public"],
 )

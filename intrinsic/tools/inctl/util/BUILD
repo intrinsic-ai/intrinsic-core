@@ -16,30 +16,6 @@ load("//bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = ["//visibility:public"])
 
-alias(
-    name = "buildozer",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:buildozer",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "printer",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "cobrautil",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:cobrautil",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "vmalias",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:vmalias",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 go_library(
     name = "releaseutil",
     srcs = ["releaseutil.go"],
@@ -112,12 +88,6 @@ go_library(
 )
 
 alias(
-    name = "templateutil",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:templateutil",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "color",
     actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
     tags = ["go/intrinsic-ioc-transition-tdd"],
@@ -126,12 +96,6 @@ alias(
 alias(
     name = "orgutil",
     actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "agents",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 

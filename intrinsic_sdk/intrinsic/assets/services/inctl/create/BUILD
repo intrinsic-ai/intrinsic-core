@@ -32,11 +32,11 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:__subpackages__",
     ],
     deps = [
-        "//intrinsic/tools/inctl/cmd:root",
-        "//intrinsic/tools/inctl/util:buildozer",
-        "//intrinsic/tools/inctl/util:printer",
-        "//intrinsic/tools/inctl/util:templateutil",
         "//intrinsic_sdk/intrinsic/assets:idutils",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:buildozer",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:templateutil",
         "@com_github_spf13_cobra//:go_default_library",
     ],
 )

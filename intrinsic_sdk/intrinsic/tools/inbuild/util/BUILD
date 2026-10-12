@@ -23,9 +23,9 @@ go_library(
     srcs = ["skillmanifest.go"],
     importpath = "intrinsic/tools/inbuild/util/skillmanifest",
     deps = [
-        "//intrinsic/skills:skillmanifest",
-        "//intrinsic/util/proto:protoio",
-        "//intrinsic/util/proto:registryutil",
+        "//intrinsic_sdk/intrinsic/skills:skillmanifest",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
         "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
     ],

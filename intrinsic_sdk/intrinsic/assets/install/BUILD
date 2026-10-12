@@ -24,10 +24,10 @@ py_library(
         "//intrinsic:internal_api_users",
     ],
     deps = [
-        "//intrinsic/util/grpc:error_handling",
         "//intrinsic_sdk/intrinsic/assets:id_utils_py",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_pb2_grpc",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_py_pb2",
+        "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
         "@ai_intrinsic_sdks_pip_deps//grpcio_status",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_googleapis//google/longrunning:operations_py_proto",

@@ -41,11 +41,11 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",
     ],
     deps = [
-        "//intrinsic/skills/tools/skill/cmd:dialerutil",
         "//incode/cloud/devicemanager/version",
         "//incode/frontend/cloud/api/v1:clustermanager_api_go_proto",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
+        "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:dialerutil",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",

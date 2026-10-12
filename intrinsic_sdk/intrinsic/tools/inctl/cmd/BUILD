@@ -77,9 +77,9 @@ go_library(
     ],
     importpath = "intrinsic/tools/inctl/cmd/root",
     deps = [
-        "//intrinsic/production:intrinsic",
-        "//intrinsic/skills/tools/skill/cmd:dialerutil",
         "//intrinsic/tools/inctl/util:traceutil",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:dialerutil",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
@@ -101,7 +101,7 @@ go_library(
     importpath = "intrinsic/tools/inctl/cmd/markdown",
     deps = [
         ":root",
-        "//intrinsic/util/archive:tartooling",
+        "//intrinsic_sdk/intrinsic/util/archive:tartooling",
         "@com_github_google_safearchive//tar",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_github_spf13_cobra//doc:go_default_library",

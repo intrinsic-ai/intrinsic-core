@@ -114,18 +114,6 @@ alias(
 )
 
 alias(
-    name = "source_code_info_view",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:source_code_info_view",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "source_code_info_view_py",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:source_code_info_view_py",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "type_url",
     actual = "//intrinsic_sdk/intrinsic/util/proto:type_url",
     tags = ["go/intrinsic-ioc-transition-tdd"],

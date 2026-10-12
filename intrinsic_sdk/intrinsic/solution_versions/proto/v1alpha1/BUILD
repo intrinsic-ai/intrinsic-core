@@ -29,7 +29,6 @@ go_proto_library(
     protos = [":motion_planner_service_migration_proto"],
     visibility = [
         "//intrinsic/solution_versions:__subpackages__",
-        "//intrinsic/solution_versions/proto/v1alpha1:__pkg__",
         "//intrinsic_sdk/intrinsic/solution_versions:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/migrate:__pkg__",
     ],
@@ -54,7 +53,6 @@ go_proto_library(
     protos = [":solution_migration_proto"],
     visibility = [
         "//intrinsic/solution_versions:__subpackages__",
-        "//intrinsic/solution_versions/proto/v1alpha1:__pkg__",
         "//intrinsic_sdk/intrinsic/solution_versions:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/migrate:__pkg__",
     ],

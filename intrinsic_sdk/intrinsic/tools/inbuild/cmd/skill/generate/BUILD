@@ -14,7 +14,7 @@
 
 load("//bazel:go_macros.bzl", "go_library")
 load(
-    "//intrinsic/util/proto/build_defs:descriptor_set.bzl",
+    "//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl",
     "proto_source_code_info_transitive_descriptor_set",
 )
 
@@ -25,7 +25,7 @@ package(
 proto_source_code_info_transitive_descriptor_set(
     name = "skill_services_provided_to_platform",
     visibility = ["//visibility:private"],
-    deps = ["//intrinsic/skills/proto:skill_service_proto"],
+    deps = ["//intrinsic_sdk/intrinsic/skills/proto:skill_service_proto"],
 )
 
 go_library(
@@ -45,10 +45,10 @@ go_library(
     embedsrcs = [":skill_services_provided_to_platform"],
     importpath = "intrinsic/tools/inbuild/cmd/skill/generate/entrypoint",
     deps = [
-        "//intrinsic/skills:skillmanifest",
-        "//intrinsic/skills/generator:gen",
-        "//intrinsic/util/proto:descriptor",
-        "//intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/skills:skillmanifest",
+        "//intrinsic_sdk/intrinsic/skills/generator:gen",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptor",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@com_github_spf13_cobra//:go_default_library",
         "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
         "@org_golang_google_protobuf//proto",
@@ -61,9 +61,9 @@ go_library(
     srcs = ["config.go"],
     importpath = "intrinsic/tools/inbuild/cmd/skill/generate/config",
     deps = [
-        "//intrinsic/skills/build_defs:skillserviceconfiggen",
-        "//intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/skills/build_defs:skillserviceconfiggen",
         "//intrinsic_sdk/intrinsic/tools/inbuild/util:skillmanifest",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@com_github_spf13_cobra//:go_default_library",
     ],
 )

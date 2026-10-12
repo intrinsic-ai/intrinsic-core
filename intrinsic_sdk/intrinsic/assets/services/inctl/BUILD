@@ -23,10 +23,10 @@ go_library(
     deps = [
         ":add",
         ":delete",
-        "//intrinsic/tools/inctl/cmd:root",
-        "//intrinsic/tools/inctl/util:cobrautil",
         "//intrinsic_sdk/intrinsic/assets/services/inctl/create",
         "//intrinsic_sdk/intrinsic/assets/services/inctl/state",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:cobrautil",
     ],
 )
 
@@ -53,11 +53,11 @@ go_library(
     srcs = ["delete.go"],
     importpath = "intrinsic/assets/services/inctl/delete",
     deps = [
-        "//intrinsic/tools/inctl/util:agents",
-        "//intrinsic/tools/inctl/util:color",
-        "//intrinsic/util/status:extstatus",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
+        "//intrinsic_sdk/intrinsic/util/status:extstatus",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/assets/proto:asset_deployment_go_proto",

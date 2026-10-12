@@ -21,8 +21,8 @@ cc_library(
     srcs = ["scene_object_config.cc"],
     hdrs = ["scene_object_config.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/scene/util:scene_object_updates",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/scene/proto/v1:collision_rules_cc_proto",

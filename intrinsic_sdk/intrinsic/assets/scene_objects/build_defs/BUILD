@@ -25,10 +25,10 @@ go_library(
     srcs = ["sceneobjectgen.go"],
     importpath = "intrinsic/assets/scene_objects/build_defs/sceneobjectgen",
     deps = [
-        "//intrinsic/util/proto:protoio",
-        "//intrinsic/util/proto:registryutil",
-        "//intrinsic/util/proto:sourcecodeinfoview",
         "//intrinsic_sdk/intrinsic/assets/scene_objects:sceneobjectbundle",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
+        "//intrinsic_sdk/intrinsic/util/proto:sourcecodeinfoview",
         "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_go_proto",
     ],
 )
@@ -39,8 +39,8 @@ go_binary(
     importpath = "intrinsic/assets/scene_objects/build_defs/sceneobjectgen_main",
     deps = [
         ":sceneobjectgen",
-        "//intrinsic/production:intrinsic",
-        "//intrinsic/util:flag",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/util:flag",
         "@com_github_golang_glog//:go_default_library",
     ],
 )

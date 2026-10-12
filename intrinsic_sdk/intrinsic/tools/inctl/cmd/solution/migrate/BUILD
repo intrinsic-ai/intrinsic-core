@@ -23,8 +23,8 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",
     ],
     deps = [
-        "//intrinsic/solution_versions/proto/v1alpha1:motion_planner_service_migration_go_proto",
-        "//intrinsic/solution_versions/proto/v1alpha1:solution_migration_go_proto",
+        "//intrinsic_sdk/intrinsic/solution_versions/proto/v1alpha1:motion_planner_service_migration_go_proto",
+        "//intrinsic_sdk/intrinsic/solution_versions/proto/v1alpha1:solution_migration_go_proto",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",

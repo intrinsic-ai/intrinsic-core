@@ -19,7 +19,7 @@ py_library(
     srcs = ["asset_configuration_client.py"],
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/util/grpc:error_handling",
+        "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_configuration_pb2_grpc",

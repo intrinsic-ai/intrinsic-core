@@ -24,13 +24,6 @@ alias(
 )
 
 alias(
-    name = "seekable",
-    actual = "//intrinsic_sdk/intrinsic/util/go:seekable",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:internal_api_users"],
-)
-
-alias(
     name = "set",
     actual = "//intrinsic_sdk/intrinsic/util/go:set",
     tags = ["go/intrinsic-ioc-transition-tdd"],

@@ -23,9 +23,9 @@ go_library(
     srcs = ["bundle.go"],
     importpath = "intrinsic/tools/inbuild/cmd/skill/bundle",
     deps = [
-        "//intrinsic/skills:skillbundle",
-        "//intrinsic/skills:skillfix",
-        "//intrinsic/skills:skillvalidate",
+        "//intrinsic_sdk/intrinsic/skills:skillbundle",
+        "//intrinsic_sdk/intrinsic/skills:skillfix",
+        "//intrinsic_sdk/intrinsic/skills:skillvalidate",
         "//intrinsic_sdk/intrinsic/tools/inbuild/util:skillmanifest",
         "@com_github_spf13_cobra//:go_default_library",
         "@org_golang_google_protobuf//reflect/protodesc:go_default_library",
@@ -37,8 +37,8 @@ go_library(
     srcs = ["manifest.go"],
     importpath = "intrinsic/tools/inbuild/cmd/skill/manifest",
     deps = [
-        "//intrinsic/util/proto:protoio",
         "//intrinsic_sdk/intrinsic/tools/inbuild/util:skillmanifest",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@com_github_spf13_cobra//:go_default_library",
     ],
 )

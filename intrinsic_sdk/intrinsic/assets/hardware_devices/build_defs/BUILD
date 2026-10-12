@@ -23,11 +23,11 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:__subpackages__",
     ],
     deps = [
-        "//intrinsic/util/proto:protoio",
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/assets/build_defs:asset_go_proto",
         "//intrinsic_sdk/intrinsic/assets/hardware_devices:hardwaredevicebundle",
         "//intrinsic_sdk/intrinsic/assets/hardware_devices:hardwaredevicefix",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:reference_go_proto",
     ],
@@ -43,8 +43,8 @@ go_binary(
     ],
     deps = [
         ":hardwaredevicegen",
-        "//intrinsic/production:intrinsic",
-        "//intrinsic/util:flag",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/util:flag",
         "@com_github_golang_glog//:go_default_library",
     ],
 )

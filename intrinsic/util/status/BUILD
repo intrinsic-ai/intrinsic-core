@@ -105,12 +105,6 @@ alias(
 )
 
 alias(
-    name = "status_specs_py",
-    actual = "//intrinsic_sdk/intrinsic/util/status:status_specs_py",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "extstatus",
     actual = "//intrinsic_sdk/intrinsic/util/status:extstatus",
     tags = ["go/intrinsic-ioc-transition-tdd"],

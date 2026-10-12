@@ -30,9 +30,9 @@ go_library(
     ],
     importpath = "intrinsic/tools/inctl/cmd/recordings/recordings",
     deps = [
-        "//intrinsic/logging/proto:logger_service_go_proto",
-        "//intrinsic/logging/proto:recording_data_categories_go",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
+        "//intrinsic_sdk/intrinsic/logging/proto:logger_service_go_proto",
+        "//intrinsic_sdk/intrinsic/logging/proto:recording_data_categories_go",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/util",

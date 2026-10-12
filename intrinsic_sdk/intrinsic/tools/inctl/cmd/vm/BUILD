@@ -36,9 +36,9 @@ go_library(
         "//visibility:public",
     ],
     deps = [
-        "//intrinsic/config:environments",
-        "//intrinsic/kubernetes/vmpool/service/pkg/defaults",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
+        "//intrinsic_sdk/intrinsic/config:environments",
+        "//intrinsic_sdk/intrinsic/kubernetes/vmpool/service/pkg/defaults",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/vm/pool",

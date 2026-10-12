@@ -15,10 +15,3 @@
 package(default_visibility = [
     "//visibility:private",
 ])
-
-alias(
-    name = "skillserviceconfiggen",
-    actual = "//intrinsic_sdk/intrinsic/skills/build_defs:skillserviceconfiggen",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__"],
-)

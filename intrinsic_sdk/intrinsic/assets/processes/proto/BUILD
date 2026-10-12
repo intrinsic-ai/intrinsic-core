@@ -22,7 +22,7 @@ proto_library(
     name = "process_asset_proto",
     srcs = ["process_asset.proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_proto",
+        "//intrinsic_sdk/intrinsic/executive/proto:behavior_tree_proto",
         "@intrinsic_apis//intrinsic/assets/proto:metadata_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:reference_proto",
     ],
@@ -38,7 +38,7 @@ go_proto_library(
     importpath = "intrinsic/assets/processes/proto/process_asset_go_proto",
     protos = [":process_asset_proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
+        "//intrinsic_sdk/intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:reference_go_proto",
     ],
@@ -48,7 +48,7 @@ proto_library(
     name = "process_manifest_proto",
     srcs = ["process_manifest.proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_proto",
+        "//intrinsic_sdk/intrinsic/executive/proto:behavior_tree_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_tag_proto",
         "@intrinsic_apis//intrinsic/assets/proto:documentation_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_proto",
@@ -67,7 +67,7 @@ go_proto_library(
     importpath = "intrinsic/assets/processes/proto/process_manifest_go_proto",
     protos = [":process_manifest_proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
+        "//intrinsic_sdk/intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_tag_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:documentation_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",

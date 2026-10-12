@@ -16,7 +16,7 @@
 
 load("@com_google_protobuf//bazel/common:proto_info.bzl", "ProtoInfo")
 load("//intrinsic/assets/build_defs:allowlists.bzl", "in_allowlist")  
-load("//intrinsic/util/proto/build_defs:descriptor_set.bzl", "ProtoSourceCodeInfo", "gen_source_code_info_descriptor_set")
+load("//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl", "ProtoSourceCodeInfo", "gen_source_code_info_descriptor_set")
 
 SkillManifestInfo = provider(
     "Info about a binary skill manifest",

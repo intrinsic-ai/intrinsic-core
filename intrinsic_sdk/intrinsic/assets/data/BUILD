@@ -22,10 +22,10 @@ go_library(
     deps = [
         ":datavalidate",
         ":utils",
-        "//intrinsic/util/archive:tartooling",
         "//intrinsic_sdk/intrinsic/assets:ioutils",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "//intrinsic_sdk/intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
+        "//intrinsic_sdk/intrinsic/util/archive:tartooling",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_google_safearchive//tar",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
@@ -55,11 +55,11 @@ go_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         ":utils",
-        "//intrinsic/util/proto:registryutil",
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/assets:metadatautils",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "//intrinsic_sdk/intrinsic/assets/errors:report",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_manifest_go_proto",
@@ -78,7 +78,7 @@ go_library(
     importpath = "intrinsic/assets/data/utils",
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/util/proto:registryutil",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@com_github_minio_highwayhash//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@org_golang_google_protobuf//proto",

@@ -47,7 +47,7 @@ Intrinsic Core uses [Kubernetes](../glossary/general_terms.md#kubernetes-k8s) to
 
    ```bash
    cd ~
-   export CORE_TAG=20261009.2
+   export CORE_TAG=20261012.0
    export OMTS_TAG=`gh release view --repo intrinsic-ai/intrinsic-omts --json tagName --jq '.tagName'`
 
    gh repo clone intrinsic-ai/intrinsic-core -- --revision="${CORE_TAG:?}"

@@ -34,8 +34,8 @@ go_library(
     ],
     importpath = "intrinsic/tools/inctl/cmd/vm/pool/pool",
     deps = [
-        "//intrinsic/kubernetes/acl:identity",
-        "//intrinsic/kubernetes/vmpool/service/pkg/defaults",
+        "//intrinsic_sdk/intrinsic/kubernetes/acl:identity",
+        "//intrinsic_sdk/intrinsic/kubernetes/vmpool/service/pkg/defaults",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:cobrautil",

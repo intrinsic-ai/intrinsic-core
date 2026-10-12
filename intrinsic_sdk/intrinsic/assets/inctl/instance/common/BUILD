@@ -23,8 +23,8 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:__subpackages__",
     ],
     deps = [
-        "//intrinsic/util/proto:protoio",
-        "//intrinsic/util/proto:registryutil",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_go_proto",
         "@org_golang_google_protobuf//encoding/protojson:go_default_library",
         "@org_golang_google_protobuf//proto:go_default_library",

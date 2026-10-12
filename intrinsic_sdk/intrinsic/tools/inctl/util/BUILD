@@ -85,8 +85,8 @@ go_library(
     deps = [
         ":color",
         ":viperutil",
-        "//intrinsic/config:environments",
         "//intrinsic/tools/inctl/config",
+        "//intrinsic_sdk/intrinsic/config:environments",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "@com_github_pkg_errors//:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",

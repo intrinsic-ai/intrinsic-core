@@ -47,20 +47,6 @@ cc_library(
 )
 
 alias(
-    name = "skillbundle",
-    actual = "//intrinsic_sdk/intrinsic/skills:skillbundle",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:internal_api_users"],
-)
-
-alias(
-    name = "skillmanifest",
-    actual = "//intrinsic_sdk/intrinsic/skills:skillmanifest",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)
-
-alias(
     name = "skillvalidate",
     actual = "//intrinsic_sdk/intrinsic/skills:skillvalidate",
     tags = ["go/intrinsic-ioc-transition-tdd"],

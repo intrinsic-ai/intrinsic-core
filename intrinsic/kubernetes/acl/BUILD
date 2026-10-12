@@ -24,35 +24,8 @@ exports_files(
 )
 
 alias(
-    name = "cookies",
-    actual = "//intrinsic_sdk/intrinsic/kubernetes/acl:cookies",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = [
-        "//intrinsic/kubernetes/acl:__subpackages__",
-        "//intrinsic/skills/tools/skill/cmd:__subpackages__",
-        "//intrinsic/tools/inctl/auth:__subpackages__",
-        "//intrinsic/tools/inctl/util:__subpackages__",
-        "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:__subpackages__",
-        "//intrinsic_sdk/intrinsic/tools/inctl/auth:__subpackages__",
-        "//intrinsic_sdk/intrinsic/tools/inctl/util:__subpackages__",
-    ],
-)
-
-alias(
     name = "clientcontext",
     actual = "//intrinsic_sdk/intrinsic/kubernetes/acl:clientcontext",
     tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//visibility:public"],
-)
-
-alias(
-    name = "jwt",
-    actual = "//intrinsic_sdk/intrinsic/kubernetes/acl:jwt",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "identity",
-    actual = "//intrinsic_sdk/intrinsic/kubernetes/acl:identity",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
 )

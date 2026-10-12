@@ -20,7 +20,7 @@ py_library(
     name = "skill_registry_client",
     srcs = ["skill_registry_client.py"],
     deps = [
-        "//intrinsic/util/grpc:error_handling",
+        "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/skills/proto:skill_registry_py_pb2",

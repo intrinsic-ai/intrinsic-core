@@ -61,7 +61,7 @@ py_grpc_library(
 proto_library(
     name = "behavior_tree_registry_internal_proto",
     srcs = ["behavior_tree_registry_internal.proto"],
-    deps = ["//intrinsic/executive/proto:behavior_tree_proto"],
+    deps = ["//intrinsic_sdk/intrinsic/executive/proto:behavior_tree_proto"],
 )
 
 cc_proto_library(

@@ -44,9 +44,9 @@ cc_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         ":platform_cc",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/assets/instances/connect:connect_cc",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -69,8 +69,8 @@ py_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         ":platform_py",
-        "//intrinsic/util/grpc:interceptor",
         "//intrinsic_sdk/intrinsic/assets/instances/connect:connect_py",
+        "//intrinsic_sdk/intrinsic/util/grpc:interceptor",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl/logging",
         "@com_google_protobuf//:protobuf_python",

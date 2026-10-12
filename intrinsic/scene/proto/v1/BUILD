@@ -92,20 +92,8 @@ alias(
 )
 
 alias(
-    name = "scene_object_import_cc_proto",
-    actual = "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_cc_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "scene_object_import_go_proto",
     actual = "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "scene_object_import_cc_grpc_proto",
-    actual = "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_cc_grpc_proto",
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 

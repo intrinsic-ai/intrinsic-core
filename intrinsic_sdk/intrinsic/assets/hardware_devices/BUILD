@@ -21,7 +21,6 @@ go_library(
     visibility = ["//intrinsic:internal_api_users"],
     deps = [
         ":hardwaredevicevalidate",
-        "//intrinsic/util/archive:tartooling",
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/assets:imageutils",
         "//intrinsic_sdk/intrinsic/assets:ioutils",
@@ -30,6 +29,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets/scene_objects:gzfprocessor",
         "//intrinsic_sdk/intrinsic/assets/scene_objects:sceneobjectbundle",
         "//intrinsic_sdk/intrinsic/assets/services:servicebundle",
+        "//intrinsic_sdk/intrinsic/util/archive:tartooling",
         "@com_github_google_safearchive//tar",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",

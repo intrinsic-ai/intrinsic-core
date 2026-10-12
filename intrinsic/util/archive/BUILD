@@ -18,13 +18,6 @@ load("//bazel:cc_macros.bzl", "cc_library")
 
 package(default_visibility = ["//visibility:private"])
 
-alias(
-    name = "tartooling",
-    actual = "//intrinsic_sdk/intrinsic/util/archive:tartooling",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:intrinsic_internal"],
-)
-
 cc_library(
     name = "unzip",
     srcs = ["unzip.cc"],

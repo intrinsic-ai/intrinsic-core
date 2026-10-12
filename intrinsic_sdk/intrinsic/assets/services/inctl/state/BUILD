@@ -22,9 +22,9 @@ go_library(
     importpath = "intrinsic/assets/services/inctl/state/get",
     deps = [
         ":stateutils",
-        "//intrinsic/tools/inctl/util:printer",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
         "@com_github_spf13_cobra//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:system_service_state_go_proto",
     ],
@@ -36,9 +36,9 @@ go_library(
     importpath = "intrinsic/assets/services/inctl/state/list",
     deps = [
         ":stateutils",
-        "//intrinsic/tools/inctl/util:printer",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
         "@com_github_spf13_cobra//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:system_service_state_go_proto",
     ],
@@ -49,7 +49,7 @@ go_library(
     srcs = ["stateutils.go"],
     importpath = "intrinsic/assets/services/inctl/state/stateutils",
     deps = [
-        "//intrinsic/tools/inctl/util:printer",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:system_service_state_go_proto",
         "@org_golang_google_protobuf//encoding/protojson:go_default_library",
         "@org_golang_x_text//cases:go_default_library",

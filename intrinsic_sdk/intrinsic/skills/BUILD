@@ -24,9 +24,9 @@ go_library(
     deps = [
         ":skillmanifest",
         ":skillvalidate",
-        "//intrinsic/util/archive:tartooling",
         "//intrinsic_sdk/intrinsic/assets:imageutils",
         "//intrinsic_sdk/intrinsic/assets:ioutils",
+        "//intrinsic_sdk/intrinsic/util/archive:tartooling",
         "@com_github_google_safearchive//tar",
         "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_go_proto",
         "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
@@ -42,7 +42,7 @@ go_library(
     importpath = "intrinsic/skills/skillmanifest",
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/util/proto:sourcecodeinfoview",
+        "//intrinsic_sdk/intrinsic/util/proto:sourcecodeinfoview",
         "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
         "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
     ],

@@ -28,7 +28,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",
     ],
     deps = [
-        "//intrinsic/config:environments",
+        "//intrinsic_sdk/intrinsic/config:environments",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "@com_github_spf13_viper//:go_default_library",

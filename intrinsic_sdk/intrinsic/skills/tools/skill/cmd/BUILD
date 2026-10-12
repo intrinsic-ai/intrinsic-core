@@ -47,8 +47,6 @@ go_library(
     importpath = "intrinsic/skills/tools/skill/cmd/dialerutil",
     visibility = [
         "//intrinsic/skills:__subpackages__",
-        "//intrinsic/skills/tools/skill/cmd:__pkg__",
-        "//intrinsic/storage/artifacts/client:__pkg__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
         "//intrinsic/tools/inctl/cmd/cluster:__pkg__",
         "//intrinsic/tools/inctl/cmd/logs:__pkg__",
@@ -64,8 +62,8 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/stop:__pkg__",
     ],
     deps = [
-        "//intrinsic/kubernetes/acl:identity",
         "//intrinsic_sdk/intrinsic/assets:baseclientutils",
+        "//intrinsic_sdk/intrinsic/kubernetes/acl:identity",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "@io_opencensus_go//trace:go_default_library",
         "@org_golang_google_grpc//:go_default_library",
@@ -80,7 +78,7 @@ go_library(
     srcs = ["waitforskill.go"],
     importpath = "intrinsic/skills/tools/skill/cmd/waitforskill",
     deps = [
-        "//intrinsic/stats/go:telemetry",
+        "//intrinsic_sdk/intrinsic/stats/go:telemetry",
         "@intrinsic_apis//intrinsic/skills/proto:skill_registry_go_proto",
         "@io_opencensus_go//trace:go_default_library",
         "@org_golang_google_grpc//:go_default_library",

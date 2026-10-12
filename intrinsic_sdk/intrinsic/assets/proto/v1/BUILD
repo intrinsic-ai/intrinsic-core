@@ -97,7 +97,7 @@ proto_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         ":asset_proto",
-        "//intrinsic/world/proto:object_world_updates_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_proto",
     ],
 )
@@ -121,7 +121,7 @@ go_proto_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         ":asset_go_proto",
-        "//intrinsic/world/proto:object_world_updates_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_go_proto",
     ],
 )

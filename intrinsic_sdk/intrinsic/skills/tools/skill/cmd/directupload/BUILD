@@ -25,8 +25,8 @@ go_library(
     ],
     importpath = "intrinsic/skills/tools/skill/cmd/directupload/directupload",
     deps = [
-        "//intrinsic/storage/artifacts/client",
         "//intrinsic_sdk/intrinsic/assets:imagetransfer",
+        "//intrinsic_sdk/intrinsic/storage/artifacts/client",
         "@com_github_cenkalti_backoff_v4//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_google_go_containerregistry//pkg/name:go_default_library",

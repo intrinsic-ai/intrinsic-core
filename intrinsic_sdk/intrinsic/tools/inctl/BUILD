@@ -21,9 +21,9 @@ go_binary(
     srcs = ["inctl_external.go"],
     importpath = "intrinsic/tools/inctl/inctl_external",
     deps = [
-        "//intrinsic/skills/tools/skill/cmd",
         "//intrinsic_sdk/intrinsic/assets/inctl:assetcmd",
         "//intrinsic_sdk/intrinsic/assets/services/inctl:service",
+        "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:gpio",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:icon",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:markdown",

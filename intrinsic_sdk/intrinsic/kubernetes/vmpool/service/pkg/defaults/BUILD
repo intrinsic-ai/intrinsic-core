@@ -16,8 +16,6 @@ load("//bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = [
     "//intrinsic/kubernetes:__subpackages__",
-    "//intrinsic/kubernetes/vmpool/service:__subpackages__",
-    "//intrinsic/kubernetes/vmpool/service/pkg/defaults:__pkg__",
     "//intrinsic/tools/inctl/cmd/vm:__subpackages__",
     "//intrinsic_sdk/intrinsic/kubernetes:__subpackages__",
     "//intrinsic_sdk/intrinsic/tools/inctl/cmd/vm:__subpackages__",

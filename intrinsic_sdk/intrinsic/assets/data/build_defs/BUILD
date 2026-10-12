@@ -25,12 +25,12 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__",
     ],
     deps = [
-        "//intrinsic/util/proto:protoio",
-        "//intrinsic/util/proto:registryutil",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "//intrinsic_sdk/intrinsic/assets/data:databundle",
         "//intrinsic_sdk/intrinsic/assets/data:datavalidate",
         "//intrinsic_sdk/intrinsic/assets/data:utils",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
@@ -52,9 +52,9 @@ go_binary(
     ],
     deps = [
         ":datagen",
-        "//intrinsic/production:intrinsic",
-        "//intrinsic/util:flag",
-        "//intrinsic/util/proto:registryutil",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/util:flag",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@com_github_golang_glog//:go_default_library",
     ],
 )

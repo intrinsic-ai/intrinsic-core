@@ -17,8 +17,8 @@
 load("@bazel_lib//lib:paths.bzl", "to_rlocation_path")
 load("@bazel_skylib//lib:paths.bzl", "paths")
 load("@com_google_protobuf//bazel/common:proto_info.bzl", "ProtoInfo")
-load("//intrinsic/util/proto/build_defs:descriptor_set.bzl", "ProtoSourceCodeInfo", "gen_source_code_info_descriptor_set")
 load("//intrinsic_sdk/intrinsic/assets/build_defs:asset.bzl", "AssetInfo", "AssetLocalInfo")
+load("//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl", "ProtoSourceCodeInfo", "gen_source_code_info_descriptor_set")
 
 DataAssetInfo = provider(
     "Provided by intrinsic_data() rule.",

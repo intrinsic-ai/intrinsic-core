@@ -61,9 +61,3 @@ go_library(
         "@io_opencensus_go//trace:go_default_library",
     ],
 )
-
-alias(
-    name = "root",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

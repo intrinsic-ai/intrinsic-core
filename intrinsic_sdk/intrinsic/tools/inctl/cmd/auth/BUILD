@@ -28,8 +28,8 @@ go_library(
     ],
     importpath = "intrinsic/tools/inctl/cmd/auth/auth",
     deps = [
-        "//intrinsic/config:environments",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
+        "//intrinsic_sdk/intrinsic/config:environments",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
