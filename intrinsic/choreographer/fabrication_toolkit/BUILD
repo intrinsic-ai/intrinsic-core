@@ -22,7 +22,6 @@ cc_library(
         "//intrinsic:intrinsic_internal",
     ],
     deps = [
-        "//intrinsic/util:macros",
         "//intrinsic/world",
         "//intrinsic/world:entity",
         "//intrinsic/world/component:collision_component",
@@ -30,6 +29,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/api:io",
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_serializer",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util:macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world:geometry_types",
         "//intrinsic_sdk/intrinsic/world/component:geometry_component",

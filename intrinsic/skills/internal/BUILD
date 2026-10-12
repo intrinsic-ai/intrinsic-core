@@ -148,12 +148,6 @@ cc_library(
 )
 
 alias(
-    name = "preview_context_impl_py",
-    actual = "//intrinsic_sdk/intrinsic/skills/internal:preview_context_impl_py",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "skill_registry_client",
     actual = "//intrinsic_sdk/intrinsic/skills/internal:skill_registry_client",
     tags = ["go/intrinsic-ioc-transition-tdd"],

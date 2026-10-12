@@ -27,6 +27,9 @@ py_library(
     deps = [
         "//intrinsic/util/proto:descriptors_py",
         "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_pose_estimator_params_py_pb2",
+        "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_train_service_config_py_pb2",
+        "//intrinsic_sdk/intrinsic/assets:interface_utils_py",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_pb2_grpc",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_py_pb2",
         "//intrinsic_sdk/intrinsic/math/python:ros_proto_conversion",
@@ -49,6 +52,7 @@ py_binary(
     srcs = ["service/ioc_train_service_main.py"],
     deps = [
         ":ioc_train_service_lib",
+        "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_train_service_config_py_pb2",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl:app",
         "@com_google_absl_py//absl/flags",
@@ -64,10 +68,13 @@ python_oci_image(
 
 intrinsic_service(
     name = "ioc_train_service_asset",
+    default_config = "configs/default_config.textproto",
     images = [":ioc_train_service_image.tar"],
     manifest = "service_manifest.textproto",
     deps = [
         "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_pose_estimator_params_proto",
+        "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_train_service_config_proto",
+        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_proto",
         "@com_google_protobuf//:empty_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",

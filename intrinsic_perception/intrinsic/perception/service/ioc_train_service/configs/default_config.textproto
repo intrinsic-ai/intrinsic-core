@@ -1,3 +1,6 @@
+# proto-file: google/protobuf/any.proto
+# proto-message: Any
+
 # Copyright 2026 Intrinsic Innovation LLC
 #
 # Licensed under the Apache License, Version 2.0 (the "License");
@@ -12,26 +15,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# Testing utilities for skills.
-
-package(
-    default_testonly = True,
-)
-
-alias(
-    name = "skill_test_utils",
-    actual = "//intrinsic_sdk/intrinsic/skills/testing:skill_test_utils",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = [
-        "//intrinsic:public_api_users",
-    ],
-)
-
-alias(
-    name = "skill_test_utils_cc",
-    actual = "//intrinsic_sdk/intrinsic/skills/testing:skill_test_utils_cc",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = [
-        "//intrinsic:public_api_users",
-    ],
-)
+[type.googleapis.com/intrinsic_proto.perception.ioc.IocTrainServiceConfig] {
+  intrinsic_runtime: {
+    name: "intrinsic_runtime"
+  }
+}

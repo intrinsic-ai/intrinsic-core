@@ -32,7 +32,7 @@ metadata {
 
 service_def {
   service_proto_prefixes: "/intrinsic_proto.perception.v1.TrainService/"
-  config_message_full_name: "google.protobuf.Empty"
+  config_message_full_name: "intrinsic_proto.perception.ioc.IocTrainServiceConfig"
   real_spec {
     image {
       archive_filename: "ioc_train_service_image.tar"

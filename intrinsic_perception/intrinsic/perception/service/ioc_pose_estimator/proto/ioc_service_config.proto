@@ -22,6 +22,13 @@ import "intrinsic/assets/proto/v1/resolved_dependency.proto";
 option go_package = "github.com/intrinsic-ai/insrc/intrinsic_perception/intrinsic/perception/service/ioc_pose_estimator/proto/ioc_service_config_go_proto";
 
 message IocPoseEstimatorServiceConfig {
+  // The resolved dependency for the Intrinsic runtime.
+  intrinsic_proto.assets.v1.ResolvedDependency intrinsic_runtime = 5
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://google.longrunning.Operations",
+        requires: "grpc://intrinsic_proto.assets.v1.InstalledAssets",
+      }];
+
   intrinsic_proto.assets.v1.ResolvedDependency inference_service = 1
       [(intrinsic_proto.assets.field_metadata).dependency = {
         requires: "grpc://inference.GRPCInferenceService"

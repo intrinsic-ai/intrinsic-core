@@ -55,6 +55,7 @@ _OTEL_COLLECTOR_ENDPOINT = "oc-agent.app-intrinsic-base.svc.cluster.local:4317"
 _MODEL_POLL_INTERVAL = 5.0  # 5 second interval for polling InstalledAssets.
 _PLATFORM_CHANNELS_READY_TIMEOUT = 10.0  # 10 seconds.
 _TRITON_CHANNEL_READY_TIMEOUT = 1200  # 20 minutes.
+_TRITON_MAX_RECONNECT_BACKOFF_MS = 2000  # 2 seconds.
 
 
 def _get_runtime_context() -> runtime_context_pb2.RuntimeContext:
@@ -109,7 +110,10 @@ def main(argv: Sequence[str]) -> None:
 
   triton_channel = grpc.insecure_channel(
       _INFERENCE_SERVER_URL,
-      options=inference_service.GRPC_OPTIONS,
+      options=inference_service.GRPC_OPTIONS
+      + [
+          ("grpc.max_reconnect_backoff_ms", _TRITON_MAX_RECONNECT_BACKOFF_MS),
+      ],
   )
   data_assets_channel = (
       utils.connect_with_runtime_asset_fallback_for_asset_migration_only(

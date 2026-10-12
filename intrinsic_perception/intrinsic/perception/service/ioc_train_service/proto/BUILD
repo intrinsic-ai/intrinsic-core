@@ -33,3 +33,27 @@ go_proto_library(
     importpath = "intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto/ioc_pose_estimator_params_go_proto",
     proto = ":ioc_pose_estimator_params_proto",
 )
+
+proto_library(
+    name = "ioc_train_service_config_proto",
+    srcs = ["ioc_train_service_config.proto"],
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
+    ],
+)
+
+py_proto_library(
+    name = "ioc_train_service_config_py_pb2",
+    deps = [":ioc_train_service_config_proto"],
+)
+
+go_proto_library(
+    name = "ioc_train_service_config_go_proto",
+    importpath = "intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto/ioc_train_service_config_go_proto",
+    proto = ":ioc_train_service_config_proto",
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
+    ],
+)

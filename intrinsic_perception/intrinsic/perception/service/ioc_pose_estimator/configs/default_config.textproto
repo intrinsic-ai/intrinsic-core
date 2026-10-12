@@ -13,6 +13,9 @@
 # limitations under the License.
 
 [type.googleapis.com/intrinsic_proto.perception.ioc.IocPoseEstimatorServiceConfig] {
+  intrinsic_runtime: {
+    name: "intrinsic_runtime"
+  }
   inference_service: {
     name: "inference_service"
   }
