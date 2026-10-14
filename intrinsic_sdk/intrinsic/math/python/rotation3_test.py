@@ -54,6 +54,30 @@ _TEST_POINTS = math_test.make_named_vectors()
 
 class Rotation3Test(parameterized.TestCase, math_test.TestCase):
 
+  def test_check_valid_honors_custom_tolerance(self):
+    rotation = rotation3.Rotation3.from_xyzw([0, 0, 0, 0.05])
+
+    self.assertRaisesRegex(
+        ValueError,
+        quaternion.QUATERNION_ZERO_MESSAGE + '.*rotation tolerance',
+        rotation.check_valid,
+        norm_epsilon=0.1,
+        err_msg='rotation tolerance',
+    )
+
+  @parameterized.parameters(-1.0, np.nan, np.inf)
+  def test_check_valid_rejects_invalid_tolerance(self, tolerance):
+    self.assertRaisesRegex(
+        ValueError,
+        'norm_epsilon.*rotation tolerance',
+        rotation3.Rotation3.identity().check_valid,
+        norm_epsilon=tolerance,
+        err_msg='rotation tolerance',
+    )
+
+  def test_check_valid_accepts_quaternion_with_large_finite_components(self):
+    rotation3.Rotation3.from_xyzw([1e200] * 4).check_valid(norm_epsilon=1e200)
+
   def _rotation_matrix(self, axis, angle):
     """Returns the 3x3 rotation matrix defined by axis and angle."""
     self.assert_vector_is_normalized(axis)
@@ -426,11 +450,13 @@ class Rotation3Test(parameterized.TestCase, math_test.TestCase):
         rotation3.Rotation3.identity(),
     )
 
-  @parameterized.parameters([
-      (np.identity(3) * 2.0,),
-      (np.ones((3, 3)),),
-      (np.ones((4, 4)),),
-  ])
+  @parameterized.parameters(
+      [
+          (np.identity(3) * 2.0,),
+          (np.ones((3, 3)),),
+          (np.ones((4, 4)),),
+      ]
+  )
   def test_from_matrix_not_orthogonal(self, not_orthogonal_matrix):
     self.assertRaisesRegex(
         ValueError,
@@ -445,13 +471,15 @@ class Rotation3Test(parameterized.TestCase, math_test.TestCase):
         not_orthogonal_matrix,
     )
 
-  @parameterized.parameters([
-      (np.zeros((1, 2, 3)),),
-      (np.zeros(7),),
-      (np.identity(2),),
-      (np.zeros((2, 4)),),
-      (np.zeros((3, 1)),),
-  ])
+  @parameterized.parameters(
+      [
+          (np.zeros((1, 2, 3)),),
+          (np.zeros(7),),
+          (np.identity(2),),
+          (np.zeros((2, 4)),),
+          (np.zeros((3, 1)),),
+      ]
+  )
   def test_from_matrix_wrong_shape(self, wrong_shape_matrix):
     wrong_shape_matrix = np.asarray(wrong_shape_matrix)
     self.assertRaisesRegex(
