@@ -340,7 +340,8 @@ class Pose3(object):
       A Pose3 that computes the same rigid transformation as the matrix.
 
     Raises:
-      ValueError: If input has wrong shape.
+      ValueError: If input has wrong shape or its rotation part is not a proper
+        rotation (not orthogonal, or a reflection with determinant -1).
     """
     if matrix4x4.shape != (4, 4):
       raise ValueError(
