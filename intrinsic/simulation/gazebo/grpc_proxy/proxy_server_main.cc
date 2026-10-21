@@ -119,6 +119,14 @@ class ErrorService : public ::grpc::CallbackGenericService {
   // CreateReactor is called for every incoming RPC
   ::grpc::ServerGenericBidiReactor* CreateReactor(
       ::grpc::GenericCallbackServerContext* context) override {
+    // Return UNIMPLEMENTED for gRPC health checks. Clients using
+    // intrinsic::connect::CheckChannelHealth treat UNIMPLEMENTED as healthy,
+    // so the client will connect successfully and the configured error status
+    // will then be returned on subsequent service RPCs
+    if (context->method() == "/grpc.health.v1.Health/Check") {
+      return new ErrorReactor(
+          ::grpc::Status(::grpc::StatusCode::UNIMPLEMENTED, ""));
+    }
     absl::ReaderMutexLock l(mutex_);
     return new ErrorReactor(status_);
   }

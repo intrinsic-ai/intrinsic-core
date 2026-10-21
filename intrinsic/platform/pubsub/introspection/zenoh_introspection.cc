@@ -23,14 +23,13 @@
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "intrinsic/icon/release/portable/init_intrinsic.h"
+#include "intrinsic/platform/pubsub/introspection/metrics.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_config.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_handle.h"
-#include "intrinsic/production/external/googleinit/googleinit.h"
 #include "intrinsic/stats/opencensus.h"
 #include "nlohmann/json.hpp"
-#include "opencensus/stats/stats.h"
-#include "opencensus/tags/tag_key.h"
 #include "ortools/base/helpers.h"
 #include "ortools/base/options.h"
 
@@ -50,106 +49,6 @@ namespace intrinsic {
 namespace {
 
 using ::nlohmann::json;
-using ::opencensus::stats::Aggregation;
-using ::opencensus::stats::MeasureInt64;
-using ::opencensus::stats::ViewDescriptor;
-using ::opencensus::tags::TagKey;
-
-constexpr char kPubSubTopicBytesName[] = "intrinsic/pubsub/topic_bytes";
-constexpr char kPubSubTopicBytesDesc[] = "Total number of bytes";
-
-constexpr char kPubSubTopicMessagesName[] = "intrinsic/pubsub/topic_messages";
-constexpr char kPubSubTopicMessagesDesc[] = "Total number of messages";
-
-constexpr char kNumPublishersName[] = "intrinsic/pubsub/num_publishers";
-constexpr char kNumPublishersDesc[] =
-    "Number of publishers in each Zenoh session";
-
-constexpr char kNumSubscribersName[] = "intrinsic/pubsub/num_subscribers";
-constexpr char kNumSubscribersDesc[] =
-    "Number of subscribers in each Zenoh session";
-
-MeasureInt64 PubSubTopicBytes() {
-  static const auto measure =
-      MeasureInt64::Register(kPubSubTopicBytesName, kPubSubTopicBytesDesc, "1");
-  return measure;
-}
-
-MeasureInt64 PubSubTopicMessages() {
-  static const auto measure = MeasureInt64::Register(
-      kPubSubTopicMessagesName, kPubSubTopicMessagesDesc, "1");
-  return measure;
-}
-
-MeasureInt64 PubSubNumPublishers() {
-  static const auto measure =
-      MeasureInt64::Register(kNumPublishersName, kNumPublishersDesc, "1");
-  return measure;
-}
-
-MeasureInt64 PubSubNumSubscribers() {
-  static const auto measure =
-      MeasureInt64::Register(kNumSubscribersName, kNumSubscribersDesc, "1");
-  return measure;
-}
-
-TagKey PubSubDirectionNameKey() {
-  static const auto key = opencensus::tags::TagKey::Register("direction");
-  return key;
-}
-
-TagKey PubSubTopicNameKey() {
-  static const auto key = opencensus::tags::TagKey::Register("topic_name");
-  return key;
-}
-
-TagKey PubSubHostNameKey() {
-  static const auto key = opencensus::tags::TagKey::Register("host_name");
-  return key;
-}
-
-REGISTER_MODULE_INITIALIZER(pubsub_metrics, {
-  PubSubTopicBytes();
-  PubSubTopicMessages();
-  PubSubNumPublishers();
-  PubSubNumSubscribers();
-
-  ViewDescriptor()
-      .set_name(kPubSubTopicBytesName)
-      .set_measure(kPubSubTopicBytesName)
-      .set_description(kPubSubTopicBytesDesc)
-      .set_aggregation(Aggregation::LastValue())
-      .add_column(PubSubDirectionNameKey())
-      .add_column(PubSubTopicNameKey())
-      .add_column(PubSubHostNameKey())
-      .RegisterForExport();
-
-  ViewDescriptor()
-      .set_name(kPubSubTopicMessagesName)
-      .set_measure(kPubSubTopicMessagesName)
-      .set_description(kPubSubTopicMessagesDesc)
-      .set_aggregation(Aggregation::LastValue())
-      .add_column(PubSubDirectionNameKey())
-      .add_column(PubSubTopicNameKey())
-      .add_column(PubSubHostNameKey())
-      .RegisterForExport();
-
-  ViewDescriptor()
-      .set_name(kNumPublishersName)
-      .set_measure(kNumPublishersName)
-      .set_description(kNumPublishersDesc)
-      .set_aggregation(Aggregation::LastValue())
-      .add_column(PubSubHostNameKey())
-      .RegisterForExport();
-
-  ViewDescriptor()
-      .set_name(kNumSubscribersName)
-      .set_measure(kNumSubscribersName)
-      .set_description(kNumSubscribersDesc)
-      .set_aggregation(Aggregation::LastValue())
-      .add_column(PubSubHostNameKey())
-      .RegisterForExport();
-});
 
 class ZenohIntrospector {
  public:
@@ -238,37 +137,17 @@ class ZenohIntrospector {
         uint64_t j_pub_messages = extract_value<uint64_t>(*it, "messages", 0);
         uint64_t j_pub_bytes = extract_value<uint64_t>(*it, "bytes", 0);
 
-        opencensus::stats::Record(
-            {
-                {PubSubTopicBytes(), j_pub_bytes},
-            },
-            {
-                {PubSubDirectionNameKey(), "pub"},
-                {PubSubTopicNameKey(), j_pub_name},
-                {PubSubHostNameKey(), j_hostname},
-            });
-
-        opencensus::stats::Record(
-            {
-                {PubSubTopicMessages(), j_pub_messages},
-            },
-            {
-                {PubSubDirectionNameKey(), "pub"},
-                {PubSubTopicNameKey(), j_pub_name},
-                {PubSubHostNameKey(), j_hostname},
-            });
+        zenoh_introspection::RecordTopicMetrics(
+            /*direction=*/"pub", j_pub_name, j_hostname,
+            static_cast<int64_t>(j_pub_bytes),
+            static_cast<int64_t>(j_pub_messages));
       }
     }
 
     // Recording the number of publishers outside of the `if` statement above to
     // make sure that we record clients with zero publishers.
-    opencensus::stats::Record(
-        {
-            {PubSubNumPublishers(), num_publishers},
-        },
-        {
-            {PubSubHostNameKey(), j_hostname},
-        });
+    zenoh_introspection::RecordNumPublishers(
+        j_hostname, static_cast<int64_t>(num_publishers));
 
     if (j.contains("subscriptions") && !j["subscriptions"].is_null()) {
       json j_subs = j["subscriptions"];
@@ -278,37 +157,17 @@ class ZenohIntrospector {
         uint64_t j_sub_messages = extract_value<uint64_t>(*it, "messages", 0);
         uint64_t j_sub_bytes = extract_value<uint64_t>(*it, "bytes", 0);
 
-        opencensus::stats::Record(
-            {
-                {PubSubTopicBytes(), j_sub_bytes},
-            },
-            {
-                {PubSubDirectionNameKey(), "sub"},
-                {PubSubTopicNameKey(), j_sub_name},
-                {PubSubHostNameKey(), j_hostname},
-            });
-
-        opencensus::stats::Record(
-            {
-                {PubSubTopicMessages(), j_sub_messages},
-            },
-            {
-                {PubSubDirectionNameKey(), "sub"},
-                {PubSubTopicNameKey(), j_sub_name},
-                {PubSubHostNameKey(), j_hostname},
-            });
+        zenoh_introspection::RecordTopicMetrics(
+            /*direction=*/"sub", j_sub_name, j_hostname,
+            static_cast<int64_t>(j_sub_bytes),
+            static_cast<int64_t>(j_sub_messages));
       }
     }
 
     // Recording the number of subscribers outside of the `if` statement above
     // to make sure that we record clients with zero subscribers.
-    opencensus::stats::Record(
-        {
-            {PubSubNumSubscribers(), num_subscribers},
-        },
-        {
-            {PubSubHostNameKey(), j_hostname},
-        });
+    zenoh_introspection::RecordNumSubscribers(
+        j_hostname, static_cast<int64_t>(num_subscribers));
   }
   static void introspection_callback_s(const char* keyexpr, const void* blob,
                                        size_t blob_len, void* fptr) {
@@ -344,7 +203,9 @@ absl::Status MainImpl() {
 
 int main(int argc, char** argv) {
   InitIntrinsic(argv[0], argc, argv);
-  intrinsic::OpenCensusPlugin open_census;
+  intrinsic::OpenCensusPlugin open_census(
+      /*service_name=*/"zenoh_introspection", /*use_otel_metrics=*/true);
+  intrinsic::zenoh_introspection::RegisterZenohIntrospectionMetrics();
   QCHECK_OK(intrinsic::MainImpl());
   return 0;
 }

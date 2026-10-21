@@ -19,5 +19,5 @@ package(default_visibility = ["//intrinsic:public_api_users"])
 py_library(
     name = "behavior_tree_visitor",
     srcs = ["behavior_tree_visitor.py"],
-    deps = ["//intrinsic/executive/proto:behavior_tree_py_pb2"],
+    deps = ["@intrinsic_apis//intrinsic/executive/proto:behavior_tree_py_pb2"],
 )

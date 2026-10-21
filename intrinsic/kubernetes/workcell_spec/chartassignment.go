@@ -29,6 +29,7 @@ import (
 	"time"
 
 	appstat "intrinsic/kubernetes/appstat/inspect"
+	"intrinsic/stats/go/telemetry"
 
 	"dario.cat/mergo"
 	"github.com/bazelbuild/buildtools/labels"
@@ -38,7 +39,9 @@ import (
 	"github.com/googlecloudrobotics/core/src/go/pkg/apis/apps/v1alpha1"
 	"github.com/googlecloudrobotics/core/src/go/pkg/client/versioned"
 	"github.com/pkg/errors"
-	"go.opencensus.io/trace"
+	"go.opentelemetry.io/otel/attribute"
+	"go.opentelemetry.io/otel/propagation"
+	oteltrace "go.opentelemetry.io/otel/trace"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/util/wait"
@@ -50,8 +53,7 @@ import (
 
 const (
 	// PartOfAppLabel is the name of the label containing the app name that a chart belongs to.
-	PartOfAppLabel    = "app.kubernetes.io/part-of"
-	traceIDAnnotation = "cloudrobotics.com/trace-id"
+	PartOfAppLabel = "app.kubernetes.io/part-of"
 )
 
 // ErrStatusUpdateTimeout is returned when the status update of the chart assignment timed out.
@@ -153,13 +155,23 @@ func DeleteAndWait(ctx context.Context, clientset versioned.Interface, kubernete
 	return Delete(ctx, clientset, kubernetes, name, true)
 }
 
+func injectTraceContext(ctx context.Context, ca *v1alpha1.ChartAssignment) {
+	if !oteltrace.SpanFromContext(ctx).SpanContext().IsValid() {
+		return
+	}
+	if ca.GetAnnotations() == nil {
+		ca.SetAnnotations(make(map[string]string))
+	}
+	(propagation.TraceContext{}).Inject(ctx, propagation.MapCarrier(ca.GetAnnotations()))
+}
+
 // CreateOrUpdate creates a new chart assignment or updates an existing one
 // When updating an existing resource, optimistic locking means we may need to retry.
 func CreateOrUpdate(ctx context.Context, clientset versioned.Interface, ca *v1alpha1.ChartAssignment) (*v1alpha1.ChartAssignment, error) {
-	ctx, span := trace.StartSpan(ctx, "chartassignment.CreateOrUpdate")
+	ctx, span := telemetry.StartSpan(ctx, "chartassignment.CreateOrUpdate")
 	defer span.End()
 
-	SetAnnotation(ca, traceIDAnnotation, trace.FromContext(ctx).SpanContext().TraceID.String())
+	injectTraceContext(ctx, ca)
 
 	// TODO(rodrigoq): Can server-side apply make this simpler?
 	caClient := clientset.AppsV1alpha1().ChartAssignments()
@@ -204,8 +216,9 @@ func CreateOrUpdate(ctx context.Context, clientset versioned.Interface, ca *v1al
 func WaitForHealthy(ctx context.Context, clientset versioned.Interface, name string, clients appstat.KubeInterface, updates io.Writer) error {
 	// TODO(b/249235890): Replace this waitForChartAssignment mechanism by a version based
 	// on the deploy service to get a pure gRPC based system.
-	ctx, span := trace.StartSpan(ctx, "waitForChartAssignment")
-	span.AddAttributes(trace.StringAttribute("chart_assignment_name", name))
+	ctx, span := telemetry.StartSpan(ctx, "waitForChartAssignment", oteltrace.WithAttributes(
+		attribute.String("chart_assignment_name", name),
+	))
 	defer span.End()
 	ticker := time.NewTicker(1 * time.Second)
 	defer ticker.Stop()
@@ -314,7 +327,7 @@ func getStatus(ca *v1alpha1.ChartAssignment) (string, bool) {
 func Install(ctx context.Context, clusterName, installUser string, ca *v1alpha1.ChartAssignment, values v1alpha1.ConfigValues, appsCS versioned.Interface, dryRun bool) error {
 	// TODO(mikhailpak): Pass user as a parameter.
 	ca.GetLabels()["installed-by"] = installUser
-	ca.GetAnnotations()["cloudrobotics.com/trace-id"] = trace.FromContext(ctx).SpanContext().TraceID.String()
+	injectTraceContext(ctx, ca)
 	ca.Spec.ClusterName = clusterName
 	// Merge values from the released chart assignment (contains feature options) with runtime based values.
 	if err := mergo.Merge(&ca.Spec.Chart.Values, values, mergo.WithOverride); err != nil {

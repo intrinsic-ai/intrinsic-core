@@ -21,6 +21,7 @@ proto_library(
     name = "asset_info_internal_proto",
     srcs = ["asset_info_internal.proto"],
     visibility = [
+        "//intrinsic/conductor:__subpackages__",
         "//intrinsic/executive:__subpackages__",
         "//intrinsic/resources/proto:__pkg__",
     ],
@@ -36,6 +37,7 @@ cc_proto_library(
     name = "asset_info_internal_cc_proto",
     visibility = [
         "//intrinsic/assets:__subpackages__",
+        "//intrinsic/conductor:__subpackages__",
         "//intrinsic/executive:__subpackages__",
     ],
     deps = [":asset_info_internal_proto"],
@@ -48,6 +50,7 @@ cc_grpc_library(
     grpc_only = True,
     visibility = [
         "//intrinsic/assets:__subpackages__",
+        "//intrinsic/conductor:__subpackages__",
         "//intrinsic/executive:__subpackages__",
     ],
     deps = [":asset_info_internal_cc_proto"],

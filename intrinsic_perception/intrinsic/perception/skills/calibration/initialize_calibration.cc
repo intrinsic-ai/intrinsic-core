@@ -21,7 +21,6 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "google/protobuf/message.h"
 #include "google/protobuf/repeated_ptr_field.h"
@@ -31,8 +30,7 @@
 #include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
-#include "intrinsic/icon/equipment/equipment_utils.h"
-#include "intrinsic/icon/skills/util/position_part_util.h"
+#include "intrinsic/icon/equipment/resolved_dependency_utils.h"
 #include "intrinsic/perception/asset_utils.h"
 #include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/pose_estimator_id_utils.h"
@@ -45,13 +43,14 @@
 #include "intrinsic/perception/proto/v1/pose_estimator_id.pb.h"
 #include "intrinsic/perception/skills/calibration/initialize_calibration.pb.h"
 #include "intrinsic/resources/proto/resource_handle.pb.h"
-#include "intrinsic/skills/cc/equipment_pack.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/cc/skill_utils.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
 #include "intrinsic/util/grpc/connection_params.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/world/objects/kinematic_object.h"
+#include "intrinsic/world/objects/object_world_client.h"
 #include "intrinsic/world/util/object_reference_utils.h"
 
 namespace intrinsic {
@@ -199,7 +198,6 @@ InitializeCalibration::Execute(const ExecuteRequest& request,
       request.params<intrinsic_proto::skills::InitializeCalibrationParams>());
   INTR_RETURN_IF_ERROR(ValidateParams(params));
 
-  const EquipmentPack equipment_pack = context.equipment();
   // Connect to the Calibration service.
   grpc::ClientContext ctx;
   INTR_ASSIGN_OR_RETURN(std::shared_ptr<grpc::Channel> channel,
@@ -231,21 +229,14 @@ InitializeCalibration::Execute(const ExecuteRequest& request,
   // Extract the robot arm with respect to which the camera pose will be
   // defined.
   world::ObjectWorldClient& world = context.object_world();
-  auto position_part =
-      equipment_pack.Unpack<intrinsic_proto::icon::Icon2PositionPart>(
-          kRobotEquipmentSlot, icon::kIcon2PositionPartKey);
-  if (!position_part.ok()) {
-    return absl::FailedPreconditionError(
-        absl::StrCat("ICON Equipment at slot ", kRobotEquipmentSlot,
-                     " does not have a position part."));
-  }
+  INTR_ASSIGN_OR_RETURN(icon::IconResolvedDependency icon_resolved_dependency,
+                        icon::ConnectToIconResolvedDependency(params.robot()));
   INTR_ASSIGN_OR_RETURN(
-      skills::ArmPartInformation arm_part_info,
-      skills::GetArmPartInformation(position_part.value(), world,
-                                    params.has_arm_part()
-                                        ? std::make_optional(params.arm_part())
-                                        : std::nullopt));
-  *initialize_request.mutable_arm_part() = arm_part_info.object;
+      icon::PositionPartWithObject part_with_object,
+      icon_resolved_dependency.GetPositionPartAndKinematicObject(
+          world, params.arm_part()));
+  *initialize_request.mutable_arm_part() =
+      part_with_object.kinematic_object.ObjectReference();
 
   if (params.has_calibration_object() &&
       !IsEmptyObjectReference(params.calibration_object())) {

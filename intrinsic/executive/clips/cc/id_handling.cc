@@ -23,6 +23,7 @@
 
 #include "absl/base/no_destructor.h"
 #include "absl/base/thread_annotations.h"
+#include "absl/container/btree_set.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
@@ -40,6 +41,7 @@
 #include "intrinsic/executive/clips_cpp/environment.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
 #include "intrinsic/executive/clips_cpp/value.h"
+#include "intrinsic/util/status/extended_status.pb.h"
 #include "intrinsic/util/status/get_extended_status.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_specs.h"
@@ -69,6 +71,79 @@ const LazyRE2 kIdentifierInvalidLeadLettersRegexp = {
 // common pattern of an alpha-numeric identifier with underscores.
 constexpr char kBlackboardKeyPattern[] = "[_a-zA-Z][_a-zA-Z0-9]*";
 const LazyRE2 kBlackboardKeyRegexp = {kBlackboardKeyPattern};
+
+// Element ids are strings, but must hold a decimal number in the style of a
+// uint64. Leading zeros are allowed, but never generated.
+constexpr char kElementIdPattern[] = "[0-9]{1,20}";
+const LazyRE2 kElementIdRegexp = {kElementIdPattern};
+
+// Validates all set element ids in 'tree' (across all trees, nodes, and
+// conditions) and reports malformed or duplicate ids. Empty element ids are
+// skipped. On success returns the set of all set element ids.
+absl::StatusOr<absl::flat_hash_set<std::string>> ValidateAndGetElementIds(
+    const BehaviorTree& tree) {
+  absl::flat_hash_set<std::string> used_element_ids;
+  absl::btree_set<std::string> duplicate_element_ids;
+  absl::btree_set<std::string> invalid_element_ids;
+
+  auto collect_element_id = [&](const auto& element) {
+    if (element.element_id().empty()) return absl::OkStatus();
+    if (!RE2::FullMatch(element.element_id(), *kElementIdRegexp)) {
+      invalid_element_ids.insert(element.element_id());
+    }
+    if (!used_element_ids.insert(element.element_id()).second) {
+      duplicate_element_ids.insert(element.element_id());
+    }
+    return absl::OkStatus();
+  };
+
+  INTR_RETURN_IF_ERROR(VisitBehaviorTree(
+      tree, {.visit_tree =
+                 [&collect_element_id](const BehaviorTree& t) {
+                   return collect_element_id(t);
+                 },
+             .visit_node =
+                 [&collect_element_id](const BehaviorTree&,
+                                       const BehaviorTree::Node& n) {
+                   return collect_element_id(n);
+                 },
+             .visit_condition =
+                 [&collect_element_id](const BehaviorTree&,
+                                       const BehaviorTree::Condition& c) {
+                   return collect_element_id(c);
+                 }}));
+
+  if (!duplicate_element_ids.empty() || !invalid_element_ids.empty()) {
+    std::vector<intrinsic_proto::status::ExtendedStatus> context;
+    if (!duplicate_element_ids.empty()) {
+      context.push_back(CreateExtendedStatus(
+          70004,
+          absl::StrFormat("Found the following duplicate element ids: %s.",
+                          absl::StrJoin(duplicate_element_ids, ", ")),
+          {.severity = intrinsic_proto::status::ExtendedStatus::ERROR}));
+    }
+    if (!invalid_element_ids.empty()) {
+      context.push_back(CreateExtendedStatus(
+          70005,
+          absl::StrFormat(
+              "Found invalid element ids: %s. Element ids must follow the "
+              "form: %s",
+              absl::StrJoin(invalid_element_ids, ", ",
+                            [](std::string* out, const std::string& id) {
+                              absl::StrAppend(out, "'", id, "'");
+                            }),
+              kElementIdPattern),
+          {.severity = intrinsic_proto::status::ExtendedStatus::ERROR}));
+    }
+
+    return CreateStatus(70099, "Behavior tree contains invalid element ids.",
+                        absl::StatusCode::kInvalidArgument,
+                        {.context = std::move(context)});
+  }
+
+  return used_element_ids;
+}
+
 
 bool IsReservedBlackboardKey(std::string_view key) {
   // These are internal keys used in the executive + all reserved identifiers in
@@ -291,6 +366,42 @@ absl::Status EnsureValidIds(intrinsic_proto::executive::BehaviorTree& tree,
   INTR_RETURN_IF_ERROR(EnsureValidTreeIds(tree, {}, tree_id_prefix));
   return EnsureValidNodeIds(tree, bit_gen);
 }
+
+
+absl::Status EnsureUniqueElementIds(BehaviorTree& tree) {
+  INTR_ASSIGN_OR_RETURN(absl::flat_hash_set<std::string> used_element_ids,
+                        ValidateAndGetElementIds(tree));
+
+  absl::BitGen bit_gen;
+  auto generate_missing_element_id = [&](auto& element) {
+    if (!element.element_id().empty()) return absl::OkStatus();
+    std::string new_element_id;
+    do {
+      new_element_id = absl::StrCat(absl::Uniform<uint64_t>(bit_gen));
+    } while (new_element_id == "0" ||
+             used_element_ids.contains(new_element_id));
+    used_element_ids.insert(new_element_id);
+    element.set_element_id(std::move(new_element_id));
+    return absl::OkStatus();
+  };
+
+  return VisitBehaviorTree(
+      tree, {.visit_tree =
+                 [&generate_missing_element_id](BehaviorTree& t) {
+                   return generate_missing_element_id(t);
+                 },
+             .visit_node =
+                 [&generate_missing_element_id](BehaviorTree&,
+                                                BehaviorTree::Node& n) {
+                   return generate_missing_element_id(n);
+                 },
+             .visit_condition =
+                 [&generate_missing_element_id](BehaviorTree&,
+                                                BehaviorTree::Condition& c) {
+                   return generate_missing_element_id(c);
+                 }});
+}
+
 
 std::string GenerateTreeIdPrefixForNode(absl::string_view tree_id,
                                         uint32_t node_id) {

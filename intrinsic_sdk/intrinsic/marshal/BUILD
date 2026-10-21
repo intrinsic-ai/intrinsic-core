@@ -24,7 +24,7 @@ cc_library(
     ],
     deps = [
         ":riegeli_coder",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:check",
         "@com_google_protobuf//:protobuf",
         "@com_google_protobuf//src/google/protobuf/io",
@@ -42,9 +42,9 @@ cc_library(
         "//intrinsic:intrinsic_internal",
     ],
     deps = [
-        "//intrinsic/util:demangle",
-        "//intrinsic/util/status:status_conversion_proto",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util:demangle",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",

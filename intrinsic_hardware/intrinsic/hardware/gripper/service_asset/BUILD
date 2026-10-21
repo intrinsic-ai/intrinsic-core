@@ -16,7 +16,7 @@ load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
 load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 package(default_visibility = [
     "//visibility:public",
@@ -97,9 +97,9 @@ cc_library(
         ":pinch_gripper_realtime_control_service_config_cc_proto",
         ":suction_gripper_opcua_service_config_cc_proto",
         ":suction_gripper_realtime_control_service_config_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_hardware/intrinsic/hardware/gpio:icon_gpio_service_config_cc_proto",
         "//intrinsic_hardware/intrinsic/hardware/gpio:opcua_gpio_service_config_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/hardware/gpio/v1:signal_cc_proto",
@@ -119,12 +119,12 @@ cc_binary(
         ":suction_gripper_opcua_service_config_cc_proto",
         ":suction_gripper_realtime_control_service_config_cc_proto",
         "//intrinsic/stats:opencensus",
-        "//intrinsic/util/grpc",
-        "//intrinsic/util/proto:any",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/release:file_helpers",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
         "//intrinsic_hardware/intrinsic/hardware/gripper/eoat:gripper_services",
+        "//intrinsic_sdk/intrinsic/util/grpc",
+        "//intrinsic_sdk/intrinsic/util/proto:any",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",

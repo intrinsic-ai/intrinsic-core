@@ -135,7 +135,9 @@ absl::Status WriteStreamingInput(absl::string_view input_name,
         io_storage.signature_.action_type_name(), "': No parser registered."));
   }
   google::protobuf::Any input_any_proto;
-  input_any_proto.PackFrom(input_proto);
+  if (!input_any_proto.PackFrom(input_proto)) {
+    return absl::InternalError("Failed to pack streaming input proto.");
+  }
   std::any* input_buffer = input_channel.input_buffer.GetFreeBuffer();
   INTR_ASSIGN_OR_RETURN(*input_buffer,
                         input_channel.input_parser(input_any_proto));

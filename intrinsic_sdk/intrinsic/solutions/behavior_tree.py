@@ -48,7 +48,6 @@ import warnings
 
 from cel.expr import syntax_pb2
 from google.protobuf import any_pb2
-from google.protobuf import descriptor_pb2
 from google.protobuf import message as protobuf_message
 from google.protobuf import wrappers_pb2
 import graphviz
@@ -3270,8 +3269,12 @@ class Data(Node):
   _operation: 'Data.OperationType'
   _cel_expression: Optional[str]
   _world_query: Optional[WorldQuery]
-  _proto: Optional[protobuf_message.Message | skill_utils.MessageWrapper]
-  _protos: Optional[List[protobuf_message.Message | skill_utils.MessageWrapper]]
+  _proto: Optional[
+      protobuf_message.Message | skill_utils.MessageWrapper | any_pb2.Any
+  ]
+  _protos: Optional[
+      List[protobuf_message.Message | skill_utils.MessageWrapper | any_pb2.Any]
+  ]
 
   class OperationType(enum.Enum):
     """Defines the kind of operation to perform for the data node."""
@@ -3287,10 +3290,14 @@ class Data(Node):
       cel_expression: Optional[str] = None,
       world_query: Optional[WorldQuery] = None,
       proto: Optional[
-          protobuf_message.Message | skill_utils.MessageWrapper
+          protobuf_message.Message | skill_utils.MessageWrapper | any_pb2.Any
       ] = None,
       protos: Optional[
-          List[protobuf_message.Message | skill_utils.MessageWrapper]
+          List[
+              protobuf_message.Message
+              | skill_utils.MessageWrapper
+              | any_pb2.Any
+          ]
       ] = None,
       name: Optional[str] = None,
       node_id: int | None = None,
@@ -3360,6 +3367,8 @@ class Data(Node):
           proto_message.data.create_or_update.proto.CopyFrom(
               self._proto.to_any()
           )
+        elif isinstance(self._proto, any_pb2.Any):
+          proto_message.data.create_or_update.proto.CopyFrom(self._proto)
         else:
           proto_message.data.create_or_update.proto.Pack(self._proto)
 
@@ -3369,6 +3378,8 @@ class Data(Node):
             proto_message.data.create_or_update.protos.items.add().CopyFrom(
                 p.to_any()
             )
+          elif isinstance(p, any_pb2.Any):
+            proto_message.data.create_or_update.protos.items.add().CopyFrom(p)
           else:
             proto_message.data.create_or_update.protos.items.add().Pack(p)
 
@@ -3453,6 +3464,11 @@ class Data(Node):
                 'The proto message in the Data node does not contain a message'
                 ' (None).'
             )
+        if isinstance(contained_proto, any_pb2.Any):
+          raise solutions_errors.FailedPreconditionError(
+              'Cannot create BlackboardValue for Data node containing an Any'
+              ' proto (no descriptor available).'
+          )
         return blackboard_value.BlackboardValue(
             contained_proto.DESCRIPTOR.fields_by_name,
             self._blackboard_key,
@@ -3545,11 +3561,16 @@ class Data(Node):
   @property
   def input_proto(
       self,
-  ) -> Optional[protobuf_message.Message | skill_utils.MessageWrapper]:
+  ) -> Optional[
+      protobuf_message.Message | skill_utils.MessageWrapper | any_pb2.Any
+  ]:
     return self._proto
 
   def set_input_proto(
-      self, proto: protobuf_message.Message | skill_utils.MessageWrapper
+      self,
+      proto: (
+          protobuf_message.Message | skill_utils.MessageWrapper | any_pb2.Any
+      ),
   ) -> Data:
     """Sets a specific proto for creating or updating a blackboard value.
 
@@ -3570,11 +3591,16 @@ class Data(Node):
   @property
   def input_protos(
       self,
-  ) -> Optional[List[protobuf_message.Message | skill_utils.MessageWrapper]]:
+  ) -> Optional[
+      List[protobuf_message.Message | skill_utils.MessageWrapper | any_pb2.Any]
+  ]:
     return self._protos
 
   def set_input_protos(
-      self, protos: List[protobuf_message.Message | skill_utils.MessageWrapper]
+      self,
+      protos: List[
+          protobuf_message.Message | skill_utils.MessageWrapper | any_pb2.Any
+      ],
   ) -> Data:
     """Sets list of specific protos for creating or updating a blackboard value.
 

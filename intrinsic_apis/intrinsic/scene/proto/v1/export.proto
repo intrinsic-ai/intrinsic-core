@@ -36,6 +36,10 @@ message ExportRequest {
     // Export to SDF. If `include_geometries` is set to true, then the response
     // will be a zip archive. Otherwise, it would be plain text SDF.
     EXPORT_FORMAT_SDF = 1;
+    // Export to binary glTF (GLB). Only visual geometries are included, and
+    // other options such as `include_geometries`, `include_user_data`, and
+    // `fds` are ignored.
+    EXPORT_FORMAT_GLB = 2;
   }
   // The format to export the SceneObject to.
   ExportFormat format = 2;
@@ -59,5 +63,8 @@ message ExportResponse {
 
     // Plain text SDF for `EXPORT_FORMAT_SDF` and `include_geometries=false`.
     string sdf = 2;
+
+    // Binary glTF (GLB) for `EXPORT_FORMAT_GLB`.
+    bytes glb = 3;
   }
 }

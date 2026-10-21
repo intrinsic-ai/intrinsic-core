@@ -17,6 +17,7 @@
 from __future__ import annotations
 
 import uuid
+import warnings
 
 import grpc
 
@@ -107,6 +108,15 @@ class BehaviorTreeRegistry:
       tree_proto = tree
     assert tree_proto.description
     skill_id = tree_proto.description.id
+    warnings.warn(
+        f'Sideloading behavior tree "{skill_id}" as a legacy process.'
+        ' Sideloading is deprecated and will not be supported in a following'
+        ' release. Set Asset metadata with'
+        ' BehaviorTree.set_asset_metadata(..., subprocess=True) and save the'
+        ' tree using Solution.processes.save() instead.',
+        DeprecationWarning,
+        stacklevel=2,
+    )
     version = str(uuid.uuid4()).replace('-', '')
     tree_proto.description.id_version = skill_id + '.0.0.1+sideload' + version
     self._register_or_update_behavior_tree(tree_proto)

@@ -19,6 +19,9 @@ package intrinsic_proto.motion_planning;
 import "intrinsic/icon/proto/joint_space.proto";
 import "intrinsic/math/proto/pose.proto";
 import "intrinsic/motion_planning/path_planning/path_segment.proto";
+
+import "intrinsic/motion_planning/proto/v1/motion_events.proto";
+
 import "intrinsic/motion_planning/proto/v1/motion_specification.proto";
 import "intrinsic/motion_planning/proto/v1/robot_specification.proto";
 
@@ -68,6 +71,10 @@ message MotionPlannerNonvolatileCacheValue {
   intrinsic_proto.icon.JointTrajectoryPVA trajectory = 1;
   // The path segments used to generate the planned trajectory.
   repeated intrinsic_proto.motion_planning.PathSegment path_segments = 2;
+
+  // The motion events on the trajectory
+  repeated intrinsic_proto.motion_planning.v1.MotionEvent motion_events = 3;
+
 }
 
 // The entry (key+value) type used for caching results from

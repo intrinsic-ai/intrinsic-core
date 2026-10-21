@@ -25,11 +25,11 @@ cc_library(
         "shared_memory_lockstep.h",
     ],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/hal:hardware_module_proxy",
         "//intrinsic_control/intrinsic/icon/interprocess/shared_memory_manager",
         "//intrinsic_control/intrinsic/icon/interprocess/shared_memory_manager:domain_socket_utils",
         "//intrinsic_control/intrinsic/icon/interprocess/shared_memory_manager:memory_segment",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread:lockstep",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status:statusor",

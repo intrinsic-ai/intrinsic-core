@@ -38,6 +38,8 @@ class MotionPlannerInterface {
   // Path planning statistics, such as the path planning duration.
   struct PathPlanningStatistics {
     absl::Duration path_planning_duration;
+    // Number of motion segments in the path planning request.
+    int num_motion_segments = 0;
   };
 
   // Trajectory generation statistics, such as the combined duration of path
@@ -61,6 +63,8 @@ class MotionPlannerInterface {
     absl::Duration motion_planning_duration;
     PathPlanningStatistics path_planning_statistics;
     TrajectoryGenerationStatistics trajectory_generation_statistics;
+    // Number of motion segments in the motion planning request.
+    int num_motion_segments = 0;
   };
 
   // These are all the types of path generation fallback strategies that the
@@ -102,6 +106,13 @@ class MotionPlannerInterface {
 
     // The collision checking statistics for the planned trajectory.
     DistanceCheckStatistics distance_check_statistics = {};
+
+
+    // The motion events corresponding to the planned trajectory.
+    // Could be empty if there are no events or before trajectory generation.
+    std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events = {};
+
     // Contains information about the motion planning duration, and its
     // breakdown, such as into path planning duration and trajectory generation
     // duration.

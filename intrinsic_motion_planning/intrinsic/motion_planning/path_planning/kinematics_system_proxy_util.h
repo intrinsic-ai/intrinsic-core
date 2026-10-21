@@ -56,6 +56,32 @@ absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
     const intrinsic_proto::RuleSet& rule_set = intrinsic_proto::RuleSet(),
     bool disable_collision_checking = false);
 
+// Options for configuring KinematicsSystemProxy creation.
+struct KinematicsProxyOptions {
+  // Configuration settings for the collision checker. If unset
+  // (CONFIG_NOT_SET), uses the default collision checker configuration (Coal).
+  intrinsic_proto::world::CollisionCheckerConfig collision_checker_config;
+
+  // Optional uniform geometric path constraints that are enforced by the
+  // proxy's IsValid check in addition to the collision checker.
+  std::optional<
+      intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
+      constraints_proto = std::nullopt;
+
+  // Collision rules applied on top of the world's default rule set (rules here
+  // take precedence over the world's defaults). Defaults to a
+  // default-constructed (empty) RuleSet, meaning no overrides.
+  intrinsic_proto::RuleSet rule_set;
+
+  // If true, no collision checker is created and
+  // `KinematicsSystemProxy::GetCollisionChecker()` returns nullptr.
+  bool disable_collision_checking = false;
+
+  // When set, a ConcurrentProxy backed by this many worker proxies is created.
+  // Must be > 0.
+  std::optional<int> maybe_concurrent_thread_count = std::nullopt;
+};
+
 // Creates a KinematicsSystemProxy for the kinematic chain defined by the
 // `robot` kinematic object. The proxy holds a collision checker initialized
 // with the provided ruleset. If no rule set is provided the default rule set
@@ -70,27 +96,7 @@ absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
 absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
     const object_world::ObjectWorld& object_world,
     const object_world::KinematicObject& robot,
-    std::optional<
-        intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
-        constraints_proto = std::nullopt,
-    const intrinsic_proto::RuleSet& rule_set = intrinsic_proto::RuleSet(),
-    bool disable_collision_checking = false,
-    std::optional<int> maybe_concurrent_thread_count = std::nullopt);
-
-// Creates a KinematicsSystemProxy from an object_world and robot with a
-// CollisionCheckerConfig to override the default collision checker.
-absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>>
-CreateKinematicsProxyWithConfig(
-    const object_world::ObjectWorld& object_world,
-    const object_world::KinematicObject& robot,
-    const intrinsic_proto::world::CollisionCheckerConfig&
-        collision_checker_config,
-    std::optional<
-        intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
-        constraints_proto = std::nullopt,
-    const intrinsic_proto::RuleSet& rule_set = intrinsic_proto::RuleSet(),
-    bool disable_collision_checking = false,
-    std::optional<int> maybe_concurrent_thread_count = std::nullopt);
+    const KinematicsProxyOptions& options = {});
 
 // Short-hand for the above call when you don't need the actual object world
 // object.
@@ -139,12 +145,12 @@ ConstraintManifoldProjector CreateConstraintManifoldProjector(
     double max_constraint_error_norm =
         KinematicsSystemProxy::kDefaultMaxConstraintErrorNorm);
 
-// This creates a proxy based on `create_info`, but the resulting proxy will
+// This creates a proxy based on `options`, but the resulting proxy will
 // have collision margins that are relaxed according to `relative_factor` and
 // `absolute_factor`. Collision margins must be updated in two places: in the
-// World itself and the ruleset in `create_info`. So we create a copy of the
+// World itself and the rule set in `options`. So we create a copy of the
 // World and transform the World's collision margins, AND we transform the
-// collision margins in `ruleset`.
+// collision margins in `options.rule_set`.
 //
 // For each margin, we compute two candidate relaxations:
 //
@@ -154,17 +160,10 @@ ConstraintManifoldProjector CreateConstraintManifoldProjector(
 //
 // We use the _minimum_ of the above 2 candidates.
 absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>>
-CreateProxyWithRelaxedMargins(
-    const object_world::ObjectWorld& object_world,
-    const object_world::KinematicObject& robot,
-    const intrinsic_proto::world::CollisionCheckerConfig&
-        collision_checker_config,
-    std::optional<
-        intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
-        constraints_proto,
-    const intrinsic_proto::RuleSet& rule_set, bool disable_collision_checking,
-    double relative_factor, double absolute_factor,
-    std::optional<int> maybe_concurrent_thread_count);
+CreateProxyWithRelaxedMargins(const object_world::ObjectWorld& object_world,
+                              const object_world::KinematicObject& robot,
+                              const KinematicsProxyOptions& options,
+                              double relative_factor, double absolute_factor);
 
 }  // namespace intrinsic
 

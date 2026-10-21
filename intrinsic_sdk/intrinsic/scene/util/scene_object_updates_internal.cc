@@ -38,6 +38,7 @@
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto/pose.pb.h"
 #include "intrinsic/math/proto_conversion.h"
+#include "intrinsic/scene/conversion/scene_object_model_utils.h"
 #include "intrinsic/scene/proto/v1/collision_rules.pb.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/object_properties.pb.h"
@@ -774,54 +775,8 @@ absl::StatusOr<SceneObject> ProcessSceneObjectUpdate(
   // update the parent_t_this. We do this for ALL joints to ensure consistency.
   if (update.joint_positions_size() > 0 || update.parent_t_inboard_size() > 0) {
     for (const auto& [joint_name, joint_entity] : all_joints) {
-      intrinsic_proto::world::KinematicsComponent* kinematics =
-          joint_entity->mutable_joint()->mutable_kinematics_component();
-
-      // Update the pose of the joint entity based on the value.
-      Pose3d parent_t_inboard;
-      if (kinematics->has_parent_t_inboard()) {
-        INTR_ASSIGN_OR_RETURN(
-            parent_t_inboard,
-            FromProtoNormalized(kinematics->parent_t_inboard()));
-      }
-
-      Pose3d outboard_t_child;
-      if (kinematics->has_outboard_t_child()) {
-        INTR_ASSIGN_OR_RETURN(
-            outboard_t_child,
-            FromProtoNormalized(kinematics->outboard_t_child()));
-      }
-
-      Pose3d inboard_t_outboard;
-      switch (kinematics->motion_type()) {
-        case intrinsic_proto::world::KinematicsComponent::MOTION_TYPE_FIXED:
-          inboard_t_outboard = Pose3d::Identity();
-          break;
-        case intrinsic_proto::world::KinematicsComponent::
-            MOTION_TYPE_REVOLUTE: {
-          eigenmath::Vector3d axis(0.0, 0.0, 1.0);
-          if (kinematics->has_axis()) {
-            axis = FromProto(kinematics->axis());
-          }
-          inboard_t_outboard =
-              CreateAngleAxisPose(kinematics->raw_value(), axis);
-        } break;
-        case intrinsic_proto::world::KinematicsComponent::
-            MOTION_TYPE_PRISMATIC: {
-          eigenmath::Vector3d axis(0.0, 0.0, 1.0);
-          if (kinematics->has_axis()) {
-            axis = FromProto(kinematics->axis());
-          }
-          axis.normalize();
-          inboard_t_outboard =
-              Pose3d(eigenmath::Vector3d(kinematics->raw_value() * axis));
-        } break;
-        default:
-          return absl::FailedPreconditionError("Unknown motion type for joint");
-      }
-
-      Pose3d new_parent_t_this =
-          parent_t_inboard * inboard_t_outboard * outboard_t_child;
+      INTR_ASSIGN_OR_RETURN(const Pose3d new_parent_t_this,
+                            ResolveJointEntityPose(*joint_entity));
       *joint_entity->mutable_parent_t_this() = ToProto(new_parent_t_this);
     }
   }
@@ -1574,22 +1529,18 @@ absl::StatusOr<SceneObject> ProcessSceneObjectUpdate(
     axis.normalize();
   }
 
-  Pose3d inboard_t_outboard = Pose3d::Identity();
-  switch (kinematics.motion_type()) {
-    case KinematicsComponent::MOTION_TYPE_REVOLUTE:
-      inboard_t_outboard = CreateAngleAxisPose(kinematics.raw_value(), axis);
-      break;
-    case KinematicsComponent::MOTION_TYPE_PRISMATIC:
-      inboard_t_outboard =
-          Pose3d(eigenmath::Vector3d(kinematics.raw_value() * axis));
-      break;
-    default:
-      return absl::InvalidArgumentError(absl::Substitute(
-          "Unsupported motion type for joint '$0'", update.new_joint_name()));
+  if (kinematics.motion_type() != KinematicsComponent::MOTION_TYPE_REVOLUTE &&
+      kinematics.motion_type() != KinematicsComponent::MOTION_TYPE_PRISMATIC) {
+    return absl::InvalidArgumentError(absl::Substitute(
+        "Unsupported motion type for joint '$0'", update.new_joint_name()));
   }
 
-  Pose3d new_parent_t_this =
-      parent_t_inboard * inboard_t_outboard * outboard_t_child;
+  KinematicsComponent resolved_kinematics = kinematics;
+  *resolved_kinematics.mutable_parent_t_inboard() = ToProto(parent_t_inboard);
+  *resolved_kinematics.mutable_outboard_t_child() = ToProto(outboard_t_child);
+  if (kinematics.has_axis()) {
+    *resolved_kinematics.mutable_axis() = ToVectorProto(axis);
+  }
 
   // Update child link's parent and pose first.
   child_entity->set_parent_name(update.new_joint_name());
@@ -1599,19 +1550,13 @@ absl::StatusOr<SceneObject> ProcessSceneObjectUpdate(
   Entity* joint_entity = object.add_entities();
   joint_entity->set_name(update.new_joint_name());
   joint_entity->set_parent_name(update.parent_link_name());
-  *joint_entity->mutable_parent_t_this() = ToProto(new_parent_t_this);
   *joint_entity->mutable_joint() = update.joint();
-  *joint_entity->mutable_joint()
-       ->mutable_kinematics_component()
-       ->mutable_parent_t_inboard() = ToProto(parent_t_inboard);
-  *joint_entity->mutable_joint()
-       ->mutable_kinematics_component()
-       ->mutable_outboard_t_child() = ToProto(outboard_t_child);
-  if (kinematics.has_axis()) {
-    *joint_entity->mutable_joint()
-         ->mutable_kinematics_component()
-         ->mutable_axis() = ToVectorProto(axis);
-  }
+  *joint_entity->mutable_joint()->mutable_kinematics_component() =
+      std::move(resolved_kinematics);
+
+  INTR_ASSIGN_OR_RETURN(const Pose3d new_parent_t_this,
+                        ResolveJointEntityPose(*joint_entity));
+  *joint_entity->mutable_parent_t_this() = ToProto(new_parent_t_this);
 
   // Keep existing named configurations consistent by inserting the new joint's
   // position.

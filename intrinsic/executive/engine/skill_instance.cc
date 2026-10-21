@@ -52,7 +52,9 @@ absl::Status ResolveSkillParameterDependencies(
   INTR_RETURN_IF_ERROR(resolver.ResolveParameterDependenciesWithFallback(
       *casted_parameter, skill_action, fallback_manifest_dependencies,
       pool_info.descriptor_pool, pool_info.message_factory));
-  parameter.PackFrom(*casted_parameter);
+  if (!parameter.PackFrom(*casted_parameter)) {
+    return absl::InternalError("Failed to pack parameter");
+  }
   return absl::OkStatus();
 }
 

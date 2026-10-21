@@ -27,11 +27,11 @@ cc_library(
         "eigen_serialization.h",
     ],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/eigenmath:pose2",
         "//intrinsic_sdk/intrinsic/marshal:riegeli_coder",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -54,11 +54,11 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/shapes",
         "//intrinsic_sdk/intrinsic/geometry/shapes:geometry_shape",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -75,7 +75,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:material",
@@ -83,6 +82,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:mesh_to_ai_scene",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_ai_scene",
         "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
@@ -91,6 +91,33 @@ cc_library(
         "@assimp",
         "@com_gitlab_libeigen_eigen//:eigen",
         "@or_tools//ortools/base:path",
+    ],
+)
+
+cc_library(
+    name = "gltf_merge",
+    srcs = ["gltf_merge.cc"],
+    hdrs = ["gltf_merge.h"],
+    deps = [
+        "@abseil-cpp//absl/strings",
+        "@tinygltf",
+    ],
+)
+
+cc_library(
+    name = "gltf_helpers",
+    srcs = ["gltf_helpers.cc"],
+    hdrs = ["gltf_helpers.h"],
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+    ],
+    deps = [
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
         "@tinygltf",
     ],
 )

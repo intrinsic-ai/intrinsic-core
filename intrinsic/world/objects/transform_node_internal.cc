@@ -22,6 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/substitute.h"
 #include "absl/time/time.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/util/aggregate_type.h"
@@ -80,6 +81,19 @@ std::string GetTransformNodeName(const TransformNode& node) {
   return visitor.GetPrintedName();
 }
 
+// Resolves the transform entity ID for `node` and `node_filter`. Reuses
+// `this_id` when `node` and `node_filter` match `this_node` and `this_filter`
+// to avoid a duplicate entity lookup.
+absl::StatusOr<AttachmentEntityId> ResolveTransformEntityId(
+    const TransformNode* this_node,
+    const world::ObjectEntityFilter& this_filter, AttachmentEntityId this_id,
+    const TransformNode* node, const world::ObjectEntityFilter& node_filter) {
+  if (node == this_node && node_filter == this_filter) {
+    return this_id;
+  }
+  return node->GetTransformEntityId(node_filter);
+}
+
 }  // namespace
 
 TransformNode::TransformNode(ObjectWorldResourceId id, WorldObject* parent,
@@ -123,7 +137,7 @@ absl::Status TransformNode::SetTransform(const TransformNode* a,
                                          const TransformNode* b,
                                          const Pose3d& a_t_b,
                                          std::optional<absl::Time> timestamp) {
-  const world::ObjectEntityFilter kBaseFilter =
+  const world::ObjectEntityFilter& kBaseFilter =
       world::ObjectEntityFilter::BaseEntity();
   return SetTransform(kBaseFilter, a, kBaseFilter, b, kBaseFilter, a_t_b,
                       timestamp);
@@ -136,25 +150,32 @@ absl::Status TransformNode::SetTransform(
     const TransformNode* node_b,
     std::optional<world::ObjectEntityFilter> node_b_filter, const Pose3d& a_t_b,
     std::optional<absl::Time> timestamp, bool bypass_movable_check) {
-  const world::ObjectEntityFilter kBaseFilter =
+  const world::ObjectEntityFilter& kBaseFilter =
       world::ObjectEntityFilter::BaseEntity();
 
   if (!bypass_movable_check) {
     INTR_RETURN_IF_ERROR(CheckIsMovable(this_filter));
   }
-  INTR_ASSIGN_OR_RETURN(
-      const AttachmentEntityId this_id,
-      GetTransformEntityId(this_filter.value_or(kBaseFilter)));
+  const world::ObjectEntityFilter& resolved_this_filter =
+      this_filter.has_value() ? *this_filter : kBaseFilter;
+  const world::ObjectEntityFilter& resolved_node_a_filter =
+      node_a_filter.has_value() ? *node_a_filter : kBaseFilter;
+  const world::ObjectEntityFilter& resolved_node_b_filter =
+      node_b_filter.has_value() ? *node_b_filter : kBaseFilter;
+  INTR_ASSIGN_OR_RETURN(const AttachmentEntityId this_id,
+                        GetTransformEntityId(resolved_this_filter));
 
   INTR_ASSIGN_OR_RETURN(
       const AttachmentComponent* attachment,
       GetEntityWorld().GetComponentByEntityId<AttachmentComponent>(this_id));
   INTR_ASSIGN_OR_RETURN(
       const AttachmentEntityId a_id,
-      node_a->GetTransformEntityId(node_a_filter.value_or(kBaseFilter)));
+      ResolveTransformEntityId(this, resolved_this_filter, this_id, node_a,
+                               resolved_node_a_filter));
   INTR_ASSIGN_OR_RETURN(
       const AttachmentEntityId b_id,
-      node_b->GetTransformEntityId(node_b_filter.value_or(kBaseFilter)));
+      ResolveTransformEntityId(this, resolved_this_filter, this_id, node_b,
+                               resolved_node_b_filter));
 
   if (a_id == b_id) {
     if (this_id != a_id) {
@@ -175,6 +196,30 @@ absl::Status TransformNode::SetTransform(
   }
 
   INTR_ASSIGN_OR_RETURN(World * world, GetMutableEntityWorld());
+
+  // Direct parent-child fast path.
+  if ((b_id == this_id && attachment->GetParentId() == a_id) ||
+      (a_id == this_id && attachment->GetParentId() == b_id)) {
+    const std::optional<absl::Time> existing_timestamp =
+        attachment->GetTimestamp();
+    if (timestamp.has_value() && existing_timestamp.has_value() &&
+        *timestamp < *existing_timestamp) {
+      return absl::InvalidArgumentError(absl::Substitute(
+          "Cannot update transform for '$0' because its timestamp $1 is newer "
+          "than the given timestamp $2",
+          this_id.value(), absl::FormatTime(*existing_timestamp),
+          absl::FormatTime(*timestamp)));
+    }
+    const Pose3d parent_t_this =
+        (b_id == this_id) ? a_t_b : Pose3d(a_t_b.inverse());
+    INTR_ASSIGN_OR_RETURN(
+        AttachmentComponent * mutable_attachment,
+        world->GetComponentByEntityId<AttachmentComponent>(this_id));
+    mutable_attachment->SetParentTThis(parent_t_this, timestamp);
+    mutable_attachment->MarkInaccurate(false);
+    return absl::OkStatus();
+  }
+
   INTR_ASSIGN_OR_RETURN(AttachmentEntityId common_ancestor_id,
                         world->FindCommonAncestor(a_id, b_id));
   if (common_ancestor_id == this_id) {

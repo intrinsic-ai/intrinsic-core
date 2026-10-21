@@ -306,7 +306,9 @@ absl::StatusOr<PartConfigAndResourceData> MakeArmPartConfig(
       arm_config.set_calculate_velocity_state_from_position(true);
     }
 
-    part_config.mutable_config()->PackFrom(arm_config);
+    if (!part_config.mutable_config()->PackFrom(arm_config)) {
+      return absl::InternalError("Failed to pack arm config.");
+    }
     part_config.set_part_type_name(HalArmPart::kPartTypeName);
     part_config.set_safety_action_type_name("intrinsic.stop");
     std::string arm_resource_name =
@@ -365,7 +367,9 @@ absl::StatusOr<PartConfigAndResourceData> MakeADIOPartConfig(
     return absl::NotFoundError("No ADIO interfaces were found");
   }
 
-  output.config.mutable_config()->PackFrom(adio_config);
+  if (!output.config.mutable_config()->PackFrom(adio_config)) {
+    return absl::InternalError("Failed to pack adio config.");
+  }
   output.config.set_part_type_name(HalADIOPart::kPartTypeName);
   output.config.set_safety_action_type_name("intrinsic.empty");
   return output;
@@ -547,7 +551,9 @@ absl::StatusOr<PartConfigAndResourceData> MakeForceTorqueSensorPartConfig(
     sensor_config.add_ft_t_cog(0);
     sensor_config.add_ft_t_cog(0);
   }
-  output.config.mutable_config()->PackFrom(sensor_config);
+  if (!output.config.mutable_config()->PackFrom(sensor_config)) {
+    return absl::InternalError("Failed to pack sensor config.");
+  }
   output.config.set_part_type_name(HalForceTorqueSensorPart::kPartTypeName);
   output.config.set_safety_action_type_name("intrinsic.empty");
   output.hardware_module_names.insert(ft_module_name);

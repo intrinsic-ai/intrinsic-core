@@ -17,7 +17,7 @@ load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
 
 package(default_visibility = [
     "//visibility:public",
@@ -29,9 +29,6 @@ package(default_visibility = [
 proto_library(
     name = "capture_images_proto",
     srcs = ["capture_images.proto"],
-    visibility = [
-        "//visibility:public",
-    ],
     deps = [
         "@com_google_protobuf//:duration_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
@@ -46,17 +43,11 @@ proto_library(
 
 cc_proto_library(
     name = "capture_images_cc_proto",
-    visibility = [
-        "//visibility:public",
-    ],
     deps = [":capture_images_proto"],
 )
 
 py_proto_library(
     name = "capture_images_py_pb2",
-    visibility = [
-        "//visibility:public",
-    ],
     deps = [":capture_images_proto"],
 )
 
@@ -67,12 +58,6 @@ cc_library(
     deps = [
         ":capture_images_cc_proto",
         "//intrinsic/stats:scoped_span",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/grpc:connection_params",
-        "//intrinsic/util/proto:repeated_field_util",
-        "//intrinsic/util/status:ret_check",
-        "//intrinsic/util/status:status_builder",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_perception/intrinsic/perception/cameras:camera",
         "//intrinsic_perception/intrinsic/perception/cameras:camera_identifier",
         "//intrinsic_perception/intrinsic/perception/proto_conversion/v1:camera_identifier",
@@ -87,6 +72,12 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills/cc:preview_request",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/grpc:connection_params",
+        "//intrinsic_sdk/intrinsic/util/proto:repeated_field_util",
+        "//intrinsic_sdk/intrinsic/util/status:ret_check",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread:thread_pool",
         "//intrinsic_sdk/intrinsic/util/time:deadline_timeout",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
@@ -114,18 +105,12 @@ cc_library(
 skill_manifest(
     name = "capture_images_manifest",
     src = "capture_images_manifest.textproto",
-    visibility = [
-        "//visibility:public",
-    ],
     deps = [":capture_images_proto"],
 )
 
 cc_skill(
     name = "capture_images_skill",
     manifest = ":capture_images_manifest",
-    visibility = [
-        "//visibility:public",
-    ],
     deps = [
         ":capture_images",
         ":capture_images_cc_proto",

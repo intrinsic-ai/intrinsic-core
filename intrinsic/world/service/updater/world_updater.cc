@@ -15,7 +15,9 @@
 #include "intrinsic/world/service/updater/world_updater.h"
 
 #include <algorithm>
+#include <array>
 #include <atomic>
+#include <cstdint>
 #include <memory>
 #include <ranges>
 #include <string>
@@ -23,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/call_once.h"
 #include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -54,6 +57,7 @@
 #include "intrinsic/resources/client/resource_registry_client_interface.h"
 #include "intrinsic/resources/proto/resource_registry.pb.h"
 #include "intrinsic/skills/cc/skill_utils.h"
+#include "intrinsic/stats/metrics_utils.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -70,8 +74,8 @@
 #include "intrinsic/world/service/world_storage.h"
 #include "intrinsic/world/util/ros_joint_state_util.h"
 #include "intrinsic/world/util/tf_frame_util.h"
-#include "opencensus/stats/stats.h"
-#include "opencensus/tags/tag_key.h"
+#include "opentelemetry/common/attribute_value.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 namespace intrinsic {
 
@@ -83,48 +87,81 @@ using ::intrinsic_proto::world::v1::PubsubWorldUpdates;
 namespace {
 constexpr absl::string_view kSampleDeltaTMeasureName =
     "intrinsic/world_updater/sample_delta_t";
-opencensus::stats::MeasureInt64 SampleDeltaT() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      kSampleDeltaTMeasureName,
-      "Wall clock time difference between the newest received ICON status and "
-      "the previous one.",
-      "us");
-  return measure;
+// Instruments in this file are intentionally released so they remain alive
+// for the program's lifetime, avoiding global destructor ordering errors on
+// service destruction. Each is a one-time allocation, so this doesn't leak.
+opentelemetry::metrics::Histogram<uint64_t>& SampleDeltaT() {
+  static opentelemetry::metrics::Histogram<uint64_t>* histogram =
+      stats::GetMeter()
+          ->CreateUInt64Histogram(
+              kSampleDeltaTMeasureName,
+              "Wall clock time difference between the newest received ICON "
+              "status and the previous one.",
+              "us")
+          .release();
+  return *histogram;
 }
 
 constexpr absl::string_view kSampleLatencyMeasureName =
     "intrinsic/world_updater/sample_latency";
-opencensus::stats::MeasureInt64 SampleLatency() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      kSampleLatencyMeasureName,
-      "Wall clock time difference between the newest received ICON status "
-      "acquisition time and the receipt time in the updater.",
-      "us");
-  return measure;
+opentelemetry::metrics::Histogram<uint64_t>& SampleLatency() {
+  static opentelemetry::metrics::Histogram<uint64_t>* histogram =
+      stats::GetMeter()
+          ->CreateUInt64Histogram(
+              kSampleLatencyMeasureName,
+              "Wall clock time difference between the newest received ICON "
+              "status acquisition time and the receipt time in the updater.",
+              "us")
+          .release();
+  return *histogram;
 }
 
 constexpr absl::string_view kDelayedSampleRejectCountMeasureName =
     "intrinsic/world_updater/delayed_samples";
-opencensus::stats::MeasureInt64 DelayedSampleRejectCount() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      "intrinsic/world_updater/delayed_samples",
-      "Samples that were rejected due to arriving later than another sample.",
-      "");
-  return measure;
+opentelemetry::metrics::Counter<uint64_t>& DelayedSampleRejectCount() {
+  static opentelemetry::metrics::Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(
+              kDelayedSampleRejectCountMeasureName,
+              "Samples that were rejected due to arriving later than another "
+              "sample.",
+              "")
+          .release();
+  return *counter;
 }
 
 constexpr absl::string_view kAcceptedSampleCountMeasureName =
     "intrinsic/world_updater/accepted_samples";
-opencensus::stats::MeasureInt64 AcceptedSampleCount() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      kAcceptedSampleCountMeasureName,
-      "Samples that were accepted by the world service.", "");
-  return measure;
+opentelemetry::metrics::Counter<uint64_t>& AcceptedSampleCount() {
+  static opentelemetry::metrics::Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(
+              kAcceptedSampleCountMeasureName,
+              "Samples that were accepted by the world service.", "")
+          .release();
+  return *counter;
 }
 
-opencensus::tags::TagKey ResourceNameKey() {
-  static const auto key = opencensus::tags::TagKey::Register("resource_name");
-  return key;
+constexpr absl::string_view kResourceNameKey = "resource_name";
+
+void RegisterMetrics() {
+  static absl::once_flag called;
+  absl::call_once(called, []() {
+    stats::RegisterHistogramView(
+        kSampleDeltaTMeasureName,
+        /*view_name=*/absl::StrCat(kSampleDeltaTMeasureName, "/distribution"),
+        stats::LinearBucketBoundaries(10, 300, 100));
+    stats::RegisterHistogramView(
+        kSampleLatencyMeasureName,
+        /*view_name=*/absl::StrCat(kSampleLatencyMeasureName, "/distribution"),
+        stats::LinearBucketBoundaries(10, 300, 100));
+    // Eagerly initialize the instruments to register them. The counters only
+    // record counts > 0, so add 0 to export their time series from the start.
+    DelayedSampleRejectCount().Add(0);
+    AcceptedSampleCount().Add(0);
+    SampleDeltaT();
+    SampleLatency();
+  });
 }
 
 absl::StatusOr<absl::Time> GetKinematicObjectTimestamp(
@@ -206,37 +243,7 @@ absl::StatusOr<std::unique_ptr<WorldUpdater>> WorldUpdater::Create(
 
   auto updater = absl::WrapUnique(new WorldUpdater(std::move(options)));
 
-  DelayedSampleRejectCount();
-  opencensus::stats::ViewDescriptor()
-      .set_name(kDelayedSampleRejectCountMeasureName)
-      .set_measure(kDelayedSampleRejectCountMeasureName)
-      .set_aggregation(opencensus::stats::Aggregation::Count())
-      .RegisterForExport();
-
-  AcceptedSampleCount();
-  opencensus::stats::ViewDescriptor()
-      .set_name(kAcceptedSampleCountMeasureName)
-      .set_measure(kAcceptedSampleCountMeasureName)
-      .set_aggregation(opencensus::stats::Aggregation::Count())
-      .RegisterForExport();
-
-  SampleDeltaT();
-  opencensus::stats::ViewDescriptor()
-      .set_name(absl::StrCat(kSampleDeltaTMeasureName, "/distribution"))
-      .set_measure(kSampleDeltaTMeasureName)
-      .set_aggregation(opencensus::stats::Aggregation::Distribution(
-          opencensus::stats::BucketBoundaries::Linear(10, 300, 100)))
-      .add_column(ResourceNameKey())
-      .RegisterForExport();
-
-  SampleLatency();
-  opencensus::stats::ViewDescriptor()
-      .set_name(absl::StrCat(kSampleLatencyMeasureName, "/distribution"))
-      .set_measure(kSampleLatencyMeasureName)
-      .set_aggregation(opencensus::stats::Aggregation::Distribution(
-          opencensus::stats::BucketBoundaries::Linear(10, 300, 100)))
-      .add_column(ResourceNameKey())
-      .RegisterForExport();
+  RegisterMetrics();
 
   INTR_RETURN_IF_ERROR(updater->AddTfSubscription());
   INTR_RETURN_IF_ERROR(updater->AddSimWorldPubsubUpdatesSubscription());
@@ -466,14 +473,15 @@ absl::Status WorldUpdater::RobotSubscription::HandleIconStatus(
 
   update_buffer.CommitFreeBuffer();
   stale = false;
-  opencensus::stats::Record(
-      {
-          {SampleDeltaT(), absl::ToInt64Microseconds(time_since_last_sample)},
-          {SampleLatency(), absl::ToInt64Microseconds(sample_latency)},
-      },
-      {
-          {ResourceNameKey(), resource_name},
-      });
+  const std::array<
+      std::pair<absl::string_view, opentelemetry::common::AttributeValue>, 1>
+      attributes = {{{kResourceNameKey, resource_name}}};
+  SampleDeltaT().Record(absl::ToInt64Microseconds(std::max(
+                            absl::ZeroDuration(), time_since_last_sample)),
+                        attributes);
+  SampleLatency().Record(
+      absl::ToInt64Microseconds(std::max(absl::ZeroDuration(), sample_latency)),
+      attributes);
   return absl::OkStatus();
 }
 
@@ -698,17 +706,12 @@ absl::Status WorldUpdater::UpdateRobotsOnce() {
              "changed.";
     }
   }
-  opencensus::stats::Record(
-      {
-          {DelayedSampleRejectCount(), rejected_samples},
-      },
-      {});
-
-  opencensus::stats::Record(
-      {
-          {AcceptedSampleCount(), accepted_samples},
-      },
-      {});
+  if (rejected_samples > 0) {
+    DelayedSampleRejectCount().Add(rejected_samples);
+  }
+  if (accepted_samples > 0) {
+    AcceptedSampleCount().Add(accepted_samples);
+  }
 
   return absl::OkStatus();
 }

@@ -25,6 +25,8 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/attributes.h"
+#include "absl/base/nullability.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/node_hash_map.h"
 #include "absl/log/log_streamer.h"
@@ -40,6 +42,7 @@
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_metadata.h"
 #include "ortools/base/strong_int.h"
+#include "third_party/imported/cpp_libraries/clock/clock.h"
 
 namespace intrinsic {
 namespace executive {
@@ -104,8 +107,19 @@ class TraceSpanManager {
     std::vector<std::pair<absl::Time, std::string>> annotations;
   };
 
+  // Creates a TraceSpanManager and registers its functions in `environment`.
+  //
+  // `clock` drives the locally tracked timing information only, i.e.,
+  // `SpanInfo` start times, annotation timestamps and execution durations. The
+  // timestamps of the underlying OpenTelemetry spans and events are still
+  // recorded by the OpenTelemetry SDK using the system clock.
+  //
+  // `clock` is not owned. If a custom clock is passed, it must outlive the
+  // returned TraceSpanManager. The default real clock is never destroyed.
   static absl::StatusOr<std::unique_ptr<TraceSpanManager>> Create(
-      Environment* environment) ABSL_LOCKS_EXCLUDED(environment->mutex());
+      Environment* environment,
+      util::Clock* absl_nonnull clock ABSL_ATTRIBUTE_LIFETIME_BOUND =
+          util::Clock::RealClock()) ABSL_LOCKS_EXCLUDED(environment->mutex());
   ~TraceSpanManager() ABSL_LOCKS_EXCLUDED(env_->mutex());
 
   // Add an externally started span to the SpanManager.
@@ -217,7 +231,10 @@ class TraceSpanManager {
                                   .stream()) const;
 
  private:
-  explicit TraceSpanManager(Environment* environment);
+  explicit TraceSpanManager(Environment* environment,
+                            util::Clock* absl_nonnull clock
+                                ABSL_ATTRIBUTE_LIFETIME_BOUND =
+                                    util::Clock::RealClock());
 
   template <typename ReturnType, typename... Args>
   absl::Status RegisterFunction(
@@ -256,6 +273,7 @@ class TraceSpanManager {
  private:
   absl::node_hash_map<TraceSpanReferenceId, SpanInfo> spans_;
   Environment* env_;
+  util::Clock& clock_;
   absl::BitGen id_random_generator_;
   std::vector<std::string> functions_;
 };

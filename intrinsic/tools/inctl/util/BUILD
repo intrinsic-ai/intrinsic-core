@@ -17,37 +17,6 @@ load("//bazel:go_macros.bzl", "go_library")
 package(default_visibility = ["//visibility:public"])
 
 go_library(
-    name = "buildozer",
-    srcs = ["buildozer.go"],
-    importpath = "intrinsic/tools/inctl/util/buildozer",
-    deps = ["@com_github_bazelbuild_buildtools//edit:go_default_library"],
-)
-
-go_library(
-    name = "printer",
-    srcs = ["printer.go"],
-    importpath = "intrinsic/tools/inctl/util/printer",
-    deps = ["@com_github_spf13_cobra//:go_default_library"],
-)
-
-go_library(
-    name = "cobrautil",
-    srcs = ["cobrautil.go"],
-    importpath = "intrinsic/tools/inctl/util/cobrautil",
-    deps = ["@com_github_spf13_cobra//:go_default_library"],
-)
-
-go_library(
-    name = "vmalias",
-    srcs = ["vmalias.go"],
-    importpath = "intrinsic/tools/inctl/util/vmalias",
-    deps = [
-        ":color",
-        "//intrinsic/tools/internal:k8sclientutil",
-    ],
-)
-
-go_library(
     name = "releaseutil",
     srcs = ["releaseutil.go"],
     importpath = "intrinsic/tools/inctl/util/releaseutil",
@@ -70,7 +39,7 @@ go_library(
     srcs = ["resolve.go"],
     importpath = "intrinsic/tools/inctl/util/resolve",
     deps = [
-        "//intrinsic/util/path_resolver:pathresolver",
+        "//intrinsic_sdk/intrinsic/util/path_resolver:pathresolver",
         "@com_github_pkg_errors//:go_default_library",
     ],
 )
@@ -86,8 +55,8 @@ go_library(
     srcs = ["gcpauth.go"],
     importpath = "intrinsic/tools/inctl/util/gcpauth",
     deps = [
-        "//intrinsic/config:environments",
-        "//intrinsic/tools/inctl/auth",
+        "//intrinsic_sdk/intrinsic/config:environments",
+        "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_google_go_containerregistry//pkg/v1/google:go_default_library",
         "@com_github_google_go_containerregistry//pkg/v1/remote:go_default_library",
@@ -109,69 +78,28 @@ go_library(
     deps = [
         ":orgutil",
         "@com_github_golang_glog//:go_default_library",
-        "@com_github_googlecloudplatform_opentelemetry_operations_go_exporter_trace//:go_default_library",
         "@io_opentelemetry_go_otel//:otel",
+        "@io_opentelemetry_go_otel//attribute",
         "@io_opentelemetry_go_otel//semconv/v1.34.0:v1_34_0",
         "@io_opentelemetry_go_otel_bridge_opencensus//:opencensus",
+        "@io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracegrpc//:otlptracegrpc",
         "@io_opentelemetry_go_otel_sdk//resource",
         "@io_opentelemetry_go_otel_sdk//trace",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//credentials/oauth:go_default_library",
     ],
 )
 
-go_library(
-    name = "templateutil",
-    srcs = ["templateutil.go"],
-    importpath = "intrinsic/tools/inctl/util/templateutil",
-)
-
-go_library(
+alias(
     name = "color",
-    srcs = ["color.go"],
-    importpath = "intrinsic/tools/inctl/util/color",
+    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
-go_library(
-    name = "util",
-    srcs = ["spinner.go"],
-    importpath = "intrinsic/tools/inctl/util",
-    deps = [
-        ":color",
-    ],
-)
-
-go_library(
-    name = "viperutil",
-    srcs = ["viperutil.go"],
-    importpath = "intrinsic/tools/inctl/util/viperutil",
-    deps = [
-        "@com_github_spf13_pflag//:go_default_library",
-        "@com_github_spf13_viper//:go_default_library",
-    ],
-)
-
-go_library(
+alias(
     name = "orgutil",
-    srcs = ["orgutil.go"],
-    importpath = "intrinsic/tools/inctl/util/orgutil",
-    deps = [
-        ":color",
-        ":viperutil",
-        "//intrinsic/config:environments",
-        "//intrinsic/tools/inctl/auth",
-        "//intrinsic/tools/inctl/config",
-        "@com_github_pkg_errors//:go_default_library",
-        "@com_github_spf13_cobra//:go_default_library",
-        "@com_github_spf13_viper//:go_default_library",
-    ],
-)
-
-go_library(
-    name = "agents",
-    srcs = ["agents.go"],
-    importpath = "intrinsic/tools/inctl/util/agents",
-    deps = [
-        "@com_github_spf13_cobra//:go_default_library",
-    ],
+    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 go_library(

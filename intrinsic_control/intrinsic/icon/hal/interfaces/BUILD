@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//intrinsic/platform:flatbuffers.bzl", "cc_flatbuffers_library", "flatbuffers_library")
+load("//intrinsic_sdk/intrinsic/platform:flatbuffers.bzl", "cc_flatbuffers_library", "flatbuffers_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -387,12 +387,12 @@ cc_library(
     ],
     deps = [
         ":joint_limits_fbs_cc",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_handle",
         "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",

@@ -205,6 +205,33 @@ EOF
     run_silent sudo sysctl -p "${sysctl_config}"
 }
 
+# Prints a node name to use instead of the hostname, if the hostname can't be
+# used as is.
+function get_node_name_override() {
+    # k3s uses the hostname as the node name, and the kubelet copies it into
+    # the kubernetes.io/hostname label, which is limited to 63 characters. If
+    # the hostname is longer (eg <instance>.<zone>.c.<project>.internal on
+    # GCE), the node can't register and k3s crash-loops.
+    local host_name
+    host_name=$(hostname)
+    if (( ${#host_name} <= 63 )); then
+        # Avoid overriding the node name unless necessary, as renaming the node
+        # of an existing cluster would orphan the old node and its local
+        # volumes.
+        return
+    fi
+
+    # Linux limits hostnames to 64 characters, so the first label is short
+    # enough unless the hostname has no dots.
+    local short_name="${host_name%%.*}"
+    if (( ${#short_name} > 63 )); then
+        echo "Error: Hostname '${host_name}' is longer than the 63 characters supported by Kubernetes." >&2
+        echo "       Set a shorter hostname with 'sudo hostnamectl set-hostname <name>' and rerun this script." >&2
+        return 1
+    fi
+    echo "${short_name}"
+}
+
 function run_silent() {
     if [[ "${EUID}" -ne 0 ]]; then
         sudo -v
@@ -265,6 +292,11 @@ function main() {
     local k3s_args=("--disable=traefik" "--write-kubeconfig-mode=0640")
     if getent group adm >/dev/null; then
         k3s_args+=("--write-kubeconfig-group=adm")
+    fi
+    local node_name
+    node_name=$(get_node_name_override)
+    if [[ -n "${node_name}" ]]; then
+        k3s_args+=("--node-name=${node_name}")
     fi
 
     echo "Installing K3s version ${K3S_VERSION}..."

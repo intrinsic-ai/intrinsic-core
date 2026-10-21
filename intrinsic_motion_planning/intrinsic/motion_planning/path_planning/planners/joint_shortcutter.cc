@@ -35,6 +35,7 @@
 #include "intrinsic/motion_planning/path_planning/planners/shortcutter_configs.pb.h"
 #include "intrinsic/motion_planning/path_planning/validators.h"
 #include "intrinsic/motion_planning/path_planning/validators_config.pb.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic {
@@ -128,6 +129,7 @@ JointShortcutter::JointShortcutter(const proto::JointShortcutterConfig& config)
 absl::StatusOr<std::vector<PointPath>> JointShortcutter::Plan(
     const PointPath& path_in, const KinematicsSystemProxy& proxy,
     PathPlannerGraph* graph) const {
+  const stats::ScopedSpan span("JointShortcutter/Plan");
   if (path_in.size() < 2) {
     return absl::InvalidArgumentError(
         "JointShortcutter requires a path with at least 2 points.");

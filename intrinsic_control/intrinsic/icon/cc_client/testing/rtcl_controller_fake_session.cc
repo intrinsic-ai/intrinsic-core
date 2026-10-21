@@ -272,7 +272,8 @@ absl::Status RtclControllerFakeSession::UpdateActiveAction(
         "Validation mode is strict but there is no action behavior active");
   }
 
-  if (active_action_behavior_.has_value()) {
+  if (active_action_behavior_.has_value() &&
+      active_action_behavior_->action_id == id) {
     // Run the user-supplied parameter matcher of the active action behavior,
     // if any.
     if (std::function<absl::Status(const google::protobuf::Any&)>
@@ -288,6 +289,15 @@ absl::Status RtclControllerFakeSession::UpdateActiveAction(
   }
 
   active_action_ids_.insert(id);
+
+  if (active_action_behavior_.has_value() &&
+      active_action_behavior_->action_id == id) {
+    if (std::function<void()> on_start =
+            active_action_behavior_->action_behaviors.GetOnStart();
+        on_start != nullptr) {
+      on_start();
+    }
+  }
 
   return absl::OkStatus();
 }
@@ -361,24 +371,13 @@ absl::Status RtclControllerFakeSession::StartActions(
                                               action_instance_id.value()));
     }
 
-    INTR_RETURN_IF_ERROR(ActivateNextBehavior());
+    INTR_RETURN_IF_ERROR(ActivateNextBehavior(action_instance_id));
 
-    if (validation_mode_ == ValidationMode::kStrict) {
-      if (!active_action_behavior_.has_value()) {
-        return absl::OutOfRangeError(
-            "ChannelFake has no active expectations, but the active action "
-            "changed. If you want to allow this, use ChannelFake's nice mode.");
-      }
-      if (active_action_behavior_->action_id.has_value() &&
-          active_action_behavior_->action_id != action_instance_id) {
-        return absl::FailedPreconditionError(absl::StrCat(
-            "ChannelFake expected action ",
-            active_action_behavior_->action_id->value(),
-            " to become active, but instead action ",
-            action_instance_id.value(),
-            " became active. If you want to allow this, use ChannelFake's nice "
-            "mode."));
-      }
+    if (validation_mode_ == ValidationMode::kStrict &&
+        !active_action_behavior_.has_value()) {
+      return absl::OutOfRangeError(
+          "ChannelFake has no active expectations, but the active action "
+          "changed. If you want to allow this, use ChannelFake's nice mode.");
     }
 
     if (active_action_behavior_.has_value()) {
@@ -801,14 +800,31 @@ RtclControllerFakeSession::PollReactions() {
     }
   }
 
-  if (activate_next_behavior) {
-    INTR_RETURN_IF_ERROR(ActivateNextBehavior());
-  }
   for (const auto& stopped_action_id : stopped_action_ids) {
     StopActiveAction(stopped_action_id);
   }
-  for (const auto& next_action_id : next_action_ids) {
-    INTR_RETURN_IF_ERROR(UpdateActiveAction(next_action_id));
+  if (next_action_ids.empty()) {
+    if (activate_next_behavior) {
+      INTR_RETURN_IF_ERROR(ActivateNextBehavior());
+    }
+  } else {
+    // Note: Starting multiple parallel actions via reactions in the same cycle
+    // (`next_action_ids.size() > 1`) has undefined behavior with respect to
+    // action expectations because the fake session only tracks a single
+    // `active_action_behavior_` at a time and `next_action_ids` is an unordered
+    // set:
+    // - If both parallel actions have `OnAction` expectations (e.g. [A, B]) and
+    //   `next_action_ids` visits B first, `ActivateNextBehavior(B)` in `kNice`
+    //   mode will erase A's expectation as skipped.
+    // - If only A has an `OnAction` expectation (with no state variable maps or
+    //   streaming outputs) and B does not, visiting A then B will cause
+    //   `ActivateNextBehavior(B)` to call `ResetActiveBehaviorIfDone()` and
+    //   clear A's `active_action_behavior_` before the next `PollReactions()`
+    //   cycle.
+    for (const auto& next_action_id : next_action_ids) {
+      INTR_RETURN_IF_ERROR(ActivateNextBehavior(next_action_id));
+      INTR_RETURN_IF_ERROR(UpdateActiveAction(next_action_id));
+    }
   }
 
   // Repeat the logic from the top of the function, so that callers do not have
@@ -830,7 +846,8 @@ absl::Status RtclControllerFakeSession::WriteToStreamingInput(
     return absl::NotFoundError(absl::StrCat(
         "Action with ID ", action_instance_id.value(), " not found."));
   }
-  if (active_action_behavior_.has_value()) {
+  if (active_action_behavior_.has_value() &&
+      active_action_behavior_->action_id == action_instance_id) {
     absl::Span<const std::function<absl::Status(const google::protobuf::Any&)>>
         ordered_streaming_input_parameter_matchers =
             active_action_behavior_->action_behaviors
@@ -901,7 +918,8 @@ RtclControllerFakeSession::GetActionInstanceIds() const {
   return action_instance_ids;
 }
 
-absl::Status RtclControllerFakeSession::ActivateNextBehavior()
+absl::Status RtclControllerFakeSession::ActivateNextBehavior(
+    std::optional<ActionInstanceId> target_action_id)
     ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_) {
   INTR_RETURN_IF_ERROR(ResetActiveBehaviorIfDone());
 
@@ -910,9 +928,34 @@ absl::Status RtclControllerFakeSession::ActivateNextBehavior()
     return absl::OkStatus();
   }
 
+  if (validation_mode_ == ValidationMode::kNice &&
+      target_action_id.has_value()) {
+    auto it = absl::c_find_if(
+        ordered_action_behaviors_,
+        [&target_action_id](const SessionWill::ActionAndBehaviors& behavior) {
+          return behavior.action_id == *target_action_id;
+        });
+    if (it == ordered_action_behaviors_.end()) {
+      LOG(INFO) << "No behavior found for action with ID "
+                << target_action_id->value();
+      return absl::OkStatus();
+    }
+    ordered_action_behaviors_.erase(ordered_action_behaviors_.begin(), it);
+  }
+
   active_action_behavior_ = ordered_action_behaviors_.front();
   ordered_action_behaviors_.pop_front();
   if (active_action_behavior_->action_id.has_value()) {
+    if (validation_mode_ == ValidationMode::kStrict &&
+        target_action_id.has_value() &&
+        active_action_behavior_->action_id != *target_action_id) {
+      return absl::FailedPreconditionError(absl::StrCat(
+          "ChannelFake expected action ",
+          active_action_behavior_->action_id->value(),
+          " to become active, but instead action ", target_action_id->value(),
+          " became active. If you want to allow this, use ChannelFake's nice "
+          "mode."));
+    }
     LOG(INFO) << "Activating next behavior for action with ID "
               << active_action_behavior_->action_id->value();
     if (active_action_behavior_->is_already_running_action) {

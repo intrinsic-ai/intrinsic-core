@@ -56,7 +56,11 @@ spec:
             - --asset_info_internal_service_address=asset-info-internal.app-intrinsic-base.svc.cluster.local:8080
             - --solution_service_address=solution-service.app-intrinsic-base.svc.cluster.local:8082
             - --world_id=world
-            - --grpc_client_connection_timeout=5m
+            # gRPC connection timeouts should wait a reasonable time connecting
+            # to services and skills. If the timeout is exceeded this indicates
+            # that this is not a connection problem and the service is not
+            # available.
+            - --grpc_client_connection_timeout=30s
             - --port=8080
             - --clips_dirs=intrinsic/executive/clips
             - --opencensus_metrics_port=9101
@@ -233,7 +237,10 @@ data:
       }
     }
 {{- end }}
+{{- if .Values.app_deployment_id }}
 ---
+# When app_deployment_id is unset, the container runs in --sleep mode to pre-pull
+# the image and does not open its metrics port, which would cause scrape errors.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -251,3 +258,4 @@ spec:
   selector:
     matchLabels:
       app: executive
+{{- end }}

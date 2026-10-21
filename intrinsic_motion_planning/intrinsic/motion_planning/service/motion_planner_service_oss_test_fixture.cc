@@ -12,7 +12,6 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <memory>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -28,20 +27,17 @@ GetMotionPlannerServiceTestParams() {
   };
 }
 
-struct MotionPlannerServiceBaseTestHelper::ParameterizationService {};
-
 MotionPlannerServiceBaseTestHelper::MotionPlannerServiceBaseTestHelper() =
     default;
 MotionPlannerServiceBaseTestHelper::~MotionPlannerServiceBaseTestHelper() =
     default;
 
-absl::Status MotionPlannerServiceBaseTestHelper::SetUpAndUpdateFlags(
-    bool set_infinite_jerk_limits, MotionPlannerFlags& flags) {
-  flags.parameterization_service_address = "";
+absl::Status MotionPlannerServiceBaseTestHelper::CheckJerkLimitsSupported(
+    bool set_infinite_jerk_limits) {
   if (!set_infinite_jerk_limits) {
     return absl::UnimplementedError(
-        "Jerk-limited trajectory parameterization service is not available in "
-        "OSS build.");
+        "Jerk-limited trajectory parameterization is not available in OSS "
+        "build.");
   }
   return absl::OkStatus();
 }

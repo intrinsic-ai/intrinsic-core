@@ -34,8 +34,8 @@ spec:
           image: "{{ .Values.registry }}{{ .Values.images.kvstore_service }}"
           args:
             - intrinsic/platform/pubsub/kvstore_grpc/server_main
-            - --port=8080
-            - --opencensus_metrics_port=9103
+            - --port=8087
+            - --opencensus_metrics_port=9107
           securityContext:
             readOnlyRootFilesystem: true
 ---
@@ -48,9 +48,9 @@ metadata:
 spec:
   clusterIP: None
   ports:
-    - port: 8080
+    - port: 8087
       name: grpc
-    - port: 9103
+    - port: 9107
       name: http-metrics
   selector:
     app: kvstore-service
@@ -75,7 +75,7 @@ spec:
         - destination:
             host: kvstore-service
             port:
-              number: 8080
+              number: 8087
 ---
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor

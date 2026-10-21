@@ -139,6 +139,12 @@ MotionPlannerClient::MotionPlannerClient(
       motion_planner_service_(std::move(motion_planner_service)),
       client_context_factory_(std::move(client_context_factory)) {}
 
+MotionPlannerClient MotionPlannerClient::ForWorld(
+    absl::string_view world_id) const {
+  return MotionPlannerClient(world_id, motion_planner_service_,
+                             client_context_factory_);
+}
+
 absl::StatusOr<MotionPlannerClient::PlanTrajectoryResult>
 MotionPlannerClient::PlanTrajectory(
     const intrinsic_proto::motion_planning::v1::RobotSpecification&
@@ -164,6 +170,12 @@ MotionPlannerClient::PlanTrajectory(
   result.lock_motion_id = response.has_lock_motion_id()
                               ? std::optional(response.lock_motion_id())
                               : std::nullopt;
+  result.logging_id = response.logging_id();
+
+  result.motion_events.insert(result.motion_events.begin(),
+                              response.motion_events().begin(),
+                              response.motion_events().end());
+
   return result;
 }
 
@@ -189,6 +201,7 @@ MotionPlannerClient::PlanPath(
   result.swept_volume.insert(result.swept_volume.begin(),
                              response.swept_volumes().begin(),
                              response.swept_volumes().end());
+  result.logging_id = response.logging_id();
   return result;
 }
 
@@ -264,6 +277,7 @@ MotionPlannerClient::ComputeIk(
   ComputeIkResult result;
   result.solutions = ToVectorXds(response.solutions());
   result.ik_debug_information = response.ik_debug_information();
+  result.logging_id = response.logging_id();
   return result;
 }
 

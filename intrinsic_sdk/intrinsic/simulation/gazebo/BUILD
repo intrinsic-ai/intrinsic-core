@@ -21,9 +21,9 @@ cc_library(
     srcs = ["type_conversion.cc"],
     hdrs = ["type_conversion.h"],
     deps = [
-        "//intrinsic/util/status:status_builder",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
         "@abseil-cpp//absl/status:statusor",
         "@gz-math",
     ],

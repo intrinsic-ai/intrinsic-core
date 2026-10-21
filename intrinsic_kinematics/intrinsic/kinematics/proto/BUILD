@@ -25,8 +25,6 @@ cc_library(
         "kinematics_conversion.h",
     ],
     deps = [
-        "//intrinsic/util/status:status_builder",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
@@ -36,6 +34,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",

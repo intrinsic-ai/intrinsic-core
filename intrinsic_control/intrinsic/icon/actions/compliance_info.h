@@ -47,6 +47,11 @@ struct ComplianceInfo {
   static constexpr char kReferenceOrientationErrorDescription[] =
       "Returns the angular distance between the desired reference orientation "
       "and the sensed orientation of the robot tool in radians.";
+  static constexpr char kStreamingInputMessageCount[] =
+      "intrinsic.streaming_input_message_count";
+  static constexpr char kStreamingInputMessageCountDescription[] =
+      "Returns the number of streaming input messages received since the "
+      "action started.";
   static constexpr char kSettledForSeconds[] = "intrinsic.settled_for_seconds";
   static constexpr char kSettledForSecondsDescription[] =
       "Returns for how many seconds the robot state has been settled and all "

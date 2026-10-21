@@ -25,8 +25,8 @@ cc_library(
         "//intrinsic/simulation/world:__pkg__",
     ],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",

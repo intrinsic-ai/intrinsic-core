@@ -25,9 +25,6 @@ cc_library(
     # We don't plan to expand the ik_base interface. So we limit to current use.
     visibility = ["//visibility:private"],
     deps = [
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/time",
-        "//intrinsic/util/time:timer",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_kinematics/intrinsic/kinematics",
         "//intrinsic_kinematics/intrinsic/kinematics:joint_wrapping",
@@ -36,6 +33,9 @@ cc_library(
         "//intrinsic_kinematics/intrinsic/kinematics:state",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
         "//intrinsic_sdk/intrinsic/math:units",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/time",
+        "//intrinsic_sdk/intrinsic/util/time:timer",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/time",
     ],
@@ -51,8 +51,6 @@ cc_library(
     ],
     deps = [
         ":ik_damped_least_squares",
-        "//intrinsic/util/time",
-        "//intrinsic/util/time:timer",
         "//intrinsic_control/intrinsic/icon/utils:realtime_stack_trace",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_kinematics/intrinsic/kinematics:group",
@@ -63,6 +61,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:units",
+        "//intrinsic_sdk/intrinsic/util/time",
+        "//intrinsic_sdk/intrinsic/util/time:timer",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings:str_format",

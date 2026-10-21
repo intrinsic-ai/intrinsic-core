@@ -48,7 +48,7 @@ type Instance struct {
 	Name               string
 	Asset              string
 	ConfigPath         string
-	ConfigRunfilesPath string
+	RelativeConfigPath string
 }
 
 // Options contains options for creating a LocalSolution proto.
@@ -139,10 +139,10 @@ func New(opts Options) (*assetpb.LocalSolution, error) {
 
 		seenNames[inst.Name] = struct{}{}
 		instances = append(instances, &assetpb.AssetInstanceInfo{
-			Name:               inst.Name,
-			Asset:              inst.Asset,
-			ConfigRunfilesPath: inst.ConfigRunfilesPath,
-			Parsed:             parsed,
+			Name:       inst.Name,
+			Asset:      inst.Asset,
+			ConfigPath: inst.RelativeConfigPath,
+			Parsed:     parsed,
 		})
 	}
 

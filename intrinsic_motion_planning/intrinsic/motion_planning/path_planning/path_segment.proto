@@ -20,9 +20,21 @@ import "intrinsic/icon/proto/cart_space.proto";
 import "intrinsic/icon/proto/joint_space.proto";
 import "intrinsic/kinematics/types/joint_limits.proto";
 import "intrinsic/math/proto/pose.proto";
+import "intrinsic/motion_planning/proto/v1/motion_events.proto"; 
 import "intrinsic/world/collision/collision_context.proto";
 
 option go_package = "intrinsic/motion_planning/path_planning/path_segment_go_proto";
+
+
+message MotionEventAndJointConfigurationIndex {
+  // The motion event.
+  intrinsic_proto.motion_planning.v1.MotionEvent motion_event = 1;
+  // The index of the joint configuration that the motion event is associated
+  // with within the `PathSegment.joint_configurations`.
+  int32 joint_configuration_index = 2;
+}
+
+
 message PathSegment {
   // Defines the type of the path segment.
   enum Type {
@@ -62,6 +74,12 @@ message PathSegment {
   // Offset between robot tip and target frame, to which above Cartesian Limits
   // are applied.
   intrinsic_proto.Pose tip_t_target = 6;
+
+
+  // The motion events associated with the path segment.
+  repeated MotionEventAndJointConfigurationIndex indexed_motion_events = 7;
+
+
   // Collision rule set to apply to the segment.
   // If not defined, `disable_collision_checking` will be set to true when
   // creating the KinematicsSystemProxy.

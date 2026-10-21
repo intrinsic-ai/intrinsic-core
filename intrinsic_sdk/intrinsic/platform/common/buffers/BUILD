@@ -61,7 +61,6 @@ cc_library(
     hdrs = ["rt_promise.h"],
     deps = [
         ":rt_queue",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/interprocess:binary_futex",
         "//intrinsic_control/intrinsic/icon/interprocess:lockable_binary_futex",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
@@ -69,6 +68,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",

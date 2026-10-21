@@ -56,8 +56,8 @@ proto_library(
         ":common_proto",
         ":process_proto",
         ":resource_set_proto",
-        "//intrinsic/assets/processes/proto:process_asset_proto",
-        "//intrinsic/world/proto:object_world_updates_proto",
+        "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_proto",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_proto",
@@ -83,8 +83,8 @@ go_proto_library(
         ":common_go_proto",
         ":process_go_proto",
         ":resource_set_go_proto",
-        "//intrinsic/assets/processes/proto:process_asset_go_proto",
-        "//intrinsic/world/proto:object_world_updates_go_proto",
+        "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
@@ -105,7 +105,7 @@ proto_library(
     name = "process_proto",
     srcs = ["process.proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_proto",
     ],
 )
 
@@ -134,7 +134,7 @@ go_proto_library(
     importpath = "intrinsic/config/proto/process_go_proto",
     protos = [":process_proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
     ],
 )
 
@@ -198,7 +198,7 @@ proto_library(
     srcs = ["resource_set.proto"],
     deps = [
         "//intrinsic/resources/proto:resource_instance_proto",
-        "//intrinsic/world/proto:object_world_updates_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
     ],
 )
 
@@ -208,7 +208,7 @@ go_proto_library(
     protos = [":resource_set_proto"],
     deps = [
         "//intrinsic/resources/proto:resource_instance_go_proto",
-        "//intrinsic/world/proto:object_world_updates_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 

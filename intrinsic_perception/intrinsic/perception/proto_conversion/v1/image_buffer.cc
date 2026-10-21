@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <optional>
 #include <string>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -707,6 +708,30 @@ template absl::StatusOr<ImageBuffer> ToProto(
     intrinsic::perception::Encoding encoding,
     std::optional<int> compression_effort);
 
+namespace {
+
+template <typename ImageTrait, typename ImageBufferRef>
+absl::StatusOr<intrinsic::perception::Image<ImageTrait>>
+CreateImageFromUnencodedBuffer(ImageBufferRef&& image_buffer) {
+  if (image_buffer.type() != GetDataType<ImageTrait>()) {
+    return absl::InvalidArgumentError("Incompatible image buffer data type");
+  }
+  if (image_buffer.num_channels() != ImageTrait::kNumChannels) {
+    return absl::InvalidArgumentError("Incompatible image buffer num channels");
+  }
+  const intrinsic::perception::Dimensions dimensions =
+      FromProto(image_buffer.dimensions());
+  if constexpr (std::is_rvalue_reference_v<ImageBufferRef&&>) {
+    return CreateImageFromMemory<ImageTrait>(
+        dimensions, std::move(*image_buffer.mutable_data()));
+  } else {
+    std::string data = image_buffer.data();
+    return CreateImageFromMemory<ImageTrait>(dimensions, std::move(data));
+  }
+}
+
+}  // namespace
+
 template <typename ImageTrait>
 absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
     const ImageBuffer& image_buffer) {
@@ -714,17 +739,7 @@ absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
     return absl::InvalidArgumentError("data field in image_buffer is empty");
   }
   if (image_buffer.encoding() == ENCODING_UNSPECIFIED) {
-    if (image_buffer.type() != GetDataType<ImageTrait>()) {
-      return absl::InvalidArgumentError("Incompatible image buffer data type");
-    }
-    if (image_buffer.num_channels() != ImageTrait::kNumChannels) {
-      return absl::InvalidArgumentError(
-          "Incompatible image buffer num channels");
-    }
-    // TODO(mbokeloh): Avoid copy when implementing the rvalue function.
-    std::string data = image_buffer.data();
-    return CreateImageFromMemory<ImageTrait>(
-        FromProto(image_buffer.dimensions()), std::move(data));
+    return CreateImageFromUnencodedBuffer<ImageTrait>(image_buffer);
   } else if (image_buffer.encoding() == ENCODING_YUV420P) {
     return CreateImageFromYuv420p<ImageTrait>(image_buffer);
   }
@@ -776,5 +791,33 @@ FromProto(const ImageBuffer& image_buffer);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Point32f>>
 FromProto(const ImageBuffer& image_buffer);
+
+template <typename ImageTrait>
+absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
+    ImageBuffer&& image_buffer) {
+  if (!image_buffer.data().empty() &&
+      image_buffer.encoding() == ENCODING_UNSPECIFIED) {
+    return CreateImageFromUnencodedBuffer<ImageTrait>(std::move(image_buffer));
+  }
+  return FromProto<ImageTrait>(std::as_const(image_buffer));
+}
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
+FromProto(ImageBuffer&& image_buffer);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Gray8u>>
+FromProto(ImageBuffer&& image_buffer);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Gray32f>>
+FromProto(ImageBuffer&& image_buffer);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Depth32f>>
+FromProto(ImageBuffer&& image_buffer);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Normal32f>>
+FromProto(ImageBuffer&& image_buffer);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Point32f>>
+FromProto(ImageBuffer&& image_buffer);
 
 }  // namespace intrinsic_proto::perception::v1

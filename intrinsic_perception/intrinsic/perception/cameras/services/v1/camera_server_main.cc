@@ -25,10 +25,12 @@
 #include "grpcpp/security/server_credentials.h"
 #include "grpcpp/server.h"
 #include "grpcpp/server_builder.h"
+#include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/icon/release/file_helpers.h"
 #include "intrinsic/icon/release/portable/init_intrinsic.h"
 #include "intrinsic/logging/data_logger_client.h"
+#include "intrinsic/logging/proto/logger_service.grpc.pb.h"
 #include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/cameras/services/v1/camera_config_service.h"
 #include "intrinsic/perception/cameras/services/v1/camera_dynamic_reconfiguration_service.h"
@@ -45,9 +47,6 @@ constexpr char kRuntimeContextFile[] = "/etc/intrinsic/runtime_config.pb";
 ABSL_FLAG(std::string, runtime_context_file, kRuntimeContextFile,
           "The path to the runtime context file containing "
           "intrinsic_proto.config.RuntimeContext binary proto.");
-ABSL_FLAG(std::string, data_logger_grpc_service_address, "",
-          "(optional) Address of the gRPC service to send logs to, in the form "
-          "'host:port'.");
 
 namespace intrinsic {
 namespace perception {
@@ -68,6 +67,29 @@ absl::Status StartServerAndListen() {
   if (context.name().empty()) {
     return intrinsic::InvalidArgumentErrorBuilder()
            << "Context name must not be empty.";
+  }
+
+  INTR_ASSIGN_OR_RETURN(
+      std::shared_ptr<grpc::Channel> data_logger_channel,
+      intrinsic::assets::dependencies::
+          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
+              camera_config_proto.intrinsic_runtime(),
+              "grpc://intrinsic_proto.data_logger.DataLogger",
+              connect::UnlimitedMessageSizeGrpcChannelArgs()));
+  if (const absl::Status status = intrinsic::connect::WaitForChannelReady(
+          data_logger_channel,
+          intrinsic::connect::kGrpcClientConnectDefaultTimeout);
+      !status.ok()) {
+    LOG(ERROR) << "Failed to connect to data logger: " << status;
+  } else {
+    auto data_logger_stub =
+        intrinsic_proto::data_logger::DataLogger::NewStub(data_logger_channel);
+    if (const absl::Status init_status =
+            intrinsic::data_logger::StartUpIntrinsicLoggerViaStub(
+                std::move(data_logger_stub));
+        !init_status.ok()) {
+      LOG(ERROR) << "Failed to initialize logging singleton: " << init_status;
+    }
   }
 
   std::string streaming_topic_name =
@@ -109,18 +131,9 @@ absl::Status StartServerAndListen() {
 
 int main(int argc, char** argv) {
   InitIntrinsic(argv[0], argc, argv);
-  intrinsic::OpenCensusPlugin open_census("camera");
-  const std::string data_logger_address =
-      absl::GetFlag(FLAGS_data_logger_grpc_service_address);
-  if (!data_logger_address.empty()) {
-    const absl::Status status =
-        intrinsic::data_logger::StartUpIntrinsicLoggerViaGrpc(
-            data_logger_address,
-            intrinsic::connect::kGrpcClientConnectDefaultTimeout);
-    if (!status.ok()) {
-      LOG(ERROR) << "Failed to connect to data logger: " << status;
-    }
-  }
+  intrinsic::OpenCensusPlugin open_census(/*service_name=*/"camera",
+                                          /*use_otel_metrics=*/true);
+  intrinsic::perception::RegisterCameraServiceMetrics();
 
   if (auto status = intrinsic::perception::StartServerAndListen();
       !status.ok()) {

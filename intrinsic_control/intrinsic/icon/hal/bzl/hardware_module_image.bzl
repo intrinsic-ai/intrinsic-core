@@ -69,7 +69,7 @@ def hardware_module_image(
         hardware_module_lib = None,
         hardware_module_binary = None,
         extra_files = [],
-        base_image = Label("//intrinsic/kubernetes:base-image-cc-oci"),
+        base_image = Label("//intrinsic/kubernetes:base-image-oci"),
         **kwargs):
     """Generates a Hardware Module image.
 

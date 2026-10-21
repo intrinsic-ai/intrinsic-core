@@ -24,6 +24,7 @@
 #include <string>
 #include <vector>
 
+#include "absl/base/attributes.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_join.h"
@@ -35,6 +36,8 @@
 #include "intrinsic/icon/testing/realtime_annotations.h"
 #include "intrinsic/icon/utils/realtime_status.h"
 #include "intrinsic/performance/analysis/proto/performance_metrics.pb.h"
+#include "intrinsic/util/time/clock_steady_interface.h"
+#include "intrinsic/util/time/time.h"
 
 // Contains helpers to measure cycle time metrics of hardware modules.
 // The CycleTimeMetricsHelper can be configured to log warnings/errors when the
@@ -47,10 +50,12 @@
 // Expected Usage:
 //
 // During Init Phase:
-// * Create a CycleTimeMetricsHelper that stores the metrics.
-// ASSERT_OK_AND_ASSIGN(helper_, CycleTimeMetricsHelper::Create(
-//                                         Your_Cycle_Time,
-//                                        log_cycle_time_warnings=*/true));
+// * Create a CycleTimeMetricsHelper that stores the metrics (`clock` is a
+//   `ClockSteadyInterface` that must outlive the helper).
+// ASSERT_OK_AND_ASSIGN(auto helper, CycleTimeMetricsHelper::Create(
+//                                       Your_Cycle_Time,
+//                                       /*log_cycle_time_warnings=*/true,
+//                                       clock));
 //
 // At the top of ReadStatus:
 // * Call ReadStatusScope read_status_scope(&helper_, state == kEnabled);
@@ -151,15 +156,19 @@ class CycleTimeHistogram {
   }
 
   // Adds a positive duration to the histogram.
-  // Returns an error if the duration is negative or zero.
+  // Returns `FailedPreconditionError` if the duration is negative or zero, or
+  // if the histogram was not initialized via `Create()`. We use
+  // `FailedPreconditionError` instead of `InvalidArgumentError` because callers
+  // typically use `CycleTimeMetricsHelper` (which computes durations from clock
+  // reads rather than caller arguments) and forward this status directly.
   RealtimeStatus Add(const absl::Duration duration)
       INTRINSIC_CHECK_REALTIME_SAFE {
     if (duration <= absl::ZeroDuration()) [[unlikely]] {
-      return InvalidArgumentError(RealtimeStatus::StrCat(
+      return FailedPreconditionError(RealtimeStatus::StrCat(
           "duration '", duration, "' must be positive."));
     }
     if (configured_cycle_duration_ <= absl::ZeroDuration()) [[unlikely]] {
-      return InvalidArgumentError(
+      return FailedPreconditionError(
           RealtimeStatus::StrCat("cycle_duration '", configured_cycle_duration_,
                                  "' must be positive. Likely not initialized. "
                                  "Use Create() to initialize."));
@@ -354,11 +363,13 @@ class CycleTimeMetricsHelper {
   // cycle_duration * kSingleOpWarningFactor
   static constexpr double kSingleOpWarningFactor = .5;
 
-  // Creates a CycleTimeMetricsHelper for the given `cycle_duration`.
+  // Creates a CycleTimeMetricsHelper for the given `cycle_duration`, using
+  // `clock` to measure durations.
   // If `log_cycle_time_warnings` is true, logs warnings/errors when the cycle
   // time is breached, or a single operation took too long.
   static absl::StatusOr<CycleTimeMetricsHelper> Create(
-      absl::Duration cycle_duration, bool log_cycle_time_warnings = true);
+      absl::Duration cycle_duration, bool log_cycle_time_warnings,
+      const ClockSteadyInterface& clock ABSL_ATTRIBUTE_LIFETIME_BOUND);
 
   // Resets the helper to the initial state.
   // Resets the values stored in the histograms to start a new measuring cycle.
@@ -400,15 +411,18 @@ class CycleTimeMetricsHelper {
   }
 
  private:
-  explicit CycleTimeMetricsHelper(bool log_cycle_time_warnings);
+  explicit CycleTimeMetricsHelper(bool log_cycle_time_warnings,
+                                  const ClockSteadyInterface& clock
+                                      ABSL_ATTRIBUTE_LIFETIME_BOUND);
 
   bool log_cycle_time_warnings_;
+  const ClockSteadyInterface& clock_;
 
-  absl::Time apply_command_start_ = absl::InfinitePast();
-  absl::Time apply_command_end_ = absl::InfinitePast();
+  TimeSteady apply_command_start_ = TimeSteady::InfinitePast();
+  TimeSteady apply_command_end_ = TimeSteady::InfinitePast();
 
-  absl::Time read_status_start_ = absl::InfinitePast();
-  absl::Time read_status_end_ = absl::InfinitePast();
+  TimeSteady read_status_start_ = TimeSteady::InfinitePast();
+  TimeSteady read_status_end_ = TimeSteady::InfinitePast();
   CycleTimeMetrics metrics_;
 
   absl::Duration previous_read_status_duration_ = absl::InfiniteDuration();

@@ -14,12 +14,28 @@
 
 """Utilities for creating and unpacking open inference protocol messages."""
 
+import struct
 from typing import Sequence
 
 import numpy as np
 from specification.protocol import open_inference_grpc_pb2
 
 from intrinsic_inference.core.utils import oip_mappings
+
+_STRING_DATATYPE = "BYTES"
+_STRING_SHAPE = [1]
+
+
+def convert_bytes_to_str(buffer: bytes) -> str:
+  """Converts an encoded OIP bytes buffer to a UTF-8 string."""
+  buffer_len = struct.unpack("<I", buffer[:4])[0]
+  return buffer[4 : 4 + buffer_len].decode("utf-8")
+
+
+def convert_str_to_bytes(tensor_str: str) -> bytes:
+  """Converts a UTF-8 string to an encoded OIP bytes buffer."""
+  tensor_encoded = tensor_str.encode("utf-8")
+  return struct.pack("<I", len(tensor_encoded)) + tensor_encoded
 
 
 def get_index_of_tensor(
@@ -34,6 +50,77 @@ def get_index_of_tensor(
     if tensor.name == tensor_name:
       return idx
   return -1
+
+
+def extract_str_tensor(
+    tensor_name: str,
+    request_or_response: (
+        open_inference_grpc_pb2.ModelInferRequest
+        | open_inference_grpc_pb2.ModelInferResponse
+    ),
+) -> str | None:
+  """Extracts a string tensor by name from an OIP request or response, or None if not found."""
+  if isinstance(request_or_response, open_inference_grpc_pb2.ModelInferRequest):
+    tensors = request_or_response.inputs
+    raw_contents = request_or_response.raw_input_contents
+  else:
+    tensors = request_or_response.outputs
+    raw_contents = request_or_response.raw_output_contents
+
+  idx = get_index_of_tensor(tensor_name, tensors)
+  if idx == -1:
+    return None
+  return convert_bytes_to_str(raw_contents[idx])
+
+
+def set_string_tensor_and_contents(
+    request_or_response: (
+        open_inference_grpc_pb2.ModelInferRequest
+        | open_inference_grpc_pb2.ModelInferResponse
+    ),
+    tensor_name: str,
+    tensor_str: str,
+    existing_idx_to_replace: int | None = None,
+) -> (
+    open_inference_grpc_pb2.ModelInferRequest
+    | open_inference_grpc_pb2.ModelInferResponse
+):
+  """Packs a tensor of type string into the request or response.
+
+  If existing_idx_to_replace is not None, the tensor at that index is replaced.
+  Otherwise the tensor is appended to inputs/outputs and raw contents.
+  """
+  if isinstance(request_or_response, open_inference_grpc_pb2.ModelInferRequest):
+    tensors = request_or_response.inputs
+    raw_contents = request_or_response.raw_input_contents
+  elif isinstance(
+      request_or_response, open_inference_grpc_pb2.ModelInferResponse
+  ):
+    tensors = request_or_response.outputs
+    raw_contents = request_or_response.raw_output_contents
+  else:
+    raise TypeError(
+        f"Invalid request or response type: {type(request_or_response)}"
+    )
+
+  if existing_idx_to_replace is None:
+    tensors.add()
+    raw_contents.append(b"")
+    idx = -1
+  else:
+    if existing_idx_to_replace >= len(tensors):
+      raise IndexError(
+          f"Index {existing_idx_to_replace} exceeded tensors list length of "
+          f"{len(tensors)}."
+      )
+    idx = existing_idx_to_replace
+
+  tensors[idx].name = tensor_name
+  tensors[idx].datatype = _STRING_DATATYPE
+  tensors[idx].shape[:] = _STRING_SHAPE
+  raw_contents[idx] = convert_str_to_bytes(tensor_str)
+
+  return request_or_response
 
 
 def extract_np_tensor_at_index(

@@ -1,0 +1,137 @@
+diff --git a/toolchain/args/BUILD.bazel b/toolchain/args/BUILD.bazel
+--- a/toolchain/args/BUILD.bazel
++++ b/toolchain/args/BUILD.bazel
+@@ -166,9 +166,9 @@
+         "@rules_cc//cc/toolchains/actions:objcpp_compile",
+     ],
+     args = [
+-        "-isystem",
++        "-stdlib++-isystem",
+         "{cxxstdlib_headers_include_search_path}",
+-        "-isystem",
++        "-stdlib++-isystem",
+         "{cxxstdlib_abi_headers_include_search_path}",
+     ],
+     # Do not sort: keep the data order aligned with the argument order above.
+diff --git a/toolchain/args/linux/BUILD.bazel b/toolchain/args/linux/BUILD.bazel
+--- a/toolchain/args/linux/BUILD.bazel
++++ b/toolchain/args/linux/BUILD.bazel
+@@ -38,7 +38,9 @@
+         "@kernel_headers//:kernel_headers_directory",
+     ],
+     args = [
+-        "-isystem",
++        "-Xclang",
++        "-internal-isystem",
++        "-Xclang",
+         "{kernel_headers_include_search_path}",
+     ],
+     data = [
+@@ -60,7 +62,9 @@
+     ],
+     args = [
+         # "__GLIBC_MINOR__={d}", version.minor
+-        "-isystem",
++        "-Xclang",
++        "-internal-isystem",
++        "-Xclang",
+         "{libc_headers_include_search_path}",
+     ],
+     data = [
+@@ -131,7 +135,9 @@
+         "//toolchain:source_compile_actions",
+     ],
+     args = [
+-        "-isystem",
++        "-Xclang",
++        "-internal-isystem",
++        "-Xclang",
+         "{libc_headers_include_search_path}",
+     ],
+     data = [
+diff --git a/toolchain/args/resource_directory_args.bzl b/toolchain/args/resource_directory_args.bzl
+--- a/toolchain/args/resource_directory_args.bzl
++++ b/toolchain/args/resource_directory_args.bzl
+@@ -3,22 +3,34 @@
+ load("@rules_cc//cc/toolchains:args.bzl", "cc_args")
+ load("@rules_cc//cc/toolchains/impl:documented_api.bzl", "cc_args_list")
+ 
+-def resource_directory_args(name, compile_directory, link_directory):
++def resource_directory_args(name, compile_directory, link_directory, compile_include_directory = None):
+     """Declare compiler-native compile and fully assembled link directories.
+ 
+     Args:
+         name: Name of the stage-gated argument group.
+         compile_directory: Resource directory belonging to the selected compiler.
+         link_directory: Label of an already assembled resource directory.
++        compile_include_directory: Builtin header include directory under compile_directory.
+     """
++    if compile_include_directory == None:
++        compile_include_directory = compile_directory
+     cc_args(
+         name = name + "_compile",
+         actions = ["@rules_cc//cc/toolchains/actions:source_compile_actions"],
+-        # Keep this semantic for driver-independent consumers such as bindgen,
+-        # which cannot discover the selected compiler's adjacent resources.
+-        args = ["-resource-dir={directory}"],
++        args = select({
++            "@llvm//constraints/windows/abi:msvc": [
++                "/clang:-nobuiltininc",
++                "/imsvc{include_directory}",
++            ],
++            "//conditions:default": [
++                "-Xclang",
++                "-internal-isystem",
++                "-Xclang",
++                "{include_directory}",
++            ],
++        }),
+         data = [compile_directory],
+-        format = {"directory": compile_directory},
++        format = {"include_directory": compile_include_directory},
+     )
+ 
+     cc_args(
+diff --git a/toolchain/bootstrap/declare_toolchains.bzl b/toolchain/bootstrap/declare_toolchains.bzl
+--- a/toolchain/bootstrap/declare_toolchains.bzl
++++ b/toolchain/bootstrap/declare_toolchains.bzl
+@@ -532,6 +532,7 @@
+             resource_directory_args(
+                 name = cc_toolchain_name + "_resource_directory_args",
+                 compile_directory = tool_prefix + "/clang_resource_directory",
++                compile_include_directory = tool_prefix + "/clang_resource_include_directory",
+                 link_directory = cc_toolchain_name + "_resource_directory",
+             )
+ 
+diff --git a/toolchain/declare_toolchains.bzl b/toolchain/declare_toolchains.bzl
+--- a/toolchain/declare_toolchains.bzl
++++ b/toolchain/declare_toolchains.bzl
+@@ -1,6 +1,6 @@
+ load("//platforms:common.bzl", "MSVC_TARGET_STAGE0_SUPPORTED_EXECS", "SUPPORTED_EXECS", "SUPPORTED_TARGETS")
+ load("//toolchain:merged_resource_directory.bzl", "merged_resource_directory")
+-load("//toolchain:selects.bzl", "platform_cc_tool_map", "platform_module_map", "platform_resource_dir")
++load("//toolchain:selects.bzl", "platform_cc_tool_map", "platform_module_map", "platform_resource_dir", "platform_resource_include_dir")
+ load("//toolchain/args:resource_directory_args.bzl", "resource_directory_args")
+ load(":cc_toolchain.bzl", "cc_toolchain")
+ 
+@@ -24,6 +24,7 @@
+         resource_directory_args(
+             name = cc_toolchain_name + "_resource_directory_args",
+             compile_directory = platform_resource_dir(exec_os, exec_cpu),
++            compile_include_directory = platform_resource_include_dir(exec_os, exec_cpu),
+             link_directory = cc_toolchain_name + "_resource_directory",
+         )
+ 
+diff --git a/toolchain/selects.bzl b/toolchain/selects.bzl
+--- a/toolchain/selects.bzl
++++ b/toolchain/selects.bzl
+@@ -49,6 +49,9 @@
+ def platform_resource_dir(exec_os, exec_cpu):
+     return Label(_tool_repo(exec_os, exec_cpu) + ":builtin_resource_dir")
+ 
++def platform_resource_include_dir(exec_os, exec_cpu):
++    return Label(_tool_repo(exec_os, exec_cpu) + ":builtin_resource_include_dir")
++
+ def platform_cc_tool_map(exec_os, exec_cpu):
+     tool_repo = _tool_repo(exec_os, exec_cpu)
+ 

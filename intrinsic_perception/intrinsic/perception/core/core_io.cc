@@ -207,15 +207,12 @@ absl::StatusOr<std::optional<Image<ImageTrait>>> TryReadImage(
 }
 
 absl::StatusOr<std::string> ReadFileFromGcs(absl::string_view filename) {
-  auto gcs_client = gcs::Client::CreateDefaultClient();
-  if (!gcs_client.ok()) {
-    return ToAbsl(gcs_client.status());
-  }
+  gcs::Client gcs_client;
 
   INTR_ASSIGN_OR_RETURN(const GcsBlobPathInformation blob_path_info,
                         GetGcsBlobPathInformationFromUri(filename));
 
-  gcs::ObjectReadStream stream = gcs_client->ReadObject(
+  gcs::ObjectReadStream stream = gcs_client.ReadObject(
       blob_path_info.bucket_name, blob_path_info.object_name,
       blob_path_info.GenerationAs<gcs::Generation>());
   if (!stream.status().ok()) {
@@ -229,14 +226,11 @@ absl::StatusOr<std::string> ReadFileFromGcs(absl::string_view filename) {
 
 absl::StatusOr<std::string> WriteToGcs(absl::string_view content,
                                        absl::string_view filename) {
-  auto gcs_client = gcs::Client::CreateDefaultClient();
-  if (!gcs_client.ok()) {
-    return ToAbsl(gcs_client.status());
-  }
+  gcs::Client gcs_client;
 
   INTR_ASSIGN_OR_RETURN(const GcsBlobPathInformation blob_path_info,
                         GetGcsBlobPathInformationFromUri(filename));
-  gcs::ObjectWriteStream stream = gcs_client->WriteObject(
+  gcs::ObjectWriteStream stream = gcs_client.WriteObject(
       blob_path_info.bucket_name, blob_path_info.object_name);
   stream << content;
   stream.Close();
@@ -283,12 +277,7 @@ absl::StatusOr<std::vector<std::string>> FindFilesInGcs(
            << extension_pattern;
   }
 
-  auto gcs_client = gcs::Client::CreateDefaultClient();
-  if (!gcs_client.ok()) {
-    return intrinsic::InternalErrorBuilder()
-           << "Error happened when creating a GCS client: "
-           << gcs_client.status();
-  }
+  gcs::Client gcs_client;
 
   const absl::StatusOr<GcsBlobPathInformation> blob_path_info =
       GetGcsBlobPathInformationFromUri(dir_path);
@@ -298,7 +287,7 @@ absl::StatusOr<std::vector<std::string>> FindFilesInGcs(
            << blob_path_info.status();
   }
 
-  gcs::ListObjectsReader reader = gcs_client->ListObjects(
+  gcs::ListObjectsReader reader = gcs_client.ListObjects(
       blob_path_info->bucket_name, gcs::Prefix(blob_path_info->object_name));
 
   std::vector<std::string> file_names;

@@ -1,0 +1,10 @@
+exports_files([
+    "asan_runtime.patch",
+    "fastbuild_compile_flags.patch",
+    "header_search_paths.patch",
+    "llvm21_third_party_zstd.patch",
+    "msan_libcxx.patch",
+    "sanitizer_runtime_libunwind.patch",
+    "stage0_object_reset.patch",
+    "sanitizer_strip_foreign_source_paths.patch",
+])

@@ -75,7 +75,9 @@ absl::Status GenericStreamWriter::OpenStreamWriter(
 absl::Status GenericStreamWriter::WriteToStream(
     const google::protobuf::Message& value) {
   intrinsic_proto::icon::v1::OpenWriteStreamRequest req;
-  req.mutable_write_value()->mutable_value()->PackFrom(value);
+  if (!req.mutable_write_value()->mutable_value()->PackFrom(value)) {
+    return absl::InternalError("Failed to pack value to stream request.");
+  }
 
   if (!grpc_stream_->Write(req)) {
     INTR_RETURN_IF_ERROR(FinishIfNeeded());

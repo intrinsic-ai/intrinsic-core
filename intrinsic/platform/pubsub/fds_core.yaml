@@ -81,7 +81,7 @@ spec:
       terminationGracePeriodSeconds: 5
       containers:
         - name: zenoh-router
-          image: "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/zenohd:1.7.2"
+          image: "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/zenohd:1.8.0"
           env:
             {{ if eq .Values.project "intrinsic-integration-tests" }}
             - name: RUST_LOG

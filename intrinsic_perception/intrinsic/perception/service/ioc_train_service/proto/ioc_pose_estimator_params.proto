@@ -28,4 +28,7 @@ message IocPoseEstimatorParams {
 
   // Minimum visibility threshold for detected objects.
   optional float visibility_threshold = 3;
+
+  // Text prompt for zero-shot open-vocabulary segmentation (e.g. SAM 3).
+  optional string text_prompt = 4;
 }

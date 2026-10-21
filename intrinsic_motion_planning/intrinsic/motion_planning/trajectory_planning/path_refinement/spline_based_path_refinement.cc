@@ -38,6 +38,9 @@
 #include "intrinsic/math/spline/spline_parameter_converter.h"
 #include "intrinsic/math/spline/spline_parameter_transform_function.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/trajectory_planning/path_refinement/path_polyline.h"
 #include "intrinsic/motion_planning/trajectory_planning/path_refinement/path_refinement_utils.h"
 #include "intrinsic/motion_planning/trajectory_planning/topp/path_sample.h"
@@ -188,6 +191,79 @@ absl::Status AddExtraSamplesAtPathBoundaries(
   std::sort(knot_path_vars.begin(), knot_path_vars.end());
   return absl::OkStatus();
 }
+
+
+// Extracts the motion events which are associated with points on the
+// `path_polyline`. The event and offset of the motion event are passed through
+// and the keypoint path variable is estimated based on the spline.
+absl::StatusOr<std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>>
+ExtractMotionEvents(const BSplineNd& spline,
+                    const PathPolyline& path_polyline) {
+  // We compute the arclength of the spline. We use this to generate the
+  // approximate arclength at polyline points which have an associated event.
+  INTR_ASSIGN_OR_RETURN(
+      std::unique_ptr<SplineParameterTransformFunction>
+          arc_length_parameter_transform_function,
+      BSplineParameterIntegralTransformFunction<SplineTraitsNd<>>::Create(
+          &spline, BSplineArcLengthIntegrand<SplineTraitsNd<>>()));
+  const std::vector<double> knot_spans_endpoints =
+      arc_length_parameter_transform_function->GetKnotSpansEndpoints();
+  INTR_ASSIGN_OR_RETURN(const double spline_length,
+                        arc_length_parameter_transform_function->Evaluate(
+                            knot_spans_endpoints.back()));
+  const double path_polyline_length = path_polyline.GetLength();
+
+  // Now, we can generate the path variables for the events.
+  std::vector<double> events_arc_lengths;
+  std::vector<std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>>
+      motion_events_per_arc_length;
+  for (int i = 0; const PathPolylinePoint& point : path_polyline.GetPoints()) {
+    if (!point.motion_events.empty()) {
+      INTR_ASSIGN_OR_RETURN(const double polyline_length_at_event,
+                            path_polyline.GetLengthAtIndex(i));
+      // We estimate the path variable of the event on the spline by scaling the
+      // path variable of the event on the polyline by the ratio of the
+      // spline length to the polyline length. This is an assumption that
+      // progress along the polyline corresponds to progress along the spline:
+      // s_event = spline_length * (s_event_polyline / polyline_length)
+      const double polyline_progress_fraction =
+          polyline_length_at_event / path_polyline_length;
+      const double arc_length_at_event =
+          spline_length * polyline_progress_fraction;
+      events_arc_lengths.push_back(arc_length_at_event);
+      // Add all the motion events corresponding to this point to the vector.
+      // That way we can add the path variable for this arc_length_at_event to
+      // all these  motion events. We need to do this because the conversion
+      // from arc length to knot curve parameter method use below does not
+      // support repeated curve parameters.
+      motion_events_per_arc_length.push_back(point.motion_events);
+    }
+    i++;
+  }
+  std::vector<intrinsic_proto::motion_planning::v1::MotionEvent> motion_events;
+  if (!events_arc_lengths.empty()) {
+    // Now we can convert the event arclength back into the knot domain which
+    // goes into the motion event.
+    INTR_ASSIGN_OR_RETURN(
+        const std::vector<double> knot_curve_parameters,
+        ConvertToKnotCurveParameterViaSingleApproximation(
+            events_arc_lengths, *arc_length_parameter_transform_function));
+    for (int i = 0; i < knot_curve_parameters.size(); ++i) {
+      for (const intrinsic_proto::motion_planning::v1::MotionEvent&
+               motion_event : motion_events_per_arc_length[i]) {
+        intrinsic_proto::motion_planning::v1::MotionEvent new_motion_event =
+            motion_event;
+        new_motion_event.mutable_keypoint()
+            ->set_keypoint_joint_path_variable_from_start(
+                knot_curve_parameters[i]);
+        motion_events.push_back(new_motion_event);
+      }
+    }
+  }
+  return motion_events;
+}
+
+
 // Evaluates the left-side (incoming) third derivative at interior knots and
 // returns it if there is a discontinuity with the right-side (outgoing) third
 // derivative `qppp_out`. Returns std::nullopt if the point is continuous, not
@@ -313,6 +389,14 @@ absl::StatusOr<SplineBasedPathRefinementResult> RefinePathBSpline(
       CreatePathRefiningBSpline(spline_control_points, kMaxSplineDegree,
                                 settings.knot_vector_selection,
                                 knot_vector_scaling_factor));
+
+
+  INTR_ASSIGN_OR_RETURN(
+      const std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>
+          motion_events,
+      ExtractMotionEvents(*spline, *path_polyline));
+
+
   // Generate the vector of path variables we want to sample at. The sample
   // distribution will depend on the selected sampling strategy.
   const double scaled_sampling_step = reference_sampling_step *
@@ -422,6 +506,9 @@ absl::StatusOr<SplineBasedPathRefinementResult> RefinePathBSpline(
   SplineBasedPathRefinementResult spline_based_path_refinement_result;
   spline_based_path_refinement_result.spline = std::move(spline);
   spline_based_path_refinement_result.path_samples = std::move(result_samples);
+
+  spline_based_path_refinement_result.motion_events = std::move(motion_events);
+
   return spline_based_path_refinement_result;
 }
 

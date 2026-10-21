@@ -81,7 +81,7 @@ absl::StatusOr<Queryable> Queryable::Create(
     std::string_view key, internal::GeneralQueryableCallback callback) {
   Queryable queryable(key, std::move(callback));
   if (imw_ret_t rv = Zenoh().imw_create_queryable(
-          queryable.GetKeyExpression().data(), &ZenohQueryableCallback,
+          queryable.keyexpr_.c_str(), &ZenohQueryableCallback,
           queryable.link_.get(), nullptr);
       rv != IMW_OK) {
     queryable.link_.reset();
@@ -99,7 +99,7 @@ void Queryable::Reset() {
     // If this is NOT_INITIALIZED it means that the pubsub system has already
     // been finalized and the queryable is gone anyway
     if (imw_ret_t rv = Zenoh().imw_destroy_queryable(
-            GetKeyExpression().data(), &ZenohQueryableCallback, link_.get());
+            keyexpr_.c_str(), &ZenohQueryableCallback, link_.get());
         rv != IMW_OK && rv != IMW_NOT_INITIALIZED) {
       LOG(ERROR) << absl::StrFormat(
           "Failed to destroy queryable for '%s' (code %d)", keyexpr_, rv);

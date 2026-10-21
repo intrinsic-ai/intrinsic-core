@@ -109,8 +109,12 @@ absl::Status Frame::SetName(const FrameName& name) {
 
   INTR_ASSIGN_OR_RETURN(World * world, GetMutableEntityWorld());
   INTR_ASSIGN_OR_RETURN(WorldEntity * entity, world->GetEntityById(entity_id_));
+  const std::string old_name = name_.value();
   INTR_RETURN_IF_ERROR(entity->SetLocalName(name.value()));
   name_ = name;
+  if (GetParent() != nullptr) {
+    GetParent()->UpdateFrameEntityLocalName(entity_id_, old_name, name.value());
+  }
 
   return absl::OkStatus();
 }

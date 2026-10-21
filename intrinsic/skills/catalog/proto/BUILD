@@ -20,7 +20,7 @@ proto_library(
     srcs = ["skill_deployment_data.proto"],
     visibility = ["//intrinsic/modified_solution/proto/v1:__pkg__"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_proto",
         "@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:image_proto",
     ],
 )
@@ -36,7 +36,7 @@ go_proto_library(
         "//intrinsic/resources:__pkg__",
     ],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:image_go_proto",
     ],
 )

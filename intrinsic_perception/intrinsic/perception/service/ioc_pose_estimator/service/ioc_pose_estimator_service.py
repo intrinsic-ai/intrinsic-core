@@ -24,6 +24,8 @@ import signal
 import threading
 
 import cv2
+from google.longrunning import operations_pb2
+from google.longrunning import operations_pb2_grpc
 from google.protobuf import text_format
 from google.protobuf.empty_pb2 import Empty
 import grpc
@@ -35,8 +37,12 @@ from intrinsic_perception.intrinsic.perception.service.ioc_pose_estimator.proto 
 from intrinsic_perception.intrinsic.perception.service.ioc_pose_estimator.service import pose_estimator_model
 from intrinsic_perception.intrinsic.perception.service.ioc_pose_estimator.service import segmentation_model
 from intrinsic_perception.intrinsic.perception.service.ioc_train_service.proto import ioc_pose_estimator_params_pb2
+from intrinsic.assets import interface_utils
+from intrinsic.assets.dependencies import utils as asset_utils
 from intrinsic.assets.install import installed_assets_client
 from intrinsic.assets.proto import id_pb2
+from intrinsic.assets.proto import installed_assets_pb2
+from intrinsic.assets.proto import installed_assets_pb2_grpc
 from intrinsic.assets.proto.v1 import resolved_dependency_pb2
 from intrinsic.math.python import pose3
 from intrinsic.math.python import proto_conversion
@@ -54,7 +60,6 @@ from intrinsic.storage.content_addressable_storage.proto import cas_service_pb2_
 from intrinsic.storage.content_addressable_storage.python import client_helpers
 from intrinsic.util.grpc import interceptor
 
-INGRESS_ADDRESS = "istio-ingressgateway.app-ingress.svc.cluster.local:80"
 CAS_ADDRESS = (
     "content-addressable-storage.app-intrinsic-base.svc.cluster.local:9747"
 )
@@ -72,6 +77,20 @@ _DEFAULT_BATCH_SIZE: int = 240
 _VISUALIZATION_DIR = "/tmp/pose_estimation_debug/"
 _DETECTION_IMAGE_TOPIC: str = "ioc_pose_estimator/detections"
 _POSE_IMAGE_TOPIC: str = "ioc_pose_estimator/poses"
+
+
+def _installed_assets_interface_uri() -> str:
+  return (
+      f"{interface_utils.GRPC_URI_PREFIX}"
+      f"{installed_assets_pb2.DESCRIPTOR.services_by_name['InstalledAssets'].full_name}"
+  )
+
+
+def _operations_interface_uri() -> str:
+  return (
+      f"{interface_utils.GRPC_URI_PREFIX}"
+      f"{operations_pb2.DESCRIPTOR.services_by_name['Operations'].full_name}"
+  )
 
 
 def _validate_and_extract_perception_model_params(
@@ -306,9 +325,19 @@ class IocPoseEstimatorService(
     """
     self._config = config
 
-    channel = grpc.insecure_channel(INGRESS_ADDRESS, options=_GRPC_OPTIONS)
-    self._assets_client = (
-        installed_assets_client.InstalledAssetsClient.from_channel(channel)
+    installed_assets_channel = asset_utils.connect_with_runtime_asset_fallback_for_asset_migration_only(
+        self._config.intrinsic_runtime,
+        _installed_assets_interface_uri(),
+        grpc_options=_GRPC_OPTIONS,
+    )
+    operations_channel = asset_utils.connect_with_runtime_asset_fallback_for_asset_migration_only(
+        self._config.intrinsic_runtime,
+        _operations_interface_uri(),
+        grpc_options=_GRPC_OPTIONS,
+    )
+    self._assets_client = installed_assets_client.InstalledAssetsClient(
+        installed_assets_pb2_grpc.InstalledAssetsStub(installed_assets_channel),
+        operations_pb2_grpc.OperationsStub(operations_channel),
     )
     cas_channel = grpc.insecure_channel(CAS_ADDRESS, options=_GRPC_OPTIONS)
     self._cas_stub = cas_service_pb2_grpc.ContentAddressableStorageServiceStub(

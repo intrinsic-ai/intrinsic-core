@@ -35,7 +35,6 @@
 #include "intrinsic/util/thread/stop_token.h"
 #include "intrinsic/util/thread/thread.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
 #include "opentelemetry/trace/span_context.h"
 
 namespace intrinsic {
@@ -49,8 +48,6 @@ class ClipsLogger {
       clips::ProtobufManager* proto_manager,
       intrinsic_proto::world::ObjectWorldService::StubInterface* world_stub =
           nullptr,
-      intrinsic_proto::world::WorldCompatibilityService::StubInterface*
-          world_compat_stub = nullptr,
       clips::TraceSpanManager* span_manager = nullptr);
   ~ClipsLogger();
 
@@ -102,8 +99,6 @@ class ClipsLogger {
   clips::TraceSpanManager* span_manager_;  // externally owned, can be nullptr
   intrinsic_proto::world::ObjectWorldService::StubInterface*
       world_stub_;  // externally owned, can be nullptr
-  intrinsic_proto::world::WorldCompatibilityService::StubInterface*
-      world_compat_stub_;  // externally owned, can be nullptr
 
   Thread worker_;
   std::optional<ConcurrentQueue<LogRequest>> log_req_channel_;

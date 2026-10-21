@@ -14,16 +14,11 @@
 
 #include "intrinsic/skills/footprint_util.h"
 
-#include <map>
 #include <utility>
-#include <variant>
 #include <vector>
 
-#include "absl/base/attributes.h"
-#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "intrinsic/choreographer/fabrication_toolkit/shape_util.h"
 #include "intrinsic/choreographer/footprints/footprint.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/geometry/api/affine_transform_of_geometry.h"
@@ -38,7 +33,6 @@
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
-#include "intrinsic/world/collision/coal_collision_checker.h"
 #include "intrinsic/world/entity_id.h"
 #include "intrinsic/world/hashing/hashing.h"
 #include "intrinsic/world/util/entity_search_util.h"
@@ -72,83 +66,6 @@ absl::StatusOr<WorldACLSpec> ToWorldACLSpec(
 
   if (!footprint.SkipsMissingPermissions()) {
     INTR_RETURN_IF_ERROR(footprint.AddMissingPermissions(world));
-  }
-
-  // Only process the collisions if we have volume resources
-  if (footprint.HasVolumes()) {
-    // Collection of all the volume ids added to the world and a mapping from
-    // those ids to the sharing type requested for the items interesting the
-    // shape
-    WorldHashSet<PhysicalEntityId> volume_ids;
-    std::map<PhysicalEntityId,
-             intrinsic_proto::skills::VolumeReservation::SharingType>
-        volume_id_map;
-
-    // Add all of the volumes from the footprint to the world_copy instance.
-    World world_copy = world.Clone();
-    for (const auto& volume_reservation : footprint.ExtractVolumes()) {
-      // This check should be removed once we better understand how we want to
-      // use ToWorldACLSpec with sharing types that are not write. The current
-      // use case of the executive only cares about the WRITE sharing type and
-      // all existing creators (on August 18th 2021) of VolumeReservation use
-      // WRITE.
-      if (volume_reservation.SharingType() !=
-          intrinsic_proto::skills::VolumeReservation::WRITE) {
-        return absl::UnimplementedError(
-            "ConvertFootprintToShapes does not support resources with non "
-            "WRITE types");
-      }
-
-      const auto* shape_data =
-          std::get_if<TransformedGeometry>(&volume_reservation.Value());
-      if (shape_data == nullptr) {
-        return absl::FailedPreconditionError(
-            "VolumeReservation does not contain ShapeData.");
-      }
-
-      const PhysicalEntityId id =
-          toolkit::AddVolumeToWorld(&world_copy, *shape_data, "resource");
-      volume_ids.insert(id);
-      volume_id_map[id] = volume_reservation.SharingType();
-    }
-
-    // Grab any collisions between the footprint volumes and existing entities.
-    const auto collisions = GetCollisionsBetweenSets(
-        world_copy, volume_ids, {}, /*check_upper_triangle_only=*/false);
-
-    // Collect the collisions resulting in ACL changes.
-    std::map<intrinsic_proto::skills::VolumeReservation::SharingType,
-             WorldHashSet<EntityId>>
-        collision_entities;
-    for (const auto& [volume_id, entity_id] : collisions) {
-      CHECK(volume_ids.contains(volume_id));
-      collision_entities[volume_id_map[volume_id]].insert(entity_id);
-    }
-
-    // Now that we know what we need to do, apply the ACLs to our instance.
-    for (const auto& [sharing, selected_entities] : collision_entities) {
-      switch (sharing) {
-        case intrinsic_proto::skills::VolumeReservation::WRITE: {
-          result.AllowFullAccessFor(selected_entities);
-          break;
-        }
-        case intrinsic_proto::skills::VolumeReservation::EMPTY:
-          ABSL_FALLTHROUGH_INTENDED;
-        case intrinsic_proto::skills::VolumeReservation::STATIC:
-          ABSL_FALLTHROUGH_INTENDED;
-        case intrinsic_proto::skills::VolumeReservation::
-            WRITE_ALLOWING_STATIC: {
-          return intrinsic::UnimplementedErrorBuilder()
-                 << "Unsupported VolumeReservation::SharingType with value: "
-                 << sharing;
-        }
-        default: {
-          return FailedPreconditionErrorBuilder()
-                 << "Unknown VolumeReservation::SharingType with value: "
-                 << sharing;
-        }
-      }
-    }
   }
 
   for (const auto& entity_reservation : footprint.ExtractEntities()) {
@@ -190,9 +107,9 @@ absl::Status AreFootprintsCompatible(
                         ToWorldACLSpec(world, footprint_right, geolib));
   INTR_RETURN_IF_ERROR(world_acl_left.IsCompatibleWith(world_acl_right));
 
-  // If the footprint volumes touch each other but not any other entities we
-  // need to check that too. But if there are no volumes in one of the
-  // footprints we have done all the checks we can already.
+  // Evaluate Stage 2 (geometric clearance): if either footprint contains no
+  // volumes, no 3D volume collisions can exist and the footprints are
+  // compatible.
   if (footprint_left.volume_size() == 0 || footprint_right.volume_size() == 0) {
     return absl::OkStatus();
   }

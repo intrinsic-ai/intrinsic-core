@@ -22,7 +22,6 @@ go_library(
     importpath = "intrinsic/storage/content_addressable_storage/pkg/observability",
     visibility = [
         "//intrinsic/assets/artifacts:__pkg__",
-        "//intrinsic/assets/catalog:__pkg__",
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/storage/content_addressable_storage/pkg/filetocas:__pkg__",
         "//intrinsic/storage/onprem_cas:__subpackages__",

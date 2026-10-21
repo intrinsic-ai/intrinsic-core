@@ -39,10 +39,12 @@ class ExecuteRequest {
       const ::google::protobuf::Message& params,
       ::google::protobuf::Message* param_defaults = nullptr)
   {
-    params_any_.PackFrom(params);
+    static_cast<void>(
+        params_any_.PackFrom(params));  // TODO: Handle return value
     if (param_defaults != nullptr) {
       param_defaults_any_ = google::protobuf::Any();
-      param_defaults_any_->PackFrom(*param_defaults);
+      static_cast<void>(param_defaults_any_->PackFrom(
+          *param_defaults));  // TODO: Handle return value
     }
   }
 

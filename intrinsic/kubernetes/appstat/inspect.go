@@ -288,7 +288,7 @@ func eventDiagnostic(events *corev1.EventList, pod corev1.Pod) (*Diagnostic, boo
 			sb.WriteString(e.Message)
 		}
 		if e.Reason == "UnexpectedAdmissionError" {
-			sb.WriteString("\nTry restarting with inctl app stop then app start (b/150675787).")
+			sb.WriteString("\nTry restarting with inctl solution stop then app start (b/150675787).")
 		}
 	}
 	if !found {

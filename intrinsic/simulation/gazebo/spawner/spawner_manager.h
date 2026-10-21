@@ -62,11 +62,15 @@ class GZ_SIM_VISIBLE SpawnerManager
       public xfa::simulation::SpawnerService::Service {
  public:
   using ObjectWorldServiceStub =
-      intrinsic_proto::world::ObjectWorldService::Stub;
+      intrinsic_proto::world::ObjectWorldService::StubInterface;
 
   static absl::StatusOr<std::unique_ptr<SpawnerManager>> Create(
       std::string_view world_service_address,
       std::string_view geometry_service_address,
+      std::string_view simulator_world_id);
+  static absl::StatusOr<std::unique_ptr<SpawnerManager>> Create(
+      std::shared_ptr<ObjectWorldServiceStub> object_world_service_stub,
+      std::unique_ptr<GeometryLibrary> geometry_library,
       std::string_view simulator_world_id);
   ~SpawnerManager() override;
 

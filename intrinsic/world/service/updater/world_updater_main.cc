@@ -220,7 +220,8 @@ absl::Status MainImpl() {
 
 int main(int argc, char** argv) {
   InitIntrinsic(argv[0], argc, argv);
-  intrinsic::OpenCensusPlugin opencensus;
+  intrinsic::OpenCensusPlugin open_census(/*service_name=*/"world_updater",
+                                          /*use_otel_metrics=*/true);
 
   QCHECK_OK(intrinsic::MainImpl());
 

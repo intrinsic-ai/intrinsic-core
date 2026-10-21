@@ -21,10 +21,9 @@ cc_library(
     srcs = ["channel.cc"],
     hdrs = ["channel.h"],
     deps = [
-        "//intrinsic/util/grpc:limits",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic_control/intrinsic/icon/release:grpc_time_support",
+        "//intrinsic_sdk/intrinsic/util/grpc:limits",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/time:clock",
         "//intrinsic_sdk/intrinsic/util/time:deadline_timeout",
         "@abseil-cpp//absl/log",

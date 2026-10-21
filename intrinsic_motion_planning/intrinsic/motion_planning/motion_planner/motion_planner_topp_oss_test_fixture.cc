@@ -27,16 +27,10 @@ std::vector<ToppTestParams> GetToppTestParams() {
   };
 }
 
-struct MotionPlannerToppBaseTest::ParameterizationService {};
-
-MotionPlannerToppBaseTest::MotionPlannerToppBaseTest() = default;
-MotionPlannerToppBaseTest::~MotionPlannerToppBaseTest() = default;
-
 void MotionPlannerToppBaseTest::SetUpTopp(const ToppTestParams& topp_params) {
   topp_test_params_ = topp_params;
   ASSERT_TRUE(topp_test_params_.set_infinite_jerk_limits)
       << "Jerk-limited trajectory generation is not available in OSS build.";
-  motion_planner_flags_.parameterization_service_address = "";
   motion_planner_flags_.enable_path_refinement_validation_step = true;
 }
 

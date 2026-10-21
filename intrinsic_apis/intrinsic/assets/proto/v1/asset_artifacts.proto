@@ -27,7 +27,8 @@ option go_package = "intrinsic/assets/proto/v1/asset_artifacts_go_proto";
 //
 // Processing local, non-inlined artifacts requires a two-phase upload:
 // 1. Establish an upload session using `StartUpload`.
-// 2. Upload chunks sequentially using `UploadChunk`.
+// 2. Upload chunks sequentially using `UploadChunk` (if the response from step
+//    1 does not indicate that the artifact already exists).
 // 3. Commit the upload using `FinalizeUpload`, which returns a ReferencedData.
 // 4. Call the unary `Process` RPC with the reference.
 //
@@ -64,9 +65,6 @@ service AssetArtifacts {
   }
 
   // Starts a chunked upload session.
-  //
-  // The client specifies the total size of the artifact to be uploaded, and the
-  // server returns a unique upload identifier.
   rpc StartUpload(StartUploadRequest) returns (StartUploadResponse) {
     option (google.api.http) = {
       post: "/v1/assetArtifacts:startUpload"
@@ -126,12 +124,23 @@ message ProcessResponse {
 
 message ProcessMetadata {}
 
-message StartUploadRequest {}
+message StartUploadRequest {
+  // The expected final digest of the artifact to upload (e.g.,
+  // "sha512:<hash>"). If a "sha512:<hash>" digest is provided, the response
+  // will indicate whether the artifact already exists (other digest algorithms
+  // are currently ignored). If the artifact already exists, then the client can
+  // skip directly to FinalizeUpload.
+  string digest = 1;
+}
 
 message StartUploadResponse {
   // A unique identifier for the created upload session. This ID must be
   // passed to all subsequent UploadChunk and FinalizeUpload calls.
   string upload_id = 1;
+
+  // True if the artifact already exists. If true, the client should skip
+  // the UploadChunk calls and proceed directly to FinalizeUpload.
+  bool artifact_exists = 2;
 }
 
 message UploadChunkRequest {
@@ -157,10 +166,11 @@ message FinalizeUploadRequest {
   // The identifier of the active upload session.
   string upload_id = 1;
 
-  // The expected final digest of the uploaded asset (e.g., "sha512:<hash>").
-  // If provided, the server will verify that the uploaded data matches this
-  // digest, returning InvalidArgument if there is a mismatch. If empty, the
-  // check is skipped.
+  // The expected final digest of the uploaded artifact (e.g., "sha512:<hash>").
+  // If a "sha512:<hash>" digest is provided, the server will verify that the
+  // uploaded data match this digest, returning InvalidArgument if there is a
+  // mismatch. Currently, if the expected digest is empty or uses a different
+  // algorithm, the check is skipped.
   string expected_digest = 2;
 }
 

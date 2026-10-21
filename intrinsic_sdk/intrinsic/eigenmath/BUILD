@@ -110,10 +110,10 @@ cc_library(
     deps = [
         ":eigenmath",
         ":rotation_utils",
-        "//intrinsic/util/status:status_builder",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
         "@abseil-cpp//absl/log:absl_check",
         "@abseil-cpp//absl/status",
         "@com_gitlab_libeigen_eigen//:eigen",

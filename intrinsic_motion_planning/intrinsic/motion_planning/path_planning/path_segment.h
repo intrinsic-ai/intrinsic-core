@@ -27,6 +27,9 @@
 #include "intrinsic/kinematics/types/joint_limits.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.pb.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/util/unique_id.h"
 #include "intrinsic/world/collision/collision_context.pb.h"
 // Need to include this to avoid build errors for
@@ -36,6 +39,18 @@
 #include "intrinsic/world/collision/rule_matching.h"
 
 namespace intrinsic {
+
+
+// A motion event and the index of the particular joint configuration within
+// `PathSegment.joint_configurations` that the motion event is associated with.
+// This is tracked so that the event location can be correctly calculated with
+// respect to the path and trajectory.
+struct MotionEventAndJointConfigurationIndex {
+  intrinsic_proto::motion_planning::v1::MotionEvent motion_event;
+  int joint_configuration_index;
+};
+
+
 struct PathSegment {
   enum class Type {
     kAny,     // Segment/sub-segment which was originated from
@@ -75,6 +90,12 @@ struct PathSegment {
   // Offset between robot tip and target frame, to which above Cartesian Limits
   // are applied.
   Pose3d tip_t_target = Pose3d::Identity();
+
+
+  // The motion events associated with the path segment.
+  std::vector<MotionEventAndJointConfigurationIndex> indexed_motion_events;
+
+
   // The type of this specific path segment.
   Type type = Type::kUndefined;
 
@@ -87,6 +108,18 @@ intrinsic_proto::motion_planning::PathSegment ToProto(
 
 absl::StatusOr<PathSegment> FromProto(
     const intrinsic_proto::motion_planning::PathSegment& path_segment_proto);
+
+
+intrinsic_proto::motion_planning::MotionEventAndJointConfigurationIndex ToProto(
+    const MotionEventAndJointConfigurationIndex&
+        motion_event_and_joint_configuration_index_proto);
+
+MotionEventAndJointConfigurationIndex FromProto(
+    const intrinsic_proto::motion_planning::
+        MotionEventAndJointConfigurationIndex&
+            motion_event_and_joint_configuration_index_proto);
+
+
 intrinsic_proto::motion_planning::PathSegment::Type ToProto(
     const PathSegment::Type type);
 

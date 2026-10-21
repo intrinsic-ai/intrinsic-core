@@ -218,6 +218,8 @@ class PreplanMotionFixtureTest
     *params.add_skills()->mutable_attach_object_to_robot() =
         CreateAttachObjectToRobotParams();
 
+    *params.add_skills()->mutable_detach_object() = CreateDetachObjectParams();
+
     return params;
   }
 
@@ -300,8 +302,6 @@ TEST_P(PreplanMotionFixtureTest, ExecuteWorksWithValidMotionSegment) {
       CreatePreplanMotionParams();
   eigenmath::VectorNd initial(6);
   initial << 0, -2, 2, 0, 0, 0;
-  eigenmath::VectorNd target(6);
-  target << -0.2, 0.4, -1.3, -0.7, 0.7, -1.0;
 
   // Confirm that the frame does not exist in the world at first.
   EXPECT_THAT(world_->GetFrame(RootObjectName(), FrameName(kFrameName)),
@@ -319,34 +319,15 @@ TEST_P(PreplanMotionFixtureTest, ExecuteWorksWithValidMotionSegment) {
                        ExecutePreplanMotionTest(params, initial));
   EXPECT_EQ(execution_result, nullptr);
 
-  // Confirm that the frame exists in the world after the execution.
-  ASSERT_OK_AND_ASSIGN(
-      auto frame, world_->GetFrame(RootObjectName(), FrameName(kFrameName)));
-  // Check the robot and object positions after the execution.
+  // Confirm that the original world was not modified by preplanning.
+  EXPECT_THAT(world_->GetFrame(RootObjectName(), FrameName(kFrameName)),
+              StatusIs(absl::StatusCode::kNotFound));
   ASSERT_OK_AND_ASSIGN(
       robot, world_->GetKinematicObject(WorldObjectName(kRobotLabel)));
   EXPECT_THAT(robot.JointPositions(),
-              ::testing::Pointwise(::testing::DoubleNear(1e-6), target));
+              ::testing::Pointwise(::testing::DoubleNear(1e-6), initial));
   ASSERT_OK_AND_ASSIGN(object, world_->GetObject(WorldObjectName(kObjectName)));
-  // The object should be attached to the robot and teleported to the robot end
-  // effector.
-  EXPECT_THAT(object.ParentTThis(),
-              IsApprox(Pose3d(
-                  eigenmath::Quaterniond(0.0037932397965, 0.0012221728174,
-                                         -0.000352137744449, -0.99999199678),
-                  eigenmath::Vector3d(0.618915615586, 0.623973516296,
-                                      -0.0131949179517))));
-  // The object should be attached to the robot.
-  EXPECT_EQ(object.ParentName(), WorldObjectName(kRobotLabel));
-
-  // Run another execution with a detach object skill.
-  intrinsic_proto::skills::PreplanMotionParams detach_params = basic_params_;
-  *detach_params.add_skills()->mutable_detach_object() =
-      CreateDetachObjectParams();
-  ASSERT_OK_AND_ASSIGN(auto detach_execution_result,
-                       ExecutePreplanMotionTest(detach_params, initial));
-  EXPECT_EQ(detach_execution_result, nullptr);
-  ASSERT_OK_AND_ASSIGN(object, world_->GetObject(WorldObjectName(kObjectName)));
+  EXPECT_THAT(object.ParentTThis(), IsApprox(Pose3d::Identity()));
   EXPECT_EQ(object.ParentName(), RootObjectName());
 }
 

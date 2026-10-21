@@ -14,28 +14,27 @@
 
 #include "intrinsic/perception/gpu/cuda_hdr/hdr_mertens.h"
 
-#include <cstdint>
+#include <cstddef>
 #include <type_traits>
 #include <utility>
 #include <vector>
 
-#include "absl/log/check.h"
-#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "intrinsic/perception/core/dimensions.h"
 #include "intrinsic/perception/core/image.h"
 #include "intrinsic/perception/core/image_traits.h"
 #include "intrinsic/perception/gpu/cuda_hdr/hdr_mertens_weight_map.h"
+#include "intrinsic/perception/gpu/cuda_image_proc/border_extrapolation.h"
 #include "intrinsic/perception/gpu/cuda_image_proc/pixelwise.h"
 #include "intrinsic/perception/gpu/cuda_image_proc/pyramid.h"
 #include "intrinsic/perception/gpu/cuda_utils/cuda_image.h"
 #include "intrinsic/perception/gpu/cuda_utils/cuda_image_utils.h"
-#include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic {
 namespace perception {
+namespace {
 
 absl::Status CheckHdrMertensParams(const HdrMertensParams& params) {
   if (params.contrast_exponent < 0.0f) {
@@ -48,8 +47,61 @@ absl::Status CheckHdrMertensParams(const HdrMertensParams& params) {
     return absl::InvalidArgumentError(
         "well_exposedness_exponent must be >= 0.0.");
   }
+  if (params.pyramid_min_dimensions.cols < 1 ||
+      params.pyramid_min_dimensions.rows < 1) {
+    return absl::InvalidArgumentError("pyramid_min_dimensions must be >= 1x1.");
+  }
   return absl::OkStatus();
 }
+
+template <typename InputTraits>
+absl::Status ValidateHdrMertensInputs(
+    const std::vector<CudaImage<InputTraits>>& ldr_images,
+    const HdrMertensParams& params) {
+  if (ldr_images.empty()) {
+    return absl::InvalidArgumentError("ldr_images must not be empty.");
+  }
+  INTR_RETURN_IF_ERROR(CheckHdrMertensParams(params));
+
+  const Dimensions base_dims = ldr_images[0].dimensions();
+  if (base_dims.cols < params.pyramid_min_dimensions.cols ||
+      base_dims.rows < params.pyramid_min_dimensions.rows) {
+    return absl::InvalidArgumentError(
+        "image dimensions must be >= pyramid_min_dimensions.");
+  }
+  for (size_t i = 1; i < ldr_images.size(); ++i) {
+    if (ldr_images[i].dimensions() != base_dims) {
+      return absl::InvalidArgumentError(
+          "Image dimensions mismatch. Ensure that all images have the same "
+          "dimensions.");
+    }
+  }
+  return absl::OkStatus();
+}
+
+std::vector<Dimensions> ComputePyramidLevelDimensions(
+    Dimensions base_dims, const HdrMertensParams& params) {
+  std::vector<Dimensions> level_dims;
+  Dimensions cur_dims = base_dims;
+  while (true) {
+    level_dims.push_back(cur_dims);
+    const Dimensions next_dims = DimensionsPyrDown(cur_dims);
+    if (next_dims.cols < params.pyramid_min_dimensions.cols ||
+        next_dims.rows < params.pyramid_min_dimensions.rows ||
+        next_dims.cols <= 1 || next_dims.rows <= 1) {
+      break;
+    }
+    cur_dims = next_dims;
+  }
+  return level_dims;
+}
+
+template <typename ComputeTraits, typename InputTraits>
+absl::StatusOr<CudaImage<ComputeTraits>> ComputeHdrMertensImpl(
+    const std::vector<CudaImage<InputTraits>>& ldr_images,
+    const HdrMertensParams& params);
+
+}  // namespace
 
 template <typename ImageTraits>
 absl::StatusOr<Image<ImageTraits>> ComputeHdrMertens(
@@ -67,52 +119,23 @@ absl::StatusOr<Image<ImageTraits>> ComputeHdrMertens(
     cuda_ldr_images.push_back(std::move(cuda_image));
   }
 
-  CudaImage<ImageTraits> cuda_hdr_image;
   if (!use_float_precision) {
-    INTR_ASSIGN_OR_RETURN(cuda_hdr_image,
+    INTR_ASSIGN_OR_RETURN(const CudaImage<ImageTraits> cuda_hdr_image,
                           ComputeHdrMertens(cuda_ldr_images, params));
-  } else {
-    using FloatImageTrait = std::conditional<std::is_same_v<ImageTraits, Rgb8u>,
-                                             Rgb32f, Gray32f>::type;
-    std::vector<CudaImage<FloatImageTrait>> cuda_ldr_images_float;
-    cuda_ldr_images_float.reserve(ldr_images.size());
-    for (const auto& cuda_ldr_image : cuda_ldr_images) {
-      INTR_ASSIGN_OR_RETURN(CudaImage<FloatImageTrait> cuda_ldr_image_float,
-                            ConvertImage<FloatImageTrait>(cuda_ldr_image));
-      cuda_ldr_images_float.push_back(std::move(cuda_ldr_image_float));
-    }
-    INTR_ASSIGN_OR_RETURN(const auto cuda_hdr_image_float,
-                          ComputeHdrMertens(cuda_ldr_images_float, params));
-    INTR_ASSIGN_OR_RETURN(cuda_hdr_image,
-                          (ConvertImage<ImageTraits>(cuda_hdr_image_float)));
+    return FromCudaImage(cuda_hdr_image);
   }
-  INTR_ASSIGN_OR_RETURN(const Image<ImageTraits> host_hdr_image,
-                        FromCudaImage(cuda_hdr_image));
-  return host_hdr_image;
+
+  using FloatImageTrait =
+      std::conditional_t<std::is_same_v<ImageTraits, Rgb8u>, Rgb32f, Gray32f>;
+  INTR_ASSIGN_OR_RETURN(
+      const CudaImage<FloatImageTrait> cuda_hdr_image_float,
+      ComputeHdrMertensImpl<FloatImageTrait>(cuda_ldr_images, params));
+  // Reuse cuda_ldr_images[0] as the output buffer to avoid an extra GPU
+  // allocation.
+  CudaImage<ImageTraits>& cuda_hdr_image = cuda_ldr_images[0];
+  INTR_RETURN_IF_ERROR(ConvertImage(cuda_hdr_image_float, cuda_hdr_image));
+  return FromCudaImage(cuda_hdr_image);
 }
-
-template <typename ImageTraits>
-struct LaplacianPyramidImageType;
-
-template <>
-struct LaplacianPyramidImageType<Gray8u> {
-  typedef Generic16i type;
-};
-
-template <>
-struct LaplacianPyramidImageType<Rgb8u> {
-  typedef Generic16i3 type;
-};
-
-template <>
-struct LaplacianPyramidImageType<Gray32f> {
-  typedef Generic32f type;
-};
-
-template <>
-struct LaplacianPyramidImageType<Rgb32f> {
-  typedef Generic32f3 type;
-};
 
 template absl::StatusOr<Image<Gray8u>> ComputeHdrMertens(
     const std::vector<const Image<Gray8u>*>& ldr_images,
@@ -122,73 +145,121 @@ template absl::StatusOr<Image<Rgb8u>> ComputeHdrMertens(
     const std::vector<const Image<Rgb8u>*>& ldr_images,
     const HdrMertensParams& params, bool use_float_precision);
 
+namespace {
+
+template <typename ComputeTraits, typename InputTraits>
+absl::StatusOr<CudaImage<ComputeTraits>> ComputeHdrMertensImpl(
+    const std::vector<CudaImage<InputTraits>>& ldr_images,
+    const HdrMertensParams& params) {
+  INTR_RETURN_IF_ERROR(ValidateHdrMertensInputs(ldr_images, params));
+
+  const Dimensions base_dims = ldr_images[0].dimensions();
+  const std::vector<Dimensions> level_dims =
+      ComputePyramidLevelDimensions(base_dims, params);
+  const size_t num_levels = level_dims.size();
+
+  using AccumulatorTrait = std::conditional_t<
+      std::is_same_v<typename ComputeTraits::ScalarType, float>, ComputeTraits,
+      GenericTrait<float, ComputeTraits::kNumChannels>>;
+  std::vector<CudaImage<AccumulatorTrait>> blended_pyramid(num_levels);
+  for (size_t j = 0; j < num_levels; ++j) {
+    INTR_ASSIGN_OR_RETURN(blended_pyramid[j],
+                          CudaImage<AccumulatorTrait>::Create(level_dims[j]));
+  }
+
+  // Pre-allocate reusable downsampled pyramid buffers across all exposures.
+  std::vector<CudaImage<Generic32f>> weight_down_pyramid(
+      num_levels > 1 ? num_levels - 1 : 0);
+  std::vector<CudaImage<ComputeTraits>> image_down_pyramid(
+      num_levels > 1 ? num_levels - 1 : 0);
+  for (size_t j = 0; j + 1 < num_levels; ++j) {
+    INTR_ASSIGN_OR_RETURN(weight_down_pyramid[j],
+                          CudaImage<Generic32f>::Create(level_dims[j + 1]));
+    INTR_ASSIGN_OR_RETURN(image_down_pyramid[j],
+                          CudaImage<ComputeTraits>::Create(level_dims[j + 1]));
+  }
+
+  constexpr bool kNeedsConversion = !std::is_same_v<ComputeTraits, InputTraits>;
+  CudaImage<ComputeTraits> staging_image;
+  size_t staged_index = ldr_images.size();
+  if constexpr (kNeedsConversion) {
+    INTR_ASSIGN_OR_RETURN(staging_image,
+                          CudaImage<ComputeTraits>::Create(base_dims));
+  }
+  auto get_compute_image =
+      [&](size_t idx) -> absl::StatusOr<const CudaImage<ComputeTraits>*> {
+    if constexpr (kNeedsConversion) {
+      if (staged_index != idx) {
+        INTR_RETURN_IF_ERROR(ConvertImage(ldr_images[idx], staging_image));
+        staged_index = idx;
+      }
+      return &staging_image;
+    } else {
+      return &ldr_images[idx];
+    }
+  };
+
+  std::vector<CudaImage<Generic32f>> weight_maps(ldr_images.size());
+  // Iterate in reverse so staging_image retains exposure 0 for the next loop.
+  for (size_t rev_idx = ldr_images.size(); rev_idx > 0; --rev_idx) {
+    const size_t i = rev_idx - 1;
+    INTR_ASSIGN_OR_RETURN(const CudaImage<ComputeTraits>* compute_image,
+                          get_compute_image(i));
+    INTR_ASSIGN_OR_RETURN(
+        weight_maps[i],
+        ComputeHdrMertensWeightMap(*compute_image, params.contrast_exponent,
+                                   params.saturation_exponent,
+                                   params.well_exposedness_exponent,
+                                   params.border_type));
+  }
+  INTR_RETURN_IF_ERROR(NormalizeWeightMaps(weight_maps));
+
+  for (size_t i = 0; i < ldr_images.size(); ++i) {
+    INTR_ASSIGN_OR_RETURN(const CudaImage<ComputeTraits>* compute_image,
+                          get_compute_image(i));
+    const bool accumulate = i > 0;
+    for (size_t j = 0; j + 1 < num_levels; ++j) {
+      const CudaImage<Generic32f>& weight_curr =
+          (j == 0) ? weight_maps[i] : weight_down_pyramid[j - 1];
+      const CudaImage<ComputeTraits>& image_curr =
+          (j == 0) ? *compute_image : image_down_pyramid[j - 1];
+      INTR_RETURN_IF_ERROR(
+          PyrDown(weight_curr, weight_down_pyramid[j], params.border_type));
+      INTR_RETURN_IF_ERROR(
+          PyrDown(image_curr, image_down_pyramid[j], params.border_type));
+      INTR_RETURN_IF_ERROR(PyrUpAndBlendLaplacian(
+          weight_curr, image_curr, image_down_pyramid[j], params.border_type,
+          accumulate, blended_pyramid[j]));
+    }
+    const CudaImage<Generic32f>& weight_last =
+        (num_levels == 1) ? weight_maps[i] : weight_down_pyramid.back();
+    const CudaImage<ComputeTraits>& image_last =
+        (num_levels == 1) ? *compute_image : image_down_pyramid.back();
+    INTR_RETURN_IF_ERROR(BlendWeightMapAndImage(
+        weight_last, image_last, accumulate, blended_pyramid.back()));
+    weight_maps[i] = {};
+  }
+
+  for (int i = static_cast<int>(num_levels) - 2; i >= 0; --i) {
+    INTR_RETURN_IF_ERROR(PyrUp(blended_pyramid[i + 1], blended_pyramid[i],
+                               params.border_type, /*accumulate=*/true));
+  }
+  INTR_RETURN_IF_ERROR(Clamp(blended_pyramid[0], /*min=*/0.0f,
+                             static_cast<float>(ComputeTraits::kIntensityMax)));
+  if constexpr (std::is_same_v<AccumulatorTrait, ComputeTraits>) {
+    return std::move(blended_pyramid[0]);
+  } else {
+    return RoundThenCast<ComputeTraits>(blended_pyramid[0]);
+  }
+}
+
+}  // namespace
+
 template <typename ImageTraits>
 absl::StatusOr<CudaImage<ImageTraits>> ComputeHdrMertens(
     const std::vector<CudaImage<ImageTraits>>& ldr_images,
     const HdrMertensParams& params) {
-  if (ldr_images.empty()) {
-    return absl::InvalidArgumentError("ldr_images must not be empty.");
-  }
-  INTR_RETURN_IF_ERROR(CheckHdrMertensParams(params));
-  std::vector<CudaImage<Generic32f>> weight_maps;
-  weight_maps.reserve(ldr_images.size());
-  for (const auto& image : ldr_images) {
-    INTR_ASSIGN_OR_RETURN(
-        auto weight_map,
-        ComputeHdrMertensWeightMap(
-            image, params.contrast_exponent, params.saturation_exponent,
-            params.well_exposedness_exponent, params.border_type));
-    weight_maps.push_back(std::move(weight_map));
-  }
-  INTR_RETURN_IF_ERROR(NormalizeWeightMaps(weight_maps));
-
-  std::vector<CudaImage<GenericTrait<float, ImageTraits::kNumChannels>>>
-      blended_pyramid;
-  for (int i = 0; i < ldr_images.size(); ++i) {
-    INTR_ASSIGN_OR_RETURN(
-        const auto gaussian_pyramid_weight_map,
-        CreateGaussianPyramid(weight_maps[i], params.pyramid_min_dimensions,
-                              params.border_type));
-
-    using LaplacianPyramidImageT = LaplacianPyramidImageType<ImageTraits>::type;
-    std::vector<CudaImage<LaplacianPyramidImageT>> laplacian_pyramid_image;
-
-    if constexpr (std::is_same_v<typename ImageTraits::ScalarType, uint8_t>) {
-      INTR_ASSIGN_OR_RETURN(laplacian_pyramid_image,
-                            CreateLaplacianPyramid<LaplacianPyramidImageT>(
-                                ldr_images[i], params.pyramid_min_dimensions,
-                                params.border_type));
-    } else {
-      using FloatImageTrait = GenericTrait<float, ImageTraits::kNumChannels>;
-      INTR_ASSIGN_OR_RETURN(const CudaImage<FloatImageTrait> ldr_image_float,
-                            Cast<FloatImageTrait>(ldr_images[i]));
-      INTR_ASSIGN_OR_RETURN(laplacian_pyramid_image,
-                            CreateLaplacianPyramid<LaplacianPyramidImageT>(
-                                ldr_image_float, params.pyramid_min_dimensions,
-                                params.border_type));
-    }
-    INTR_RET_CHECK_EQ(gaussian_pyramid_weight_map.size(),
-                      laplacian_pyramid_image.size());
-    if (blended_pyramid.empty()) {
-      blended_pyramid.resize(gaussian_pyramid_weight_map.size());
-      for (int j = 0; j < blended_pyramid.size(); j++) {
-        INTR_ASSIGN_OR_RETURN(
-            blended_pyramid[j],
-            (CudaImage<GenericTrait<float, ImageTraits::kNumChannels>>::Create(
-                gaussian_pyramid_weight_map[j].dimensions())));
-        blended_pyramid[j].SetZero();
-      }
-    }
-    for (int j = 0; j < blended_pyramid.size(); ++j) {
-      INTR_RETURN_IF_ERROR(BlendWeightMapAndImage(
-          gaussian_pyramid_weight_map[j], laplacian_pyramid_image[j],
-          blended_pyramid[j]));
-    }
-  }
-  INTR_ASSIGN_OR_RETURN(CudaImage<ImageTraits> hdr_image,
-                        ReconstructImageFromLaplacianPyramid<ImageTraits>(
-                            blended_pyramid, params.border_type));
-  return hdr_image;
+  return ComputeHdrMertensImpl<ImageTraits>(ldr_images, params);
 }
 
 template absl::StatusOr<CudaImage<Gray8u>> ComputeHdrMertens(

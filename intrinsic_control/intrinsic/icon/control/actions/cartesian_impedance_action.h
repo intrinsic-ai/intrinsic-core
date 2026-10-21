@@ -123,6 +123,7 @@ class CartesianImpedanceAction final
   std::unique_ptr<MaximumTranslationalDistanceTracker> distance_tracker_;
   std::unique_ptr<IsSettledCriterion> is_settled_criterion_;
   bool using_acceleration_command_interface_;
+  int64_t streaming_input_message_count_ = 0;
 };
 
 }  // namespace intrinsic::icon

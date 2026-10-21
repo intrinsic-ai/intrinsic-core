@@ -27,7 +27,6 @@
 #include "intrinsic/world/objects/transform_node_internal.h"
 #include "intrinsic/world/objects/world_object_internal.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
-#include "opencensus/stats/view_descriptor.h"
 
 namespace intrinsic {
 namespace object_world {
@@ -151,8 +150,17 @@ bool IsOnlyStateChange(
 bool IsOnlyStateChange(
     const intrinsic_proto::world::ObjectWorldUpdate& world_update);
 
-opencensus::stats::ViewDescriptor NameIsGlobalAliasFalseViewDescriptor();
-void RegisterObjectWorldUpdatesMetricsViews();
+// Name of the counter of object creations and renames with
+// name_is_global_alias set to false.
+inline constexpr char kNameIsGlobalAliasFalseMeasureName[] =
+    "intrinsic/object_world/name_is_global_alias_false";
+// Attribute key of that counter: the type of the object world update.
+inline constexpr char kUpdateTypeKey[] = "object_world_update_type";
+
+// Creates the object world update metric instruments. Call it after the global
+// MeterProvider is initialized (e.g. after OpenCensusPlugin in main()), or the
+// instruments bind to the Noop provider.
+void RegisterObjectWorldUpdatesMetrics();
 
 }  // namespace object_world
 }  // namespace intrinsic

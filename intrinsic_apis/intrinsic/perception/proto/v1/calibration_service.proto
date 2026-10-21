@@ -23,6 +23,7 @@ import "intrinsic/math/proto/pose.proto";
 import "intrinsic/perception/proto/v1/pattern_detection_config.proto";
 import "intrinsic/perception/proto/v1/camera_setup.proto";
 import "intrinsic/perception/proto/v1/camera_to_robot_calibration.proto";
+import "intrinsic/perception/proto/v1/capture_data.proto";
 import "intrinsic/perception/proto/v1/distortion_params.proto";
 import "intrinsic/perception/proto/v1/intrinsic_params.proto";
 import "intrinsic/platform/pubsub/storage_location.proto";
@@ -188,6 +189,49 @@ message ValidateRequest {
   CameraSetup camera_to_robot_calibration_type = 3;
   // Whether to validate the camera-to-camera(s) pose.
   bool validate_camera_to_camera = 4;
+
+  // Externally provided captures to validate. If this field is non-empty, the
+  // validation runs on these captures and the data that may have been
+  // previously collected via `collect_calibration_data` is ignored. This makes
+  // it possible to skip the robot-driven data collection entirely and to
+  // validate images which were captured by other means, e.g., by the
+  // `capture_images` skill.
+  //
+  // Note that the `initialize_calibration` skill still needs to be called
+  // beforehand, since the pattern detection config and the cameras that the
+  // captures belong to are configured there.
+  //
+  // Each entry is one capture, i.e., the equivalent of the data that one
+  // `CaptureData` call would have grabbed from the cameras. Its `capture_data`
+  // holds the capture of each initialized camera, in the same order as
+  // `camera_resource_handles` in the `InitializeRequest`, i.e. entry `i` must
+  // hold the image that camera `i` took. Every initialized camera needs exactly
+  // one entry and every entry needs to reference a capture result, otherwise an
+  // error is returned.
+  //
+  // The cameras are matched by position, so providing them in the wrong order
+  // silently validates the images of one camera against the parameters and
+  // pose of another. Callers need to make sure that the order matches the one
+  // that was passed to `Initialize`.
+  //
+  // Camera-to-camera validation relies on this grouping to know which images
+  // belong together, so for it all entries of one capture must show the
+  // calibration pattern in the same pose. Intrinsic validation evaluates every
+  // image on its own and therefore does not require this.
+  //
+  // A camera which cannot see the pattern in a pose can therefore not be left
+  // out of a capture; use a separate request with pattern poses that are
+  // inside its field of view. It is not an error if the pattern is not detected
+  // in one of the images, that image just does not contribute to the
+  // validation. But every camera needs at least one detection, otherwise an
+  // error is returned. Several captures may be provided in order to
+  // validate several pattern poses, which samples more of the image area and
+  // therefore makes the validation more meaningful.
+  //
+  // Camera-to-robot validation is not supported with provided captures,
+  // because the robot poses that belong to the individual captures are not
+  // part of the provided capture data.
+  repeated CaptureDataList captures = 5;
 }
 
 message IntrinsicCalibrationResult {
@@ -220,6 +264,11 @@ message StereoValidationResult {
   double rms_error_2d = 1;
   // Maximum stereo reprojection error in pixels.
   optional double max_error_2d = 2;
+  // Name of the reference camera the pair was validated against.
+  string reference_camera_name = 3;
+  // Name of the camera whose pose relative to the reference camera was
+  // validated.
+  string camera_name = 4;
 }
 
 message MultiCameraValidationResult {

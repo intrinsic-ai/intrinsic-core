@@ -42,6 +42,7 @@
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/icon/cc_client/condition.h"
 #include "intrinsic/icon/common/id_types.h"
 #include "intrinsic/icon/common/slot_part_map.h"
@@ -50,7 +51,6 @@
 #include "intrinsic/icon/proto/v1/service.grpc.pb.h"
 #include "intrinsic/icon/proto/v1/service.pb.h"
 #include "intrinsic/icon/proto/v1/types.pb.h"
-#include "intrinsic/icon/release/grpc_time_support.h"
 #include "intrinsic/icon/release/source_location.h"
 #include "intrinsic/logging/proto/context.pb.h"
 #include "intrinsic/util/grpc/channel_interface.h"
@@ -257,7 +257,8 @@ ActionDescriptor::ActionDescriptor(absl::string_view action_type_name,
 ActionDescriptor& ActionDescriptor::WithFixedParams(
     const ::google::protobuf::Message& fixed_params) {
   google::protobuf::Any any_proto;
-  any_proto.PackFrom(fixed_params);
+  static_cast<void>(
+      any_proto.PackFrom(fixed_params));  // TODO: Handle return value
   fixed_params_ = any_proto;
   return *this;
 }

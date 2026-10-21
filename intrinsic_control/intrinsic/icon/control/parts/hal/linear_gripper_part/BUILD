@@ -23,7 +23,6 @@ cc_library(
     srcs = ["hal_linear_gripper_part.cc"],
     hdrs = ["hal_linear_gripper_part.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:context",
         "//intrinsic_control/intrinsic/icon/control/parts:feature_interface_registry",
         "//intrinsic_control/intrinsic/icon/control/parts:hal_realtime_part_base",
@@ -35,6 +34,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/hal/interfaces:gripper_fbs_cc",
         "//intrinsic_control/intrinsic/icon/hal/interfaces:gripper_fbs_utils",
         "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",

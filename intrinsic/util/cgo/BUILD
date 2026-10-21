@@ -32,7 +32,7 @@ cc_library(
     hdrs = ["cpp_types.h"],
     deps = [
         ":c_types",
-        "//intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:die_if_null",
         "@abseil-cpp//absl/status",

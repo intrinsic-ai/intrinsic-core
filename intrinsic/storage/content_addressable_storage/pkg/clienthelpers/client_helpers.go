@@ -19,12 +19,11 @@ package clienthelpers
 import (
 	"bytes"
 	"context"
-	"errors"
 	"fmt"
 	"hash"
 	"hash/crc32"
 	"io"
-	"syscall"
+	"os"
 	"time"
 
 	backoff "github.com/cenkalti/backoff/v4"
@@ -94,53 +93,9 @@ func Get(ctx context.Context, casClient casgrpcpb.ContentAddressableStorageServi
 	return nil
 }
 
-// GetRange is a convenience function that retrieves an object from CAS starting
-// at readOffset and writes the bytes to the provided writer until EOF.
-// If an error is returned from the CAS service, it is passed down unwrapped so that clients
-// can check for the canonical error code. Returns the total size of the object.
-func GetRange(ctx context.Context, casClient casgrpcpb.ContentAddressableStorageServiceClient, objectID string, readOffset int64, w io.Writer) (int64, error) {
-	ctx, span := trace.StartSpan(ctx, "clienthelpers.GetRange")
-	defer span.End()
-
-	ctx, cancel := context.WithCancel(ctx)
-	defer cancel()
-
-	req := &caspb.GetRangeRequest{
-		ObjectId:   objectID,
-		ReadOffset: readOffset,
-	}
-	stream, err := casClient.GetRange(ctx, req)
-	if err != nil {
-		return 0, fmt.Errorf("creating stream for %q: %w", req.String(), err)
-	}
-
-	checksummer := NewChecksummer()
-	var totalObjectSize int64
-	for {
-		checksummer.Reset()
-		res, err := stream.Recv()
-		if err == io.EOF {
-			break
-		}
-		if err != nil {
-			return 0, err
-		}
-		totalObjectSize = res.GetTotalObjectSize()
-		content := res.GetChecksummedData().GetContent()
-		if _, err := checksummer.Write(content); err != nil {
-			return 0, fmt.Errorf("could not checksum content: %w", err)
-		}
-		if clientCRC, serverCRC := checksummer.Sum32(), res.GetChecksummedData().GetCrc32C(); clientCRC != serverCRC {
-			return 0, fmt.Errorf("checksum mismatch: client computed 0x%08x, server computed 0x%08x", clientCRC, serverCRC)
-		}
-		if _, err := w.Write(content); err != nil {
-			return 0, fmt.Errorf("could not write data: %w", err)
-		}
-	}
-	return totalObjectSize, nil
-}
-
 type downloadOptions struct {
+	casClient       casgrpcpb.ContentAddressableStorageServiceClient
+	offset          int64
 	maxRetries      uint64
 	infiniteRetries bool
 	initialBackoff  time.Duration
@@ -155,10 +110,26 @@ func defaultDownloadOptions() *downloadOptions {
 	}
 }
 
-// DownloadOption configures GetResumable.
+// DownloadOption configures GetResumableReader.
 type DownloadOption func(*downloadOptions)
 
+// WithCASClient configures the CAS service client used for the download.
+func WithCASClient(casClient casgrpcpb.ContentAddressableStorageServiceClient) DownloadOption {
+	return func(o *downloadOptions) {
+		o.casClient = casClient
+	}
+}
+
+// WithOffset configures the starting byte offset for the download.
+// Defaults to 0 if not specified.
+func WithOffset(offset int64) DownloadOption {
+	return func(o *downloadOptions) {
+		o.offset = offset
+	}
+}
+
 // WithMaxRetries configures the maximum number of resume retries upon transient errors.
+// The retries are set per chunk of downloaded data.
 func WithMaxRetries(retries uint64) DownloadOption {
 	return func(o *downloadOptions) {
 		o.maxRetries = retries
@@ -166,7 +137,7 @@ func WithMaxRetries(retries uint64) DownloadOption {
 	}
 }
 
-// WithInfiniteRetries configures GetResumable to retry upon transient errors
+// WithInfiniteRetries configures GetResumableReader to retry upon transient errors
 // indefinitely until the caller's context is done.
 func WithInfiniteRetries() DownloadOption {
 	return func(o *downloadOptions) {
@@ -200,95 +171,292 @@ func (o *downloadOptions) backoff(ctx context.Context) backoff.BackOff {
 	return backoff.WithContext(bo, ctx)
 }
 
-type countingWriter struct {
-	writer  io.Writer
-	written int64
-}
-
-func (c *countingWriter) Write(p []byte) (int, error) {
-	n, err := c.writer.Write(p)
-	c.written += int64(n)
-	return n, err
-}
-
-// GetResumable downloads an object from CAS to the provided io.Writer.
-// If w implements io.Seeker (such as an *os.File), it resumes from the current file
-// offset. In the event of transient network interruptions, it automatically retries
-// with exponential backoff starting from the latest written offset. If the server
-// does not implement GetRange and the offset is 0, it falls back to Get.
-func GetResumable(
-	ctx context.Context, casClient casgrpcpb.ContentAddressableStorageServiceClient, objectID string, w io.Writer, opts ...DownloadOption,
-) error {
-	ctx, span := trace.StartSpan(ctx, "clienthelpers.GetResumable")
-	defer span.End()
-
-	o := defaultDownloadOptions()
-	for _, opt := range opts {
-		opt(o)
-	}
-
-	var startOffset int64
-	var seeker io.Seeker
-	// Check if the destination supports seeking (like *os.File):
-	// 1. Query the current cursor position to resume any existing partial file.
-	// 2. Save the seeker handle to re-align the file cursor if retries occur.
-	// Non-seekable writers (e.g. http.ResponseWriter, bytes.Buffer, pipes) default to offset 0.
-	if s, ok := w.(io.Seeker); ok {
-		// Set the cursor to the point where download stopped.
-		pos, err := s.Seek(0, io.SeekCurrent)
-		if err == nil { // if NO error
-			startOffset = pos
-			seeker = s
-		} else if !errors.Is(err, syscall.ESPIPE) {
-			// *os.File implements io.Seeker, but pipes, sockets, and os.Stdout return
-			// syscall.ESPIPE ("Illegal seek"). We ignore ESPIPE so that streaming to pipes
-			// works starting from offset 0, but propagate any real I/O error.
-			return fmt.Errorf("determining current offset for %q: %w", objectID, err)
-		}
-	}
-
-	cw := &countingWriter{writer: w, written: startOffset}
-	b := o.backoff(ctx)
-
-	return backoff.Retry(func() error {
-		if seeker != nil {
-			// sync the cursor to the latest tracked progress
-			if _, err := seeker.Seek(cw.written, io.SeekStart); err != nil {
-				return backoff.Permanent(fmt.Errorf("seeking to offset %d in writer: %w", cw.written, err))
-			}
-		}
-
-		_, err := GetRange(ctx, casClient, objectID, cw.written, cw)
-		if err == nil {
-			return nil
-		}
-
-		// Fallback to Get if GetRange is unsupported and we are at offset 0.
-		if status.Code(err) == codes.Unimplemented {
-			if cw.written != 0 {
-				return backoff.Permanent(err)
-			}
-
-			if err := Get(ctx, casClient, objectID, w); err != nil {
-				return backoff.Permanent(err)
-			}
-			return nil
-		}
-
-		if !isRetriable(err) {
-			return backoff.Permanent(err)
-		}
-
-		return err
-	}, b)
-}
-
 func isRetriable(err error) bool {
 	switch status.Code(err) {
 	case codes.Unavailable, codes.DeadlineExceeded, codes.ResourceExhausted, codes.Aborted:
 		return true
 	}
 	return false
+}
+
+var (
+	_ io.ReadCloser = (*ResumableReader)(nil)
+	_ io.WriterTo   = (*ResumableReader)(nil)
+)
+
+// ResumableReader streams an object from CAS starting at a given byte offset,
+// verifying CRC32C checksums per chunk and automatically retrying transient
+// gRPC errors with exponential backoff from the latest read offset.
+// If the server does not implement GetRange and the starting offset is 0, it
+// falls back to Get.
+//
+// Callers must call [ResumableReader.Close] when done to release the underlying
+// gRPC stream resources. ResumableReader is not safe for concurrent use.
+type ResumableReader struct {
+	// [io.Reader]'s Read doesn't accept a context but we need to propagate it to
+	// [ResumableReader.pull] to refill [ResumableReader.buf].
+	ctx        context.Context
+	cancelFunc context.CancelCauseFunc
+	span       *trace.Span
+	// contains remaining data unread from the most recently pulled chunk of the object.
+	buf         []byte
+	checksummer hash.Hash32
+	objectID    string
+	// tracks the current byte offset in the CAS object
+	offset    int64
+	casClient casgrpcpb.ContentAddressableStorageServiceClient
+	// not all servers implement GetRange. useGet makes [ResumableReader] fall back to Get.
+	// It is only supported for a download from 0 offset.
+	useGet  bool
+	backoff backoff.BackOff
+	err     error
+
+	streamGet      casgrpcpb.ContentAddressableStorageService_GetClient
+	streamGetRange casgrpcpb.ContentAddressableStorageService_GetRangeClient
+}
+
+// WriteTo implements [io.WriterTo] to optimize io.Copy
+// by getting rid of an intermediate buffer during the copy.
+func (r *ResumableReader) WriteTo(w io.Writer) (int64, error) {
+	var totalWritten int64
+
+	for {
+		if r.ctx.Err() != nil {
+			return totalWritten, context.Cause(r.ctx)
+		}
+
+		for len(r.buf) == 0 {
+			if err := r.pull(); err != nil {
+				// io.EOF indicates the entire stream has been written; per the io.WriterTo
+				// and io.Copy contracts, normal completion returns a nil error.
+				if err == io.EOF {
+					return totalWritten, nil
+				}
+				return totalWritten, err
+			}
+		}
+
+		n, err := w.Write(r.buf)
+		if n < 0 || n > len(r.buf) {
+			if err != nil {
+				return totalWritten, err
+			}
+			return totalWritten, fmt.Errorf(
+				"invalid write count: writer reported %d bytes written for %d-byte buffer",
+				n, len(r.buf),
+			)
+		}
+		r.buf = r.buf[n:]
+		r.offset += int64(n)
+		totalWritten += int64(n)
+		if err != nil {
+			return totalWritten, err
+		}
+
+		if len(r.buf) > 0 {
+			return totalWritten, fmt.Errorf(
+				"%w: wrote %d of %d bytes",
+				io.ErrShortWrite, n, n+len(r.buf),
+			)
+		}
+	}
+}
+
+// Close implements [io.ReadCloser].
+func (r *ResumableReader) Close() error {
+	r.cancelFunc(os.ErrClosed)
+	r.span.End()
+	return nil
+}
+
+// Read implements [io.ReadCloser].
+func (r *ResumableReader) Read(p []byte) (int, error) {
+	if r.ctx.Err() != nil {
+		return 0, context.Cause(r.ctx)
+	}
+
+	if len(p) == 0 {
+		return 0, nil
+	}
+
+	// pull() is called in the loop to make sure r.buf is filled.
+	for len(r.buf) == 0 {
+		if err := r.pull(); err != nil {
+			return 0, err
+		}
+	}
+
+	n := copy(p, r.buf)
+	r.buf = r.buf[n:]
+	r.offset += int64(n)
+
+	return n, nil
+}
+
+// pull pulls the next chunk from the Get/GetRange stream and puts it into
+// r.buf.
+func (r *ResumableReader) pull() error {
+	if r.err != nil {
+		return r.err
+	}
+
+	r.err = backoff.Retry(func() error {
+		if err := r.open(); err != nil {
+			return err
+		}
+
+		var data *caspb.ChecksummedData
+
+		if !r.useGet {
+			resp, err := r.streamGetRange.Recv()
+			switch {
+			case status.Code(err) == codes.Unimplemented && r.offset == 0:
+				r.streamGetRange = nil
+				r.useGet = true
+				if err := r.open(); err != nil {
+					return err
+				}
+			case err != nil:
+				// it will be reinitialized in [ResumableReader.open] before retrying
+				r.streamGetRange = nil
+				if isRetriable(err) {
+					return err
+				}
+				return backoff.Permanent(err)
+			case resp.GetChunkOffset() != r.offset:
+				return backoff.Permanent(
+					fmt.Errorf("unexpected chunk offset: got %d, want %d", resp.GetChunkOffset(), r.offset),
+				)
+			default:
+				data = resp.GetChecksummedData()
+			}
+		}
+
+		if r.useGet {
+			resp, err := r.streamGet.Recv()
+			if err != nil {
+				// it will be reinitialized in [ResumableReader.open] before retrying
+				r.streamGet = nil
+				// It is retriable only for 0 offset. Otherwise, the data will be overwritten.
+				if isRetriable(err) && r.offset == 0 {
+					return err
+				}
+
+				return backoff.Permanent(err)
+			}
+
+			data = resp.GetChecksummedData()
+		}
+
+		r.checksummer.Reset()
+		if _, err := r.checksummer.Write(data.GetContent()); err != nil {
+			return backoff.Permanent(fmt.Errorf("error calculating checksum: %w", err))
+		}
+
+		if clientCRC, serverCRC := r.checksummer.Sum32(), data.GetCrc32C(); clientCRC != serverCRC {
+			return backoff.Permanent(
+				fmt.Errorf("checksum mismatch: client computed 0x%08x, server computed 0x%08x", clientCRC, serverCRC),
+			)
+		}
+
+		r.buf = data.GetContent()
+
+		return nil
+	}, r.backoff)
+
+	if r.ctx.Err() != nil {
+		r.err = context.Cause(r.ctx)
+	}
+
+	return r.err
+}
+
+// open opens the stream to read data from.
+// If the stream is already opened, it's a no-op.
+func (r *ResumableReader) open() error {
+	if r.useGet {
+		if r.streamGet != nil {
+			return nil
+		}
+		if r.offset != 0 {
+			return backoff.Permanent(fmt.Errorf("cannot open Get stream at non-zero offset %d", r.offset))
+		}
+
+		req := &caspb.GetRequest{
+			ObjectId: r.objectID,
+		}
+		stream, err := r.casClient.Get(r.ctx, req)
+		if err != nil {
+			if isRetriable(err) {
+				return err
+			}
+			return backoff.Permanent(err)
+		}
+		r.streamGet = stream
+		return nil
+	}
+
+	if r.streamGetRange != nil {
+		return nil
+	}
+
+	req := &caspb.GetRangeRequest{
+		ObjectId:   r.objectID,
+		ReadOffset: r.offset,
+	}
+	stream, err := r.casClient.GetRange(r.ctx, req)
+	if err != nil {
+		if status.Code(err) == codes.Unimplemented && r.offset == 0 {
+			r.useGet = true
+			return r.open()
+		}
+		if isRetriable(err) {
+			return err
+		}
+		return backoff.Permanent(err)
+	}
+
+	r.streamGetRange = stream
+	return nil
+}
+
+// GetResumableReader returns a [ResumableReader] configured to read objectID
+// starting at byte 0 (or at the offset configured via [WithOffset]).
+// Callers must provide a CAS client via [WithCASClient].
+// The underlying gRPC stream is opened lazily on the first call to Read or
+// WriteTo; any error returned by the CAS service is passed down unwrapped so
+// callers can inspect status.Code(err).
+func GetResumableReader(
+	ctx context.Context,
+	objectID string,
+	opts ...DownloadOption,
+) (*ResumableReader, error) {
+	defaultOpts := defaultDownloadOptions()
+	for _, o := range opts {
+		o(defaultOpts)
+	}
+
+	if defaultOpts.casClient == nil {
+		return nil, status.Error(codes.InvalidArgument, "CAS client must not be nil")
+	}
+
+	if defaultOpts.offset < 0 {
+		return nil, status.Error(codes.InvalidArgument, "offset must be >= 0")
+	}
+
+	ctx, span := trace.StartSpan(ctx, "clienthelpers.GetResumableReader")
+	childCtx, cancel := context.WithCancelCause(ctx)
+
+	return &ResumableReader{
+		ctx:         childCtx,
+		cancelFunc:  cancel,
+		span:        span,
+		objectID:    objectID,
+		offset:      defaultOpts.offset,
+		backoff:     defaultOpts.backoff(childCtx),
+		casClient:   defaultOpts.casClient,
+		checksummer: NewChecksummer(),
+	}, nil
 }
 
 // GetAsProto is a convenience function that retrieves an object from CAS and then unmarshals the

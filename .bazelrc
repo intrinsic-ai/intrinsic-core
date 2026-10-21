@@ -34,6 +34,10 @@ common --action_env=BAZEL_DO_NOT_DETECT_CPP_TOOLCHAIN=1
 common --cxxopt='-std=c++20'
 common --host_cxxopt='-std=c++20'
 
+
+common --@llvm//config:fastbuild_optimization_mode=O1
+
+
 # Use a static value for `PATH` and does not inherit `LD_LIBRARY_PATH`. Doesn't let environment
 # variables like `PATH` sneak into the build, which can cause massive cache misses when they change.
 # Use `--action_env=ENV_VARIABLE` if you want to inherit specific environment variables from the
@@ -100,7 +104,9 @@ common:intrinsic -c opt
 
 
 # go/sponge-undeclared-outputs only works if outputs are zipped.
-test --zip_undeclared_test_outputs
+# Set for every command, not only test: a test-only option gives test targets a
+# different configuration, so `bazel test` after `bazel build` re-analyzes them.
+common --zip_undeclared_test_outputs
 
 # Do not write to the shared RBE cache when running Bazel locally. This can lead
 # to cache poisoning and false positivies in the RBE based CI.
@@ -135,6 +141,9 @@ common --@aspect_rules_lint//lint:fail_on_violation=true
 
 # Enable custom profiling by default.
 common --@gz-common//profiler:config=custom
+
+# Use OpenTelemetry C++ ABI v2 (enables synchronous Gauge and Span::AddLink).
+common --@io_opentelemetry_cpp//api:abi_version_no=2
 
 # Disable the less permissive Luksan solver from nlopt.
 common --@nlopt//:use_luksan=false
@@ -175,7 +184,6 @@ common --copt=-Werror
 # These are required to make code build which has been migrated from google3
 # (http://tools/cpp/warnings.bzl).
 common --per_file_copt=//.*@-Wno-deprecated-declarations  # TODO(b/467267084): Enable, warnings disabled because they are very spammy.
-common --per_file_copt=//.*@-Wno-error=deprecated-pragma  # TODO(b/467267841): Enable
 common --per_file_copt=//.*@-Wno-nullability-completeness # TODO(b/467268103): Enable, warnings disabled because they are very spammy.
 
 # TODO(b/381398679) Enable once https://github.com/bazel-contrib/rules_foreign_cc/issues/1333 is resolved
@@ -219,54 +227,49 @@ common --config=haswell
 
 # Address sanitizer
 common:asan --strip=never
-common:asan --copt -fsanitize=address
+common:asan --@llvm//config:asan
 common:asan --copt -DADDRESS_SANITIZER
 common:asan --copt -O1
 common:asan --copt -g
 common:asan --copt -fno-omit-frame-pointer
-common:asan --linkopt -fsanitize=address
 common:asan --test_env=ASAN_OPTIONS=detect_leaks=0:detect_odr_violation=0
 test:asan --test_tag_filters=-noasan
 
 # Memory sanitizer
 common:msan --strip=never
-common:msan --copt -fsanitize=memory
+common:msan --@llvm//config:msan
 common:msan --copt -DMEMORY_SANITIZER
 common:msan --copt -O1
 common:msan --copt -g
 common:msan --copt -fno-omit-frame-pointer
-common:msan --linkopt -fsanitize=memory
 test:msan --test_tag_filters=-nomsan
 
 # Thread sanitizer
 common:tsan --strip=never
-common:tsan --copt -fsanitize=thread
+common:tsan --@llvm//config:tsan
 common:tsan --copt -DTHREAD_SANITIZER
 common:tsan --copt -O1
 common:tsan --copt -g
 common:tsan --copt -fno-omit-frame-pointer
-common:tsan --linkopt -fsanitize=thread
 test:tsan --test_tag_filters=-notsan
 
 # Undefined Behavior sanitizer
 common:ubsan --strip=never
-common:ubsan --copt -fsanitize=undefined
+common:ubsan --@llvm//config:ubsan
 common:ubsan --copt -DUNDEFINED_BEHAVIOR_SANITIZER
 common:ubsan --copt -O1
 common:ubsan --copt -g
 common:ubsan --copt -fno-omit-frame-pointer
-common:ubsan --linkopt -fsanitize=undefined
 common:ubsan --test_env=UBSAN_OPTIONS=print_stacktrace=1:halt_on_error=0
 test:ubsan --test_tag_filters=-noubsan
 
 # Real-time sanitizer
 common:rtsan --strip=never
-common:rtsan --copt -fsanitize=realtime
+common:rtsan --@llvm//config:rtsan
 common:rtsan --copt -DREALTIME_SANITIZER
 common:rtsan --copt -O1
 common:rtsan --copt -g
 common:rtsan --copt -fno-omit-frame-pointer
-common:rtsan --linkopt -fsanitize=realtime
 test:rtsan --test_tag_filters=-nortsan
 
 # Define a dynamic execution strategy (https://bazel.build/remote/dynamic)
@@ -295,7 +298,6 @@ common:dynamic --strategy=CppLink=dynamic
 common:dynamic --strategy=CudaCompile=dynamic
 common:dynamic --strategy=Databundle=dynamic
 common:dynamic --strategy=FileWrite=dynamic
-common:dynamic --strategy=Genrule=dynamic
 common:dynamic --strategy=GoCompilePkg=dynamic
 common:dynamic --strategy=GoCompilePkgExternal=dynamic
 common:dynamic --strategy=GoLink=dynamic

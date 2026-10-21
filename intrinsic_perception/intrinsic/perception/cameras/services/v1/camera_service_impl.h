@@ -40,6 +40,10 @@
 namespace intrinsic {
 namespace perception {
 
+// Registers instruments and eagerly initializes metrics. Must be called in
+// main() after intrinsic::OpenCensusPlugin is constructed.
+void RegisterCameraServiceMetrics();
+
 class CameraServiceImpl final
     : public intrinsic_proto::perception::v1::CameraService::Service {
  public:

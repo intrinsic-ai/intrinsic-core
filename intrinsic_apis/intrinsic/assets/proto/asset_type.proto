@@ -33,7 +33,7 @@ enum AssetType {
 
   // LINT.ThenChange(
   //   //intrinsic/assets/type_utils.ts:asset_type_info,
-  //   //intrinsic/assets/typeutils.go:asset_type_info
+  //   //intrinsic_sdk/intrinsic/assets/typeutils.go:asset_type_info
   // )
 
 }

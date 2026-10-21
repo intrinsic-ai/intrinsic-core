@@ -21,10 +21,10 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"sync/atomic"
 	"time"
 
-	"intrinsic/assets/conversion/applicationasset"
-	"intrinsic/assets/conversion/runtime"
+	"intrinsic/assets/conversion/solutionconversion"
 	"intrinsic/assets/dependencies/graph"
 	"intrinsic/assets/dependencies/platform"
 	"intrinsic/assets/dependencies/runtimegraph"
@@ -107,6 +107,11 @@ var (
 	}
 )
 
+type deploymentState struct {
+	appDeploymentID string
+	isIdle          bool
+}
+
 // The DeployService can deploy applications on the cluster.
 type DeployService struct {
 	conductorClient               conductorgrpcpb.ConductorServiceClient
@@ -128,6 +133,7 @@ type DeployService struct {
 	clusterInfo         transfersvc.ClusterInfo
 	clusterParams       render.ClusterParams
 	initDataFiles       render.InitDataFilesParams
+	deploymentState     atomic.Pointer[deploymentState]
 }
 
 // Options contains options for a deploy service.
@@ -182,20 +188,31 @@ func New(opts Options) *DeployService {
 	}
 }
 
+func (s *DeployService) setDeploymentState(appDeploymentID string, isIdle bool) {
+	s.deploymentState.Store(&deploymentState{
+		appDeploymentID: appDeploymentID,
+		isIdle:          isIdle,
+	})
+}
+
 // StartIdleWorkcellSpec applies the default workcell spec to the cluster in order to cache container images.
 func (s *DeployService) StartIdleWorkcellSpec(ctx context.Context) error {
 	ctx, span := trace.StartSpan(ctx, "StartIdleWorkcellSpec")
 	defer span.End()
 
-	// Only start the idle workcell spec if there isn't a workcell spec already
-	// installed. This avoids unnecessarily updating an existing solution
+	// Only start the idle workcell spec if there isn't a solution already
+	// running. This avoids unnecessarily updating an existing solution
 	// deployment with defaults.
 	if ca, err := s.transferService.CurrentExclusiveChart(ctx); err != nil {
 		return fmt.Errorf("failed to get current exclusive chart: %w", err)
-	} else if running, err := transfersvc.IsSolutionRunning(ca); err != nil {
+	} else if running, appID, err := transfersvc.IsSolutionRunning(ca); err != nil {
 		return fmt.Errorf("failed to check running state of exclusive chart: %w", err)
 	} else if running {
 		log.InfoContextf(ctx, "Solution deployment already exists, skipping StartIdleWorkcellSpec")
+		if appID == "" {
+			appID = newAppDeploymentID()
+		}
+		s.setDeploymentState(appID, false)
 		return nil
 	}
 
@@ -228,6 +245,8 @@ func (s *DeployService) applyIdleWorkcellSpec(ctx context.Context) error {
 		log.ErrorContextf(ctx, "s.transferService.ApplyWorkcellSpec(ws=%v) failed: %v", ws, err)
 		return fmt.Errorf("failed to apply the workcell spec: %w", err)
 	}
+	s.setDeploymentState("", true)
+
 	return nil
 }
 
@@ -475,12 +494,9 @@ func (s *DeployService) DeployApplication(ctx context.Context, req *deploypb.Dep
 
 	log.InfoContext(ctx, "Solution is not a branch.  No save data will be retrieved.")
 	var validateDependencies deployValidator = func(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) error {
-		_, err := s.validateDependencies(ctx, app, rts)
-		if err != nil {
-			// TODO(b/536078799): As a temporary measure, we only log the errors here instead of fatally
-			// returning them. Once we are reasonably confident that this won't cause breakages for
-			// existing users, we should change this to return the error here.
+		if _, err := s.validateDependencies(ctx, app, rts); err != nil {
 			log.ErrorContextf(ctx, "dependency validation failed in DeployApplication: %v", err)
+			return status.Errorf(codes.FailedPrecondition, "dependency validation failed when deploying the Solution: %v", err)
 		}
 		return nil
 	}
@@ -492,6 +508,8 @@ func (s *DeployService) DeployApplication(ctx context.Context, req *deploypb.Dep
 		req.GetApplication().Metadata = &commonpb.Metadata{}
 	}
 	req.GetApplication().Metadata.SolutionDeploymentId = newSolutionDeploymentID()
+	// Explicitly clear any user provided input for category.
+	req.GetApplication().Metadata.Category = commonpb.Metadata_CATEGORY_UNDEFINED
 
 	if _, err := s.deployApplication(ctx, req.GetApplication(), nil, nil, deployOpts{validate: validateDependencies}); err != nil {
 		log.ErrorContextf(ctx, "deployApplication failed: %v", err)
@@ -505,6 +523,9 @@ type deployValidator func(ctx context.Context, app *apb.Application, rts map[str
 type deployOpts struct {
 	// validate is a callback to run validation during solution deployment.
 	validate deployValidator
+	// appDeploymentID is the app_deployment_id to use for the deployment.
+	// If empty, a new app_deployment_id is generated.
+	appDeploymentID string
 }
 
 func (s *DeployService) deployApplication(
@@ -517,10 +538,6 @@ func (s *DeployService) deployApplication(
 	ctx, span := trace.StartSpan(ctx, "DeployService.deployApplication")
 	defer span.End()
 
-	if cat := app.GetMetadata().GetCategory(); cat != commonpb.Metadata_INSTANCE && cat != commonpb.Metadata_BRANCH {
-		log.ErrorContextf(ctx, "invalid app category of %v", cat)
-		return nil, status.Errorf(codes.Internal, "request to deploy an application of category %q, want INSTANCE or BRANCH", cat)
-	}
 	if app.GetMetadata().GetSolutionDeploymentId() == "" {
 		log.ErrorContext(ctx, "missing solution deployment ID")
 		return nil, status.Error(codes.Internal, "request to deploy an application without a solution deployment ID")
@@ -593,7 +610,10 @@ func (s *DeployService) deployApplication(
 		log.ErrorContextf(ctx, "render.IsSimulated failed: %v", err)
 		return nil, status.Errorf(codes.Internal, "render workcell spec: %v", err)
 	}
-	appDeploymentID := newAppDeploymentID()
+	appDeploymentID := opts.appDeploymentID
+	if appDeploymentID == "" {
+		appDeploymentID = newAppDeploymentID()
+	}
 	ws, err := render.WorkcellSpecFromApplication(&render.ApplicationParams{
 		DefaultWorkcellSpec:     defaultWorkcellSpec,
 		ResourceInstances:       app.GetResources().GetResourceInstances(),
@@ -663,20 +683,15 @@ func (s *DeployService) deployApplication(
 		log.ErrorContextf(ctx, "s.transferService.ApplyWorkcellSpec(ws=%v) failed: %v", ws, err)
 		return nil, status.Errorf(codes.Internal, "failed to create and apply workcell spec: %v", err)
 	}
+	s.setDeploymentState(appDeploymentID, false)
 
 	log.InfoContextf(ctx, "DeployApplication done")
-	solution, err := asSolution(app, rts)
+	sd, err := solutionconversion.AsSolutionDeployment(app, rts)
 	if err != nil {
-		log.ErrorContextf(ctx, "asSolution(app, rts) failed: %v", err)
+		log.ErrorContextf(ctx, "solutionconversion.AsSolutionDeployment(app, rts) failed: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to convert local state to a solution: %v", err)
 	}
-	return &solutiondeploymentpb.SolutionDeployment{
-		Name:          app.GetMetadata().GetSolutionDeploymentId(),
-		DisplayName:   app.GetMetadata().GetDisplayName(),
-		SolutionId:    app.GetMetadata().GetName(),
-		OperationMode: app.GetOperationMode(),
-		Solution:      solution,
-	}, nil
+	return sd, nil
 }
 
 func (s *DeployService) StopApplication(ctx context.Context, req *deploypb.StopApplicationRequest) (*deploypb.StopApplicationResponse, error) {
@@ -984,7 +999,6 @@ func (s *DeployService) scheduleVersionedSolution(ctx context.Context, solutionI
 		app := applicationview.WithMetadataFrom(ms.GetApplication(), &apb.Application{
 			Metadata: &commonpb.Metadata{
 				Name:        solutionID,
-				Category:    commonpb.Metadata_BRANCH,
 				DisplayName: branch.GetDisplayName(),
 			},
 			OperationMode: operationMode,
@@ -994,10 +1008,8 @@ func (s *DeployService) scheduleVersionedSolution(ctx context.Context, solutionI
 		var validateDependencies deployValidator = func(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) error {
 			es, err := s.validateDependencies(ctx, app, rts)
 			if err != nil {
-				// TODO(b/536078799): As a temporary measure, we only log the errors here instead of fatally
-				// returning them. Once we are reasonably confident that this won't cause breakages for
-				// existing users, we should change this to return the error here.
 				log.ErrorContextf(ctx, "dependency validation failed in CreateSolutionDeploymentFromVersionedSolution: %v", err)
+				return status.Errorf(codes.FailedPrecondition, "dependency validation failed when deploying the Solution: %v", err)
 			} else if es != nil {
 				metadata := &solutiondeploymentpb.CreateSolutionDeploymentFromVersionedSolutionMetadata{
 					Warnings: es,
@@ -1073,6 +1085,7 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 
 	if err := s.runner.Schedule(ctx, op, func(ctx context.Context) (proto.Message, error) {
 		var solutionDeploymentID string
+		var appDeploymentID string
 		var appRunning bool
 		// Right now we only use the response here to get the solution
 		// deployment id.  We could potentially use more of the response,
@@ -1089,6 +1102,9 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 		} else {
 			appRunning = true
 			solutionDeploymentID = currApp.GetApplication().GetMetadata().GetSolutionDeploymentId()
+			if st := s.deploymentState.Load(); st != nil && !st.isIdle {
+				appDeploymentID = st.appDeploymentID
+			}
 		}
 		if reqName := req.GetSolutionDeployment().GetName(); reqName != "" && reqName != solutionDeploymentID {
 			if !appRunning {
@@ -1099,11 +1115,15 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 		if solutionDeploymentID == "" {
 			solutionDeploymentID = newSolutionDeploymentID()
 		}
+		if req.SolutionDeployment == nil {
+			req.SolutionDeployment = &solutiondeploymentpb.SolutionDeployment{}
+		}
+		req.SolutionDeployment.Name = solutionDeploymentID
 
-		app, err := asApplication(req.GetSolutionDeployment().GetSolution())
+		app, err := solutionconversion.AsApplication(req.GetSolutionDeployment())
 		if err != nil {
-			log.ErrorContextf(ctx, "failed to convert solution to application: %v", err)
-			return nil, status.Errorf(codes.InvalidArgument, "failed to convert solution to application: %v", err)
+			log.ErrorContextf(ctx, "failed to convert solution deployment to application: %v", err)
+			return nil, status.Errorf(codes.InvalidArgument, "failed to convert solution deployment to application: %v", err)
 		}
 
 		if email, err := userEmailFromContext(ctx); err != nil {
@@ -1111,21 +1131,12 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 		} else if email != "" {
 			app.Metadata.LastUpdatedBy = email
 		}
-		if solutionID := req.GetSolutionDeployment().GetSolutionId(); solutionID != "" {
-			app.Metadata.Category = commonpb.Metadata_BRANCH
-			app.Metadata.Name = solutionID
-		}
-		app.Metadata.SolutionDeploymentId = solutionDeploymentID
-		app.Metadata.DisplayName = req.GetSolutionDeployment().GetDisplayName()
-		app.OperationMode = req.GetSolutionDeployment().GetOperationMode()
 
 		var validateDependencies deployValidator = func(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) error {
 			es, err := s.validateDependencies(ctx, app, rts)
 			if err != nil {
-				// TODO(b/536078799): As a temporary measure, we only log the errors here instead of fatally
-				// returning them. Once we are reasonably confident that this won't cause breakages for
-				// existing users, we should change this to return the error here.
 				log.ErrorContextf(ctx, "dependency validation failed in UpdateSolutionDeployment: %v", err)
+				return status.Errorf(codes.FailedPrecondition, "dependency validation failed when deploying the Solution: %v", err)
 			} else if es != nil {
 				metadata := &solutiondeploymentpb.UpdateSolutionDeploymentMetadata{
 					Warnings: es,
@@ -1137,7 +1148,8 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 			return nil
 		}
 		solutionDeployment, err := s.deployApplication(ctx, app, nil, nil, deployOpts{
-			validate: validateDependencies,
+			validate:        validateDependencies,
+			appDeploymentID: appDeploymentID,
 		})
 		if err != nil {
 			return nil, err
@@ -1175,96 +1187,24 @@ func (s *DeployService) GetSolutionDeployment(ctx context.Context, req *solution
 	}
 
 	app := resp.GetApplication()
-	rts, err := runtimedbtransfer.Retrieve(ctx, s.resourceTypeRuntimeClient, app)
+	rtrs, err := resourcetyperuntime.GetAll(ctx, s.resourceTypeRuntimeClient)
 	if err != nil {
 		log.ErrorContextf(ctx, "Failed to get application: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to retrieve asset information: %v", err)
 	}
+	rts := make(map[string]*rtrpb.ResourceTypeRuntime, len(rtrs))
+	for _, rtr := range rtrs {
+		rts[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
+	}
 
-	solution, err := asSolution(app, rts)
+	sd, err := solutionconversion.AsSolutionDeployment(app, rts)
 	if err != nil {
-		log.ErrorContextf(ctx, "asSolution failed: %v", err)
+		log.ErrorContextf(ctx, "solutionconversion.AsSolutionDeployment failed: %v", err)
 		return nil, status.Errorf(codes.Internal, "failed to convert to solution: %v", err)
 	}
 
 	log.InfoContext(ctx, "Returning solution deployment")
-	sd := &solutiondeploymentpb.SolutionDeployment{
-		Name:          app.GetMetadata().GetSolutionDeploymentId(),
-		DisplayName:   app.GetMetadata().GetDisplayName(),
-		SolutionId:    app.GetMetadata().GetName(),
-		OperationMode: app.GetOperationMode(),
-		Solution:      solution,
-	}
 	return asView(sd, req.GetView()), nil
-}
-
-func asApplication(sol *solutionpb.Solution) (*apb.Application, error) {
-	assets := make(map[string]*apb.Application_Asset)
-	for id, asset := range sol.GetAssets() {
-		appAsset, err := applicationasset.AssetToApplicationAsset(asset)
-		if err != nil {
-			return nil, fmt.Errorf("failed to convert asset %q: %w", id, err)
-		}
-		assets[id] = appAsset
-	}
-
-	instances := make(map[string]*apb.Application_Instance)
-	for name, inst := range sol.GetInstances() {
-		instances[name] = &apb.Application_Instance{
-			Asset:  inst.GetAsset(),
-			Config: inst.GetConfig(),
-		}
-	}
-
-	return &apb.Application{
-		Metadata: &commonpb.Metadata{
-			Category: commonpb.Metadata_INSTANCE,
-		},
-		Process:            &processpb.Process{},
-		Assets:             assets,
-		Instances:          instances,
-		ObjectWorldUpdates: sol.GetObjectWorldUpdates(),
-	}, nil
-}
-
-func asSolution(app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) (*solutionpb.Solution, error) {
-	rtsByID := map[string]*rtrpb.ResourceTypeRuntime{}
-	for _, rt := range rts {
-		id := idutils.IDFromProtoUnchecked(rt.GetMetadata().GetIdVersion().GetId())
-		rtsByID[id] = rt
-	}
-
-	assets := make(map[string]*assetpb.Asset)
-	for id, rtr := range rtsByID {
-		asset, err := runtime.RuntimeToAsset(rtr)
-		if err != nil {
-			// TODO: b/517345754: Remove when all old-style pose estimators and
-			// resources using world fragments have been removed from all solutions
-			// and we can enforce this conversion.
-			log.Warningf("Omitting %q from solution because runtime.RuntimeToAsset failed: %v", id, err)
-		} else {
-			assets[id] = asset
-		}
-	}
-
-	instances := make(map[string]*aigrpcpb.AssetInstance)
-	for _, ri := range app.GetResources().GetResourceInstances() {
-		id, err := idutils.RemoveVersionFrom(ri.GetTypeIdVersion())
-		if err != nil {
-			return nil, fmt.Errorf("invalid type_id_version for instance %q: %w", ri.GetName(), err)
-		}
-		rtr, ok := rtsByID[id]
-		if !ok {
-			return nil, fmt.Errorf("missing runtime for instance %q (type %q)", ri.GetName(), id)
-		}
-		instances[ri.GetName()] = instanceconversion.ConvertResourceInstanceToAssetInstance(ri, rtr)
-	}
-
-	return &solutionpb.Solution{
-		Assets:             assets,
-		Instances:          instances,
-		ObjectWorldUpdates: app.GetResources().GetObjectWorldUpdates().GetUpdates(),
-	}, nil
 }
 
 func viewOrDefault(view solutiondeploymentpb.SolutionDeploymentView, defaultView solutiondeploymentpb.SolutionDeploymentView) (solutiondeploymentpb.SolutionDeploymentView, error) {
@@ -1318,9 +1258,13 @@ func basicSolutionView(solution *solutionpb.Solution) *solutionpb.Solution {
 
 func (s *DeployService) validateDependencies(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) (*espb.ExtendedStatus, error) {
 	r := report.New(report.AsWarningIfType[error]())
-	sc, err := runtimegraph.NewSolutionContext(ctx, app, slices.Collect(maps.Values(rts)), runtimegraph.WithPlatformRuntime())
+	sc, err := runtimegraph.NewSolutionContext(ctx, app.GetResources().GetResourceInstances(), slices.Collect(maps.Values(rts)), runtimegraph.WithPlatformRuntime())
 	if err != nil {
-		return nil, fmt.Errorf("failed to create solution context: %w", err)
+		// TODO(b/536078799): As a temporary measure, we only log the errors here instead of fatally
+		// returning them. Once we are reasonably confident that this won't cause breakages for
+		// existing users, we should change this to return the error here.
+		log.ErrorContextf(ctx, "failed to create solution context: %v", err)
+		return nil, nil
 	}
 	if err := graph.ValidateAll(ctx, sc, graph.WithReport(r)); err != nil {
 		return nil, err

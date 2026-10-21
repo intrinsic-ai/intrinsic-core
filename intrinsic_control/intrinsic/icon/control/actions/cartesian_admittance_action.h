@@ -133,6 +133,7 @@ class CartesianAdmittanceAction final
   const int num_controller_substeps_per_icon_cycle_;
 
   std::optional<Pose3d> task_t_tool_start_;
+  int64_t streaming_input_message_count_ = 0;
   std::unique_ptr<MaximumTranslationalDistanceTracker> distance_tracker_;
 
   // Tracking kinematics::State as member because of b/287941171.

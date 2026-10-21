@@ -73,6 +73,8 @@ imw_ret_t CreateSessionLocked(const char* config)
   auto singleton = std::make_shared<IMWZenoh>();
   const imw_ret_t ret = singleton->create_session(config);
   if (ret != IMW_OK) {
+    // Safe to destroy under init_fini_mutex_: singleton was never published to
+    // g_imw_zenoh_singleton and has no user callbacks or introspection thread.
     return ret;
   }
   *g_imw_zenoh_singleton = std::move(singleton);

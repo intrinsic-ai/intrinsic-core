@@ -43,16 +43,17 @@ std::string ActuatedGripperPluginSpec::ToSdformatXmlString(
   if (pinch_gripper_config.has_value()) {
     auto* e = xml_doc.NewElement("pinch_gripper_config");
     std::string config_string;
-    ::google::protobuf::TextFormat::PrintToString(*pinch_gripper_config,
-                                                  &config_string);
+    static_cast<void>(::google::protobuf::TextFormat::PrintToString(
+        *pinch_gripper_config, &config_string));  // TODO: Handle return value
     e->SetText(config_string.c_str());
     xml_doc.RootElement()->InsertEndChild(e);
   }
   if (service_pinch_gripper_config.has_value()) {
     auto* e = xml_doc.NewElement("service_pinch_gripper_config");
     std::string config_string;
-    ::google::protobuf::TextFormat::PrintToString(*service_pinch_gripper_config,
-                                                  &config_string);
+    static_cast<void>(::google::protobuf::TextFormat::PrintToString(
+        *service_pinch_gripper_config,
+        &config_string));  // TODO: Handle return value
     e->SetText(config_string.c_str());
     xml_doc.RootElement()->InsertEndChild(e);
   }
@@ -107,8 +108,9 @@ std::string FixedJointGripperPluginSpec::ToSdformatXmlString(
   if (suction_gripper_config.has_value()) {
     auto* e = xml_doc.NewElement("suction_gripper_config");
     std::string command_string;
-    ::google::protobuf::TextFormat::PrintToString(*suction_gripper_config,
-                                                  &command_string);
+    static_cast<void>(::google::protobuf::TextFormat::PrintToString(
+        *suction_gripper_config,
+        &command_string));  // TODO: Handle return value
     e->SetText(command_string.c_str());
     xml_doc.RootElement()->InsertEndChild(e);
   }

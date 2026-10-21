@@ -21,6 +21,7 @@
 #include "absl/flags/declare.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/simulation/world/world_to_sdf.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
@@ -43,6 +44,11 @@ absl::StatusOr<World> DownloadWorldFromObjectWorldService(
 absl::StatusOr<
     std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>>
 GetObjectWorldServiceStub(absl::string_view object_world_service_address);
+
+absl::StatusOr<
+    std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>>
+GetObjectWorldServiceStub(const intrinsic_proto::assets::v1::ResolvedDependency&
+                              intrinsic_runtime_dep);
 
 // To save meshes to a disk location specified with a cmd-line flag, you can use
 // WorldSdfAdapter::Options options;

@@ -87,6 +87,11 @@ _VISIBILITY_THRESHOLD = flags.DEFINE_float(
     0.6,
     help="Optional visibility threshold for detected objects.",
 )
+_TEXT_PROMPT = flags.DEFINE_string(
+    "text_prompt",
+    None,
+    help="Optional text prompt for SAM 3 zero-shot instance segmentation.",
+)
 
 FLAGS = flags.FLAGS
 
@@ -98,6 +103,7 @@ def get_create_training_job_request(
     refinement_iters: int | None = None,
     confidence_threshold: float | None = None,
     visibility_threshold: float | None = None,
+    text_prompt: str | None = None,
     min_distance: float = 0.5,
     max_distance: float = 1.5,
 ) -> train_service_pb2.CreateTrainingJobRequest:
@@ -110,6 +116,7 @@ def get_create_training_job_request(
     refinement_iters: Optional number of refinement iterations for pose estimation.
     confidence_threshold: Optional minimum confidence / detection score threshold.
     visibility_threshold: Optional minimum visibility threshold.
+    text_prompt: Optional text prompt for SAM 3 zero-shot segmentation.
     min_distance: Minimum camera distance in meters.
     max_distance: Maximum camera distance in meters.
 
@@ -135,6 +142,8 @@ def get_create_training_job_request(
     params.confidence_threshold = confidence_threshold
   if visibility_threshold is not None:
     params.visibility_threshold = visibility_threshold
+  if text_prompt is not None:
+    params.text_prompt = text_prompt
 
   pose_estimation_config.inference_params.Pack(params)
 
@@ -339,7 +348,8 @@ def main(argv: Sequence[str]) -> None:
   print(
       "Submitting training job to generate Pose Estimator:"
       f" {pose_estimator_name} (iters: {_REFINEMENT_ITERS.value}, conf:"
-      f" {_CONFIDENCE_THRESHOLD.value}, vis: {_VISIBILITY_THRESHOLD.value})"
+      f" {_CONFIDENCE_THRESHOLD.value}, vis: {_VISIBILITY_THRESHOLD.value},"
+      f" prompt: {_TEXT_PROMPT.value!r})"
   )
   create_training_job_request = get_create_training_job_request(
       scene_object=scene_object,
@@ -348,6 +358,7 @@ def main(argv: Sequence[str]) -> None:
       refinement_iters=_REFINEMENT_ITERS.value,
       confidence_threshold=_CONFIDENCE_THRESHOLD.value,
       visibility_threshold=_VISIBILITY_THRESHOLD.value,
+      text_prompt=_TEXT_PROMPT.value,
   )
 
   try:

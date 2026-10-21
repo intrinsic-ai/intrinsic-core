@@ -29,12 +29,12 @@ cc_library(
     srcs = ["motion_planning_util.cc"],
     hdrs = ["motion_planning_util.h"],
     deps = [
-        "//intrinsic/world/proto:object_world_service_cc_proto",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:robot_specification_cc_proto",
     ],
 )
@@ -44,12 +44,12 @@ cc_library(
     srcs = ["motion_planning_error_util.cc"],
     hdrs = ["motion_planning_error_util.h"],
     deps = [
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:get_extended_status",
-        "//intrinsic/util/status:status_builder",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -81,6 +81,8 @@ proto_library(
         "//intrinsic/skills/apps/icon2:__pkg__",
     ],
     deps = [
+        "//intrinsic_control/intrinsic/icon/proto/v1:motion_event_types_proto",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_proto",
@@ -116,8 +118,11 @@ go_proto_library(
     proto = ":move_robot_proto",
     visibility = [
         "//intrinsic/logging:__subpackages__",
+        "//intrinsic_sdk/intrinsic/logging:__subpackages__",
     ],
     deps = [
+        "//intrinsic_control/intrinsic/icon/proto/v1:motion_event_types_go_proto",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_go_proto",

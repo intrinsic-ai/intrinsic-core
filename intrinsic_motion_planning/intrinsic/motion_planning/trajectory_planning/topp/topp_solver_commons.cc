@@ -924,6 +924,18 @@ absl::StatusOr<TrajectoryOvershoot> ComputeTrajectoryOvershoot(
   overshoot.acc_overshoot.reserve(trajectory.size());
   overshoot.jerk_overshoot.reserve(trajectory.size());
   icon::JointLimitChecker joint_limit_checker(interpolation_step, ndof);
+  const auto& time_stamps = trajectory.time_stamps();
+
+  // Returns the index of the last trajectory sample whose timestamp is smaller
+  // or equal than `time`, i.e. the first sample of the segment containing
+  // `time`. Clamped to zero for times before the start of the trajectory.
+  auto first_sample_of_segment_containing =
+      [&time_stamps](absl::Duration time) {
+        const auto it =
+            std::upper_bound(time_stamps.begin(), time_stamps.end(), time);
+        return std::max(0, static_cast<int>(it - time_stamps.begin()) - 1);
+      };
+
   int index = 0;
   for (absl::Duration d = absl::ZeroDuration(); d <= trajectory.Duration();
        d += interpolation_step) {
@@ -949,34 +961,49 @@ absl::StatusOr<TrajectoryOvershoot> ComputeTrajectoryOvershoot(
     if (!check_ok) {
       const JointStatePVAJ& last_state = joint_limit_checker.last_state();
 
+      // The k-th backward finite difference at time `d` depends on the
+      // positions in the time window `[d - k * interpolation_step, d]`.
       auto check_and_record_overshoot =
-          [index](const eigenmath::VectorNd& state_derivative,
-                  const eigenmath::VectorNd& scaled_limit,
-                  const eigenmath::VectorNd& sample_limit,
-                  std::vector<Overshoot>& overshoots) {
+          [index, d, interpolation_step, &first_sample_of_segment_containing](
+              const int derivative_order,
+              const eigenmath::VectorNd& state_derivative,
+              const eigenmath::VectorNd& scaled_limit,
+              const eigenmath::VectorNd& sample_limit,
+              std::vector<Overshoot>& overshoots) {
             if ((state_derivative.cwiseAbs().array() > scaled_limit.array())
                     .any()) {
               const double overshoot_value =
                   (state_derivative.cwiseAbs().array() / sample_limit.array())
                       .maxCoeff();
+              const int window_start_index = std::min(
+                  index, first_sample_of_segment_containing(
+                             d - derivative_order * interpolation_step));
               if (!overshoots.empty() && overshoots.back().index == index) {
                 overshoots.back().overshoot_factor = std::max(
                     overshoots.back().overshoot_factor, overshoot_value);
+                overshoots.back().window_start_index =
+                    std::min(overshoots.back().window_start_index.value_or(
+                                 window_start_index),
+                             window_start_index);
               } else {
                 overshoots.push_back(
-                    {.index = index, .overshoot_factor = overshoot_value});
+                    {.index = index,
+                     .overshoot_factor = overshoot_value,
+                     .window_start_index = window_start_index});
               }
             }
           };
 
       check_and_record_overshoot(
-          last_state.velocity, scaled_limits.max_velocity,
-          sample_limits.max_velocity, overshoot.vel_overshoot);
+          /*derivative_order=*/1, last_state.velocity,
+          scaled_limits.max_velocity, sample_limits.max_velocity,
+          overshoot.vel_overshoot);
       check_and_record_overshoot(
-          last_state.acceleration, scaled_limits.max_acceleration,
-          sample_limits.max_acceleration, overshoot.acc_overshoot);
-      check_and_record_overshoot(last_state.jerk, scaled_limits.max_jerk,
-                                 sample_limits.max_jerk,
+          /*derivative_order=*/2, last_state.acceleration,
+          scaled_limits.max_acceleration, sample_limits.max_acceleration,
+          overshoot.acc_overshoot);
+      check_and_record_overshoot(/*derivative_order=*/3, last_state.jerk,
+                                 scaled_limits.max_jerk, sample_limits.max_jerk,
                                  overshoot.jerk_overshoot);
     }
   }
@@ -1045,7 +1072,20 @@ absl::Status ScalePathSamplesJointLimitsByOvershoot(
                          "got ",
                          entry.overshoot_factor, "."));
       }
-      const int start_idx = std::max(0, entry.index - neighborhood_window);
+      // The neighborhood spans `neighborhood_window` samples on both sides of
+      // `entry.index`. Since the violation is detected via backward finite
+      // differences, the neighborhood is further extended backwards if needed
+      // to cover all samples whose segments intersect the finite-difference
+      // time window of the overshoot, i.e. down to `window_start_index`.
+      const int window_start_index =
+          std::min(entry.index, entry.window_start_index.value_or(entry.index));
+      if (window_start_index < 0) {
+        return absl::OutOfRangeError(
+            absl::StrCat("Overshoot window start index ", window_start_index,
+                         " is out of range [0, ", path_samples.size(), ")."));
+      }
+      const int start_idx = std::max(
+          0, std::min(entry.index - neighborhood_window, window_start_index));
       const int end_idx = std::min(static_cast<int>(path_samples.size()) - 1,
                                    entry.index + neighborhood_window);
       for (int i = start_idx; i <= end_idx; ++i) {

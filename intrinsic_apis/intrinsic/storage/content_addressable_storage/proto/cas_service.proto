@@ -41,6 +41,19 @@ service ContentAddressableStorageService {
   // Get a byte range of an object starting from read_offset until EOF.
   // Useful for resuming interrupted downloads.
   rpc GetRange(GetRangeRequest) returns (stream GetRangeResponse) {}
+
+  // Initialize a resumable upload session. Returns an upload_id to pass to
+  // WriteObject and QueryWriteStatus.
+  rpc StartResumableWrite(StartResumableWriteRequest)
+      returns (StartResumableWriteResponse) {}
+
+  // Stream data chunks to an active resumable upload session.
+  rpc WriteObject(stream WriteObjectRequest) returns (WriteObjectResponse) {}
+
+  // Query the server's persisted byte offset and completion status for an
+  // upload session.
+  rpc QueryWriteStatus(QueryWriteStatusRequest)
+      returns (QueryWriteStatusResponse) {}
 }
 
 message ChecksummedData {
@@ -108,4 +121,59 @@ message StatResponse {
 
   // Optional. Set only if the client requested `peek_bytes`.
   bytes first_bytes = 2;
+}
+
+message StartResumableWriteRequest {
+  // Optional total object size in bytes. If provided, the server validates it
+  // against the maximum allowed size upfront and verifies the final size upon
+  // `finish_write = true`.
+  optional int64 object_size = 1;
+}
+
+message StartResumableWriteResponse {
+  string upload_id = 1;
+}
+
+message WriteObjectRequest {
+  // Required on the FIRST message of each WriteObject stream; empty ("") on
+  // subsequent messages in the same stream.
+  string upload_id = 1;
+
+  // Required on the FIRST message of each WriteObject stream. Must equal the
+  // server's `persisted_size` (0 on the initial stream, or the value returned
+  // by QueryWriteStatus when resuming).
+  // For subsequent messages in the same stream, offsets are implicit (bytes
+  // are appended sequentially).
+  optional int64 write_offset = 2;
+
+  // Data chunk and its optional CRC32C checksum. May be empty if
+  // `finish_write` is true and all bytes were already persisted.
+  ChecksummedData checksummed_data = 3;
+
+  // Set to true ONLY on the last message of the final WriteObject stream.
+  // Instructs the server to finalize the object, verify `object_size`,
+  // move/compose the object into its final CAS key, and return
+  // `object_id`.
+  bool finish_write = 4;
+}
+
+message WriteObjectResponse {
+  // Populated ONLY when `finish_write = true` succeeded.
+  string object_id = 1;
+}
+
+message QueryWriteStatusRequest {
+  string upload_id = 1;
+}
+
+message QueryWriteStatusResponse {
+  // Total number of contiguous bytes from offset 0 that the server has durably
+  // persisted so far. The next WriteObject stream must start at
+  // `write_offset = persisted_size`.
+  int64 persisted_size = 1;
+
+  // Populated ONLY if the upload was already finalized (`finish_write = true`
+  // succeeded on a preceding WriteObject stream. Allows a client to get the
+  // object_id if the WriteObjectResponse was lost over the network).
+  string object_id = 2;
 }

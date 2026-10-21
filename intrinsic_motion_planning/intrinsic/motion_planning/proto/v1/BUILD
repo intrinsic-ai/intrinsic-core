@@ -29,6 +29,7 @@ proto_library(
     srcs = ["motion_planner_service.proto"],
     strip_import_prefix = "/intrinsic_motion_planning",
     deps = [
+        ":motion_events_proto",
         ":motion_specification_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_protobuf//:empty_proto",
@@ -74,6 +75,7 @@ go_proto_library(
     proto = ":motion_planner_service_proto",
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
+        ":motion_events_go_proto",
         ":motion_specification_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
@@ -111,11 +113,13 @@ proto_library(
     srcs = ["motion_specification.proto"],
     strip_import_prefix = "/intrinsic_motion_planning",
     deps = [
+        ":motion_events_proto",
+        "@com_google_protobuf//:any_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:geometric_constraints_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_blending_parameter_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planning_limits_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_proto",
-    ] + [],
+    ],
 )
 
 cc_proto_library(
@@ -133,9 +137,32 @@ go_proto_library(
     importpath = "intrinsic/motion_planning/proto/v1/motion_specification_go_proto",
     proto = ":motion_specification_proto",
     deps = [
+        ":motion_events_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:geometric_constraints_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_blending_parameter_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planning_limits_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_go_proto",
-    ] + [],
+    ],
+)
+
+# keep
+proto_library(
+    name = "motion_events_proto",
+    srcs = ["motion_events.proto"],
+    strip_import_prefix = "/intrinsic_motion_planning",
+    deps = [
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:duration_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "motion_events_cc_proto",
+    deps = [":motion_events_proto"],
+)
+
+go_proto_library(
+    name = "motion_events_go_proto",
+    importpath = "intrinsic/motion_planning/proto/v1/motion_events_go_proto",
+    proto = ":motion_events_proto",
 )

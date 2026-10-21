@@ -310,6 +310,7 @@ RealtimeStatus CartesianImpedanceAction::OnEnter(OnEnterParameters params) {
   state_variables_.Reset();
   elapsed_time_seconds_ = 0.0;
   task_t_tool_start_ = std::nullopt;
+  streaming_input_message_count_ = 0;
   distance_tracker_->Clear();
 
   if (!cart_impedance_params_.has_value()) {
@@ -364,6 +365,7 @@ RealtimeStatus CartesianImpedanceAction::Sense(SenseParameters params) {
       params.streaming_io_access.PollInput<CartesianImpedanceParameters>(
           streaming_input_id_));
   if (streaming_parameters != nullptr) {
+    ++streaming_input_message_count_;
     // New controller goal received, run real-time pre-processing steps and
     // set.
     INTRINSIC_RT_RETURN_IF_ERROR(SetCompleteReference(
@@ -480,7 +482,8 @@ RealtimeStatus CartesianImpedanceAction::Sense(SenseParameters params) {
            distance_tracker_->GetMaximumDistance(),
        .is_done = is_done,
        .is_settled = is_settled,
-       .settled_for_seconds = settled_for_seconds});
+       .settled_for_seconds = settled_for_seconds,
+       .streaming_input_message_count = streaming_input_message_count_});
 
   // Write data into streaming output struct.
   //

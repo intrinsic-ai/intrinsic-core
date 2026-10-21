@@ -72,6 +72,7 @@ message ErrorContext {
 message MotionPipelineError {
   // Used for multi-segment planning.
   repeated MotionPlanningError motion_planning_error = 1;
+  optional string logging_id = 2;
 }
 
 // Defines a motion planning error

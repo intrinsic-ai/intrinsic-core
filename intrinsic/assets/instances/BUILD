@@ -24,7 +24,6 @@ go_library(
     visibility = ["//intrinsic/kubernetes/workcell_spec:__pkg__"],
     deps = [
         ":instanceconversion",
-        "//intrinsic/assets:idutils",
         "//intrinsic/config/proto:application_go_proto",
         "//intrinsic/resources/proto:resource_instance_go_proto",
         "//intrinsic/resources/proto:resource_type_runtime_go_proto",
@@ -32,6 +31,7 @@ go_library(
         "//intrinsic/resources/service:resourcetyperuntime",
         "//intrinsic/storage/hot_shared_state/proto:application_service_go_proto",
         "//intrinsic/util/pagination:pagetoken",
+        "//intrinsic_sdk/intrinsic/assets:idutils",
         "@intrinsic_apis//intrinsic/assets/proto:asset_tag_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_go_proto",
@@ -48,11 +48,11 @@ go_library(
     importpath = "intrinsic/assets/instances/instanceconversion",
     visibility = ["//visibility:public"],
     deps = [
-        "//intrinsic/assets:idutils",
         "//intrinsic/assets/deploy:render",
         "//intrinsic/assets/services:inspection",
         "//intrinsic/resources/proto:resource_instance_go_proto",
         "//intrinsic/resources/proto:resource_type_runtime_go_proto",
+        "//intrinsic_sdk/intrinsic/assets:idutils",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_go_proto",

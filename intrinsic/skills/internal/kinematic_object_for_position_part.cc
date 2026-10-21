@@ -51,6 +51,12 @@ absl::StatusOr<world::KinematicObject> KinematicObjectForPositionPart(
         absl::StrCat("Resource handle ", handle.name(),
                      " does not have any Icon2PositionPart information."));
   }
+  if (icon_position_part.object_names().size() == 1) {
+    const auto& object_name = icon_position_part.object_names().begin()->second;
+    LOG(INFO) << "Using kinematic object from position part object_names: "
+              << object_name;
+    return object_world.GetKinematicObject(WorldObjectName(object_name));
+  }
   if (icon_position_part.world_robot_collection_name().empty()) {
     LOG(INFO) << "Icon2PositionPart for " << icon_position_part.part_name()
               << " does not specify a kinematic model. Returning kinematic "

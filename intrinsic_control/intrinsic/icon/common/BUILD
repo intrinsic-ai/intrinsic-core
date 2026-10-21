@@ -48,7 +48,7 @@ cc_library(
     hdrs = ["topic_names.h"],
     deps = [
         ":id_types",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

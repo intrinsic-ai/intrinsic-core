@@ -29,7 +29,6 @@ import (
 	"go.opencensus.io/plugin/ocgrpc"
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/credentials/insecure"
-	"google.golang.org/grpc/status"
 
 	wrapperpb "intrinsic/conductor/proto/wrapper_bridge_go_proto"
 	rspb "intrinsic/config/proto/resource_set_go_proto"
@@ -39,7 +38,6 @@ import (
 	"intrinsic/resources/service/resourceworld"
 	resourcesetservicepb "intrinsic/storage/hot_shared_state/proto/v1/resource_set_service_go_proto"
 	"intrinsic/util/cgo/cgoconvert"
-	statuspb "intrinsic/util/status/status_go_proto"
 	objectworldservicepb "intrinsic/world/public/proto/object_world_service_go_proto"
 )
 
@@ -229,55 +227,6 @@ func go_c_ResourceReaderGeometricResourceSetData(handle C.go_c_Handle, out C.go_
 		Owu:  owu,
 	}
 	if err := cgoconvert.TranslateProtoOut(out, resp); err != nil {
-		cgoconvert.TranslateStatusOut(statusOut, err)
-		return
-	}
-}
-
-//export go_c_ResourceWorldUpdateWorldFromResourceSet
-func go_c_ResourceWorldUpdateWorldFromResourceSet(handle C.go_c_Handle, worldID C.go_c_StringIn, skipInvalidUpdates C.bool, out C.go_c_ProtoOut, statusOut C.go_c_StatusOut) {
-	defer handlePanic(statusOut)
-	client, ok := cgo.Handle(handle).Value().(*resourceworld.Client)
-	if !ok {
-		cgoconvert.TranslateStatusOut(statusOut, fmt.Errorf("handle does not contain *resourceworld.Client"))
-		return
-	}
-
-	wID := cgoconvert.TranslateStringIn(worldID)
-	ctx := context.Background()
-	result, err := client.UpdateWorldFromResourceSet(
-		ctx,
-		wID,
-		resourceworld.SkipInvalidUpdates(bool(skipInvalidUpdates)),
-	)
-	if err != nil {
-		cgoconvert.TranslateStatusOut(statusOut, err)
-		return
-	}
-
-	bridgeResult := &wrapperpb.UpdateWorldFromResourceSetResult{}
-	for _, u := range result.SkippedUpdates {
-		st := status.Convert(u.Err)
-		bridgeResult.SkippedUpdates = append(bridgeResult.SkippedUpdates, &wrapperpb.SkippedWorldUpdateWithError{
-			Update: u.Update,
-			Error: &statuspb.StatusProto{
-				Code:    int32(st.Code()),
-				Message: st.Message(),
-			},
-		})
-	}
-	for _, o := range result.SkippedSceneObjects {
-		st := status.Convert(o.Err)
-		bridgeResult.SkippedSceneObjects = append(bridgeResult.SkippedSceneObjects, &wrapperpb.SkippedSceneObjectWithError{
-			SceneObjectName: o.SceneObjectName,
-			Error: &statuspb.StatusProto{
-				Code:    int32(st.Code()),
-				Message: st.Message(),
-			},
-		})
-	}
-
-	if err := cgoconvert.TranslateProtoOut(out, bridgeResult); err != nil {
 		cgoconvert.TranslateStatusOut(statusOut, err)
 		return
 	}

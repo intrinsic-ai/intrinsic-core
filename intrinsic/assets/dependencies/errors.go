@@ -54,6 +54,9 @@ const (
 
 	// CodeErrMissingUsedAsset is used when an Asset uses an Asset that is not available in the Solution.
 	CodeErrMissingUsedAsset
+
+	// CodeErrMissingDependencyTarget is used when a required dependency is unset.
+	CodeErrMissingDependencyTarget
 )
 
 func errorTitleFromCode(code Code) string {
@@ -70,6 +73,8 @@ func errorTitleFromCode(code Code) string {
 		return "Unused referenced Asset"
 	case CodeErrMissingUsedAsset:
 		return "Missing used Asset"
+	case CodeErrMissingDependencyTarget:
+		return "Missing required dependency"
 	default:
 		return "Dependency validation error"
 	}

@@ -40,7 +40,7 @@ namespace clips {
 // proto compatibility test fails. This is independent from the returned Status.
 // In particular there can be diagnostics when a tree is successfully imported.
 absl::Status ImportProcessTree(
-    const intrinsic_proto::executive::BehaviorTree& behavior_tree,
+    intrinsic_proto::executive::BehaviorTree behavior_tree,
     std::string_view operation_name, Environment* absl_nonnull env,
     ProtobufManager* absl_nonnull proto_manager,
     SkillClientGenerator* absl_nonnull skill_client_generator,

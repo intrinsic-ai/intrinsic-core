@@ -70,8 +70,9 @@ class SkillData:
 
     If `validate_fn` is provided and a cached value exists:
     - Returns cached value if `validate_fn` returns True.
-    - Returns None if `validate_fn` returns False.
-    - Propagates any exception immediately if `validate_fn` raises one.
+    - Evicts the cached key and returns None if `validate_fn` returns False.
+    - Evicts the cached key and propagates any exception immediately if
+      `validate_fn` raises one.
 
     Args:
       context_id: Identifier for the action execution context.
@@ -88,15 +89,8 @@ class SkillData:
       )
       return None
 
-    cached = self._cache.get(context_id, key)
-    if cached is _MISSING:
-      return None
-
-    if validate_fn is not None:
-      if not validate_fn(cached):
-        return None
-
-    return cached
+    cached = self._get_and_validate(context_id, key, validate_fn)
+    return None if cached is _MISSING else cached
 
   def get_or_compute(
       self,
@@ -111,10 +105,11 @@ class SkillData:
     returning the result without caching.
 
     If `validate_fn` is provided and a cached value exists:
-    - Returns cached value if `validate_fn` returns true.
-    - Recomputes via `compute_fn`, updates cache, and returns fresh value if
-      `validate_fn` returns false.
-    - Propagates any exception immediately if `validate_fn` raises an exception.
+    - Returns cached value if `validate_fn` returns True.
+    - Evicts the cached key, recomputes via `compute_fn`, updates cache, and
+      returns fresh value if `validate_fn` returns False.
+    - Evicts the cached key and propagates any exception immediately if
+      `validate_fn` raises an exception.
 
     Automatically evicts the least recently used context_id (and all its
     associated keys) if the context capacity is reached.
@@ -139,10 +134,9 @@ class SkillData:
       )
       return compute_fn()
 
-    cached = self._cache.get(context_id, key)
+    cached = self._get_and_validate(context_id, key, validate_fn)
     if cached is not _MISSING:
-      if validate_fn is None or validate_fn(cached):
-        return cached
+      return cached
 
     fresh_value = compute_fn()
     self._cache.put(context_id, key, fresh_value)
@@ -164,6 +158,26 @@ class SkillData:
       logging.warning("SkillData: context_id is empty; delete skipped.")
       return False
     return self._cache.erase(context_id)
+
+  def _get_and_validate(
+      self,
+      context_id: str,
+      key: str,
+      validate_fn: Optional[Callable[[_T], bool]] = None,
+  ) -> Any:
+    """Returns the cached value, or _MISSING if not found or invalidated."""
+    cached = self._cache.get(context_id, key)
+    if cached is _MISSING or validate_fn is None:
+      return cached
+
+    is_valid = False
+    try:
+      is_valid = bool(validate_fn(cached))
+    finally:
+      if not is_valid:
+        self._cache.erase_key(context_id, key)
+
+    return cached if is_valid else _MISSING
 
 
 class _LRUCache:
@@ -210,3 +224,17 @@ class _LRUCache:
 
     with self._lock:
       return self._contexts.pop(context_id, None) is not None
+
+  def erase_key(self, context_id: str, key: str) -> bool:
+    """Erases a single key under context_id. Returns True if found."""
+    if not context_id:
+      return False
+
+    with self._lock:
+      context = self._contexts.get(context_id)
+      if context is None or key not in context:
+        return False
+      del context[key]
+      if not context:
+        del self._contexts[context_id]
+      return True

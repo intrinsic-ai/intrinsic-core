@@ -93,12 +93,12 @@ cc_library(
     hdrs = ["random_number_utils.h"],
     deps = [
         ":halton_sequence",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:absl_check",
         "@abseil-cpp//absl/random",
         "@abseil-cpp//absl/random:seed_sequences",

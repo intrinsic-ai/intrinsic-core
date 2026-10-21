@@ -24,6 +24,8 @@ filegroup(
         "//intrinsic/simulation/gazebo/plugins:gazebo_hwm",
         "//intrinsic/skills/apps/icon2:homing_skill",
         "//intrinsic_control/intrinsic/icon/actions:joint_jogging_py_pb2",
+        "//intrinsic_control/intrinsic/icon/equipment:resolved_dependency_utils",
+        "//intrinsic_control/intrinsic/icon/equipment:resolved_dependency_utils_py",
         "//intrinsic_control/intrinsic/icon/hal/tools:hardware_module_introspection",
         "//intrinsic_control/intrinsic/icon/hardware_modules/abb:abb_robots_core",
         "//intrinsic_control/intrinsic/icon/hardware_modules/fake:fake_module",

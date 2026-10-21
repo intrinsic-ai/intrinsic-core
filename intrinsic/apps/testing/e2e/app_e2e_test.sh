@@ -94,6 +94,26 @@ function test_behavior_tree {
   test_binary "${TEST_CMD[@]}"
 }
 
+function wait_for_pod_ready {
+  local pod_name="$1"
+  local namespace="$2"
+  ts_echo "Waiting for pod ${pod_name} in namespace ${namespace} to be Running and Ready..."
+  for i in $(seq 60); do
+    local phase
+    phase=$(kc --namespace "${namespace}" get pod "${pod_name}" -o jsonpath='{.status.phase}' 2>/dev/null || true)
+    if [[ "${phase}" == "Running" ]]; then
+      local ready
+      ready=$(kc --namespace "${namespace}" get pod "${pod_name}" -o jsonpath='{.status.containerStatuses[0].ready}' 2>/dev/null || true)
+      if [[ "${ready}" == "true" ]]; then
+        ts_echo "Pod ${pod_name} is Running and Ready."
+        return 0
+      fi
+    fi
+    sleep 2
+  done
+  die "Pod ${pod_name} in namespace ${namespace} failed to reach Running and Ready state."
+}
+
 function setup_all_tests() {
   if [[ "${E2E_DEBUG-false}" != "true" ]]; then
     ts_echo "Deleting all running workcells"
@@ -118,16 +138,57 @@ function setup_all_tests() {
 
   NAMESPACE=$(get_app_namespace)
 
+  if [[ "${RUN_AS_SERVICE}" == "true" ]]; then
+    ts_echo "Installing and adding test runner service"
+    local service_bundle_path="${SERVICE_BUNDLE}"
+    if [[ -n "${service_bundle_path}" && ! -f "${service_bundle_path}" ]] && declare -f rlocation >/dev/null; then
+      service_bundle_path="$(rlocation "${SERVICE_BUNDLE}")"
+    fi
+    local install_args=(
+      --cluster="${CLUSTER_NAME}"
+    )
+    if [[ -n "${INTRINSIC_ORG:-}" ]]; then
+      install_args+=(--org="${INTRINSIC_ORG}")
+      if [[ "${INTRINSIC_ORG}" == *"@"* ]]; then
+        local -r gcp_project="${INTRINSIC_ORG#*@}"
+        install_args+=(
+          --registry="gcr.io/${gcp_project}"
+        )
+      fi
+    fi
+    inctl_asset_install "${install_args[@]}" "${service_bundle_path}"
+    local -r service_name_dashes="${SERVICE_NAME//_/-}"
+    local service_add_args=(
+      --cluster="${CLUSTER_NAME}"
+    )
+    if [[ -n "${INTRINSIC_ORG:-}" ]]; then
+      service_add_args+=(--org="${INTRINSIC_ORG}")
+    fi
+    inctl_service_add "${SERVICE_ID}" "${service_add_args[@]}"
+    # Wait for the service pod to be ready and running
+    local -r pod_name="rs-${service_name_dashes}-0"
+    wait_for_pod_ready "${pod_name}" "app-resources"
+
+    # Set up port forwarding to localhost:5051
+    ts_echo "Setting up port forwarding to ${pod_name} on port 5051"
+    kc --namespace="app-resources" port-forward "pod/${pod_name}" "5051:9090" >/dev/null 2>&1 &
+    # Give port forward a moment to start
+    sleep 20
+    ts_echo "Finished up setting up port forward."
+  fi
+
   ts_echo "General test setup complete"
 }
 
 function teardown_all_tests() {
   ts_echo " Starting teardown of all tests"
 
-  if [[ "${E2E_DEBUG-false}" != "true" ]]; then
+  pkill -f "port-forward.*5051:9090" || true
+
+  if [[ "${E2E_DEBUG:-false}" != "true" ]] && [[ "${RUN_AS_SERVICE:-false}" != "true" ]]; then
     inctl_app_stop
   else
-    echo "Not stopping running app because E2E_DEBUG=true was given."
+    echo "Not stopping running app because E2E_DEBUG=true or RUN_AS_SERVICE=true was given."
   fi
 
   ts_echo " Finished teardown of all tests"

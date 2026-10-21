@@ -161,6 +161,10 @@ absl::Status PlanAndExecuteMotion(
       /*move_until_signal_params=*/std::nullopt,
       /*stopped_on_signal=*/
       nullptr
+
+      ,
+      trajectory_result.motion_events
+
   );
 }
 

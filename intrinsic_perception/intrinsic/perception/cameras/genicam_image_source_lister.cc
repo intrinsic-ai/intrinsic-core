@@ -14,36 +14,33 @@
 
 #include "intrinsic/perception/cameras/genicam_image_source_lister.h"
 
-#include <arv.h>
-
+#include <cstddef>
+#include <string>
 #include <vector>
 
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
+#include "intrinsic/perception/cameras/aravis/aravis_utils.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/image_source_lister.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 absl::StatusOr<std::vector<CameraIdentifier>>
 GenICamImageSourceLister::ListAvailableCameras() {
+  const std::vector<std::string> device_ids = ListAvailableDeviceIds();
   std::vector<CameraIdentifier> camera_identifiers;
-  arv_update_device_list();
-  const int num_devices = arv_get_n_devices();
-  camera_identifiers.reserve(num_devices);
-  LOG(INFO) << "ListAvailableCameras() returned " << num_devices
+  camera_identifiers.reserve(device_ids.size());
+  LOG(INFO) << "ListAvailableCameras() returned " << device_ids.size()
             << " Genicam cameras";
-  for (int device_idx = 0; device_idx < num_devices; ++device_idx) {
-    const auto* const device_id = arv_get_device_id(device_idx);
-    LOG(INFO) << "Camera " << device_idx << ": " << device_id;
-    camera_identifiers.push_back(
-        {.driver = CameraIdentifier::GenICam{.device_id = device_id}});
+  for (size_t device_idx = 0; device_idx < device_ids.size(); ++device_idx) {
+    LOG(INFO) << "Camera " << device_idx << ": " << device_ids[device_idx];
+    camera_identifiers.push_back({.driver = CameraIdentifier::GenICam{
+                                      .device_id = device_ids[device_idx]}});
   }
   return camera_identifiers;
 }
 
 REGISTER_IMAGE_SOURCE_LISTER(GenICamImageSourceLister, "genicam");
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception

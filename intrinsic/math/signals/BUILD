@@ -22,7 +22,7 @@ cc_library(
     hdrs = ["adaptive_quadrature.h"],
     deps = [
         ":nested_quadrature",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/functional:function_ref",
         "@abseil-cpp//absl/status",
@@ -37,7 +37,7 @@ cc_library(
     hdrs = ["gauss_kronrod_quadrature.h"],
     deps = [
         ":nested_quadrature",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/functional:function_ref",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/memory",
@@ -53,7 +53,7 @@ cc_library(
     srcs = ["gauss_legendre_quadrature.cc"],
     hdrs = ["gauss_legendre_quadrature.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/functional:function_ref",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

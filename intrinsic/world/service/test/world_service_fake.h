@@ -30,7 +30,6 @@
 #include "intrinsic/world/hashing/hashing.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/service/object_world_service.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
 #include "intrinsic/world/service/world_service.grpc.pb.h"
 #include "intrinsic/world/service/world_storage.h"
 #include "intrinsic/world/service/worldservice_impl.h"
@@ -112,14 +111,6 @@ class FakeWorldService {
   // Returns a reference to the ObjectWorldService instance.
   intrinsic_proto::world::ObjectWorldService::Service& GetObjectWorldService() {
     return *object_world_service_;
-  }
-
-  // Returns a new WorldCompatibilityService stub for the fake world service
-  // that uses an in-process channel.
-  std::unique_ptr<intrinsic_proto::world::WorldCompatibilityService::Stub>
-  NewCompatibilityStub() {
-    return intrinsic_proto::world::WorldCompatibilityService::NewStub(
-        server_->InProcessChannel(grpc::ChannelArguments()));
   }
 
   std::shared_ptr<grpc::Channel> InProcessChannel() const {

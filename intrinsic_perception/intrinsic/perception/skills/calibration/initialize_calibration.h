@@ -27,8 +27,6 @@ namespace skills {
 
 class InitializeCalibration : public SkillInterface {
  public:
-  static constexpr char kRobotEquipmentSlot[] = "robot";
-
   absl::StatusOr<std::unique_ptr<google::protobuf::Message>> Execute(
       const ExecuteRequest& request, ExecuteContext& context) override;
 

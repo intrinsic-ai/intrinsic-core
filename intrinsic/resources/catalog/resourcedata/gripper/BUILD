@@ -12,10 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
-load("//intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load("//intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
+load("//intrinsic_sdk/intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
+load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 # Robotiq hand-e gripper.
 sdf_scene_object(

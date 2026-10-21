@@ -1,0 +1,184 @@
+diff --git a/config/defs.bzl b/config/defs.bzl
+index b13c467..42fe122 100644
+--- a/config/defs.bzl
++++ b/config/defs.bzl
+@@ -6,6 +6,16 @@ OPTIMIZATION_MODES = [
+     "optimized",
+ ]
+ 
++FASTBUILD_OPTIMIZATION_MODES = [
++    "O0",
++    "O1",
++    "O2",
++    "O3",
++    "Og",
++    "Os",
++    "Oz",
++]
++
+ SANITIZERS = [
+     "ubsan",
+     "cfi",
+@@ -112,6 +122,22 @@ def config_settings():
+             },
+         )
+ 
++    # This flag controls the optimization level used when compiling in fastbuild
++    # mode (-c fastbuild).
++    string_flag(
++        name = "fastbuild_optimization_mode",
++        values = FASTBUILD_OPTIMIZATION_MODES,
++        build_setting_default = "O0",
++    )
++
++    for optimization_mode in FASTBUILD_OPTIMIZATION_MODES:
++        native.config_setting(
++            name = "fastbuild_optimization_mode_{}".format(optimization_mode),
++            flag_values = {
++                ":fastbuild_optimization_mode": optimization_mode,
++            },
++        )
++
+     # This flag controls whether we compile and link with --sysroot=/dev/null
+     # to ensure hermeticity.
+     #
+diff --git a/toolchain/cc_toolchain.bzl b/toolchain/cc_toolchain.bzl
+index 851111d..b68c1ea 100644
+--- a/toolchain/cc_toolchain.bzl
++++ b/toolchain/cc_toolchain.bzl
+@@ -16,6 +16,8 @@ def cc_toolchain(
+             "@llvm//toolchain/features:opt_stub",
+             "@llvm//toolchain/features:dbg",
+             "@llvm//toolchain/features:dbg_stub",
++            "@llvm//toolchain/features:fastbuild",
++            "@llvm//toolchain/features:fastbuild_stub",
+             "@llvm//toolchain/features:archive_param_file",
+             "@llvm//toolchain/features:copy_dynamic_libraries_to_binary",
+             # The semantic feature is valid: clang-cl renders external include
+@@ -51,6 +53,7 @@ def cc_toolchain(
+         all_of = [
+             "@llvm//toolchain/features:opt",
+             "@llvm//toolchain/features:dbg",
++            "@llvm//toolchain/features:fastbuild",
+             "@llvm//toolchain/features:archive_param_file",
+             "@llvm//toolchain/features:static_link_cpp_runtimes",
+             "@llvm//toolchain/features:targets_windows",
+@@ -168,6 +171,7 @@ def cc_toolchain(
+             # This lets us properly order them before user_compile_flags and user_link_flags below.
+             "@llvm//toolchain/features:opt",
+             "@llvm//toolchain/features:dbg",
++            "@llvm//toolchain/features:fastbuild",
+             "@llvm//toolchain/features:archive_param_file",
+             "@llvm//toolchain/features:parse_headers_wrapper",
+             "@llvm//toolchain/features/legacy:all_legacy_builtin_features",
+diff --git a/toolchain/features/BUILD.bazel b/toolchain/features/BUILD.bazel
+index 0e3c06e..9e77256 100644
+--- a/toolchain/features/BUILD.bazel
++++ b/toolchain/features/BUILD.bazel
+@@ -38,7 +38,7 @@ _FINAL_LINK_ACTIONS = [
+ 
+ # [x] opt
+ # [x] dbg
+-# [] fastbuild
++# [x] fastbuild
+ # [] static_linking_mode - does this do anything? Seems obsolete
+ # [] dynamic_linking_mode
+ # [x] per_object_debug_info
+@@ -386,6 +386,88 @@ cc_feature(
+     overrides = "@rules_cc//cc/toolchains/features:dbg",
+ )
+ 
++cc_args(
++    name = "fastbuild_optimization_level_o1",
++    actions = _CONFIGURATION_COMPILE_ACTIONS,
++    args = select({
++        "//constraints/windows/abi:msvc": ["/clang:-O1"],
++        "//conditions:default": ["-O1"],
++    }),
++)
++
++cc_args(
++    name = "fastbuild_optimization_level_o2",
++    actions = _CONFIGURATION_COMPILE_ACTIONS,
++    args = select({
++        "//constraints/windows/abi:msvc": ["/O2"],
++        "//conditions:default": ["-O2"],
++    }),
++)
++
++cc_args(
++    name = "fastbuild_optimization_level_o3",
++    actions = _CONFIGURATION_COMPILE_ACTIONS,
++    args = select({
++        "//constraints/windows/abi:msvc": ["/clang:-O3"],
++        "//conditions:default": ["-O3"],
++    }),
++)
++
++cc_args(
++    name = "fastbuild_optimization_level_og",
++    actions = _CONFIGURATION_COMPILE_ACTIONS,
++    args = select({
++        "//constraints/windows/abi:msvc": ["/clang:-Og"],
++        "//conditions:default": ["-Og"],
++    }),
++)
++
++cc_args(
++    name = "fastbuild_optimization_level_os",
++    actions = _CONFIGURATION_COMPILE_ACTIONS,
++    args = select({
++        "//constraints/windows/abi:msvc": ["/O1"],
++        "//conditions:default": ["-Os"],
++    }),
++)
++
++cc_args(
++    name = "fastbuild_optimization_level_oz",
++    actions = _CONFIGURATION_COMPILE_ACTIONS,
++    args = select({
++        "//constraints/windows/abi:msvc": ["/clang:-Oz"],
++        "//conditions:default": ["-Oz"],
++    }),
++)
++
++cc_args_list(
++    name = "fastbuild_compile_flags",
++    args = select({
++        "//config:fastbuild_optimization_mode_O1": [":fastbuild_optimization_level_o1"],
++        "//config:fastbuild_optimization_mode_O2": [":fastbuild_optimization_level_o2"],
++        "//config:fastbuild_optimization_mode_O3": [":fastbuild_optimization_level_o3"],
++        "//config:fastbuild_optimization_mode_Og": [":fastbuild_optimization_level_og"],
++        "//config:fastbuild_optimization_mode_Os": [":fastbuild_optimization_level_os"],
++        "//config:fastbuild_optimization_mode_Oz": [":fastbuild_optimization_level_oz"],
++        "//conditions:default": [],
++    }),
++)
++
++# Use a stub feature so we can properly control flag ordering.
++cc_feature(
++    name = "fastbuild",
++    args = [
++        ":fastbuild_compile_flags",
++    ],
++    feature_name = "_underlying_fastbuild",
++    requires_any_of = [":fastbuild_stub"],
++)
++
++cc_feature(
++    name = "fastbuild_stub",
++    overrides = "@rules_cc//cc/toolchains/features:fastbuild",
++)
++
+ cc_feature(
+     name = "archive_param_file",
+     feature_name = "archive_param_file",
+@@ -605,6 +687,8 @@ cc_feature_set(
+         ":opt_stub",
+         ":dbg",
+         ":dbg_stub",
++        ":fastbuild",
++        ":fastbuild_stub",
+         ":static_link_cpp_runtimes",
+         ":parse_headers",
+         ":coverage_stub",

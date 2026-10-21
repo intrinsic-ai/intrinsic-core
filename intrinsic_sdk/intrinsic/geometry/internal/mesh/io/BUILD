@@ -48,9 +48,9 @@ cc_library(
     ],
     deps = [
         ":restrict_importer",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_ai_scene",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
@@ -90,9 +90,9 @@ cc_library(
     ],
     deps = [
         ":restrict_importer",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_ai_scene",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
@@ -118,9 +118,9 @@ cc_library(
     deps = [
         ":ai_scene_to_mesh",
         ":load_ai_scene_from_file",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status:statusor",

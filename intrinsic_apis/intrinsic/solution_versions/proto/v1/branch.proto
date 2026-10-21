@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package intrinsic_proto.solution_versions.v1;
 
+import "google/api/field_behavior.proto";
 import "google/protobuf/timestamp.proto";
 import "intrinsic/config/proto/operation_mode.proto";
 
@@ -98,4 +99,11 @@ message Branch {
   // IDs can originate from parent organizations that users of this solution
   // might not have access to.
   repeated string copy_source_branch_ids = 9;
+
+  // If set to true on an UpdateBranch request, unlocks the deployment branch by
+  // revoking its active lock token and clearing its lock and execution status
+  // when the lock-holding cluster is unreachable or no longer running the
+  // branch. Returns FAILED_PRECONDITION if the cluster is reachable and still
+  // running the branch.
+  bool unlock = 10 [(google.api.field_behavior) = INPUT_ONLY];
 }

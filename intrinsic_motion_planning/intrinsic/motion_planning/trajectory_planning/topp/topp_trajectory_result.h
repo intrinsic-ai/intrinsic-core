@@ -20,6 +20,9 @@
 
 #include "absl/status/statusor.h"
 #include "intrinsic/kinematics/types/joint_trajectories.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/trajectory_planning/topp/reachability_node.h"
 #include "intrinsic/motion_planning/trajectory_planning/topp/squared_path_velocity_interface.h"
 #include "intrinsic/motion_planning/trajectory_planning/topp/topp_trajectory_result.pb.h"
@@ -45,6 +48,14 @@ struct ToppTrajectoryResult {
   // reachable phase-space velocity along the path and can be used for
   // fine-grained interpolation or further path adjustments.
   std::unique_ptr<SquaredPathVelocityInterface> squared_path_velocity;
+
+
+  // A collection of motion events associated with the trajectory. These events
+  // are mapped to specific keypoint times and Cartesian arc-lengths along the
+  // parameterized path.
+  std::vector<intrinsic_proto::motion_planning::v1::MotionEvent> motion_events;
+
+
   // Reachability corridor at each keyframe of the active path: the states
   // that are both reachable from the start and from which the goal remains
   // reachable, i.e. the intersection of the forward and backward reachable

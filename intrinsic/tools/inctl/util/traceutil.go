@@ -19,15 +19,19 @@ import (
 	"context"
 	"flag"
 	"fmt"
+	"time"
 
 	"intrinsic/tools/inctl/util/orgutil"
 
-	traceexporter "github.com/GoogleCloudPlatform/opentelemetry-operations-go/exporter/trace"
 	"go.opentelemetry.io/otel"
+	"go.opentelemetry.io/otel/attribute"
 	"go.opentelemetry.io/otel/bridge/opencensus"
+	"go.opentelemetry.io/otel/exporters/otlp/otlptrace/otlptracegrpc"
 	"go.opentelemetry.io/otel/sdk/resource"
 	sdktrace "go.opentelemetry.io/otel/sdk/trace"
 	semconv "go.opentelemetry.io/otel/semconv/v1.34.0"
+	"google.golang.org/grpc"
+	"google.golang.org/grpc/credentials/oauth"
 
 	log "github.com/golang/glog"
 )
@@ -40,13 +44,27 @@ var (
 
 
 func newTracerProvider(project string) (*sdktrace.TracerProvider, error) {
-	exporter, err := traceexporter.New(traceexporter.WithProjectID(project))
+	ctx := context.Background()
+	creds, err := oauth.NewApplicationDefault(ctx, "https://www.googleapis.com/auth/trace.append")
+	if err != nil {
+		return nil, fmt.Errorf("load application default credentials: %w", err)
+	}
+	exporter, err := otlptracegrpc.New(ctx,
+		otlptracegrpc.WithEndpoint("telemetry.googleapis.com:443"),
+		otlptracegrpc.WithDialOption(grpc.WithPerRPCCredentials(creds)),
+	)
 	if err != nil {
 		return nil, fmt.Errorf("create trace exporter: %w", err)
 	}
 
-	res, err := resource.New(context.Background(),
-		resource.WithAttributes(semconv.ServiceName("inctl")),
+	res, err := resource.New(ctx,
+		resource.WithTelemetrySDK(),
+		resource.WithFromEnv(),
+		resource.WithAttributes(
+			semconv.ServiceName("inctl"),
+			// The Telemetry API writes the spans to the project in gcp.project_id.
+			attribute.String("gcp.project_id", project),
+		),
 	)
 	if err != nil {
 		return nil, fmt.Errorf("create resource: %w", err)
@@ -76,7 +94,10 @@ func RegisterExporter(project string) func() {
 		return func() {}
 	}
 	return func() {
-		tp.Shutdown(context.Background())
+		// Bounded because refreshing a user credential's token ignores the export timeout.
+		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		defer cancel()
+		tp.Shutdown(ctx)
 	}
 }
 

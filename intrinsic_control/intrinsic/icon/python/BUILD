@@ -27,10 +27,10 @@ py_library(
         "state_variable_path.py",
     ],
     deps = [
-        "//intrinsic/util/grpc:connection",
-        "//intrinsic/util/grpc:interceptor",
         "//intrinsic_control/intrinsic/icon/proto:matrix_conversions",  # buildcleaner: keep to allow import
         "//intrinsic_sdk/intrinsic/solutions:deployments",
+        "//intrinsic_sdk/intrinsic/util/grpc:connection",
+        "//intrinsic_sdk/intrinsic/util/grpc:interceptor",
         "//intrinsic_sdk/intrinsic/world/robot_payload/python:robot_payload",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl/logging",
@@ -61,7 +61,7 @@ py_library(
     name = "icon_logging",
     srcs = ["icon_logging.py"],
     deps = [
-        "//intrinsic/logging/proto:log_item_py_pb2",
+        "//intrinsic_sdk/intrinsic/logging/proto:log_item_py_pb2",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/icon/proto:streaming_output_py_pb2",
     ],

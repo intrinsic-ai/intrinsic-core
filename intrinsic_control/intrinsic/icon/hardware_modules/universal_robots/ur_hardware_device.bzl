@@ -20,10 +20,10 @@ and execution targets (HardwareDevice, ServiceNode, SceneObject).
 """
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
-load("//intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
-load("//intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:resources.bzl", "hardware_module_manifest")
+load("//intrinsic_sdk/intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
+load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 def ur_hardware_device(name, display_name, is_core_variant = False):
     """Creates service, scene object and hardware devices including manifests for a UR robot.

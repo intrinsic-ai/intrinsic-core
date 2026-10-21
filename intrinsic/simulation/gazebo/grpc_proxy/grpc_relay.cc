@@ -17,9 +17,11 @@
 #include <atomic>
 #include <memory>
 
+#include "absl/base/thread_annotations.h"
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "grpcpp/generic/callback_generic_service.h"
 #include "grpcpp/generic/generic_stub.h"
@@ -45,51 +47,66 @@ class RelayReactor : public grpc::ServerGenericBidiReactor {
     stub->PrepareBidiStreamingCall(client_context_.get(), context->method(),
                                    grpc::StubOptions(), &stub_reactor_);
 
+    // Hold the client reactor while RelayReactor callbacks can still initiate
+    // operations on stub_reactor_.
+    stub_reactor_.AddHold();
     stub_reactor_.StartRead(&response_buffer_);
-    stub_reactor_.StartCall();
     StartRead(&request_buffer_);
+    stub_reactor_.StartCall();
   }
 
   // Triggered when we finish reading a REQUEST from the Downstream Client
-  void OnReadDone(bool ok) override {
+  void OnReadDone(bool ok) override ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
+    if (!stub_hold_) {
+      return;
+    }
     if (!ok) {
-      if (!finished_.load()) stub_reactor_.StartWritesDone();
+      stub_reactor_.StartWritesDone();
       return;
     }
     stub_reactor_.StartWrite(&request_buffer_);
   }
 
   // Triggered when we finish writing a RESPONSE to the Downstream Client
-  void OnWriteDone(bool ok) override {
+  void OnWriteDone(bool ok) override ABSL_LOCKS_EXCLUDED(mu_) {
+    absl::MutexLock lock(&mu_);
     if (!ok) {
+      client_context_->TryCancel();
+      ReleaseStubHold();
       MaybeFinish(
           grpc::Status(grpc::StatusCode::ABORTED, "Downstream write failed"));
       return;
     }
-    // The response_buffer_ is now free. Read the next response from the
-    // Upstream Server.
-    stub_reactor_.StartRead(&response_buffer_);
+    if (stub_hold_) {
+      // The response_buffer_ is now free. Read the next response from the
+      // Upstream Server.
+      stub_reactor_.StartRead(&response_buffer_);
+    }
   }
 
-  void OnCancel() override {
-    client_context_->TryCancel();
-    MaybeFinish(grpc::Status(grpc::StatusCode::CANCELLED,
-                             "Call cancelled or server shutting down"));
-  }
+  void OnCancel() override { client_context_->TryCancel(); }
 
   void OnDone() override {
     // Server side is officially finished.
     DecrementRefCount();
   }
 
-  void MaybeFinish(const grpc::Status& s) {
-    bool expected = false;
-    if (finished_.compare_exchange_strong(expected, true)) {
+  void MaybeFinish(const grpc::Status& s) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+    if (!finished_) {
+      finished_ = true;
       Finish(s);
     }
   }
 
  private:
+  void ReleaseStubHold() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_) {
+    if (stub_hold_) {
+      stub_hold_ = false;
+      stub_reactor_.RemoveHold();
+    }
+  }
+
   void DecrementRefCount() {
     if (refs_.fetch_sub(1, std::memory_order_acq_rel) == 1) {
       delete this;
@@ -98,7 +115,10 @@ class RelayReactor : public grpc::ServerGenericBidiReactor {
 
   // Atomic ref count starts at 2 (one for Server side, one for Client side).
   std::atomic<int> refs_{2};
-  std::atomic<bool> finished_{false};
+
+  absl::Mutex mu_;
+  bool stub_hold_ ABSL_GUARDED_BY(mu_) = true;
+  bool finished_ ABSL_GUARDED_BY(mu_) = false;
 
   std::unique_ptr<grpc::ClientContext> client_context_;
   grpc::ByteBuffer request_buffer_;
@@ -110,10 +130,10 @@ class RelayReactor : public grpc::ServerGenericBidiReactor {
     explicit StubReactor(RelayReactor* parent) : parent_(parent) {}
 
     // Triggered when we finish reading a RESPONSE from the Upstream Server.
-    void OnReadDone(bool ok) override {
+    void OnReadDone(bool ok) override ABSL_LOCKS_EXCLUDED(parent_->mu_) {
+      absl::MutexLock lock(&parent_->mu_);
       if (!ok) {
-        // Stream broke. Do nothing.
-        // gRPC will call StubReactor::OnDone(status) shortly.
+        parent_->ReleaseStubHold();
         return;
       }
       // Forward the response payload to the downstream client.
@@ -121,17 +141,20 @@ class RelayReactor : public grpc::ServerGenericBidiReactor {
     }
 
     // Triggered when we finish writing a REQUEST to the Upstream Server.
-    void OnWriteDone(bool ok) override {
-      if (!ok) {
-        // Stream broke. Do nothing.
-        // gRPC will call StubReactor::OnDone(status) shortly.
+    void OnWriteDone(bool ok) override ABSL_LOCKS_EXCLUDED(parent_->mu_) {
+      absl::MutexLock lock(&parent_->mu_);
+      if (!ok || !parent_->stub_hold_) {
         return;
       }
       parent_->StartRead(&parent_->request_buffer_);
     }
 
-    void OnDone(const grpc::Status& s) override {
-      parent_->MaybeFinish(s);
+    void OnDone(const grpc::Status& s) override
+        ABSL_LOCKS_EXCLUDED(parent_->mu_) {
+      {
+        absl::MutexLock lock(&parent_->mu_);
+        parent_->MaybeFinish(s);
+      }
       parent_->DecrementRefCount();
     }
 

@@ -1,0 +1,117 @@
+{{/*
+Copyright 2026 Intrinsic Innovation LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+*/ -}}
+
+module(name = "{{.WorkspaceName}}")
+
+bazel_dep(name = "ai_intrinsic_sdks")
+{{ if .SDKRepository -}}
+archive_override(
+    module_name = "ai_intrinsic_sdks",
+    {{if eq .SDKVersion "latest" -}}
+    # To pin a version change the following to, e.g.:
+    #   urls = "{{.SDKRepository}}/archive/refs/tags/intrinsic.platform.20221231.RC00.tar.gz",
+    #   strip_prefix = "sdk-intrinsic.platform.20221231.RC00/"
+    strip_prefix = "sdk-main/",
+    urls = ["{{.SDKRepository}}/archive/refs/heads/main.tar.gz"],
+    {{- else -}}
+    strip_prefix = "{{.SDKStripPrefix}}",
+    urls = ["{{.SDKRepository}}/archive/refs/tags/{{.SDKVersion}}.tar.gz"],
+    {{- end}}
+)
+{{- else if .LocalSDKPath -}}
+local_path_override(
+    module_name = "ai_intrinsic_sdks",
+    path = "{{.LocalSDKPath}}",
+)
+{{- end }}
+
+# Direct dependencies
+bazel_dep(name = "abseil-cpp", version = "20250127.1", repo_name = "com_google_absl")
+bazel_dep(name = "abseil-py", version = "2.1.0", repo_name = "com_google_absl_py")
+bazel_dep(name = "bazel_skylib", version = "1.8.0")
+bazel_dep(name = "googletest", version = "1.17.0", repo_name = "com_google_googletest")
+bazel_dep(name = "grpc", version = "1.73.1", repo_name = "com_github_grpc_grpc")
+bazel_dep(name = "platforms", version = "1.0.0")
+bazel_dep(name = "protobuf", version = "33.6", repo_name = "com_google_protobuf")
+bazel_dep(name = "rules_go", version = "0.64.1", repo_name = "io_bazel_rules_go")
+bazel_dep(name = "rules_pkg", version = "1.1.0")
+bazel_dep(name = "rules_python", version = "2.3.3")
+bazel_dep(name = "rules_shell", version = "0.8.0")
+
+# C++ toolchain
+bazel_dep(name = "llvm", version = "0.8.24")
+
+llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+llvm.version(llvm_version = "21.1.8")
+llvm.configure(
+    targets = [
+        "X86",
+    ],
+)
+use_repo(llvm, "llvm-project")
+
+register_toolchains(
+    "@llvm//toolchain:all",
+    dev_dependency = True,
+)
+
+bazel_dep(name = "rules_cc", version = "0.2.25")
+bazel_dep(name = "rules_foreign_cc", version = "0.16.0")
+
+# Google API bindings
+bazel_dep(name = "googleapis", version = "0.0.0-20240819-fe8ba054a", repo_name = "com_google_googleapis")
+
+switched_rules = use_extension("@com_google_googleapis//:extensions.bzl", "switched_rules")
+switched_rules.use_languages(
+    cc = True,
+    go = True,
+    grpc = True,
+    python = True,
+)
+use_repo(switched_rules, "com_google_googleapis_imports")
+
+# OCI images
+bazel_dep(name = "rules_oci", version = "2.2.6")
+
+oci = use_extension("@rules_oci//oci:extensions.bzl", "oci")
+use_repo(
+    oci,
+    "distroless_base",
+    "distroless_python3",
+)
+
+# Naive workaround to work around system_python dependency in Protobuf 33 and later.
+# Patch from https://github.com/protocolbuffers/protobuf/issues/24084#issuecomment-5619303017.
+# Reference https://github.com/protocolbuffers/protobuf/issues/24084
+single_version_override(
+    module_name = "protobuf",
+    patch_cmds = [
+        "sed -i 's|@system_python//:python_headers|@rules_python//python/cc:current_py_cc_headers|g' python/build_targets.bzl python/py_extension.bzl",
+    ],
+)
+
+# Rust toolchain (required by transitive SDK dependencies such as zenoh-c)
+bazel_dep(name = "rules_rs", version = "0.0.109")
+
+rules_rs_toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+rules_rs_toolchains.toolchain(
+    name = "rust_1_89_toolchains",
+    edition = "2021",
+    version = "1.89.0",
+)
+use_repo(rules_rs_toolchains, "rust_1_89_toolchains")
+
+register_toolchains("@rust_1_89_toolchains//...")

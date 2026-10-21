@@ -24,6 +24,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "intrinsic/perception/core/image_traits.h"
 #include "intrinsic/perception/gpu/cuda_utils/cuda_image.h"
 #include "intrinsic/perception/gpu/cuda_utils/cuda_math.h"
@@ -284,6 +285,10 @@ template absl::Status Clamp(CudaImage<Generic32f>& image, float min, float max);
 template absl::Status Clamp(CudaImage<Generic32f3>& image, float min,
                             float max);
 
+template absl::Status Clamp(CudaImage<Gray32f>& image, float min, float max);
+
+template absl::Status Clamp(CudaImage<Rgb32f>& image, float min, float max);
+
 template <typename OutputImageTraits, typename ImageTraitsA,
           typename ImageTraitsB>
 absl::StatusOr<CudaImage<OutputImageTraits>> Add(
@@ -382,6 +387,44 @@ template absl::StatusOr<CudaImage<Generic32f3>> Subtract(
     const CudaImage<Generic32f3>& image_b);
 
 template <typename OutputImageTraits, typename InputImageTraits>
+absl::Status ConvertImage(const CudaImage<InputImageTraits>& image,
+                          CudaImage<OutputImageTraits>& image_out) {
+  static_assert(
+      OutputImageTraits::kNumChannels == InputImageTraits::kNumChannels,
+      "Input and output image types must have the same number of channels.");
+  if (image.dimensions() != image_out.dimensions()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "image and image_out must have the same dimensions. Input: ",
+        image.cols(), "x", image.rows(), ", Output: ", image_out.cols(), "x",
+        image_out.rows()));
+  }
+  if (image.size() == 0) {
+    return absl::OkStatus();
+  }
+  constexpr int kBlockSize = 16;
+  const dim3 num_blocks(CeilSizeDiv(image.cols(), kBlockSize),
+                        CeilSizeDiv(image.rows(), kBlockSize));
+  const dim3 num_threads_per_block(kBlockSize, kBlockSize);
+  ConvertImageKernel<OutputImageTraits, InputImageTraits>
+      <<<num_blocks, num_threads_per_block>>>(image_out.data(), image.data(),
+                                              image.cols(), image.rows());
+  CUDA_CHECK(cudaStreamSynchronize(nullptr));
+  return absl::OkStatus();
+}
+
+template absl::Status ConvertImage(const CudaImage<Gray8u>& image,
+                                   CudaImage<Gray32f>& image_out);
+
+template absl::Status ConvertImage(const CudaImage<Rgb8u>& image,
+                                   CudaImage<Rgb32f>& image_out);
+
+template absl::Status ConvertImage(const CudaImage<Gray32f>& image,
+                                   CudaImage<Gray8u>& image_out);
+
+template absl::Status ConvertImage(const CudaImage<Rgb32f>& image,
+                                   CudaImage<Rgb8u>& image_out);
+
+template <typename OutputImageTraits, typename InputImageTraits>
 absl::StatusOr<CudaImage<OutputImageTraits>> ConvertImage(
     const CudaImage<InputImageTraits>& image) {
   static_assert(
@@ -393,14 +436,7 @@ absl::StatusOr<CudaImage<OutputImageTraits>> ConvertImage(
   INTR_ASSIGN_OR_RETURN(
       CudaImage<OutputImageTraits> image_out,
       CudaImage<OutputImageTraits>::Create(image.dimensions()));
-  constexpr int kBlockSize = 16;
-  const dim3 num_blocks(CeilSizeDiv(image.cols(), kBlockSize),
-                        CeilSizeDiv(image.rows(), kBlockSize));
-  const dim3 num_threads_per_block(kBlockSize, kBlockSize);
-  ConvertImageKernel<OutputImageTraits, InputImageTraits>
-      <<<num_blocks, num_threads_per_block>>>(image_out.data(), image.data(),
-                                              image.cols(), image.rows());
-  CUDA_CHECK(cudaStreamSynchronize(nullptr));
+  INTR_RETURN_IF_ERROR(ConvertImage(image, image_out));
   return image_out;
 }
 

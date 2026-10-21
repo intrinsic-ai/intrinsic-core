@@ -41,7 +41,7 @@ namespace object_world {
 static constexpr char kStrictObjectWorldNameRegexpPattern[] =
     "^[a-zA-Z_][a-zA-Z_0-9]*$";
 // LINT.ThenChange(
-//   //intrinsic/frontend/world_viewer/utils/world_ids.ts
+//   //intrinsic/frontend/world_viewer/core/model/world_ids.ts
 // )
 static constexpr LazyRE2 kStrictObjectWorlNameRegexp = {
     kStrictObjectWorldNameRegexpPattern};

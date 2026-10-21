@@ -15,8 +15,6 @@
 #ifndef INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_MOTION_PLANNER_FLAGS_H_
 #define INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_MOTION_PLANNER_FLAGS_H_
 
-#include <string>
-
 namespace intrinsic {
 
 // TODO(b/458474652): Re-classify the flags.
@@ -55,12 +53,6 @@ struct MotionPlannerFlags {
   // of 4 empirically. We saw big speedups up to this number, and more marginal
   // gains at higher numbers.
   int concurrent_collision_checking_thread_count = 4;
-
-  // Address of the parameterization service. This is used to create a channel
-  // to the parameterization service, get a stub and construct a
-  // parameterization client, used to solve parameterization problems required
-  // by the TOPP algorithm.
-  std::string parameterization_service_address = "";
 
   // If true: if output trajectory fails refinement validation, we generate a
   // new trajectory with reduced joint blending tightness and try again. If

@@ -145,6 +145,68 @@
   )
 )
 
+; Maps a plan-action state to a BehaviorTree.TaskNode.State proto value.
+;
+; Args:
+;   ?state: plan-action state symbol
+; Returns:
+;   The TaskNode.State enum value name as symbol
+(deffunction task-node-proto-state-from-plan-action-state (?state)
+  (switch ?state
+    (case FOOTPRINT-CHECKING then (return CHECKING_FOOTPRINT))
+    (case FOOTPRINT-CONFLICT-WAITING then (return FOOTPRINT_CONFLICT_WAITING))
+    (case CANCELLATION-REQUESTED then (return CANCELING))
+    (case CANCELLATION-PENDING then (return CANCELING))
+    (case EXECUTION-SUCCEEDED then (return RUNNING))
+    (case EXECUTION-FAILED then (return RUNNING))
+  )
+  (return (sym-cat (str-replace-all ?state "-" "_")))
+)
+
+; Maps a behavior-call-instance state to a BehaviorTree.TaskNode.State proto
+; value.
+;
+; Args:
+;   ?state: behavior-call-instance state symbol
+; Returns:
+;   The TaskNode.State enum value name as symbol
+(deffunction task-node-proto-state-from-behavior-call-instance-state (?state)
+  (switch ?state
+    (case CANCELLATION-REQUESTED then (return CANCELING))
+    ; TODO(timdn): update with suspend refactor
+    (case SUSPENDING then (return RUNNING))
+    (case SUSPENDED then (return RUNNING))
+  )
+  (return ?state)
+)
+
+; Maps a code-execution-instance state to a BehaviorTree.TaskNode.State proto
+; value.
+;
+; Args:
+;   ?state: code-execution-instance state symbol
+; Returns:
+;   The TaskNode.State enum value name as symbol
+(deffunction task-node-proto-state-from-code-execution-instance-state (?state)
+  (switch ?state
+    (case CANCELATION-REQUESTED then (return CANCELING))
+    (case CANCELATION-PENDING then (return CANCELING))
+  )
+  (return ?state)
+)
+
+; Maps a behavior-tree-condition state to a BehaviorTree.Condition.State proto
+; value.
+;
+; Args:
+;   ?state: behavior-tree-condition state symbol
+; Returns:
+;   The Condition.State enum value name as symbol
+(deffunction condition-proto-state-from-condition-state (?state)
+  (if (eq ?state START) then (return EVALUATING))
+  (return ?state)
+)
+
 ; ----------------------------------- RULES -----------------------------------
 
 (defrule behavior-tree-state-proto-update-tree
@@ -161,6 +223,9 @@
   (run-metadata-proto-update-field ?path ?state ?op)
 
   (modify ?tree (run-metadata-proto-state ?state))
+
+  (operation-events-add-tree-state-change-event
+    ?op ?state ?run-metadata-proto-path)
 )
 
 (defrule behavior-tree-state-proto-update-node
@@ -203,8 +268,9 @@
 
   (modify ?node (run-metadata-proto-state ?state)
                 (run-metadata-proto-recovered-state ?run-metadata-proto-recovered-state))
-  (operation-events-add-node-state-change-event ?op ?tree-id ?node-id
-                                                ?s-state ?was-recovered)
+
+  (operation-events-add-node-state-change-event ?op ?s-state ?was-recovered
+                                                ?run-metadata-proto-path)
 )
 
 (defrule behavior-tree-state-proto-update-condition
@@ -215,61 +281,74 @@
                                     (run-metadata-proto-state ?proto-state&~?state)
                                     (run-metadata-proto-path ?run-metadata-proto-path&~""))
  =>
-  (bind ?path (proto-path-join ?run-metadata-proto-path "state"))
-  (bind ?s-satisfied-path (proto-path-join ?run-metadata-proto-path "satisfied"))
-  (bind ?s-state ?state)
-  (if (eq ?s-state START) then (bind ?s-state EVALUATING))
-  (run-metadata-proto-update-field ?path ?s-state ?op)
-  (if (eq ?s-state FINISHED)
-   then (run-metadata-proto-update-field ?s-satisfied-path ?satisfied ?op))
   (modify ?cond (run-metadata-proto-state ?state))
+
+  ; START and EVALUATING both map to proto EVALUATING. Only update the run
+  ; metadata and publish an event if the proto-visible state changes.
+  (bind ?s-state (condition-proto-state-from-condition-state ?state))
+  (bind ?previous-s-state
+    (condition-proto-state-from-condition-state ?proto-state))
+  (if (neq ?s-state ?previous-s-state) then
+    (bind ?path (proto-path-join ?run-metadata-proto-path "state"))
+    (run-metadata-proto-update-field ?path ?s-state ?op)
+    (if (eq ?s-state FINISHED) then
+      (bind ?s-satisfied-path
+        (proto-path-join ?run-metadata-proto-path "satisfied"))
+      (run-metadata-proto-update-field ?s-satisfied-path ?satisfied ?op)
+    )
+
+    (operation-events-add-condition-state-change-event ?op ?s-state ?satisfied
+                                                       ?run-metadata-proto-path)
+  )
 )
 
 (defrule behavior-tree-state-proto-update-task-node-action
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  (behavior-tree-node (tree-id ?tree-id) (type TASK)
+  (behavior-tree-node (id ?node-id) (tree-id ?tree-id) (type TASK)
                       (task-action-uid ?task-action-uid)
                       (run-metadata-proto-path ?run-metadata-proto-path&~""))
   ?action <- (plan-action (uid ?task-action-uid) (state ?state)
                           (run-metadata-proto-state ?proto-state&~?state))
  =>
-  (bind ?path (proto-path-join ?run-metadata-proto-path "task.state"))
-  (bind ?task-state (sym-cat (str-replace-all ?state "-" "_")))
-  ; These states need to be mapped to proto-specific values
-  (switch ?state
-    (case FOOTPRINT-CHECKING then (bind ?task-state CHECKING_FOOTPRINT))
-    (case FOOTPRINT-CONFLICT-WAITING then (bind ?task-state FOOTPRINT_CONFLICT_WAITING))
-    (case CANCELLATION-REQUESTED then (bind ?task-state CANCELING))
-    (case CANCELLATION-PENDING then (bind ?task-state CANCELING))
-    (case EXECUTION-SUCCEEDED then (bind ?task-state RUNNING))
-    (case EXECUTION-FAILED then (bind ?task-state RUNNING))
-  )
-  (run-metadata-proto-update-field ?path ?task-state ?op)
   (modify ?action (run-metadata-proto-state ?state))
+  ; Several plan-action states map to the same proto state. Only update the run
+  ; metadata and publish an event if the proto-visible state changes.
+  (bind ?path (proto-path-join ?run-metadata-proto-path "task.state"))
+  (bind ?task-state (task-node-proto-state-from-plan-action-state ?state))
+  (bind ?previous-task-state
+    (task-node-proto-state-from-plan-action-state ?proto-state))
+  (if (neq ?task-state ?previous-task-state) then
+    (run-metadata-proto-update-field ?path ?task-state ?op)
+    (operation-events-add-task-node-state-change-event
+      ?op ?task-state ?run-metadata-proto-path)
+  )
 )
 
 (defrule behavior-tree-state-proto-update-task-node-behavior-instance
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
-  (behavior-tree-node (tree-id ?tree-id) (type TASK)
+  (behavior-tree-node (id ?node-id) (tree-id ?tree-id) (type TASK)
                       (task-type CALL-BEHAVIOR)
                       (behavior-call-instance-uid ?bci-uid)
                       (run-metadata-proto-path ?run-metadata-proto-path&~""))
   ?bci <- (behavior-call-instance (uid ?bci-uid) (state ?state)
                                   (run-metadata-proto-state ?proto-state&~?state))
  =>
-  (bind ?path (proto-path-join ?run-metadata-proto-path "task.state"))
-  (bind ?task-state ?state)
-  ; These states need to be mapped to proto-specific values
-  (switch ?state
-    (case CANCELLATION-REQUESTED then (bind ?task-state CANCELING))
-    ; TODO(timdn): update with suspend refactor
-    (case SUSPENDING then (bind ?task-state RUNNING))
-    (case SUSPENDED then (bind ?task-state RUNNING))
-  )
-  (run-metadata-proto-update-field ?path ?task-state ?op)
   (modify ?bci (run-metadata-proto-state ?state))
+  ; Several behavior-call-instance states map to the same proto state. Only
+  ; update the run metadata and publish an event if the proto-visible state
+  ; changes.
+  (bind ?path (proto-path-join ?run-metadata-proto-path "task.state"))
+  (bind ?task-state
+    (task-node-proto-state-from-behavior-call-instance-state ?state))
+  (bind ?previous-task-state
+    (task-node-proto-state-from-behavior-call-instance-state ?proto-state))
+  (if (neq ?task-state ?previous-task-state) then
+    (run-metadata-proto-update-field ?path ?task-state ?op)
+    (operation-events-add-task-node-state-change-event
+      ?op ?task-state ?run-metadata-proto-path)
+  )
 )
 
 (defrule behavior-tree-state-proto-update-task-node-code-execution-instance
@@ -283,17 +362,21 @@
                                    (state ?state)
                                    (run-metadata-proto-state ?proto-state&~?state))
  =>
-  (bind ?path (proto-path-join ?run-metadata-proto-path "task.state"))
-  (bind ?task-state ?state)
-  ; These states need to be mapped to proto-specific values
-  (switch ?state
-    (case CANCELATION-REQUESTED then (bind ?task-state CANCELING))
-    (case CANCELATION-PENDING then (bind ?task-state CANCELING))
-  )
-  (run-metadata-proto-update-field ?path ?task-state ?op)
   (modify ?cei (run-metadata-proto-state ?state))
+  ; Several code-execution-instance states map to the same proto state. Only
+  ; update the run metadata and publish an event if the proto-visible state
+  ; changes.
+  (bind ?path (proto-path-join ?run-metadata-proto-path "task.state"))
+  (bind ?task-state
+    (task-node-proto-state-from-code-execution-instance-state ?state))
+  (bind ?previous-task-state
+    (task-node-proto-state-from-code-execution-instance-state ?proto-state))
+  (if (neq ?task-state ?previous-task-state) then
+    (run-metadata-proto-update-field ?path ?task-state ?op)
+    (operation-events-add-task-node-state-change-event
+      ?op ?task-state ?run-metadata-proto-path)
+  )
 )
-
 
 (defrule behavior-tree-state-proto-update-task-node-code-execution-response-stdout
   (declare (salience ?*SALIENCE-HIGHER*))
@@ -314,6 +397,8 @@
   (bind ?path
     (proto-path-join ?run-metadata-proto-path "task.execute_code.stdout[*]"))
   (run-metadata-proto-update-field ?path ?stdout ?op)
+  (operation-events-add-task-node-execute-code-stdout-event
+    ?op ?stdout ?run-metadata-proto-path)
   (retract ?ces)
 )
 
@@ -331,7 +416,7 @@
   (run-metadata-proto-update-field ?path ?loop-num-times ?op)
   (modify ?node (run-metadata-proto-num-iterations ?loop-num-times))
   (operation-events-add-counter-change-event
-    ?op ?tree-id ?node-id ?loop-num-times)
+    ?op ?loop-num-times ?run-metadata-proto-path)
 )
 
 (defrule behavior-tree-state-proto-update-retry-num-tries
@@ -347,13 +432,14 @@
   (run-metadata-proto-update-field ?path ?retry-num-tries ?op)
   (modify ?node (run-metadata-proto-num-iterations ?retry-num-tries))
   (operation-events-add-counter-change-event
-    ?op ?tree-id ?node-id ?retry-num-tries)
+    ?op ?retry-num-tries ?run-metadata-proto-path)
 )
 
 (defrule behavior-tree-state-proto-update-breakpoint
   (declare (salience ?*SALIENCE-HIGHER*))
   (behavior-tree (id ?tree-id) (operation-name ?op))
   ?node <- (behavior-tree-node (tree-id ?tree-id)
+                               (id ?node-id)
                                (breakpoint-type ?type)
                                (run-metadata-proto-breakpoint-type ?proto-type&~?type)
                                (run-metadata-proto-path ?run-metadata-proto-path&~""))
@@ -367,6 +453,7 @@
       (run-metadata-proto-update-field ?path ?type ?op)
   )
   (modify ?node (run-metadata-proto-breakpoint-type ?type))
+  (operation-events-add-breakpoint-change-event ?op ?tree-id ?node-id ?type)
 )
 
 (defrule behavior-tree-state-proto-update-execution-settings
@@ -398,6 +485,8 @@
   )
   (modify ?node (run-metadata-proto-execution-mode ?mode)
                 (run-metadata-proto-execution-mode-result-state ?result-state))
+  (operation-events-add-node-execution-settings-change-event
+    ?op ?mode ?result-state ?run-metadata-proto-path)
 )
 
 (defrule run-metadata-proto-update-scene-id
@@ -409,6 +498,7 @@
  =>
   (run-metadata-proto-update-field "scene_id" ?scene-id ?operation-name)
   (modify ?op (run-metadata-proto-scene-id ?scene-id))
+  (operation-events-add-run-metadata-change-event ?operation-name)
 )
 
 (defrule run-metadata-proto-update-execution-mode
@@ -422,6 +512,7 @@
                                    (operation-execution-mode-to-proto-mode ?execution-mode)
                                    ?operation-name)
   (modify ?op (run-metadata-proto-execution-mode ?execution-mode))
+  (operation-events-add-run-metadata-change-event ?operation-name)
 )
 
 (defrule run-metadata-proto-update-simulation-mode
@@ -435,6 +526,7 @@
                                    (operation-sim-mode-to-proto-mode ?simulation-mode)
                                    ?operation-name)
   (modify ?op (run-metadata-proto-simulation-mode ?simulation-mode))
+  (operation-events-add-run-metadata-change-event ?operation-name)
 )
 
 (defrule run-metadata-proto-update-start-tree-and-node
@@ -464,6 +556,7 @@
   )
   (modify ?op (run-metadata-proto-start-tree-id ?start-tree-id)
               (run-metadata-proto-start-node-id ?start-node-id))
+  (operation-events-add-run-metadata-change-event ?operation-name)
 )
 
 (defrule run-metadata-proto-update-start-time
@@ -482,6 +575,7 @@
       (pb-remove ?ts-proto)
   )
   (modify ?op (run-metadata-proto-start-time ?start-time))
+  (operation-events-add-run-metadata-change-event ?operation-name)
 )
 
 (defrule run-metadata-proto-clear-start-time
@@ -492,19 +586,21 @@
  =>
   (run-metadata-proto-clear-field "start_time" ?operation-name)
   (modify ?op (run-metadata-proto-start-time 0 0))
+  (operation-events-add-run-metadata-change-event ?operation-name)
 )
 
 (defrule operation-state-proto-update
   (declare (salience ?*SALIENCE-HIGHER*))
   ?op <- (operation-envelope (name ?operation-name)
                       (state ?state)
-                      (run-metadata-proto-state ~?state)
+                      (run-metadata-proto-state ?prev-state&~?state)
                       (return-value-proto ?return-value-proto)
                       (operation-proto ?operation-proto)
   )
  =>
   (run-metadata-proto-update-field "operation_state" ?state ?operation-name)
   (modify ?op (run-metadata-proto-state ?state))
+  (operation-events-add-operation-state-change-event ?operation-name ?state)
 
   (if (<> ?operation-proto 0) then
     (switch ?state
@@ -539,6 +635,15 @@
         (pb-clear-field ?operation-proto "error")
         (pb-set-field ?operation-proto "done" FALSE)
       )
+    )
+    ; Publish the result when the operation becomes done and once when a done
+    ; operation leaves its terminal state, e.g., on reset.
+    (bind ?terminal-states (create$ SUCCEEDED FAILED CANCELED))
+    (if (or (member$ ?state ?terminal-states)
+            (member$ ?prev-state ?terminal-states))
+     then
+      (operation-events-add-operation-result-change-event ?operation-name
+                                                          ?operation-proto)
     )
   )
 )

@@ -1,0 +1,71 @@
+diff --git a/toolchain/runtimes/cc_stage0_object.bzl b/toolchain/runtimes/cc_stage0_object.bzl
+--- a/toolchain/runtimes/cc_stage0_object.bzl
++++ b/toolchain/runtimes/cc_stage0_object.bzl
+@@ -7,6 +7,19 @@
+     implementation = lambda settings, attr: {
+         # we are compiling runtimes without any kind of other dependencies
+         "//toolchain:runtime_stage": "stage0",
++        # Stage0 objects (crtbegin/crtend) are linked into every binary and
++        # shared library, so user flags must never leak into them. In
++        # particular -fsanitize-coverage would give each shared object its own
++        # counters section, which breaks coverage-guided fuzzers. This mirrors
++        # what configure_builder_for_runtimes() does for the other runtimes.
++        "//command_line_option:copt": [],
++        "//command_line_option:cxxopt": [],
++        "//command_line_option:conlyopt": [],
++        "//command_line_option:linkopt": [],
++        "//command_line_option:host_copt": [],
++        "//command_line_option:host_cxxopt": [],
++        "//command_line_option:host_conlyopt": [],
++        "//command_line_option:host_linkopt": [],
+         # Stage0 objects must never be built with sanitizers enabled.
+         "//config:asan": False,
+         "//config:msan": False,
+@@ -20,6 +33,8 @@
+         "//config:cfi": False,
+         "//config:lsan": False,
+         "//config:xray": False,
++        "//config:fuzzer": False,
++        "//config:profile": False,
+         "//config:host_asan": False,
+         "//config:host_msan": False,
+         "//config:host_dfsan": False,
+@@ -32,10 +47,20 @@
+         "//config:host_cfi": False,
+         "//config:host_lsan": False,
+         "//config:host_xray": False,
++        "//config:host_fuzzer": False,
++        "//config:host_profile": False,
+     },
+     inputs = [],
+     outputs = [
+         "//toolchain:runtime_stage",
++        "//command_line_option:copt",
++        "//command_line_option:cxxopt",
++        "//command_line_option:conlyopt",
++        "//command_line_option:linkopt",
++        "//command_line_option:host_copt",
++        "//command_line_option:host_cxxopt",
++        "//command_line_option:host_conlyopt",
++        "//command_line_option:host_linkopt",
+         "//config:asan",
+         "//config:msan",
+         "//config:dfsan",
+@@ -48,6 +73,8 @@
+         "//config:cfi",
+         "//config:lsan",
+         "//config:xray",
++        "//config:fuzzer",
++        "//config:profile",
+         "//config:host_asan",
+         "//config:host_msan",
+         "//config:host_dfsan",
+@@ -60,6 +87,8 @@
+         "//config:host_cfi",
+         "//config:host_lsan",
+         "//config:host_xray",
++        "//config:host_fuzzer",
++        "//config:host_profile",
+     ],
+ )
+ 

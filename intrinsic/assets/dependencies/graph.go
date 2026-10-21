@@ -279,6 +279,12 @@ type dependency struct {
 	// For Skill nodes in a Process, this contains the Process ID and the Skill ID.
 	// The ordering of the identifiers does not matter.
 	from []string
+	// configPath contains the path to the field in the config proto or parameter message
+	// that declares this dependency.
+	//
+	// For any dependency edges not originating from the config or parameter proto, this
+	// field is empty.
+	configPath string
 }
 
 // node represents a node in the dependency graph.
@@ -501,16 +507,18 @@ func validateNode(sc *SolutionContext, node *node, opts *validateGraphOptions) e
 		var targetAsset *AssetContext
 		var ok bool
 
-		// Find the dependency target.
-		if inst, exists := sc.Instances[dep.on]; exists {
-			targetAsset, ok = sc.Assets[inst.Asset]
-		} else if asset, exists := sc.Assets[dep.on]; exists {
-			// Data Assets are the only Assets that can be depended on directly
-			// using the Asset ID. All other Assets must be depended on by their
-			// instance names.
-			if asset.AssetType == atypepb.AssetType_ASSET_TYPE_DATA {
-				targetAsset = asset
-				ok = true
+		if dep.on != "" {
+			// Find the dependency target.
+			if inst, exists := sc.Instances[dep.on]; exists {
+				targetAsset, ok = sc.Assets[inst.Asset]
+			} else if asset, exists := sc.Assets[dep.on]; exists {
+				// Data Assets are the only Assets that can be depended on directly
+				// using the Asset ID. All other Assets must be depended on by their
+				// instance names.
+				if asset.AssetType == atypepb.AssetType_ASSET_TYPE_DATA {
+					targetAsset = asset
+					ok = true
+				}
 			}
 		}
 
@@ -520,7 +528,15 @@ func validateNode(sc *SolutionContext, node *node, opts *validateGraphOptions) e
 			continue
 		}
 
-		if !ok || targetAsset == nil {
+		if dep.on == "" {
+			if err := opts.report.Add(dependencyerrors.Newf(
+				dependencyerrors.CodeErrMissingDependencyTarget,
+				"%s has an unconfigured required dependency for this field in the configuration message: %q", dep.sourceDescription, dep.configPath,
+			)); err != nil {
+				return err
+			}
+			continue
+		} else if !ok || targetAsset == nil {
 			if err := opts.report.Add(dependencyerrors.Newf(
 				dependencyerrors.CodeErrUnknownDependency,
 				"%s has unknown dependency %q", dep.sourceDescription, dep.on,
@@ -643,16 +659,17 @@ func nodeFromAsset(ctx context.Context, assetID string, sc *SolutionContext) (*n
 // the `ResolvedDependency` fields.
 func collectDependencies(config *anypb.Any, fds *descriptorpb.FileDescriptorSet) ([]*dependency, error) {
 	var deps []*dependency
-	err := traversal.ForEachResolvedDependency(config, fds, func(dep *dependencypb.Dependency, msg *rdpb.ResolvedDependency) (*rdpb.ResolvedDependency, error) {
+	err := traversal.ForEachResolvedDependency(config, fds, func(dep *dependencypb.Dependency, msg *rdpb.ResolvedDependency, field traversal.FieldContext) (*rdpb.ResolvedDependency, error) {
 		if msg == nil {
 			return nil, nil
 		}
-		if msg.GetName() == "" {
+		if msg.GetName() == "" && field.Optional {
 			return msg, nil
 		}
 		deps = append(deps, &dependency{
-			iface: dep,
-			on:    msg.GetName(),
+			iface:      dep,
+			on:         msg.GetName(),
+			configPath: field.Path,
 		})
 		return msg, nil
 	})

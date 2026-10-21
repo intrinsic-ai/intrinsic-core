@@ -85,6 +85,7 @@ go_proto_library(
         "//intrinsic/resources/service:__pkg__",
         "//intrinsic/storage/hot_shared_state:__subpackages__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__pkg__",
     ],
     deps = ["//intrinsic/config/proto:application_go_proto"],
 )

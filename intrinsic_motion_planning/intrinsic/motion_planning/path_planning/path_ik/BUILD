@@ -21,8 +21,6 @@ cc_library(
     srcs = ["path_ik.cc"],
     hdrs = ["path_ik.h"],
     deps = [
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control/parts:feature_interfaces",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_kinematics/intrinsic/kinematics",
@@ -49,6 +47,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath:pose3_utils",
         "//intrinsic_sdk/intrinsic/math:ipow",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

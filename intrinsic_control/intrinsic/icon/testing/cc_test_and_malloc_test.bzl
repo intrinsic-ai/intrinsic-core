@@ -60,6 +60,8 @@ def cc_test_and_malloc_test(name, deps = [], local_defines = [], tags = [], **kw
         "nofastbuild",
         # Sanitizers and coverage are already covered by the test above, and
         # malloc checking is disabled in these modes anyways.
+        "noasan",
+        "nomsan",
         "notsan",
     ])
     cc_test(

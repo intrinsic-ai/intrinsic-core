@@ -67,11 +67,11 @@ cc_library(
         "projection_matrix_utils.h",
     ],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
     ],

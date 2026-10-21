@@ -21,6 +21,14 @@ package(default_visibility = [
     "//visibility:public",
 ])
 
+# `MallocGuard` is a no-op under allocator-replacing sanitizers, so its tests
+# are not allowed to be run with the following sanitizers.
+SANITIZER_EXCLUSION_TAGS = [
+    "noasan",
+    "nomsan",
+    "notsan",
+]
+
 cc_library(
     name = "bitmask_enums",
     hdrs = ["bitmask_enums.h"],
@@ -134,7 +142,7 @@ cc_library(
     deps = [
         ":fixed_str_cat",
         ":realtime_status",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log:absl_check",
     ],
@@ -166,7 +174,7 @@ go_binary(
     ],
     importpath = "intrinsic/icon/utils/init_hwm",
     deps = [
-        "//intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
         "@com_github_golang_glog//:go_default_library",
     ],
 )
@@ -347,21 +355,21 @@ cc_library(
     srcs = ["world_utils.cc"],
     hdrs = ["world_utils.h"],
     deps = [
-        "//intrinsic/util:string_type",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic/world",
         "//intrinsic/world:kinematic_world_views",
-        "//intrinsic/world/proto:object_world_service_cc_proto",
         "//intrinsic_kinematics/intrinsic/kinematics",
         "//intrinsic_kinematics/intrinsic/kinematics:skeleton",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util:string_type",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world/objects:frame",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
@@ -428,8 +436,10 @@ cc_library(
         ":log",
         ":realtime_status",
         ":realtime_status_macro",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/time",
+        "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
@@ -496,11 +506,11 @@ cc_library(
     name = "inspection_publisher",
     hdrs = ["inspection_publisher.h"],
     deps = [
-        "//intrinsic/platform/pubsub",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/hal:module_config",
+        "//intrinsic_sdk/intrinsic/platform/pubsub",
         "//intrinsic_sdk/intrinsic/platform/pubsub:publisher",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:string_view",

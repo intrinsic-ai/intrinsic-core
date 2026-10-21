@@ -21,8 +21,6 @@ cc_library(
     srcs = ["ik_helper.cc"],
     hdrs = ["ik_helper.h"],
     deps = [
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_kinematics/intrinsic/kinematics:group",
         "//intrinsic_kinematics/intrinsic/kinematics:skeleton",
@@ -33,6 +31,8 @@ cc_library(
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

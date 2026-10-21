@@ -20,7 +20,7 @@ cc_library(
     name = "proto_conversion",
     hdrs = ["proto_conversion.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@com_google_protobuf//:protobuf",

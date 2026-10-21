@@ -34,8 +34,6 @@
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/proto/object_world_service.pb.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.pb.h"
 #include "intrinsic/world/service/world_mutex.h"
 #include "intrinsic/world/service/world_storage.h"
 
@@ -44,8 +42,7 @@ namespace object_world {
 
 // Implementation of the ObjectWorldService.
 class ObjectWorldService final
-    : public intrinsic_proto::world::ObjectWorldService::Service,
-      public intrinsic_proto::world::WorldCompatibilityService::Service {
+    : public intrinsic_proto::world::ObjectWorldService::Service {
  public:
   // Creates a new instance. You need to follow-up with Init() on the returned,
   // new instance to finish initialization.
@@ -209,16 +206,6 @@ class ObjectWorldService final
       const intrinsic_proto::world::AreFootprintsCompatibleRequest* request,
       intrinsic_proto::world::AreFootprintsCompatibleResponse* response)
       override;
-
-  grpc::Status GetWorldWithEntities(
-      grpc::ServerContext* context,
-      const intrinsic_proto::world::GetWorldWithEntitiesRequest* request,
-      intrinsic_proto::world::WorldWithEntities* response) override;
-
-  grpc::Status GetWorldState(
-      grpc::ServerContext* context,
-      const intrinsic_proto::world::GetWorldStateRequest* request,
-      intrinsic_proto::world::GetWorldStateResponse* response) override;
 
   grpc::Status GetCollisionSettings(
       grpc::ServerContext* context,

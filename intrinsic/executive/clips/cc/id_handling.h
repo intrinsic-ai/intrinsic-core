@@ -218,6 +218,16 @@ ValidateAndGetNodeIds(const intrinsic_proto::executive::BehaviorTree& tree);
 absl::Status EnsureValidNodeIds(intrinsic_proto::executive::BehaviorTree& tree,
                                 absl::BitGenRef id_random_generator);
 
+
+// Checks that all set element ids in 'tree' (across all trees, nodes, and
+// conditions) are valid and contain no duplicates. A valid element id is a
+// string of 1 to 20 decimal digits (leading zeros allowed). Duplicates are
+// detected on the raw string. Trees, nodes, and conditions with an empty
+// element id get a randomly generated, non-zero uint64 id.
+absl::Status EnsureUniqueElementIds(
+    intrinsic_proto::executive::BehaviorTree& tree);
+
+
 }  // namespace intrinsic::executive
 
 #endif  // INTRINSIC_EXECUTIVE_CLIPS_CC_ID_HANDLING_H_

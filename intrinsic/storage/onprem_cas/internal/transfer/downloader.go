@@ -18,6 +18,7 @@ import (
 	"context"
 	"fmt"
 	"hash"
+	"io"
 	"time"
 
 	"intrinsic/storage/content_addressable_storage/pkg/clienthelpers"
@@ -120,12 +121,21 @@ func (d *Downloader) downloadImpl(ctx context.Context, objectID string, size uin
 		return 0, fmt.Errorf("local create failed: %w", err)
 	}
 
-	writer := newCASStreamWriter(createStream)
-
-	if err = clienthelpers.GetResumable(runCtx, d.upstreamClient, objectID, writer,
+	r, err := clienthelpers.GetResumableReader(
+		runCtx,
+		objectID,
+		clienthelpers.WithCASClient(d.upstreamClient),
 		clienthelpers.WithInfiniteRetries(),
 		clienthelpers.WithRetryBackoff(100*time.Millisecond, 5*time.Second),
-	); err != nil {
+	)
+	if err != nil {
+		return 0, fmt.Errorf("creating resumable reader failed: %w", err)
+	}
+	defer r.Close()
+
+	writer := newCASStreamWriter(createStream)
+
+	if _, err = io.Copy(writer, r); err != nil {
 		recordWastedBytes(ctx, OpDownload, int64(writer.written))
 		return writer.written, fmt.Errorf("upstream resumable download failed: %w", err)
 	}
@@ -167,12 +177,7 @@ func (w *casStreamWriter) Write(p []byte) (int, error) {
 		},
 	}
 	if err := w.stream.Send(req); err != nil {
-		// if we can't write to the stream, it's dead and
-		// we should let GetResumable know that there is no need to retry.
-		// hence, using %v here returns codes.Unknown which is
-		// treated by GetResumable as an unretriable error
-		// and allows to avoid useless retries.
-		return 0, fmt.Errorf("sending to local CAS: %v", err)
+		return 0, fmt.Errorf("sending to local CAS: %w", w.stream.RecvMsg(nil))
 	}
 
 	w.written += uint64(len(p))

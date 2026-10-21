@@ -28,6 +28,7 @@ import (
 	"intrinsic/util/proto/protoio"
 
 	log "github.com/golang/glog"
+	"google.golang.org/protobuf/reflect/protoregistry"
 
 	assetpb "intrinsic/assets/build_defs/asset_go_proto"
 	opmodepb "intrinsic/config/proto/operation_mode_go_proto"
@@ -42,9 +43,9 @@ var opModeLookup = map[string]opmodepb.OperationMode{
 
 var (
 	assets                 = intrinsicflag.MultiString("assets", nil, "Path to serialized AssetInfo protos. Can be repeated.")
-	localAssets            = intrinsicflag.MultiString("local_assets", nil, "Spec of <asset_info_path>=<bundle_runfiles_path> for local assets. Can be repeated.")
+	localAssets            = intrinsicflag.MultiString("local_assets", nil, "Spec of <asset_info_path>=<bundle_path> for local assets. Can be repeated.")
 	catalogAssets          = intrinsicflag.MultiString("catalog_assets", nil, "Path to serialized AssetCatalogRefInfo protos. Can be repeated.")
-	instanceSpecs          = intrinsicflag.MultiString("instances", nil, "Spec of <name>=<asset>[=<config_path>=<config_runfiles_path>] for asset instances. Can be repeated.")
+	instanceSpecs          = intrinsicflag.MultiString("instances", nil, "Spec of <name>=<asset>[=<config_path>=<relative_config_path>] for asset instances. Can be repeated.")
 	objectWorldUpdateFiles = intrinsicflag.MultiString("object_world_updates", nil, "Path to object world updates pbtxt file. Can be repeated.")
 	defaultOperationMode   = flag.String("default_operation_mode", "", "Operation mode of the app. Can be 'sim' or 'real'.")
 	output                 = flag.String("output", "", "Output LocalSolution proto path.")
@@ -67,16 +68,16 @@ func main() {
 	for idx, spec := range *localAssets {
 		parts := strings.SplitN(spec, "=", 2)
 		if len(parts) != 2 {
-			log.Exitf("invalid --local_assets format %q, expected <asset_info_path>=<bundle_runfiles_path>", spec)
+			log.Exitf("invalid --local_assets format %q, expected <asset_info_path>=<bundle_path>", spec)
 		}
 		assetInfo := new(assetpb.AssetInfo)
 		if err := protoio.ReadBinaryProto(parts[0], assetInfo); err != nil {
 			log.Exitf("failed to read AssetInfo proto at %q: %v", parts[0], err)
 		}
 		localAssetInfos[idx] = &assetpb.AssetLocalInfo{
-			AssetType:          assetInfo.GetAssetType(),
-			Id:                 assetInfo.GetId(),
-			BundleRunfilesPath: parts[1],
+			AssetType:  assetInfo.GetAssetType(),
+			Id:         assetInfo.GetId(),
+			BundlePath: parts[1],
 		}
 	}
 
@@ -93,18 +94,18 @@ func main() {
 	for idx, spec := range *instanceSpecs {
 		parts := strings.Split(spec, "=")
 		if len(parts) != 2 && len(parts) != 4 {
-			log.Exitf("invalid --instances format %q, expected <name>=<asset> or <name>=<asset>=<config_path>=<config_runfiles_path>", spec)
+			log.Exitf("invalid --instances format %q, expected <name>=<asset> or <name>=<asset>=<config_path>=<relative_config_path>", spec)
 		}
-		var configPath, configRunfilesPath string
+		var configPath, relativeConfigPath string
 		if len(parts) == 4 {
 			configPath = parts[2]
-			configRunfilesPath = parts[3]
+			relativeConfigPath = parts[3]
 		}
 		instances[idx] = &localsolution.Instance{
 			Name:               parts[0],
 			Asset:              parts[1],
 			ConfigPath:         configPath,
-			ConfigRunfilesPath: configRunfilesPath,
+			RelativeConfigPath: relativeConfigPath,
 		}
 	}
 
@@ -143,7 +144,7 @@ func main() {
 	if err != nil {
 		log.Exitf("could not create LocalSolution proto: %v", err)
 	}
-	if err := protoio.WriteBinaryProto(*output, assets, protoio.WithDeterministic(true)); err != nil {
+	if err := protoio.WriteStableTextProto(*output, assets, protoio.WithWriteResolver(new(protoregistry.Types))); err != nil {
 		log.Exitf("Failed to write solution proto: %v", err)
 	}
 }

@@ -23,11 +23,11 @@ cc_library(
     deps = [
         "//intrinsic/geometry/api:file_io",
         "//intrinsic/geometry/compatibility:io",
-        "//intrinsic/geometry/proto:geometry_service_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:io",
+        "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_service_types_cc_proto",

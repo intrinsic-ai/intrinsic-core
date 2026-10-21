@@ -23,10 +23,10 @@ cuda_library(
     hdrs = ["cuda_image_utils.h"],
     deps = [
         ":cuda_utils",
-        "//intrinsic/util/status:ret_check",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_perception/intrinsic/perception/core:image",
         "//intrinsic_perception/intrinsic/perception/core:image_traits",
+        "//intrinsic_sdk/intrinsic/util/status:ret_check",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
     ],
@@ -50,10 +50,10 @@ cuda_library(
     ],
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
     deps = [
-        "//intrinsic/util/status:ret_check",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_perception/intrinsic/perception/core:dimensions",
         "//intrinsic_perception/intrinsic/perception/core:image_traits",
+        "//intrinsic_sdk/intrinsic/util/status:ret_check",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",

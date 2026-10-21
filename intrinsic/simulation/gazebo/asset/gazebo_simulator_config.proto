@@ -20,6 +20,13 @@ import "intrinsic/assets/proto/field_metadata.proto";
 import "intrinsic/assets/proto/v1/resolved_dependency.proto";
 
 message GazeboConfig {
+  // The resolved dependency for the Intrinsic runtime.
+  intrinsic_proto.assets.v1.ResolvedDependency intrinsic_runtime = 2
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.geometry.GeometryService",
+        requires: "grpc://intrinsic_proto.world.ObjectWorldService",
+      }];
+
   message SimulationOptions {
     // Default is 500Hz. Decreasing this value can improve performance
     // (real-time factor) but might reduce accuracy and stability of dynamic
@@ -30,10 +37,4 @@ message GazeboConfig {
   }
 
   SimulationOptions simulation_options = 1;
-
-  // The resolved dependency for the Intrinsic runtime.
-  intrinsic_proto.assets.v1.ResolvedDependency intrinsic_runtime = 2
-      [(intrinsic_proto.assets.field_metadata).dependency = {
-        requires: "grpc://intrinsic_proto.world.ObjectWorldService",
-      }];
 }

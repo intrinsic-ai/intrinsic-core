@@ -61,11 +61,20 @@ class ObjectWorldClient {
       absl::string_view world_id,
       std::shared_ptr<ObjectWorldService::StubInterface> object_world_service);
 
-  ObjectWorldClient(ObjectWorldClient&& other) = default;
-  ObjectWorldClient& operator=(ObjectWorldClient&& other) = default;
+  ~ObjectWorldClient();
+
+  ObjectWorldClient(const ObjectWorldClient&) = delete;
+  ObjectWorldClient& operator=(const ObjectWorldClient&) = delete;
+  ObjectWorldClient(ObjectWorldClient&& other) noexcept;
+  ObjectWorldClient& operator=(ObjectWorldClient&& other) noexcept;
 
   // Returns the ID of the world.
   absl::string_view GetWorldID() const { return world_id_; }
+
+  // Clones the world in the world service and returns a client for the cloned
+  // world. The cloned world is automatically deleted from the world service
+  // when the returned client is destroyed.
+  absl::StatusOr<ObjectWorldClient> Clone() const;
 
   // Returns a local copy of the transform node identified by the given
   // reference.
@@ -428,8 +437,18 @@ class ObjectWorldClient {
 
 
  private:
+  ObjectWorldClient(
+      absl::string_view world_id,
+      std::shared_ptr<ObjectWorldService::StubInterface> object_world_service,
+      bool owns_world);
+
+  void DeleteOwnedWorld();
+
   std::string world_id_;
   std::shared_ptr<ObjectWorldService::StubInterface> object_world_service_;
+  // If true, this client owns the remote world identified by `world_id_` and
+  // will delete it from the world service when destroyed.
+  bool owns_world_ = false;
 };
 
 }  // namespace world

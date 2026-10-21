@@ -48,6 +48,10 @@ type testConfigItemType struct {
 type testConfigType struct {
 	Solution      string                `json:"solution"`
 	OperationMode string                `json:"operation_mode"`
+	RunAsService  bool                  `json:"run_as_service"`
+	ServiceBundle string                `json:"service_bundle"`
+	ServiceId     string                `json:"service_id"`
+	ServiceName   string                `json:"service_name"`
 	Tests         []*testConfigItemType `json:"tests"`
 }
 
@@ -80,6 +84,10 @@ func generate(testConfig *testConfigType) error {
 	if err := tmpl.Execute(output, templateData{
 		"Solution":      testConfig.Solution,
 		"OperationMode": testConfig.OperationMode,
+		"RunAsService":  testConfig.RunAsService,
+		"ServiceBundle": testConfig.ServiceBundle,
+		"ServiceId":     testConfig.ServiceId,
+		"ServiceName":   testConfig.ServiceName,
 		"TestFunctions": testFunctions,
 	}); err != nil {
 		return fmt.Errorf("error executing header template: %w", err)

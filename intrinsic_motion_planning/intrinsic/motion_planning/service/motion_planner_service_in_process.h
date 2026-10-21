@@ -24,7 +24,6 @@
 #include "intrinsic/motion_planning/motion_planner/motion_planner_flags.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.grpc.pb.h"
 #include "intrinsic/motion_planning/service/motion_planner_service.h"
-#include "intrinsic/motion_planning/service/motion_planner_service_test_fixture.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/service/test/world_service_fake.h"
 
@@ -33,11 +32,10 @@ namespace intrinsic {
 // Sets up a grpc server running the full motion planner service internally.
 // This is just for testing as our usual setup includes a shared motion planner
 // service running in its own container.
-class MotionPlannerServiceInProcess
-    : public MotionPlannerServiceBaseTestHelper {
+class MotionPlannerServiceInProcess {
  public:
   MotionPlannerServiceInProcess();
-  ~MotionPlannerServiceInProcess() override;
+  ~MotionPlannerServiceInProcess();
 
   std::string GetAddress() const { return address_; }
 

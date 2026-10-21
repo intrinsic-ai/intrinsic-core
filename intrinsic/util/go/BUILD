@@ -16,26 +16,18 @@
 
 load("//bazel:go_macros.bzl", "go_library")
 
-go_library(
+alias(
     name = "pointer",
-    srcs = ["pointer.go"],
-    importpath = "intrinsic/util/go/pointer",
+    actual = "//intrinsic_sdk/intrinsic/util/go:pointer",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//intrinsic:internal_api_users"],
 )
 
-go_library(
+alias(
     name = "set",
-    srcs = ["set.go"],
-    importpath = "intrinsic/util/go/set",
+    actual = "//intrinsic_sdk/intrinsic/util/go:set",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//intrinsic:internal_api_users"],
-)
-
-go_library(
-    name = "validate",
-    srcs = ["validate.go"],
-    importpath = "intrinsic/util/go/validate",
-    visibility = ["//intrinsic:internal_api_users"],
-    deps = ["@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:image_go_proto"],
 )
 
 go_library(

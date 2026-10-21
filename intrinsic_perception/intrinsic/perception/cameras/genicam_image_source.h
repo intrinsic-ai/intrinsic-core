@@ -34,6 +34,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/cameras/aravis/aravis_glib_utils.h"
 #include "intrinsic/perception/cameras/aravis/aravis_utils.h"
@@ -47,10 +48,10 @@
 #include "intrinsic/perception/cameras/software_hdr.h"
 #include "intrinsic/perception/core/camera_params.h"
 #include "intrinsic/perception/core/dimensions.h"
+#include "intrinsic/perception/core/hdr_utils.h"
 #include "intrinsic/stats/scoped_span.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 class GenicamImageSource : public ImageSource {
  public:
@@ -89,10 +90,62 @@ class GenicamImageSource : public ImageSource {
     CaptureResult capture_result;
     std::optional<absl::Duration> exposure_time;
   };
+  struct StreamingHdrState {
+    std::vector<absl::Duration> exposure_times;
+    std::vector<CameraSetting> auto_settings_to_restore;
+    int num_tries = 0;
+    HdrOperator hdr_operator = HdrOperator::kMertens;
+    std::vector<CaptureResult> ldr_frames;
+  };
+  struct StreamingState {
+    CaptureArgs params;
+    // True once StartStream() has finished configuring the camera and while
+    // streaming acquisition is active; false while StartStream() is setting up
+    // or StopStream() is tearing down the stream.
+    bool is_active = false;
+    std::optional<StreamingHdrState> hdr;
+  };
+
+  absl::StatusOr<std::vector<CameraSetting>> GetActiveAutoSettings() const;
+  // Switches any `Continuous` settings in `active_auto_settings` to `Once`
+  // (appending the original `Continuous` settings to `auto_settings_to_restore`
+  // so the caller can restore them later) and acquires frames until all
+  // settings in `active_auto_settings` converge to `Off` (or forces them to
+  // `Off` after `kMaxNumFramesToConverge` frames). Returns the last acquired
+  // frame. Precondition: `!active_auto_settings.empty()`.
+  absl::StatusOr<CaptureResult> ConvergeAutoSettings(
+      absl::Span<const CameraSetting> active_auto_settings,
+      absl::Duration timeout,
+      std::vector<CameraSetting>& auto_settings_to_restore);
+  absl::Status RestoreAutoSettings(
+      absl::Span<const CameraSetting> auto_settings_to_restore);
+  // Returns the base exposure time at `front()` followed by sorted unique
+  // knee-point exposure times. Returns an empty vector if software HDR is
+  // disabled or no distinct knee-point exposures exist.
+  absl::StatusOr<std::vector<absl::Duration>> GetHdrExposureTimes() const;
+  // Acquires a single LDR frame within `timeout`. When `expected_exposure_time`
+  // is provided, avoids querying `ExposureTime` from the camera and, in
+  // free-running mode, retries until the acquired frame's exposure time
+  // matches `expected_exposure_time` (via `ChunkExposureTime` or the 2-frame
+  // fallback).
   absl::StatusOr<CaptureResult> GetLdrCaptureResult(
-      absl::Duration timeout, bool requires_exact_exposure_time);
+      absl::Duration timeout,
+      std::optional<absl::Duration> expected_exposure_time = std::nullopt);
   absl::StatusOr<std::vector<CaptureResult>> GetLdrCaptureResults(
       absl::Duration timeout);
+
+  // Processes a newly captured frame during streaming, advancing the HDR
+  // exposure bracket and updating the camera's ExposureTime when streaming HDR
+  // is active. Returns `std::nullopt` if the stream has stopped, the frame's
+  // exposure time does not match the current bracket step, or the frame was
+  // buffered as an intermediate LDR bracket frame. Returns a populated
+  // `CaptureResult` containing the fused HDR image once all bracket exposures
+  // are collected, or the unmodified `capture_result` when streaming HDR is
+  // inactive.
+  absl::StatusOr<std::optional<CaptureResult>> ProcessStreamingHdrFrame(
+      CaptureResult capture_result,
+      std::optional<absl::Duration> received_exposure, int64_t frame_id)
+      ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
 
   // Retries the passed function until write permission is granted or the device
   // is ready again (after a timeout or being busy). Waiting for permission is
@@ -115,27 +168,33 @@ class GenicamImageSource : public ImageSource {
 
   // Reads the access to a camera setting.
   absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccessImpl(
-      absl::string_view name) const override;
+      absl::string_view name) const override
+      ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
 
   // The function reads camera setting properties and returns them.
   // An error is only raised when settings for an unknown property are
   // requested. If some properties cannot be queried for a specific setting
   // these are not populated in the result.
   absl::StatusOr<CameraSettingProperties> ReadCameraSettingPropertiesImpl(
-      absl::string_view name) const override;
+      absl::string_view name) const override
+      ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
 
   // Reads and returns the currently configured camera settings. The provided
   // name must refer to a feature listed in the Standard Feature Naming
   // Convention (SFNC) from the GenICam standard.
   // The function raises an error when either the feature name is unknown or
   // when the current value of the feature cannot be requested.
-  absl::StatusOr<CameraSetting> ReadCameraSettingImpl(
-      absl::string_view name) const override;
+  absl::StatusOr<CameraSetting> ReadCameraSettingImpl(absl::string_view name)
+      const override ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
 
   // Retries to set the specified camera setting by `UpdateCameraSettingOnce`
   // until write permission is granted.
   absl::Status UpdateCameraSettingImpl(
       const CameraSetting& camera_setting) override;
+
+  // Internal helper to update a camera setting during stream startup/teardown
+  // while `streaming_state_` is populated.
+  absl::Status UpdateCameraSettingInternal(const CameraSetting& camera_setting);
 
   // Sets a value of the specified camera setting.
   // The name in the camera setting specifies the exact feature which is updated
@@ -157,8 +216,8 @@ class GenicamImageSource : public ImageSource {
   // Post-condition: stream_ != nullptr.
   absl::Status StartAsyncAcquisition();
 
-  // Stops the camera acquisition and deletes the current stream.
-  // Post-condition: stream_ == nullptr.
+  // Stops the camera acquisition while keeping the current stream and its
+  // buffers allocated.
   absl::Status StopAsyncAcquisition();
 
   // Temporarily stops a stream to quickly change camera parameters.
@@ -178,6 +237,7 @@ class GenicamImageSource : public ImageSource {
   BufferHelper buffer_helper_;
 
   mutable absl::Mutex mutex_;
+  mutable absl::Mutex camera_mutex_ ABSL_ACQUIRED_AFTER(mutex_);
 
   std::string device_id_;
 
@@ -188,11 +248,7 @@ class GenicamImageSource : public ImageSource {
   // 'TriggerMode = Off'.
   bool use_software_trigger_ = true;
 
-  // Used internally to prevent deadlocks when starting a stream but still have
-  // all of the relevant settings update.
-  bool is_stream_starting_ ABSL_GUARDED_BY(mutex_) = false;
-
-  std::optional<CaptureArgs> streaming_params_ ABSL_GUARDED_BY(mutex_);
+  std::optional<StreamingState> streaming_state_ ABSL_GUARDED_BY(mutex_);
 
   // Stores the id of the lost control callback handler.
   uint32_t lost_control_handler_id_ = 0;
@@ -263,7 +319,6 @@ class GenicamImageSource : public ImageSource {
       acquisition_measurements_per_exposure_time_;
 };
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception
 
 #endif  // INTRINSIC_PERCEPTION_CAMERAS_GENICAM_IMAGE_SOURCE_H_

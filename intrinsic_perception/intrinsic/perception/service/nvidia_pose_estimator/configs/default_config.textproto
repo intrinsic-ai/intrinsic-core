@@ -1,0 +1,86 @@
+# Copyright 2026 Intrinsic Innovation LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+[type.googleapis.com/intrinsic_proto.perception.nvidia.NvidiaPoseEstimatorServiceConfig] {
+  # Provides InstalledAssets, which the model download below and the per-request
+  # asset lookups (prompt, CAD model) go through.
+  intrinsic_runtime {
+    name: "intrinsic_runtime"
+  }
+
+  # Model weights, delivered as Data assets and downloaded at startup. The
+  # platform resolves each name to an installed asset and fills in the
+  # interfaces; see proto/nvidia_service_config.proto.
+  foundationpose_model {
+    name: "ai.intrinsic.nvidia_pose_estimator.foundationpose_models"
+  }
+  foundationstereo_model {
+    name: "ai.intrinsic.nvidia_pose_estimator.foundationstereo_models"
+  }
+  sam3_model {
+    name: "ai.intrinsic.nvidia_pose_estimator.sam3_models"
+  }
+
+  # FoundationStereo
+  stereo {
+    min_depth_m: 0.30
+    max_depth_m: 0.80
+    width: 640
+    height: 416
+    # Same defaults as the upstream foundationpose_perception_pipeline.
+    clahe_clip_limit: 3.0
+    clahe_detail_boost: 1.5
+  }
+
+  # SAM3
+  sam3_detection {
+    prompt: "object"
+    confidence_threshold: 0.2
+    resolution: 1008
+  }
+  sam3_refinement {
+    policy: SAM3_REFINEMENT_POLICY_REPLACE_MID_NMS06
+    low_miou: 0.2
+    high_miou: 0.8
+    nms_threshold: 0.6
+  }
+
+  # FoundationPose
+  foundation_pose {
+    n_refine: 5
+    n_hypotheses: 252
+    batch_size: 42
+  }
+  selection {
+    policy: PROPOSAL_SELECTION_POLICY_SOFT_GLOBAL_V1
+    cutoff: 3.0
+    weight_sam_score: 2.0
+    weight_render_mask_iou: 4.0
+    weight_render_box_iou: 1.0
+    fp_score_divisor: 100.0
+  }
+
+  # Sensor ids follow the Orbbec camera layout ("1"=RGB, "2"/"3"=IR stereo,
+  # "4"=hardware depth); other cameras may need different ids.
+  sensor_routing {
+    detection_sensor: "1"
+    depth_source: DEPTH_SOURCE_AUTO
+    stereo_sensors: "2"
+    stereo_sensors: "3"
+  }
+
+  debug {
+    publish_visualization: true
+  }
+}

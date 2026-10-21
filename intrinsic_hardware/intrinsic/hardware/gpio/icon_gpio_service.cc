@@ -50,6 +50,7 @@
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/hardware/gpio/gpio_service_proto_utils.h"  // IWYU pragma: keep
 #include "intrinsic/hardware/gpio/v1/gpio_service.grpc.pb.h"
 #include "intrinsic/hardware/gpio/v1/gpio_service.pb.h"
@@ -63,7 +64,6 @@
 #include "intrinsic/icon/common/id_types.h"
 #include "intrinsic/icon/proto/io_block.pb.h"
 #include "intrinsic/icon/proto/part_status.pb.h"
-#include "intrinsic/icon/release/grpc_time_support.h"
 #include "intrinsic/logging/proto/log_item.pb.h"
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"

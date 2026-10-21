@@ -151,10 +151,20 @@ LoadMotionFromNonvolatileCacheIfRequested(
 
     LOG(INFO) << "The found motion matches the given request, is in limits "
                  "and collision free.";
-    return MotionPlanner::PlanTrajectoryResult{
+    MotionPlanner::PlanTrajectoryResult result{
         .trajectory = found_entry.value().value.trajectory,
         .path_segments = found_entry.value().value.path_segments
+
+        ,
+        .motion_events = found_entry.value().value.motion_events
+
     };
+    const int num_motion_segments =
+        request.motion_specification().motion_segments_size();
+    result.motion_planning_statistics.num_motion_segments = num_motion_segments;
+    result.motion_planning_statistics.path_planning_statistics
+        .num_motion_segments = num_motion_segments;
+    return result;
   }
 
   LOG(INFO) << "Construct a new motion specification and plan trajectory. "
@@ -200,6 +210,10 @@ SaveMotionToNonvolatileCacheIfRequested(
   MotionPlannerNonvolatileCacheValue cache_value{
       .trajectory = plan_trajectory_result.trajectory,
       .path_segments = plan_trajectory_result.path_segments
+
+      ,
+      .motion_events = plan_trajectory_result.motion_events
+
   };
 
   INTR_ASSIGN_OR_RETURN(const std::string uuid,
@@ -325,9 +339,19 @@ ConstructNewMotionSpecificationAndPlanTrajectory(
           path_segments,
           request.robot_specification().robot_reference().object_id()));
 
-  return motion_planner.PlanTrajectory(
-      object_world, request.robot_specification(), new_motion_specification,
-      request.motion_planner_config(), /*run_time_flags=*/std::nullopt);
+  INTR_ASSIGN_OR_RETURN(
+      MotionPlanner::PlanTrajectoryResult result,
+      motion_planner.PlanTrajectory(
+          object_world, request.robot_specification(), new_motion_specification,
+          request.motion_planner_config(), /*run_time_flags=*/std::nullopt));
+  // `num_motion_segments` intentionally reflects the original request's total
+  // segments rather than the expanded segments in `new_motion_specification`.
+  const int num_motion_segments =
+      request.motion_specification().motion_segments_size();
+  result.motion_planning_statistics.num_motion_segments = num_motion_segments;
+  result.motion_planning_statistics.path_planning_statistics
+      .num_motion_segments = num_motion_segments;
+  return result;
 }
 
 }  // namespace intrinsic

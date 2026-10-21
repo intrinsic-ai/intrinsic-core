@@ -101,7 +101,8 @@ jobs:
       - name: Build Intrinsic Core Artifacts
         uses: ./.github/actions/build-intrinsic-core-artifacts
         with:
-          stamp: "true"
+          # Disable stamping while we resolve the semver requirement
+          # stamp: "true"
           checkout-ref: ${{ needs.determine-checkout-ref.outputs.checkout_ref }}
           working-directory: intrinsic-core_build
           upload-artifacts: "true"

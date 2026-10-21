@@ -64,6 +64,15 @@ intrinsic_proto::motion_planning::PathSegment ToProto(
 
   *path_segment_proto.mutable_tip_t_target() =
       intrinsic::ToProto(path_segment.tip_t_target);
+
+
+  for (const MotionEventAndJointConfigurationIndex&
+           motion_event_and_path_index : path_segment.indexed_motion_events) {
+    *path_segment_proto.add_indexed_motion_events() =
+        ToProto(motion_event_and_path_index);
+  }
+
+
   path_segment_proto.set_type(ToProto(path_segment.type));
 
   return path_segment_proto;
@@ -99,10 +108,48 @@ absl::StatusOr<PathSegment> FromProto(
   INTR_ASSIGN_OR_RETURN(
       path_segment.tip_t_target,
       intrinsic_proto::FromProto(path_segment_proto.tip_t_target()));
+
+
+  for (const intrinsic_proto::motion_planning::
+           MotionEventAndJointConfigurationIndex&
+               motion_event_and_joint_configuration_index_proto :
+       path_segment_proto.indexed_motion_events()) {
+    path_segment.indexed_motion_events.push_back(
+        FromProto(motion_event_and_joint_configuration_index_proto));
+  }
+
+
   path_segment.type = FromProto(path_segment_proto.type());
 
   return path_segment;
 }
+
+
+intrinsic_proto::motion_planning::MotionEventAndJointConfigurationIndex ToProto(
+    const MotionEventAndJointConfigurationIndex&
+        motion_event_and_joint_configuration_index) {
+  intrinsic_proto::motion_planning::MotionEventAndJointConfigurationIndex
+      motion_event_and_path_index_proto;
+  *motion_event_and_path_index_proto.mutable_motion_event() =
+      motion_event_and_joint_configuration_index.motion_event;
+  motion_event_and_path_index_proto.set_joint_configuration_index(
+      motion_event_and_joint_configuration_index.joint_configuration_index);
+  return motion_event_and_path_index_proto;
+}
+
+MotionEventAndJointConfigurationIndex FromProto(
+    const intrinsic_proto::motion_planning::
+        MotionEventAndJointConfigurationIndex&
+            motion_event_and_joint_configuration_index_proto) {
+  return MotionEventAndJointConfigurationIndex{
+      .motion_event =
+          motion_event_and_joint_configuration_index_proto.motion_event(),
+      .joint_configuration_index =
+          motion_event_and_joint_configuration_index_proto
+              .joint_configuration_index()};
+}
+
+
 intrinsic_proto::motion_planning::PathSegment::Type ToProto(
     const PathSegment::Type type) {
   switch (type) {

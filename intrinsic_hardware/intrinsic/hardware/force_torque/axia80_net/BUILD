@@ -16,11 +16,11 @@ load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:hardware_module_binary.bzl", "hardware_module_binary")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:hardware_module_image.bzl", "hardware_module_image")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:resources.bzl", "hardware_module_manifest", "wrap_in_any_textproto")
+load("//intrinsic_sdk/intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 package(default_visibility = [
     "//visibility:private",
@@ -83,7 +83,6 @@ cc_library(
     ],
     deps = [
         ":axia80_net_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/hal:default_hardware_interfaces",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_handle",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_registry",
@@ -102,6 +101,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:sensor_utils",
         "//intrinsic_hardware/intrinsic/hardware/gripper/wsg32:async_buffer",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//intrinsic_sdk/intrinsic/util/thread:stop_token",
         "//intrinsic_sdk/intrinsic/util/thread:thread_options",

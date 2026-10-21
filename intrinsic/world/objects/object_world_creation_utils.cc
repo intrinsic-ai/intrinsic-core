@@ -58,7 +58,7 @@ namespace {
 // The prefix for objects and frames must be the same since for legacy reasons
 // the frontend still uses number ids internally and must be able to convert
 // string id -> int -> string id (for objects and frames).
-// See intrinsic/frontend/world_viewer/utils/utils.ts.
+// See intrinsic/frontend/world_viewer/core/utils/utils.ts.
 // TODO(b/238716879): Switch to different prefixes once the frontend uses string
 // ids.
 constexpr absl::string_view kObjectWorldResourceIdObjectPrefix = "ofid_";

@@ -15,7 +15,10 @@
 #ifndef INTRINSIC_PERCEPTION_CAMERAS_CAMERA_SETTING_UTILS_H_
 #define INTRINSIC_PERCEPTION_CAMERAS_CAMERA_SETTING_UTILS_H_
 
+#include <algorithm>
+#include <cmath>
 #include <cstdint>
+#include <limits>
 #include <string>
 #include <string_view>
 #include <type_traits>
@@ -111,21 +114,39 @@ P::ValueType ClampAndRoundToIncrement(typename P::ValueType value,
     return value;
   }
 
-  const typename P::ValueType min = properties.range->minimum;
-  const typename P::ValueType max = properties.range->maximum;
-  const typename P::ValueType inc = properties.increment;
+  using ValueType = typename P::ValueType;
+  const ValueType min = properties.range->minimum;
+  const ValueType max = properties.range->maximum;
+  const ValueType inc = properties.increment;
 
   value = std::clamp(value, min, max);
-  if (inc == 0.0) {
+  if (inc <= 0) {
     return value;
   }
 
-  const typename P::ValueType mod = std::fmod(value - min, inc);
-  typename P::ValueType result = value - mod;
-  if (mod > 0.5 * inc) {
-    result += inc;
+  if constexpr (std::is_integral_v<ValueType>) {
+    const ValueType rem = (value - min) % inc;
+    ValueType result = value - rem;
+    if (rem > inc / 2 && result <= max - inc) {
+      result += inc;
+    }
+    return result;
+  } else {
+    const ValueType steps = std::ceil((value - min) / inc - 0.5);
+    if (!(steps < 1.0 / std::numeric_limits<ValueType>::epsilon())) {
+      return value;
+    }
+    const ValueType result = min + steps * inc;
+    const ValueType tolerance = 4 * std::numeric_limits<ValueType>::epsilon() *
+                                std::max(std::abs(min), std::abs(max));
+    if (std::abs(result - max) <= tolerance) {
+      return max;
+    }
+    if (result > max) {
+      return min + (steps - 1) * inc;
+    }
+    return result;
   }
-  return result;
 }
 
 }  // namespace intrinsic::perception

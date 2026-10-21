@@ -38,22 +38,22 @@ import (
 
 // service implements the AssetArtifacts service.
 type service struct {
-	proc    *processor.Processor
-	uploads *uploader.Uploads
+	proc     *processor.Processor
+	uploader *uploader.Uploader
 }
 
 // New creates a new AssetArtifactsServer.
-func New(proc *processor.Processor, uploads *uploader.Uploads) (assetartifactspb.AssetArtifactsServer, error) {
+func New(proc *processor.Processor, uploader *uploader.Uploader) (assetartifactspb.AssetArtifactsServer, error) {
 	if proc == nil {
 		return nil, fmt.Errorf("proc must be non-nil")
 	}
-	if uploads == nil {
-		return nil, fmt.Errorf("uploads must be non-nil")
+	if uploader == nil {
+		return nil, fmt.Errorf("uploader must be non-nil")
 	}
 
 	return &service{
-		proc:    proc,
-		uploads: uploads,
+		proc:     proc,
+		uploader: uploader,
 	}, nil
 }
 
@@ -140,26 +140,28 @@ func parseProcessRequest(req *assetartifactspb.ProcessRequest) (*referenceddata.
 
 // StartUpload starts a chunked upload session.
 func (s *service) StartUpload(ctx context.Context, req *assetartifactspb.StartUploadRequest) (*assetartifactspb.StartUploadResponse, error) {
-	id, err := s.uploads.Add(ctx)
+	id, artifactExists, err := s.uploader.Add(ctx, req.GetDigest())
 	if err != nil {
 		log.ErrorContextf(ctx, "StartUpload failed: %v", err)
 		return nil, err
 	}
 
-	return &assetartifactspb.StartUploadResponse{UploadId: id}, nil
+	return &assetartifactspb.StartUploadResponse{
+		ArtifactExists: artifactExists,
+		UploadId:       id,
+	}, nil
 }
 
 // UploadChunk uploads a chunk of data for an active upload session.
 func (s *service) UploadChunk(ctx context.Context, req *assetartifactspb.UploadChunkRequest) (*assetartifactspb.UploadChunkResponse, error) {
-	upload, err := s.uploads.Get(req.GetUploadId())
+	upload, err := s.uploader.Get(req.GetUploadId())
 	if err != nil {
 		log.WarningContextf(ctx, "UploadChunk failed: upload %q not found: %v", req.GetUploadId(), err)
 		return nil, err
 	}
 
 	if err := upload.Send(ctx, req.GetOffset(), req.GetData()); err != nil {
-		log.ErrorContextf(ctx, "UploadChunk for upload %q failed at offset %d (size %d): %v; aborting session", req.GetUploadId(), req.GetOffset(), len(req.GetData()), err)
-		upload.Abort()
+		log.ErrorContextf(ctx, "UploadChunk for upload %q failed at offset %d (size %d): %v", req.GetUploadId(), req.GetOffset(), len(req.GetData()), err)
 		return nil, err
 	}
 
@@ -170,7 +172,7 @@ func (s *service) UploadChunk(ctx context.Context, req *assetartifactspb.UploadC
 
 // FinalizeUpload finalizes a chunked upload session and returns the ReferencedData.
 func (s *service) FinalizeUpload(ctx context.Context, req *assetartifactspb.FinalizeUploadRequest) (*assetartifactspb.FinalizeUploadResponse, error) {
-	upload, err := s.uploads.Get(req.GetUploadId())
+	upload, err := s.uploader.Get(req.GetUploadId())
 	if err != nil {
 		log.WarningContextf(ctx, "FinalizeUpload failed: upload %q not found: %v", req.GetUploadId(), err)
 		return nil, err

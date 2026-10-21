@@ -101,6 +101,28 @@ extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Point32f>>
 FromProto(const ImageBuffer& image_buffer);
 
+template <typename ImageTrait>
+absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
+    ImageBuffer&& image_buffer);
+extern template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
+FromProto(ImageBuffer&& image_buffer);
+extern template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Gray8u>>
+FromProto(ImageBuffer&& image_buffer);
+extern template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Gray32f>>
+FromProto(ImageBuffer&& image_buffer);
+extern template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Depth32f>>
+FromProto(ImageBuffer&& image_buffer);
+extern template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Normal32f>>
+FromProto(ImageBuffer&& image_buffer);
+extern template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Point32f>>
+FromProto(ImageBuffer&& image_buffer);
+
 }  // namespace intrinsic_proto::perception::v1
 
 // Convenience ToProto aliases to allow argument-dependent lookup. Directly use

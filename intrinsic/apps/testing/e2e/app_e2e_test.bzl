@@ -21,8 +21,25 @@ load("//intrinsic/util/wrapped_executable:wrapped_executable.bzl", "wrapped_test
 def _gen_test_script_impl(ctx):
     test_config = {
         "operation_mode": ctx.attr.operation_mode,
+        "run_as_service": ctx.attr.run_as_service,
         "tests": [],
     }
+    if ctx.attr.run_as_service:
+        if not ctx.attr.service:
+            fail("Must specify 'service' when 'run_as_service' is True.")
+        service_label = ctx.attr.service.label
+        runner_service_name = service_label.name
+        service_files = ctx.attr.service[DefaultInfo].files.to_list()
+        if service_files:
+            test_config["service_bundle"] = to_rlocation_path(ctx, service_files[0])
+        else:
+            package_path = service_label.package
+            if package_path.startswith("google3/"):
+                package_path = package_path[len("google3/"):]
+            test_config["service_bundle"] = package_path + "/" + runner_service_name + ".bundle.tar"
+        test_config["service_id"] = "ai.intrinsic." + runner_service_name
+        test_config["service_name"] = runner_service_name
+
     if ctx.attr.application:
         test_config["solution"] = to_rlocation_path(ctx, ctx.executable.application)
     if ctx.attr.notebooks:
@@ -40,14 +57,32 @@ def _gen_test_script_impl(ctx):
             "type": "behavior_tree",
         })
     if ctx.attr.binary:
-        test_config["tests"].append({
-            "files": [to_rlocation_path(ctx, ctx.executable.binary)],
-            "params": [
+        if ctx.attr.run_as_service and ctx.executable.original_binary:
+            orig_path = to_rlocation_path(ctx, ctx.executable.original_binary)
+            params = [
+                "--server_address=localhost:5051",
+                "--target_module=" + orig_path,
+                "--action=start",
+                "--run_id=" + ctx.label.name,
+                "--",
+            ] + [
                 ctx.expand_location(arg, targets = ctx.attr.binary_data)
                 for arg in ctx.attr.binary_params
-            ],
-            "type": "binary",
-        })
+            ]
+            test_config["tests"].append({
+                "files": [to_rlocation_path(ctx, ctx.executable.binary)],
+                "params": params,
+                "type": "binary",
+            })
+        else:
+            test_config["tests"].append({
+                "files": [to_rlocation_path(ctx, ctx.executable.binary)],
+                "params": [
+                    ctx.expand_location(arg, targets = ctx.attr.binary_data)
+                    for arg in ctx.attr.binary_params
+                ],
+                "type": "binary",
+            })
     elif ctx.attr.binary_params:
         fail("binary_params are set but no binary is specified")
     elif ctx.attr.binary_data:
@@ -88,6 +123,9 @@ _gen_test_script = rule(
         "binary_params": attr.string_list(),
         "notebooks": attr.label_list(allow_files = True),
         "operation_mode": attr.string(values = ["sim", "real"]),
+        "original_binary": attr.label(executable = True, cfg = "target"),
+        "run_as_service": attr.bool(default = False),
+        "service": attr.label(),
         "_test_generator": attr.label(
             default = Label("//intrinsic/apps/testing/e2e:testgen"),
             cfg = "exec",
@@ -114,8 +152,13 @@ def _app_e2e_test_impl(
         binary,
         binary_params,
         binary_data,
+        run_as_service,
+        service,
         size,
-        timeout_minutes):
+        timeout_minutes,
+        tags = [],
+        testonly = True,
+        **kwargs):
     if not notebooks and not behavior_trees and not binary:
         fail("Must specify at least one notebook, behavior tree, or binary")
 
@@ -132,20 +175,38 @@ def _app_e2e_test_impl(
         data += behavior_trees
         data.append(Label("//intrinsic/apps/testing/e2e:test_behavior_tree"))
 
+    original_binary = None
     if binary:
-        # Embed "args" and "env" to ensure they are passed to the wrapped test.
-        wrapped_test(
-            name = name + "_wrapped",
-            target = binary,
-            tags = [
-                "manual",
-            ],
-            visibility = ["//visibility:private"],
-        )
-        binary = name + "_wrapped"
+        if run_as_service:
+            if not service:
+                fail("Must specify 'service' target when 'run_as_service' is True.")
+            original_binary = binary
+            # Use remote_service_bridge as the binary to execute on host
 
-        data.append(binary)
-        data.extend(binary_data)
+            binary = Label("//intrinsic/performance/service:remote_service_bridge")
+            data.append(binary)
+
+            # Resolve and add the service bundle target dependency
+            service_label = service
+            repo = service_label.workspace_name
+            repo_prefix = "@" + repo if repo else ""
+            bundle_target = repo_prefix + "//" + service_label.package + ":" + service_label.name + ".bundle.tar"
+            data.append(bundle_target)
+        else:
+            # Embed "args" and "env" to ensure they are passed to the wrapped test.
+            wrapped_test(
+                name = name + "_wrapped",
+                target = binary,
+                tags = [
+                    "manual",
+                ] + tags,
+                testonly = testonly,
+                visibility = ["//visibility:private"],
+            )
+            binary = name + "_wrapped"
+
+            data.append(binary)
+            data.extend(binary_data)
 
     test_script = name + "_sh"
     _gen_test_script(
@@ -158,8 +219,11 @@ def _app_e2e_test_impl(
         binary = binary,
         binary_params = binary_params,
         binary_data = binary_data,
-        tags = ["manual"],
-        testonly = True,
+        original_binary = original_binary,
+        run_as_service = run_as_service,
+        service = service,
+        tags = ["manual"] + tags,
+        testonly = testonly,
         visibility = ["//visibility:private"],
     )
 
@@ -174,11 +238,13 @@ def _app_e2e_test_impl(
         },
         tags = [
             "manual",
-        ],
+        ] + tags,
+        testonly = testonly,
         deps = [
             Label("//intrinsic/apps/testing/e2e:app_e2e_test"),
         ],
         visibility = visibility,
+        **kwargs
     )
 
 app_e2e_test = macro(
@@ -207,9 +273,6 @@ app_e2e_test = macro(
         //<path_to_test>:<test_name> -- --my_flag=my_value
     """,
     attrs = {
-        # Note: Most attributes require configurable=False such that we can access their
-        # value in the macro (otherwise we'd get `select` objects instead of values).
-        # See https://github.com/bazelbuild/bazel/issues/24674.
         "application": attr.label(
             executable = True,
             cfg = "target",
@@ -251,6 +314,15 @@ app_e2e_test = macro(
             values = ["sim", "real"],
             default = "sim",
             doc = "Operation mode for solution.",
+        ),
+        "run_as_service": attr.bool(
+            default = False,
+            configurable = False,
+            doc = "Whether to run the binary as a service.",
+        ),
+        "service": attr.label(
+            configurable = False,
+            doc = "The pre-declared test_runner_service target when run_as_service = True.",
         ),
         "size": attr.string(
             default = "large",

@@ -21,6 +21,7 @@ package main
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"io"
 	"log"
@@ -231,7 +232,19 @@ func proxyHandler(backendConn *grpc.ClientConn, allowedServices []string, state 
 		clientCtx, clientCancel := context.WithCancel(metadata.NewOutgoingContext(serverStream.Context(), md.Copy()))
 		defer clientCancel()
 
-		// C. Initialize Backend Stream
+		// C. Pre-read unary request frame for fallback-capable methods before opening
+		// the backend stream. This guarantees that the request payload is captured
+		// before any backend communication or fallback handling takes place and avoids
+		// concurrent serverStream.RecvMsg calls during fallback execution.
+		var initialReqFrame *rawFrame
+		if isUnaryFallbackMethod(serviceName, methodName) {
+			initialReqFrame = &rawFrame{}
+			if err := serverStream.RecvMsg(initialReqFrame); err != nil {
+				return err
+			}
+		}
+
+		// D. Initialize Backend Stream
 		desc := &grpc.StreamDesc{
 			ServerStreams: true,
 			ClientStreams: true,
@@ -241,34 +254,33 @@ func proxyHandler(backendConn *grpc.ClientConn, allowedServices []string, state 
 			return err
 		}
 
-		// D. Bidirectional Data Pipe
+		// E. Bidirectional Data Pipe
 		errChan := make(chan error, 2)
-
-		// For ApplyConfiguration, read the initial unary request frame synchronously upfront.
-		// This guarantees that the request payload is reliably captured before any backend
-		// communication or fallback handling can take place, eliminating any timing races.
-		var initialReqFrame *rawFrame
-		if serviceName == dynamicReconfigService && methodName == applyConfigMethod {
-			initialReqFrame = &rawFrame{}
-			if err := serverStream.RecvMsg(initialReqFrame); err != nil {
-				return err
-			}
-		}
 
 		// Goroutine: Client -> Backend
 		go func() {
-			// If we pre-read the initial frame, forward it to backend first.
+			// If we pre-read the unary request frame, forward it to backend,
+			// close the sending direction, and exit without touching serverStream.
 			if initialReqFrame != nil {
 				if err := backendStream.SendMsg(initialReqFrame); err != nil {
+					if errors.Is(err, io.EOF) {
+						// ClientStream.SendMsg returns io.EOF when the backend aborts the stream;
+						// the authoritative gRPC status is retrieved by the Backend -> Client goroutine.
+						errChan <- nil
+						return
+					}
 					errChan <- err
 					return
 				}
+				backendStream.CloseSend()
+				errChan <- nil
+				return
 			}
 
 			for {
 				f := &rawFrame{}
 				err := serverStream.RecvMsg(f)
-				if err == io.EOF {
+				if errors.Is(err, io.EOF) {
 					// Client is done sending. Close the sending direction of the backend stream.
 					backendStream.CloseSend()
 					errChan <- nil
@@ -279,6 +291,10 @@ func proxyHandler(backendConn *grpc.ClientConn, allowedServices []string, state 
 					return
 				}
 				if err := backendStream.SendMsg(f); err != nil {
+					if errors.Is(err, io.EOF) {
+						errChan <- nil
+						return
+					}
 					errChan <- err
 					return
 				}
@@ -347,6 +363,14 @@ func proxyHandler(backendConn *grpc.ClientConn, allowedServices []string, state 
 
 		return nil
 	}
+}
+
+// isUnaryFallbackMethod returns true if the RPC is a unary method that supports
+// local fallback handling when the backend returns Unimplemented or Gazebo FailedPrecondition.
+func isUnaryFallbackMethod(serviceName, methodName string) bool {
+	return (serviceName == dynamicReconfigService && methodName == applyConfigMethod) ||
+		(serviceName == cameraConfigService && methodName == getCameraConfigMethod) ||
+		(serviceName == serviceState && (methodName == "GetState" || methodName == "Enable" || methodName == "Disable"))
 }
 
 // updateConfigFromApplyRequest unmarshals an ApplyConfigurationRequest payload and

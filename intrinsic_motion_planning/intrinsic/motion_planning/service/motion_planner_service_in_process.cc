@@ -32,6 +32,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.grpc.pb.h"
 #include "intrinsic/motion_planning/service/motion_planner_service.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
+#include "intrinsic/motion_planning/service/motion_planner_service_test_fixture.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/service/test/world_service_fake.h"
 
@@ -77,20 +78,6 @@ MotionPlannerServiceInProcess::Create(
   auto service_in_process = std::make_unique<MotionPlannerServiceInProcess>();
   service_in_process->geometry_library_ = geometry_library;
 
-  // Prepare stub to parameterization service, create a client, and use it
-  // within the construction of the motion planner service.
-  MotionPlannerFlags maybe_modified_flags = flags;
-  if (maybe_modified_flags.parameterization_service_address.empty()) {
-    absl::Status status = service_in_process->SetUpAndUpdateFlags(
-        /*set_infinite_jerk_limits=*/false, maybe_modified_flags);
-    if (!status.ok() && !absl::IsUnimplemented(status)) {
-      // In OSS builds, jerk-limited trajectory parameterization is unavailable
-      // so `SetUpAndUpdateFlags` returns an `UnimplementedError`. We ignore
-      // this error in OSS mode, but check all other errors.
-      CHECK_OK(status);
-    }
-  }
-
   absl::StatusOr<std::unique_ptr<MotionPlannerService>>
       motion_planner_service_status = MotionPlannerService::Create(
           object_world_service, geometry_library.get(),
@@ -101,7 +88,7 @@ MotionPlannerServiceInProcess::Create(
           MotionPlannerServiceConfig{
               .workcell_name = std::string(kTestWorkcellName),
               .organization_id = std::string(kTestOrgId),
-              .flags = maybe_modified_flags});
+              .flags = flags});
   CHECK_OK(motion_planner_service_status);
   service_in_process->service_ =
       std::move(motion_planner_service_status.value());

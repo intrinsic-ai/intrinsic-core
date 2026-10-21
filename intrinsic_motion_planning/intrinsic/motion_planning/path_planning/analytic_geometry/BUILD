@@ -39,8 +39,8 @@ cc_library(
     ],
     deps = [
         ":types",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
     ],
 )

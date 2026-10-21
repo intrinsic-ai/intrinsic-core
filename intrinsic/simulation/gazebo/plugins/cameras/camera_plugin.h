@@ -35,6 +35,7 @@
 #include "gz/sim/EventManager.hh"
 #include "gz/sim/System.hh"
 #include "gz/transport/Node.hh"
+#include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/core/camera_params.h"
@@ -49,8 +50,7 @@
 ABSL_DECLARE_FLAG(bool, stream_simulated_images_to_pubsub);
 ABSL_DECLARE_FLAG(absl::Duration, render_engine_initialization_timeout);
 
-namespace intrinsic {
-namespace simulation {
+namespace intrinsic::simulation {
 
 // A plugin for serving RGB or RGB + Depth camera images from Gazebo to the
 // simulation camera server.
@@ -130,6 +130,7 @@ class CameraPlugin : public gz::sim::System, public gz::sim::ISystemConfigure {
   // constructible.
   std::optional<intrinsic::perception::CameraParams> camera_params_ =
       std::nullopt;
+  Pose3d camera_t_sensor_;
   std::unique_ptr<intrinsic::perception::GazeboCameraConnection> connection_;
 
   PixelTypeToIdMap sensor_ids_by_pixel_type_;
@@ -156,7 +157,6 @@ class CameraPlugin : public gz::sim::System, public gz::sim::ISystemConfigure {
   std::string trigger_topic_;
 };
 
-}  // namespace simulation
-}  // namespace intrinsic
+}  // namespace intrinsic::simulation
 
 #endif  // INTRINSIC_SIMULATION_GAZEBO_PLUGINS_CAMERAS_CAMERA_PLUGIN_H_

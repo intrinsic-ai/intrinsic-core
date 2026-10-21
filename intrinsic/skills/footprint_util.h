@@ -32,15 +32,23 @@ namespace intrinsic {
 const intrinsic_proto::skills::Footprint& LockTheUniverseFootprint();
 
 // Converts a Footprint proto to a WorldACLSpec for use with a World object.
+// Processes explicit entity and object reservations (and lock_the_universe) to
+// establish read/write access control on world entities. Volume reservations do
+// not synthesize entity ACLs and are deconflicted geometrically in
+// `AreFootprintsCompatible()`.
 absl::StatusOr<WorldACLSpec> ToWorldACLSpec(
     const World& world, const intrinsic_proto::skills::Footprint& footprint,
     const GeometryDeserializer& geolib);
 
-// Returns ok status if the given footprints do not contain conflicting acls
-// for the same entity. Conflicting in this case means the same as for a mutex,
-// if they both have read permissions then they can co-exist, if either has a
-// write permission then we will return an error because they are not
-// compatible.
+// Returns ok status if the given footprints are compatible for concurrent
+// execution.
+// Evaluates compatibility in two stages:
+// 1. Stage 1 (World ACL Spec): Checks that entity and object reservations do
+//    not contain conflicting access permissions (e.g. read/write mutexes on the
+//    same entity).
+// 2. Stage 2 (Geometric Clearance): Checks that 3D volume reservations between
+//    the two footprints do not intersect in workspace coordinates (via
+//    `HasVolumeConflict()`).
 absl::Status AreFootprintsCompatible(
     const World& world, const GeometryDeserializer& geolib,
     const intrinsic_proto::skills::Footprint& footprint_left,

@@ -18,12 +18,35 @@
 #include <vector>
 
 #include "absl/status/statusor.h"
+#include "intrinsic/perception/core/image.h"
 #include "intrinsic/perception/core/image_traits.h"
 
 namespace intrinsic::perception {
 
 // Enumerates the supported HDR methods.
 enum class HdrOperator { kMertens };
+
+// Merges a set of LDR frames into one HDR frame using Mertens fusion on the
+// CPU.
+// `ldr_images` must contain at least 2 non-null images with dimensions greater
+// than 1x1 (returns `absl::StatusCode::kInvalidArgument` otherwise).
+// `contrast_weight`, `saturation_weight`, and `exposure_weight` are the
+// exponent weights for the Mertens contrast, saturation, and well-exposedness
+// quality measures.
+// Explicitly instantiated for `Gray8u` and `Rgb8u`.
+template <typename ImageTraits>
+absl::StatusOr<Image<ImageTraits>> ComputeHdrMertensCpu(
+    const std::vector<const Image<ImageTraits>*>& ldr_images,
+    float contrast_weight = 1.0f, float saturation_weight = 1.0f,
+    float exposure_weight = 1.0f);
+
+extern template absl::StatusOr<Image<Gray8u>> ComputeHdrMertensCpu(
+    const std::vector<const Image<Gray8u>*>& ldr_images, float contrast_weight,
+    float saturation_weight, float exposure_weight);
+
+extern template absl::StatusOr<Image<Rgb8u>> ComputeHdrMertensCpu(
+    const std::vector<const Image<Rgb8u>*>& ldr_images, float contrast_weight,
+    float saturation_weight, float exposure_weight);
 
 // Merges a set of LDR frames into one HDR frame.
 template <typename ImageTraits>

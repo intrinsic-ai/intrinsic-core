@@ -20,9 +20,15 @@ import "intrinsic/assets/proto/field_metadata.proto";
 import "intrinsic/assets/proto/v1/resolved_dependency.proto";
 import "intrinsic/icon/proto/joint_space.proto";
 import "intrinsic/icon/proto/v1/condition_types.proto";
+
+import "intrinsic/icon/proto/v1/motion_event_types.proto";
+
 import "intrinsic/kinematics/types/joint_limits.proto";
 import "intrinsic/motion_planning/proto/v1/geometric_constraints.proto";
 import "intrinsic/motion_planning/proto/v1/motion_blending_parameter.proto";
+
+import "intrinsic/motion_planning/proto/v1/motion_events.proto";
+
 import "intrinsic/motion_planning/proto/v1/motion_planner_config.proto";
 import "intrinsic/motion_planning/proto/v1/motion_planning_limits.proto";
 import "intrinsic/skills/proto/skill_parameter_metadata.proto";
@@ -117,6 +123,19 @@ message MoveUntilSignalParameters {
   // condition evaluates to True, the motion will stop.
   optional intrinsic_proto.icon.v1.Condition move_until_signal_condition = 4;
 }
+
+message MotionSegmentEvent {
+  // The location on the motion segment to trigger the event.
+  intrinsic_proto.motion_planning.v1.MotionEventSegmentLocation event_location =
+      1;
+  // The desired effect of the event.
+  intrinsic_proto.icon.v1.TrajectoryEvent trajectory_event = 3;
+
+  reserved 2;
+  reserved "event";
+}
+
+
 message ExecutionParameters {
   // Specify whether or not to ignore the is_settled criterion during motion
   // execution. The settling
@@ -214,6 +233,14 @@ message MotionSegment {
   // apply to the origin of the moving frame defined in the motion target.
   optional intrinsic_proto.motion_planning.v1.DynamicCartesianLimits
       cartesian_limits = 10;
+
+  // `MotionSegmentEvent`s that are triggered during the motion segment. An
+  // arbitrary number of events can be added to the motion segment which will be
+  // triggered based on the `event_location` field. Motion events can be used to
+  // trigger analog and digital output signals with real-time accuracy at
+  // predetermined locations on the trajectory.
+  repeated MotionSegmentEvent motion_segment_events = 14;
+
 }
 
 message MoveRobotParams {
@@ -259,7 +286,6 @@ message MoveRobotParams {
   // motions. You should not typically need this option if you are planning
   // online.
   optional bool plan_using_last_commanded_position = 10;
-
   reserved 4, 5, 6, 7;
 }
 
@@ -277,6 +303,11 @@ message MoveRobotExecutionPlan {
   intrinsic_proto.icon.JointTrajectoryPVA planned_trajectory = 1;
   // Robot specifications from the motion planning request
   RobotSpecifications robot_specifications = 2;
+
+
+  // Motion events from the motion planning request.
+  repeated intrinsic_proto.motion_planning.v1.MotionEvent motion_events = 3;
+
 }
 
 message MoveRobotReturnValue {

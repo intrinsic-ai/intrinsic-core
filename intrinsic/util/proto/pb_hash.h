@@ -40,7 +40,8 @@ struct pb_hash {
       ::google::protobuf::io::StringOutputStream sos(&serialized);
       ::google::protobuf::io::CodedOutputStream cos(&sos);
       cos.SetSerializationDeterministic(true);
-      message.SerializeToCodedStream(&cos);
+      static_cast<void>(
+          message.SerializeToCodedStream(&cos));  // TODO: Handle return value
     }
     return std::hash<std::string>{}(serialized);
   }

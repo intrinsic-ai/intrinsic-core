@@ -26,8 +26,9 @@ cc_library(
     srcs = ["action_utils.cc"],
     hdrs = ["action_utils.h"],
     deps = [
-        "//intrinsic/util/proto:descriptors",
         "//intrinsic_control/intrinsic/icon/release:source_location",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
@@ -165,7 +166,6 @@ cc_library(
     deps = [
         ":cartesian_impedance_cc_proto",
         ":cartesian_impedance_reference_generators_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/proto:cart_space_conversion",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
         "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
@@ -175,6 +175,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/math:twist",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

@@ -121,9 +121,13 @@ UserDataFromString(const std::string& textproto,
           textproto));
 
   std::string serialized;
-  parsed_msg.message->SerializeToString(&serialized);
+  if (!parsed_msg.message->SerializeToString(&serialized)) {
+    return absl::InternalError("Failed to serialize dynamic message.");
+  }
   SceneObject scene_object;
-  scene_object.ParseFromString(serialized);
+  if (!scene_object.ParseFromString(serialized)) {
+    return absl::InternalError("Failed to parse scene object proto.");
+  }
   return scene_object.user_data();
 }
 

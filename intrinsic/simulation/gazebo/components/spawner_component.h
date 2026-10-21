@@ -39,14 +39,16 @@ class PoseSerializer {
  public:
   static std::ostream& Serialize(std::ostream& _out,
                                  const intrinsic::Pose3d& _pose) {
-    ToProto(_pose).SerializeToOstream(&_out);
+    static_cast<void>(
+        ToProto(_pose).SerializeToOstream(&_out));  // TODO: Handle return value
     return _out;
   }
 
   static std::istream& Deserialize(std::istream& _in,
                                    intrinsic::Pose3d& _pose) {
     intrinsic_proto::Pose pose_proto;
-    pose_proto.ParseFromIstream(&_in);
+    static_cast<void>(
+        pose_proto.ParseFromIstream(&_in));  // TODO: Handle return value
     _pose = std::move(*intrinsic_proto::FromProtoNormalized(pose_proto));
     return _in;
   }

@@ -119,7 +119,34 @@ int GetReferencePrecedence(
   return 3;
 }
 
-// Returns true if a should come before b.
+bool CompareReferenceLists(
+    const google::protobuf::RepeatedPtrField<
+        intrinsic_proto::world::ObjectOrEntityReference>& a,
+    const google::protobuf::RepeatedPtrField<
+        intrinsic_proto::world::ObjectOrEntityReference>& b) {
+  return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(),
+                                      &CompareReferences);
+}
+
+bool CompareCollisionActions(const intrinsic_proto::world::CollisionAction& a,
+                             const intrinsic_proto::world::CollisionAction& b) {
+  if (a.action_case() != b.action_case()) {
+    return a.action_case() < b.action_case();
+  }
+  switch (a.action_case()) {
+    case intrinsic_proto::world::CollisionAction::kIsExcluded:
+      // Orders `false` (not excluded) before `true` (excluded).
+      return a.is_excluded() < b.is_excluded();
+    case intrinsic_proto::world::CollisionAction::kMargin:
+      return a.margin().hard_margin() < b.margin().hard_margin();
+    case intrinsic_proto::world::CollisionAction::ACTION_NOT_SET:
+      return false;
+  }
+  return false;
+}
+
+}  // namespace
+
 bool CompareReferences(
     const intrinsic_proto::world::ObjectOrEntityReference& a,
     const intrinsic_proto::world::ObjectOrEntityReference& b) {
@@ -202,34 +229,6 @@ bool CompareReferences(
   // References are equal, return false for strict weak ordering.
   return false;
 }
-
-bool CompareReferenceLists(
-    const google::protobuf::RepeatedPtrField<
-        intrinsic_proto::world::ObjectOrEntityReference>& a,
-    const google::protobuf::RepeatedPtrField<
-        intrinsic_proto::world::ObjectOrEntityReference>& b) {
-  return std::lexicographical_compare(a.begin(), a.end(), b.begin(), b.end(),
-                                      &CompareReferences);
-}
-
-bool CompareCollisionActions(const intrinsic_proto::world::CollisionAction& a,
-                             const intrinsic_proto::world::CollisionAction& b) {
-  if (a.action_case() != b.action_case()) {
-    return a.action_case() < b.action_case();
-  }
-  switch (a.action_case()) {
-    case intrinsic_proto::world::CollisionAction::kIsExcluded:
-      // Orders `false` (not excluded) before `true` (excluded).
-      return a.is_excluded() < b.is_excluded();
-    case intrinsic_proto::world::CollisionAction::kMargin:
-      return a.margin().hard_margin() < b.margin().hard_margin();
-    case intrinsic_proto::world::CollisionAction::ACTION_NOT_SET:
-      return false;
-  }
-  return false;
-}
-
-}  // namespace
 
 bool CompareCollisionRules(
     const intrinsic_proto::world::CollisionSettings::CollisionRule& lhs,

@@ -12,50 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_library")
+package(default_visibility = [
+    "//intrinsic/tools/inctl:__subpackages__",
+    "//intrinsic_sdk/intrinsic/tools/inctl:__subpackages__",
+])
 
-package(default_visibility = ["//intrinsic/tools/inctl:__subpackages__"])
-
-go_library(
-    name = "cluster",
-    srcs = [
-        "cluster.go",
-        "delete.go",
-        "list.go",
-        "mode.go",
-        "poweroff.go",
-        "syslog.go",
-        "upgrade.go",
-        "ups.go",
-    ],
-    importpath = "intrinsic/tools/inctl/cmd/cluster/cluster",
-    visibility = [
-        "//intrinsic/tools/inctl:__subpackages__",
-    ],
-    deps = [
-        "//intrinsic/assets:clientutils",
-        "//intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
-        "//intrinsic/skills/tools/skill/cmd:dialerutil",
-        "//intrinsic/tools/inctl/auth",
-        "//intrinsic/tools/inctl/cmd:root",
-        "//intrinsic/tools/inctl/util:agents",
-        "//intrinsic/tools/inctl/util:cobrautil",
-        "//intrinsic/tools/inctl/util:orgutil",
-        "//intrinsic/tools/inctl/util:printer",
-        "//incode/cloud/devicemanager/version",
-        "//incode/frontend/cloud/api/v1:clustermanager_api_go_proto",
-        "@com_github_pkg_errors//:go_default_library",
-        "@com_github_spf13_cobra//:go_default_library",
-        "@com_github_spf13_viper//:go_default_library",
-        "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
-        "@intrinsic_apis//intrinsic/frontend/cloud/api/v1:clusterdiscovery_api_go_proto",
-        "@intrinsic_apis//intrinsic/frontend/cloud/api/v1alpha1:clustermanager_api_go_proto",
-        "@intrinsic_apis//intrinsic/kubernetes/inversion/v1:inversion_go_proto",
-        "@intrinsic_apis//intrinsic/kubernetes/workcellmode/proto:workcellmode_service_go_proto",
-        "@org_golang_google_grpc//:go_default_library",
-        "@org_golang_google_grpc//codes:go_default_library",
-        "@org_golang_google_grpc//credentials/insecure:go_default_library",
-        "@org_golang_google_grpc//status:go_default_library",
-        "@org_golang_google_protobuf//types/known/fieldmaskpb",
-    ],
+exports_files(
+    ["syslog.go"],
+    visibility = ["//intrinsic_sdk/intrinsic/tools/inctl/cmd/cluster:__pkg__"],
 )

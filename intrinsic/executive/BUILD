@@ -14,7 +14,7 @@
 
 load("//bazel:cc_macros.bzl", "cc_binary")
 load("//bazel:cc_oci_image.bzl", "cc_oci_image")
-load("//intrinsic/util/proto/build_defs:proto_data.bzl", "proto_data")
+load("//intrinsic_sdk/intrinsic/util/proto/build_defs:proto_data.bzl", "proto_data")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -33,7 +33,7 @@ cc_binary(
     data = [
         ":status_specs_message",
         "//intrinsic/executive/clips",
-        "//intrinsic/executive/proto:world_query_proto_descriptor_set",
+        "//intrinsic_sdk/intrinsic/executive/proto:world_query_proto_descriptor_set",
     ],
     deps = [
         "//intrinsic/executive/engine:clips_executive_service",
@@ -41,12 +41,12 @@ cc_binary(
         "//intrinsic/executive/engine:extended_status_codes",
         "//intrinsic/executive/proto:process_tree_cc_proto",  # fixdeps: keep
         "//intrinsic/stats:opencensus",
-        "//intrinsic/util/path_resolver",
-        "//intrinsic/util/status:return",
-        "//intrinsic/util/status:status_builder",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic/util/status:status_specs",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
+        "//intrinsic_sdk/intrinsic/util/path_resolver",
+        "//intrinsic_sdk/intrinsic/util/status:return",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_specs",
         "//intrinsic_sdk/intrinsic/util/thread",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log",

@@ -18,15 +18,29 @@ package intrinsic_proto.skills;
 
 import "intrinsic/assets/proto/field_metadata.proto";
 import "intrinsic/assets/proto/v1/resolved_dependency.proto";
+import "intrinsic/icon/proto/v1/field_metadata.proto";
 import "intrinsic/perception/proto/v1/pattern_detection_config.proto";
 import "intrinsic/perception/proto/v1/pose_estimator_id.proto";
-import "intrinsic/skills/proto/skill_parameter_metadata.proto";
 import "intrinsic/world/proto/object_world_refs.proto";
 
 option go_package = "intrinsic/perception/skills/calibration/initialize_calibration_go_proto";
 
-// Next ID: 10
+// Next ID: 11
 message InitializeCalibrationParams {
+  // Robot used for calibration.
+  intrinsic_proto.assets.v1.ResolvedDependency robot = 10
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.icon.v1.IconApi",
+        skill_annotations: { fallback_manifest_dependency_key: "robot" }
+      }];
+
+  // Name of the ICON arm part to control. If not provided but only a single
+  // arm part is present in the ICON instance, that part will be used.
+  optional intrinsic_proto.world.ObjectReference arm_part = 3 [
+    (intrinsic_proto.assets.field_metadata) = { is_icon2_position_part: true },
+    (intrinsic_proto.icon.v1.field_metadata) = { resolved_at_runtime: "robot" }
+  ];
+
   intrinsic_proto.assets.v1.ResolvedDependency data_assets_service = 5
       [(intrinsic_proto.assets.field_metadata).dependency = {
         requires: "grpc://intrinsic_proto.data.v1.DataAssets"
@@ -53,12 +67,6 @@ message InitializeCalibrationParams {
     intrinsic_proto.perception.v1.PatternDetectionConfig
         pattern_detection_config = 2;
   }
-  // Name of the ICON arm part to control. If not provided but only a single
-  // arm part is present in the ICON instance, that part will be used.
-  optional intrinsic_proto.world.ObjectReference arm_part = 3
-      [(intrinsic_proto.skills.skill_parameter_metadata) = {
-        is_icon2_position_part: true
-      }];
 
   // Unique identifier of the object used for calibration (typically, a
   // calibration pattern).

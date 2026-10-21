@@ -398,4 +398,52 @@ std::vector<EpicIndexedTriangleSet3> FromCoacdMeshes(
   return output;
 }
 
+MeshoptBuffers ToMeshoptBuffers(const Mesh& mesh) {
+  const size_t vertex_count = mesh.vertex_count();
+  const size_t face_count = mesh.face_count();
+
+  MeshoptBuffers buffers;
+  buffers.vertex_positions.resize(vertex_count * 3);
+  for (size_t i = 0; i < vertex_count; ++i) {
+    const auto& v = mesh.vertex(i);
+    buffers.vertex_positions[i * 3] = static_cast<float>(v.x());
+    buffers.vertex_positions[i * 3 + 1] = static_cast<float>(v.y());
+    buffers.vertex_positions[i * 3 + 2] = static_cast<float>(v.z());
+  }
+
+  buffers.indices.resize(face_count * 3);
+  for (size_t i = 0; i < face_count; ++i) {
+    const auto& f = mesh.face(i);
+    buffers.indices[i * 3] = static_cast<uint32_t>(f[0]);
+    buffers.indices[i * 3 + 1] = static_cast<uint32_t>(f[1]);
+    buffers.indices[i * 3 + 2] = static_cast<uint32_t>(f[2]);
+  }
+
+  return buffers;
+}
+
+Mesh FromMeshoptBuffers(const MeshoptBuffers& buffers) {
+  const size_t vertex_count = buffers.vertex_positions.size() / 3;
+  const size_t index_count = buffers.indices.size();
+
+  Mesh::VertexCollection vertices;
+  vertices.reserve(vertex_count);
+  for (size_t i = 0; i < vertex_count; ++i) {
+    vertices.emplace_back(
+        static_cast<double>(buffers.vertex_positions[i * 3]),
+        static_cast<double>(buffers.vertex_positions[i * 3 + 1]),
+        static_cast<double>(buffers.vertex_positions[i * 3 + 2]));
+  }
+
+  Mesh::FaceCollection faces;
+  faces.reserve(index_count / 3);
+  for (size_t i = 0; i + 2 < index_count; i += 3) {
+    faces.emplace_back(static_cast<Mesh::IndexType>(buffers.indices[i + 0]),
+                       static_cast<Mesh::IndexType>(buffers.indices[i + 1]),
+                       static_cast<Mesh::IndexType>(buffers.indices[i + 2]));
+  }
+
+  return Mesh(std::move(vertices), std::move(faces));
+}
+
 }  // namespace intrinsic::geo

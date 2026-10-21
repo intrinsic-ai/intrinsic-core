@@ -40,6 +40,7 @@
 #include "absl/types/span.h"
 #include "google/protobuf/empty.pb.h"
 #include "grpcpp/client_context.h"
+#include "grpcpp/support/time.h"  // for grpc::TimePoint<absl::Time>
 #include "intrinsic/executive/clips_cpp/assert_facade.h"
 #include "intrinsic/executive/clips_cpp/function_facade.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
@@ -48,7 +49,6 @@
 #include "intrinsic/executive/proto/any_list.pb.h"
 #include "intrinsic/executive/proto/world_query.pb.h"
 #include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
-#include "intrinsic/icon/release/grpc_time_support.h"  // for grpc::TimePoint<absl::Time>
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/skills/internal/conflicts.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
@@ -69,8 +69,6 @@
 #include "intrinsic/world/proto/object_world_updates.pb.h"
 #include "intrinsic/world/service/updater/world_updater.grpc.pb.h"
 #include "intrinsic/world/service/updater/world_updater.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.pb.h"
 #include "intrinsic/world/util/remove_redundant_updates.h"
 #include "intrinsic/world/world.pb.h"
 #include "opentelemetry/trace/span.h"
@@ -121,7 +119,8 @@ intrinsic_proto::executive::AnyList ConvertIdNameToAnyList(
   for (const intrinsic_proto::world::IdAndName& id_name : id_name_list) {
     M ref;
     ref.set_id(id_name.id());
-    any_list.add_items()->PackFrom(ref);
+    static_cast<void>(
+        any_list.add_items()->PackFrom(ref));  // TODO: Handle return value
   }
   return any_list;
 }
@@ -140,7 +139,8 @@ intrinsic_proto::executive::AnyList ExtractNamedJointConfigurations(
   }
   for (const intrinsic_proto::world::IdAndName& id_name : id_name_list) {
     if (joint_configs.contains(id_name.name())) {
-      any_list.add_items()->PackFrom(joint_configs[id_name.name()]);
+      static_cast<void>(any_list.add_items()->PackFrom(
+          joint_configs[id_name.name()]));  // TODO: Handle return value
     }
   }
   return any_list;
@@ -195,15 +195,12 @@ ClipsWorld::ClipsWorld(
     clips::ProtobufManager* proto_manager,
     clips::TraceSpanManager* span_manager,
     intrinsic_proto::world::ObjectWorldService::StubInterface* object_stub,
-    intrinsic_proto::world::WorldUpdater::StubInterface* world_updater_stub,
-    intrinsic_proto::world::WorldCompatibilityService::StubInterface*
-        compatibility_stub)
+    intrinsic_proto::world::WorldUpdater::StubInterface* world_updater_stub)
     : assert_facade_(assert_facade),
       proto_manager_(proto_manager),
       span_manager_(span_manager),
       object_world_service_stub_(object_stub),
-      world_updater_stub_(world_updater_stub),
-      world_compatibility_service_stub_(compatibility_stub) {}
+      world_updater_stub_(world_updater_stub) {}
 
 absl::Status ClipsWorld::Init(clips::EnvironmentFunctionFacade* facade) {
   // Create a thread pool with 10 threads.
@@ -296,12 +293,11 @@ absl::StatusOr<clips::ProtoMessageId> ClipsWorld::DownloadObjectWorld(
     const std::string& world_id) {
   grpc::ClientContext context;
   intrinsic::ConfigureClientContext(&context);
-  intrinsic_proto::world::GetWorldWithEntitiesRequest request;
+  intrinsic_proto::world::ListObjectsRequest request;
   request.set_world_id(world_id);
-  intrinsic_proto::world::WorldWithEntities response;
-  INTR_RETURN_IF_ERROR(
-      ToAbslStatus(world_compatibility_service_stub_->GetWorldWithEntities(
-          &context, request, &response)));
+  intrinsic_proto::world::ListObjectsResponse response;
+  INTR_RETURN_IF_ERROR(ToAbslStatus(
+      object_world_service_stub_->ListObjects(&context, request, &response)));
   return proto_manager_->AddGeneratedProto(response);
 }
 

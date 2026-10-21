@@ -149,15 +149,15 @@ limitations under the License.
         <pose degrees="true">0.0 0.0 0.0 90.0 -90.0 0.0</pose>
         <update_rate>2.0</update_rate>
         <camera>
-          <horizontal_fov>1.570796</horizontal_fov>
+          <horizontal_fov>1.6406</horizontal_fov>
           <image>
             <width>1280</width>
             <height>800</height>
           </image>
           <lens>
             <intrinsics>
-              <fx>640</fx>
-              <fy>628</fy>
+              <fx>597</fx>
+              <fy>593</fy>
               <cx>640</cx>
               <cy>400</cy>
             </intrinsics>

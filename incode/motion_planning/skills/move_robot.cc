@@ -69,6 +69,9 @@
 #include "intrinsic/motion_planning/proto/v1/motion_blending_parameter.pb.h"
 #include "intrinsic/motion_planning/service/debug/timing_debug_logger.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.grpc.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planning_limits.pb.h"
@@ -507,11 +510,11 @@ absl::StatusOr<intrinsic_proto::skills::Footprint> MoveRobot::GetFootprint(
     robot_object = robot;
   }
 
-  // Precalculate and cache the motion plan.
-  INTR_RETURN_IF_ERROR(GetOrComputePlan(context.context_id(), params,
-                                        context.object_world(),
-                                        context.motion_planner(), robot_object)
-                           .status());
+  // Compute and store the motion plan.
+  INTR_RETURN_IF_ERROR(
+      ComputeAndStorePlan(context.context_id(), params, context.object_world(),
+                          context.motion_planner(), robot_object)
+          .status());
 
   intrinsic_proto::skills::Footprint out;
   INTR_ASSIGN_OR_RETURN(
@@ -572,7 +575,6 @@ MoveRobot::PlanTrajectory(
               .enable_strict_trajectory_fallback();
     }
   }
-
   absl::StatusOr<MotionPlannerClient::PlanTrajectoryResult>
       status_or_trajectory =
           planner.PlanTrajectory(robot_specification, motion_specs,
@@ -615,6 +617,11 @@ MoveRobot::InternalComputePlan(
       trajectory_result.trajectory;
   *execution_plan_result.mutable_robot_specifications() =
       robot_specification_proto;
+
+  *execution_plan_result.mutable_motion_events() = {
+      trajectory_result.motion_events.begin(),
+      trajectory_result.motion_events.end()};
+
   intrinsic_proto::skills::MoveRobotInternalData internal_data;
   *internal_data.mutable_execution_plan() = execution_plan_result;
   if (trajectory_result.lock_motion_id.has_value()) {
@@ -661,17 +668,14 @@ MoveRobot::ComputePlan(
   }
 
   // TODO(kmuelling): Ideally we should plan using the last commanded position
-  // here. However, this is not possible because we cannot get the last
-  // commanded position from ICON in Predict. The world and therefore this
-  // function call only has access to the sensed position which is stored in the
-  // robotics object. If the last commanded position is close to the application
-  // limits, planning/execution might fail because the sensed position is
-  // outside the joint limits. As a workaround, we plan with the sensed position
-  // projected onto the application limits in case of small limits violations.
+  // here. However, this is not possible when called through GetFootprint
+  // because we cannot get the last commanded position from ICON there.
   //
-  // This is a temporary solution until we can get the last commanded position
-  // from ICON in Predict or we remove predict. See b/383717503 for more
-  // details.
+  // As a consequence, we access the sensed position stored in the
+  // `robot_object`. If the last commanded position is close to the application
+  // limits of the robot, the sensed position might violate these limits.
+  // As a workaround, we plan with the sensed position projected onto
+  // the application limits in case of small limits violations.
   //
   // The tolerated limit violation should depend on the robot. As a first
   // approximation, we use the same tolerance for all robots.
@@ -728,13 +732,34 @@ MoveRobot::ComputePlan(
 }
 
 absl::StatusOr<intrinsic_proto::skills::MoveRobotInternalData>
+MoveRobot::ComputeAndStorePlan(
+    absl::string_view context_id,
+    const intrinsic_proto::skills::MoveRobotParams& params,
+    world::ObjectWorldClient& world,
+    motion_planning::MotionPlannerClient& planner,
+    std::optional<world::KinematicObject> robot_object) const {
+  // Drop any plan from a previous projection of this action before planning
+  // (b/569565855). Re-projection under the same `context_id` means the world
+  // may have changed, so the old plan must neither be returned here nor survive
+  // a failed recomputation and be picked up by `Execute()` or `Preview()`.
+  // This removes all keys of the context; MoveRobot only stores "plan".
+  // Note: `Delete()` and `GetOrCompute()` are not atomic, but the Executive
+  // projects an action one call at a time sequentially.
+  if (!context_id.empty()) {
+    GetSkillData().Delete(context_id);
+  }
+  return GetOrComputePlan(context_id, params, world, planner,
+                          std::move(robot_object));
+}
+
+absl::StatusOr<intrinsic_proto::skills::MoveRobotInternalData>
 MoveRobot::GetOrComputePlan(
     absl::string_view context_id,
     const intrinsic_proto::skills::MoveRobotParams& params,
     world::ObjectWorldClient& world,
     motion_planning::MotionPlannerClient& planner,
     std::optional<world::KinematicObject> robot_object) const {
-  auto compute_fn =
+  const auto compute_fn =
       [&]() -> absl::StatusOr<intrinsic_proto::skills::MoveRobotInternalData> {
     return ComputePlan(params, world, planner, robot_object);
   };
@@ -838,6 +863,10 @@ absl::StatusOr<std::unique_ptr<google::protobuf::Message>> MoveRobot::Execute(
 
   logger.Start("get preplanned solution");
   std::optional<intrinsic_proto::icon::JointTrajectoryPVA> preplanned_solution;
+
+  std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>
+      preplanned_motion_events;
+
   INTR_ASSIGN_OR_RETURN(RobotParameters icon_arm_params,
                         ReadICONArmParams(arm_part_info.name, icon_client));
   if (internal_data_proto.has_value()) {
@@ -848,6 +877,13 @@ absl::StatusOr<std::unique_ptr<google::protobuf::Message>> MoveRobot::Execute(
             internal_data_proto.value().execution_plan(),
             JointLimitsXd::Create(icon_arm_params.application_limits),
             icon_arm_params.default_cartesian_limits));
+
+
+    preplanned_motion_events = {
+        internal_data_proto.value().execution_plan().motion_events().begin(),
+        internal_data_proto.value().execution_plan().motion_events().end()};
+
+
     if (internal_data_proto.value().has_lock_motion_id()) {
       return_value->set_lock_motion_id(
           internal_data_proto.value().lock_motion_id());
@@ -902,6 +938,9 @@ absl::StatusOr<std::unique_ptr<google::protobuf::Message>> MoveRobot::Execute(
       return_value->clear_lock_motion_id();
     }
     preplanned_solution.emplace(trajectory_result.trajectory);
+
+    preplanned_motion_events = std::move(trajectory_result.motion_events);
+
   }
 
   if (preplanned_solution.value().state_size() == 0) {
@@ -942,6 +981,10 @@ absl::StatusOr<std::unique_ptr<google::protobuf::Message>> MoveRobot::Execute(
           !parameters.execution_parameters().ignore_is_settled_condition(),
           context.canceller(), move_until_signal_condition,
           &stopped_on_signal
+
+          ,
+          preplanned_motion_events
+
           ))
       .LogError();
   const double execute_joint_trajectory_duration_seconds =
@@ -975,9 +1018,10 @@ absl::StatusOr<std::unique_ptr<::google::protobuf::Message>> MoveRobot::Preview(
   }
 
   INTR_ASSIGN_OR_RETURN(
-      const auto internal_data,
+      const intrinsic_proto::skills::MoveRobotInternalData internal_data,
       GetOrComputePlan(context.context_id(), params, context.object_world(),
-                       context.motion_planner(), robot_object));
+                       context.motion_planner(), robot_object),
+      _ << "Failed to obtain or compute motion plan for Preview.");
 
   const auto& trajectory = internal_data.execution_plan().planned_trajectory();
   absl::Duration previous_time = absl::ZeroDuration();

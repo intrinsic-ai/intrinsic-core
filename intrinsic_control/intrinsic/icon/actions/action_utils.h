@@ -150,17 +150,39 @@ class ActionSignatureBuilder {
   //
   // This indicates that any Part that a client maps to that slot must support
   // all of the Feature Interfaces in `required_feature_interfaces`, and
-  // optionally can support `optional_feature_interfaces`.
+  // optionally can support `optional_feature_interfaces`. If
+  // `required_feature_interfaces` is empty but `optional_feature_interfaces`
+  // is not, the Part must support at least one of
+  // `optional_feature_interfaces`.
   //
-  // If `required_feature_interfaces` is empty, then the slot itself is
-  // optional, i.e. the action can be used without it.
+  // This registers a required slot (`is_optional = false`), even if
+  // `required_feature_interfaces` is empty. To register an optional slot, use
+  // `AddOptionalPartSlot()`.
   //
   // Returns AlreadyExistsError if `slot_name` is already taken.
   absl::Status AddPartSlot(
       absl::string_view slot_name, absl::string_view slot_description,
-      absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>
+      const absl::flat_hash_set<
+          intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
           required_feature_interfaces,
-      absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>
+      const absl::flat_hash_set<
+          intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
+          optional_feature_interfaces = {},
+      intrinsic::SourceLocation loc = intrinsic::SourceLocation::current());
+
+  // Adds an optional Part Slot with the given name, description and Feature
+  // Interfaces.
+  //
+  // The slot is marked optional (`is_optional = true`) and may be omitted from
+  // `SlotPartMap`. Any Part that a client maps to this slot must satisfy the
+  // same Feature Interface rules as for `AddPartSlot()`.
+  absl::Status AddOptionalPartSlot(
+      absl::string_view slot_name, absl::string_view slot_description,
+      const absl::flat_hash_set<
+          intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
+          required_feature_interfaces,
+      const absl::flat_hash_set<
+          intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
           optional_feature_interfaces = {},
       intrinsic::SourceLocation loc = intrinsic::SourceLocation::current());
 

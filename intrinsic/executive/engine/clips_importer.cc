@@ -23,6 +23,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "intrinsic/executive/clips/cc/id_handling.h"
 #include "intrinsic/executive/clips_cpp/environment.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
 #include "intrinsic/executive/engine/skill_client_generator.h"
@@ -190,7 +191,7 @@ absl::Status PerformPostImportValidation(
 }  // namespace
 
 absl::Status ImportProcessTree(
-    const intrinsic_proto::executive::BehaviorTree& behavior_tree,
+    intrinsic_proto::executive::BehaviorTree behavior_tree,
     std::string_view operation_name, Environment* absl_nonnull env,
     ProtobufManager* absl_nonnull proto_manager,
     SkillClientGenerator* absl_nonnull skill_client_generator,
@@ -198,6 +199,10 @@ absl::Status ImportProcessTree(
         diagnostics_for_import,
     bool test_skip_parameter_validation)
     ABSL_EXCLUSIVE_LOCKS_REQUIRED(env->mutex()) {
+
+  INTR_RETURN_IF_ERROR(EnsureUniqueElementIds(behavior_tree));
+
+
   INTR_RETURN_IF_ERROR(
       skill_client_generator->UpdateSkillsAndResources(operation_name));
   absl::flat_hash_set<std::string> ignore_asset_ids = GetNoopActions(env);

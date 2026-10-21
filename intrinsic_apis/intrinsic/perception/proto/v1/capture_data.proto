@@ -30,3 +30,8 @@ message CaptureData {
   // If reference_frame is not specified, this field is not set.
   optional Pose reference_t_camera = 3;
 }
+
+// A list of `CaptureData`, e.g. the outputs of several CaptureImages skills.
+message CaptureDataList {
+  repeated intrinsic_proto.perception.v1.CaptureData capture_data = 1;
+}

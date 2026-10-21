@@ -14,23 +14,15 @@
 
 #include "intrinsic/motion_planning/metrics/metrics.h"
 
-#include "intrinsic/production/external/googleinit/googleinit.h"
-#include "opencensus/stats/stats.h"
-#include "opencensus/tags/tag_key.h"
+#include "intrinsic/stats/metrics_utils.h"
+#include "opentelemetry/metrics/meter.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 namespace intrinsic {
 namespace motion_planning {
 
-using ::opencensus::stats::Aggregation;
-using ::opencensus::stats::MeasureDouble;
-using ::opencensus::stats::MeasureInt64;
-using ::opencensus::stats::ViewDescriptor;
-using ::opencensus::tags::TagKey;
+using ::opentelemetry::metrics::Histogram;
 
-constexpr char kMPSPlanTrajectoryTimeSumName[] =
-    "intrinsic/motion_planning/mps_plan_trajectory_time_sum";
-constexpr char kMPSPlanTrajectoryTimeSumDescription[] =
-    "Sum of time taken to plan a trajectory";
 constexpr char kMPSPlanTrajectoryTimeNameDist[] =
     "intrinsic/motion_planning/mps_plan_trajectory_time_dist";
 constexpr char kMPSPlanTrajectoryTimeDistDescription[] =
@@ -38,55 +30,27 @@ constexpr char kMPSPlanTrajectoryTimeDistDescription[] =
 
 constexpr char kMilliseconds[] = "ms";
 
-MeasureDouble MPSPlanTrajectoryTimeSum() {
-  static const auto measure = MeasureDouble::Register(
-      kMPSPlanTrajectoryTimeSumName, kMPSPlanTrajectoryTimeSumDescription,
-      kMilliseconds);
-  return measure;
+Histogram<double>& MPSPlanTrajectoryTimeDist() {
+  // Intentionally release the instrument so it remains alive for the program's
+  // lifetime, avoiding global destructor ordering errors on service
+  // destruction. This one-time allocation is safe and won't cause memory leaks.
+  static Histogram<double>* histogram = []() {
+    // The view must be registered before the instrument is created.
+    stats::RegisterHistogramView(
+        kMPSPlanTrajectoryTimeNameDist, /*view_name=*/"",
+        // Exponential spacing between 1 and 512 milliseconds
+        // [1, 2, 4, ..., 512] milliseconds
+        stats::ExponentialBucketBoundaries(/*num_finite_buckets=*/10,
+                                           /*scale=*/1.0,
+                                           /*growth_factor=*/2.0));
+    return stats::GetMeter()
+        ->CreateDoubleHistogram(kMPSPlanTrajectoryTimeNameDist,
+                                kMPSPlanTrajectoryTimeDistDescription,
+                                kMilliseconds)
+        .release();
+  }();
+  return *histogram;
 }
-
-MeasureDouble MPSPlanTrajectoryTimeDist() {
-  static const auto measure = MeasureDouble::Register(
-      kMPSPlanTrajectoryTimeNameDist, kMPSPlanTrajectoryTimeDistDescription,
-      kMilliseconds);
-  return measure;
-}
-
-TagKey CacheHitResultKey() {
-  static const auto key = TagKey::Register("cache_hit_result");
-  return key;
-}
-
-TagKey CallerIDKey() {
-  static const auto key = TagKey::Register("caller_id");
-  return key;
-}
-
-REGISTER_MODULE_INITIALIZER(motion_planning_metrics, {
-  // Call each measure here once to initialize it.
-  MPSPlanTrajectoryTimeSum();
-  MPSPlanTrajectoryTimeDist();
-
-  ViewDescriptor()
-      .set_name(kMPSPlanTrajectoryTimeSumName)
-      .set_measure(kMPSPlanTrajectoryTimeSumName)
-      .set_description(kMPSPlanTrajectoryTimeSumDescription)
-      .add_column(CacheHitResultKey())
-      .add_column(CallerIDKey())
-      .set_aggregation(Aggregation::Sum())
-      .RegisterForExport();
-  ViewDescriptor()
-      .set_name(kMPSPlanTrajectoryTimeNameDist)
-      .set_measure(kMPSPlanTrajectoryTimeNameDist)
-      .set_description(kMPSPlanTrajectoryTimeDistDescription)
-      .add_column(CacheHitResultKey())
-      .add_column(CallerIDKey())
-      // Exponential spacing between 1 and 1024 milliseconds
-      // [1, 2, 4, ..., 1024] milliseconds
-      .set_aggregation(Aggregation::Distribution(
-          opencensus::stats::BucketBoundaries::Exponential(10, 1, 2)))
-      .RegisterForExport();
-});
 
 }  // namespace motion_planning
 }  // namespace intrinsic

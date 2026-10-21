@@ -94,7 +94,7 @@ cc_library(
     ],
     deps = [
         ":opcua_raii_types",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/cleanup",
         "@abseil-cpp//absl/log",

@@ -43,8 +43,7 @@
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/version.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 class BufferHelper {
  public:
@@ -175,6 +174,9 @@ absl::StatusOr<std::vector<T>> ReadRegister(std::string_view name,
   return values;
 }
 
+// Updates the Aravis device list and returns the IDs of all available devices.
+std::vector<std::string> ListAvailableDeviceIds();
+
 // Discovers a camera by its device id.
 absl::StatusOr<GObjectPtr<ArvCamera>> DiscoverCamera(
     std::string_view device_id, absl::Duration timeout = absl::Seconds(0));
@@ -264,7 +266,6 @@ absl::StatusOr<T> BufferHelper::GetChunkValue(
   return value;
 };
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception
 
 #endif  // INTRINSIC_PERCEPTION_CAMERAS_ARAVIS_ARAVIS_UTILS_H_

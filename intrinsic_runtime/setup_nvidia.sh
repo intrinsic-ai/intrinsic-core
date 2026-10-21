@@ -37,7 +37,8 @@ EOF
 function check_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
-            exec sudo -E bash "${BASH_SOURCE[0]}" "$@"
+            # sudo-rs (default since Ubuntu 25.10) ignores -E, so list the variables.
+            exec sudo --preserve-env=NVIDIA_DRIVER_VERSION bash "${BASH_SOURCE[0]}" "$@"
         else
             echo "Error: This script requires root privileges. Please run with sudo (e.g. curl ... | sudo -E bash)" >&2
             exit 1

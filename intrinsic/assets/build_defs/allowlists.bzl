@@ -38,8 +38,6 @@ _LISTS = {
         "//intrinsic_control/intrinsic/icon/skills:set_payload_manifest",
         "//intrinsic_control/intrinsic/icon/skills:update_robot_joint_positions_manifest",
         "//intrinsic_perception/intrinsic/perception/skills/calibration:collect_calibration_data_manifest",
-        "//intrinsic_perception/intrinsic/perception/skills/calibration:initialize_calibration_manifest",
-        "//intrinsic_perception/intrinsic/perception/skills/calibration:sample_calibration_poses_manifest",
         "//intrinsic_perception/intrinsic/perception/skills/multi_view:estimate_pose_multi_view_manifest",
         "//incode/motion_planning/skills:move_robot_manifest",
         "//incode/motion_planning/skills:preplan_motion_manifest",

@@ -59,6 +59,7 @@ go_library(
         "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//types/known/anypb",
         "@org_golang_google_protobuf//types/known/timestamppb",
+        "@org_golang_x_time//rate",
     ],
 )
 

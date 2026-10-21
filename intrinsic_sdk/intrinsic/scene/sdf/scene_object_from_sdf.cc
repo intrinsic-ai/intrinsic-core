@@ -167,8 +167,11 @@ SceneObjectFromSdfModel(const ::sdf::Model& sdf_model,
         EntitiesFromSdfLink(*link, uri_resolver, geometry_serializer),
         _ << "While parsing links in SDF Model " << sdf_model.Name()
           << " to convert to an Intrinsic Scene Object.");
-    scene_object_model.mutable_entities()->Add(link_entities.begin(),
-                                               link_entities.end());
+    // Avoids deep copies by moving created link and sensor entities into
+    // scene_object_model.
+    for (auto&& link_entity : link_entities) {
+      *scene_object_model.add_entities() = std::move(link_entity);
+    }
   }
 
   bool has_non_fixed_joint = false;
@@ -264,7 +267,7 @@ SceneObjectFromSdfModel(const ::sdf::Model& sdf_model,
   }
 
   if (root_entity_names.size() != 1) {
-    return absl::InternalError(
+    return absl::FailedPreconditionError(
         absl::StrCat("Expected only one root entity, but found: ",
                      absl::StrJoin(root_entity_names, ", ")));
   }
@@ -322,7 +325,8 @@ SceneObjectFromSdfModel(const ::sdf::Model& sdf_model,
     auto* user_data_map = scene_object_model.mutable_user_data();
     google::protobuf::Any& any_data_from_map =
         (*user_data_map)[sdf::kGazeboCustomJoint];
-    any_data_from_map.PackFrom(struct_msg);
+    static_cast<void>(
+        any_data_from_map.PackFrom(struct_msg));  // TODO: Handle return value
   }
 
   if (sdf_model.Element()->HasElement(

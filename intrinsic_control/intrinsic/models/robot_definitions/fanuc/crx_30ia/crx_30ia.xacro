@@ -15,7 +15,7 @@ limitations under the License.
 -->
 <sdf version='1.9' xmlns:xacro='http://www.ros.org/wiki/xacro'>
 <xacro:include filename="$(cwd)/third_party/fanuc/crx_30ia/crx_30ia_base.xacro"/>
-<xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/fanuc/timeslicer_plugins.xacro"/>
+<xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/fanuc/simulation_plugins.xacro"/>
 
 <!-- Expands to an Fanuc crx_30ia robot that can be customized with various
   options like starting pose.
@@ -34,7 +34,7 @@ limitations under the License.
                                     **model_options '>
   <xacro:crx_30ia_base_sdf name="${name}">
     <model_options>
-      <xacro:timeslicer_plugins />
+      <xacro:simulation_plugins/>
       <!-- Append passed in model options. -->
       <xacro:insert_block name="model_options"/>
     </model_options>

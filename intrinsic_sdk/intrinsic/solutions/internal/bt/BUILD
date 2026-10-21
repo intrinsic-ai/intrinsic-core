@@ -14,16 +14,13 @@
 
 load("//bazel:python.bzl", "py_library")
 
-package(default_visibility = [
-    "//intrinsic/solutions:__subpackages__",
-    "//intrinsic_sdk/intrinsic/solutions:__subpackages__",
-])
+package(default_visibility = ["//intrinsic_sdk/intrinsic/solutions:__subpackages__"])
 
 py_library(
     name = "bt_util",
     srcs = ["bt_util.py"],
     deps = [
-        "//intrinsic/util/proto:descriptors_py",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors_py",
         "@com_google_protobuf//:protobuf_python",
     ],
 )

@@ -30,27 +30,17 @@ cuda_library(
 )
 
 cuda_library(
-    name = "color_conversion",
-    srcs = ["color_conversion.cu.cc"],
-    hdrs = ["color_conversion.h"],
+    name = "color_conversion_device",
+    hdrs = ["color_conversion_device.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic_perception/intrinsic/perception/core:image_traits",
-        "//intrinsic_perception/intrinsic/perception/gpu/cuda_utils",
-        "@abseil-cpp//absl/status:statusor",
+        "@cuda//:cuda_headers",
     ],
 )
 
 cuda_library(
-    name = "laplacian",
-    srcs = ["laplacian.cu.cc"],
-    hdrs = ["laplacian.h"],
+    name = "laplacian_device",
+    hdrs = ["laplacian_device.h"],
     deps = [
-        ":border_extrapolation",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic_perception/intrinsic/perception/core:image_traits",
-        "//intrinsic_perception/intrinsic/perception/gpu/cuda_utils",
-        "@abseil-cpp//absl/status:statusor",
         "@cuda//:cuda_headers",
     ],
 )
@@ -60,11 +50,12 @@ cuda_library(
     srcs = ["pixelwise.cu.cc"],
     hdrs = ["pixelwise.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_perception/intrinsic/perception/core:image_traits",
         "//intrinsic_perception/intrinsic/perception/gpu/cuda_utils",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
         "@cuda//:cuda_headers",
     ],
 )
@@ -78,11 +69,11 @@ cc_library(
         ":pixelwise",
         ":resize",
         ":smooth",
-        "//intrinsic/util/status:ret_check",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_perception/intrinsic/perception/core:dimensions",
         "//intrinsic_perception/intrinsic/perception/core:image_traits",
         "//intrinsic_perception/intrinsic/perception/gpu/cuda_utils",
+        "//intrinsic_sdk/intrinsic/util/status:ret_check",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -95,10 +86,10 @@ cuda_library(
     srcs = ["resize.cu.cc"],
     hdrs = ["resize.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_perception/intrinsic/perception/core:dimensions",
         "//intrinsic_perception/intrinsic/perception/core:image_traits",
         "//intrinsic_perception/intrinsic/perception/gpu/cuda_utils",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
@@ -112,10 +103,22 @@ cuda_library(
     hdrs = ["smooth.h"],
     deps = [
         ":border_extrapolation",
-        "//intrinsic/util/status:status_macros",
+        ":smooth_device",
+        "//intrinsic_perception/intrinsic/perception/core:dimensions",
         "//intrinsic_perception/intrinsic/perception/core:image_traits",
         "//intrinsic_perception/intrinsic/perception/gpu/cuda_utils",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:str_format",
+        "@cuda//:cuda_headers",
+    ],
+)
+
+cuda_library(
+    name = "smooth_device",
+    hdrs = ["smooth_device.h"],
+    deps = [
         "@cuda//:cuda_headers",
     ],
 )

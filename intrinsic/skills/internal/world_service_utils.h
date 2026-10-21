@@ -24,27 +24,11 @@
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
-#include "intrinsic/world/service/world_service.grpc.pb.h"
 #include "intrinsic/world/world.h"
 #include "intrinsic/world/world.pb.h"
 
 namespace intrinsic {
 namespace skills {
-
-// Downloads the world with the given Id from the world service as proto.
-absl::StatusOr<intrinsic_proto::world::internal::World>
-DownloadWorldProtoFromWorldService(
-    absl::string_view world_id,
-    intrinsic_proto::world::internal::WorldService::StubInterface*
-        world_service);
-
-// Downloads the world with the given Id from the world service and deserializes
-// it to a World instance.
-absl::StatusOr<World> DownloadWorldFromWorldService(
-    absl::string_view world_id,
-    const GeometryDeserializer& geometry_deserializer,
-    intrinsic_proto::world::internal::WorldService::StubInterface*
-        world_service);
 
 // Deserializes all geometry components in the world in-place using the given
 // deserializer.
@@ -58,6 +42,15 @@ DownloadWorldProtoFromObjectWorldService(
     absl::string_view world_id,
     intrinsic_proto::world::ObjectWorldService::StubInterface&
         object_world_service);
+
+// Constructs a World instance from an ObjectWorldService World proto (as
+// returned by `DownloadWorldProtoFromObjectWorldService` or by
+// `ObjectWorldService.GetWorld` with `WORLD_VIEW_FULL`). Only the objects and
+// collision settings of `world_proto` are used. If geolib is provided,
+// deserializes world geometries in-place.
+absl::StatusOr<World> CreateWorldFromObjectWorldProto(
+    intrinsic_proto::world::World world_proto,
+    GeometryLibrary* geolib = nullptr);
 
 // Downloads the world with the given ID from ObjectWorldService (querying
 // ListObjects and GetCollisionSettings) and constructs a World instance.

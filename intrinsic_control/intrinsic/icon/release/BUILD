@@ -41,15 +41,3 @@ py_library(
         "@com_google_protobuf//:protobuf_python",
     ],
 )
-
-cc_library(
-    name = "grpc_time_support",
-    srcs = ["grpc_time_support.cc"],
-    hdrs = ["grpc_time_support.h"],
-    deps = [
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/time",
-        "@com_github_grpc_grpc//:gpr",
-        "@com_github_grpc_grpc//:grpc++",
-    ],
-)

@@ -29,3 +29,35 @@ cc_library(
     hdrs = ["deadline_timeout.h"],
     deps = ["@abseil-cpp//absl/time"],
 )
+
+cc_library(
+    name = "time",
+    srcs = [
+        "clock_steady.cc",
+        "time.cc",
+    ],
+    hdrs = [
+        "clock_steady.h",
+        "clock_steady_interface.h",
+        "time.h",
+    ],
+    deps = [
+        "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
+        "@abseil-cpp//absl/time",
+        "@com_google_googletest//:gtest_prod",
+    ],
+)
+
+cc_library(
+    name = "timer",
+    srcs = [
+        "elapsed_timer.cc",
+    ],
+    hdrs = [
+        "elapsed_timer.h",
+    ],
+    deps = [
+        ":time",
+        "@abseil-cpp//absl/time",
+    ],
+)

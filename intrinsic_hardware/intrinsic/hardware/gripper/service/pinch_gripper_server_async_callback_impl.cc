@@ -121,7 +121,9 @@ absl::Status PinchGripperServerAsyncCallbackImpl::CreatePinchGripperInternal(
               << " with gripper handle: " << gripper_handle;
     google::protobuf::Any any_config;
     if (config.has_generic_pinch_gripper_config()) {
-      any_config.PackFrom(config.generic_pinch_gripper_config());
+      if (!any_config.PackFrom(config.generic_pinch_gripper_config())) {
+        return absl::InternalError("Failed to pack pinch gripper config.");
+      }
     } else {
       return absl::InvalidArgumentError(
           "Cannot create a gripper because no communication config "

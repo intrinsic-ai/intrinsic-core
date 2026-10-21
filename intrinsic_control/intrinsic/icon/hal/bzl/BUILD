@@ -25,8 +25,8 @@ go_binary(
     importpath = "intrinsic/icon/hal/bzl/hal_manifest",
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
-        "//intrinsic/production:intrinsic",
-        "//intrinsic/util:flag",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/util:flag",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_go_proto",
         "@org_golang_google_protobuf//encoding/prototext:go_default_library",
@@ -39,7 +39,7 @@ go_binary(
     importpath = "intrinsic/icon/hal/bzl/wrap_pbtxt",
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
-        "//intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
         "@com_github_golang_glog//:go_default_library",
     ],
 )

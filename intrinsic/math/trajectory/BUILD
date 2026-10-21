@@ -22,10 +22,10 @@ cc_library(
     deps = [
         "//intrinsic/math:linspace",
         "//intrinsic/math:time_series_utils",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

@@ -14,7 +14,9 @@
 
 #include "intrinsic/perception/cameras/services/v1/camera_service_impl.h"
 
+#include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <string>
 #include <utility>
@@ -58,14 +60,15 @@
 #include "intrinsic/perception/proto_conversion/v1/post_processing.h"
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
-#include "intrinsic/production/external/googleinit/googleinit.h"
+#include "intrinsic/stats/metrics_utils.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_builder_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_macros_grpc.h"
-#include "opencensus/stats/stats.h"
+#include "opentelemetry/metrics/meter.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 ABSL_FLAG(
     bool, camera_service_enable_streaming_debug_stats, false,
@@ -75,67 +78,64 @@ namespace intrinsic {
 namespace perception {
 
 namespace metrics_logging {
+namespace {
+
+using ::opentelemetry::metrics::Counter;
+using ::opentelemetry::metrics::Gauge;
+
 constexpr char kFramesProcessingRateName[] =
-    "intrinsic/perception/camera_stream_frame_hz";
+    "intrinsic/perception/camera_stream_frame_rate";
 constexpr char kFramesProcessingRateDescription[] =
     "Number of frames processed.";
 constexpr char kFramesProcessedName[] =
-    "intrinsic/perception/camera_stream_frame_time_ns";
+    "intrinsic/perception/camera_stream_frame_count";
 constexpr char kFramesProcessedDescription[] = "Number of frames processed.";
 constexpr char kTimeToProcessFrameName[] =
-    "intrinsic/perception/camera_stream_frame_count";
+    "intrinsic/perception/camera_stream_frame_time";
 constexpr char kTimeToProcessFrameDescription[] =
     "Amount of time spent to process frames.";
 constexpr char kNanoSeconds[] = "ns";
 constexpr char kHertz[] = "hz";
 
-opencensus::stats::MeasureDouble LogFramesProcessingRate() {
-  static const auto measure = opencensus::stats::MeasureDouble::Register(
-      kFramesProcessingRateName, kFramesProcessingRateDescription, kHertz);
-  return measure;
+// Instruments in this file are intentionally released so they remain alive
+// for the program's lifetime, avoiding global destructor ordering errors on
+// service destruction. Each is a one-time allocation, so this doesn't leak.
+Gauge<double>& LogFramesProcessingRate() {
+  static Gauge<double>* gauge =
+      stats::GetMeter()
+          ->CreateDoubleGauge(kFramesProcessingRateName,
+                              kFramesProcessingRateDescription, kHertz)
+          .release();
+  return *gauge;
 }
 
-opencensus::stats::MeasureInt64 LogFramesProcessed() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      kFramesProcessedName, kFramesProcessedDescription, "1");
-  return measure;
+Counter<uint64_t>& LogFramesProcessed() {
+  static Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(kFramesProcessedName,
+                                kFramesProcessedDescription, "1")
+          .release();
+  return *counter;
 }
 
-opencensus::stats::MeasureInt64 LogTimeToProcessFrame() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      kTimeToProcessFrameName, kTimeToProcessFrameDescription, kNanoSeconds);
-  return measure;
+Counter<uint64_t>& LogTimeToProcessFrame() {
+  static Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(kTimeToProcessFrameName,
+                                kTimeToProcessFrameDescription, kNanoSeconds)
+          .release();
+  return *counter;
 }
 
-REGISTER_MODULE_INITIALIZER(metrics, {
-  // Call each measure here once to initialize it.
-  LogFramesProcessingRate();
-  LogFramesProcessed();
-  LogTimeToProcessFrame();
-
-  opencensus::stats::ViewDescriptor()
-      .set_name(kFramesProcessingRateName)
-      .set_measure(kFramesProcessingRateName)
-      .set_description(kFramesProcessingRateDescription)
-      .set_aggregation(opencensus::stats::Aggregation::LastValue())
-      .RegisterForExport();
-
-  opencensus::stats::ViewDescriptor()
-      .set_name(kFramesProcessedName)
-      .set_measure(kFramesProcessedName)
-      .set_description(kFramesProcessedDescription)
-      .set_aggregation(opencensus::stats::Aggregation::Count())
-      .RegisterForExport();
-
-  opencensus::stats::ViewDescriptor()
-      .set_name(kTimeToProcessFrameName)
-      .set_measure(kTimeToProcessFrameName)
-      .set_description(kTimeToProcessFrameDescription)
-      .set_aggregation(opencensus::stats::Aggregation::Sum())
-      .RegisterForExport();
-});
-
+}  // namespace
 }  // namespace metrics_logging
+
+void RegisterCameraServiceMetrics() {
+  // Eagerly initialize the instruments to register them.
+  metrics_logging::LogFramesProcessingRate();
+  metrics_logging::LogFramesProcessed();
+  metrics_logging::LogTimeToProcessFrame();
+}
 
 CameraServiceImpl::CameraServiceImpl(
     absl_nonnull std::shared_ptr<CameraManager> camera_manager,
@@ -311,15 +311,15 @@ CameraServiceImpl::GetMetricsCallback(
           capture.capture_at - session_stats->last_capture_time;
       session_stats->last_capture_time = capture.capture_at;
 
-      // Record the instant rate to the opencensus metric.
+      // Record the instant rate to the OpenTelemetry metrics.
       // TODO(b/442910605): The metrics are not currently propagated to pantheon
-      opencensus::stats::Record({
-          {metrics_logging::LogFramesProcessed(), 1},
-          {metrics_logging::LogFramesProcessingRate(),
-           1 / absl::ToDoubleSeconds(last_capture_duration)},
-          {metrics_logging::LogTimeToProcessFrame(),
-           absl::ToInt64Nanoseconds(last_capture_duration)},
-      });
+      metrics_logging::LogFramesProcessed().Add(1);
+      if (last_capture_duration > absl::ZeroDuration()) {
+        metrics_logging::LogFramesProcessingRate().Record(
+            1.0 / absl::ToDoubleSeconds(last_capture_duration));
+      }
+      metrics_logging::LogTimeToProcessFrame().Add(absl::ToInt64Nanoseconds(
+          std::max(absl::ZeroDuration(), last_capture_duration)));
     }
 
     return absl::OkStatus();

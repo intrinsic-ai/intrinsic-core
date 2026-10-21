@@ -216,7 +216,9 @@ absl::StatusOr<proto::EdgeValidatorSpecification> GetEdgeValidatorSpecification(
   config.set_resolution(resolution);
   proto::EdgeValidatorSpecification spec;
   spec.set_name("DefaultEdgeValidator");
-  spec.mutable_config()->PackFrom(config);
+  if (!spec.mutable_config()->PackFrom(config)) {
+    return absl::InternalError("Failed to pack EdgeValidatorConfig");
+  }
   return spec;
 }
 proto::PointValidatorSpecification GetDefaultPointValidatorSpecification() {

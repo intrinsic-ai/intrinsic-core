@@ -15,7 +15,10 @@
 load("//bazel:go_macros.bzl", "go_library", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
 
-package(default_visibility = ["//intrinsic/tools/inctl:__subpackages__"])
+package(default_visibility = [
+    "//intrinsic/tools/inctl:__subpackages__",
+    "//intrinsic_sdk/intrinsic/tools/inctl:__subpackages__",
+])
 
 proto_library(
     name = "config_proto",

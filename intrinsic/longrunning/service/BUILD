@@ -21,9 +21,9 @@ go_binary(
     deps = [
         "//intrinsic/kubernetes:intrinsic",
         "//intrinsic/longrunning/go/proxy",
-        "//intrinsic/stats/go:telemetry",
-        "//intrinsic/util:flag",
         "//intrinsic/util/go:shutdown",
+        "//intrinsic_sdk/intrinsic/stats/go:telemetry",
+        "//intrinsic_sdk/intrinsic/util:flag",
         "@com_github_golang_glog//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@io_opencensus_go//plugin/ocgrpc:go_default_library",

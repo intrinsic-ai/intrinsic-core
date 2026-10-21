@@ -42,11 +42,11 @@ cc_binary(
     deps = [
         ":hardware_module_introspection_cc_grpc_proto",
         ":hardware_module_introspection_cc_proto",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic/util/status:status_macros_grpc",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_utils",
         "//intrinsic_control/intrinsic/icon/hal:hardware_module_proxy",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log",

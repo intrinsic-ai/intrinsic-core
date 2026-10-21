@@ -24,6 +24,6 @@ go_library(
     importpath = "intrinsic/kubernetes/clusterconfig/clusterconfig",
     deps = [
         "@com_github_golang_glog//:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/apis/registry/v1alpha1:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/apis/registry/v1alpha1:go_default_library",
     ],
 )

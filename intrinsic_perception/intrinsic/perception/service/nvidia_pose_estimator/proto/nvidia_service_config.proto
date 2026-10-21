@@ -1,0 +1,238 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.perception.nvidia;
+
+import "intrinsic/assets/proto/field_metadata.proto";
+import "intrinsic/assets/proto/v1/resolved_dependency.proto";
+
+option go_package = "github.com/intrinsic-ai/insrc/intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/proto/nvidia_service_config_go_proto";
+
+message NvidiaPoseEstimatorServiceConfig {
+  // 1. The Intrinsic runtime, used to look up installed assets: the model
+  // assets below, and each request's target asset (prompt and CAD model).
+  intrinsic_proto.assets.v1.ResolvedDependency intrinsic_runtime = 1
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.assets.v1.InstalledAssets"
+      }];
+
+  // 2. FoundationStereo depth estimation configuration.
+  optional StereoDepthConfig stereo = 2;
+
+  // 3. SAM3 (Segment Anything Model 3) 2D proposal detection configuration.
+  optional Sam3DetectionConfig sam3_detection = 3;
+
+  // 4. SAM3 CAD box-prompt mask refinement configuration.
+  optional Sam3RefinementConfig sam3_refinement = 4;
+
+  // 5. FoundationPose 6D pose estimation, tracking, and refinement
+  // configuration.
+  optional FoundationPoseConfig foundation_pose = 5;
+
+  // 6. Post-pose proposal selection & reranking configuration.
+  optional ProposalSelectionConfig selection = 6;
+
+  // 7. Multi-sensor routing: which sensors feed detection vs. depth.
+  optional SensorRoutingConfig sensor_routing = 7;
+
+  // 8. Intermediate artifact dumping, for debugging a single request.
+  optional DebugConfig debug = 8;
+
+  // 9. Model weight Data assets downloaded from CAS into the models root at
+  // startup.
+  intrinsic_proto.assets.v1.ResolvedDependency foundationpose_model = 9
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "data://intrinsic_proto.perception.v1.PerceptionModel"
+      }];
+
+  intrinsic_proto.assets.v1.ResolvedDependency foundationstereo_model = 10
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "data://intrinsic_proto.perception.v1.PerceptionModel"
+      }];
+
+  intrinsic_proto.assets.v1.ResolvedDependency sam3_model = 11
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "data://intrinsic_proto.perception.v1.PerceptionModel"
+      }];
+}
+
+// =========================================================================
+// Grouped Configuration Sub-Messages
+// =========================================================================
+
+message StereoDepthConfig {
+  // Expected scene depth range in meters. Used for stereo partner ranking
+  // (min_depth_m) and disparity pre-shifting (both) to keep disparity within
+  // FoundationStereo's 416 px search range. Unset either to disable pre-shift.
+  optional float min_depth_m = 1;
+  optional float max_depth_m = 2;
+
+  // Width, in pixels, of the stereo pair as fed to FoundationStereo; must be a
+  // multiple of 32 (default: 640). The rectified pair is scaled to this width
+  // and its height padded or cropped to `height`. Can be adjusted to suit the
+  // input image size and GPU memory. The depth map is still returned at the
+  // detection camera's resolution, upsampled from this size.
+  optional int32 width = 3;
+
+  // Height, in pixels, of the stereo pair as fed to FoundationStereo; must be
+  // a multiple of 32 (default: 416). See `width`.
+  optional int32 height = 4;
+
+  // Clip limit for CLAHE applied to both rectified views before matching; unset
+  // or 0 disables it.
+  optional float clahe_clip_limit = 5;
+
+  // Detail-layer gain for the bilateral base/detail split following CLAHE;
+  // unset or 0 disables it. Only used when clahe_clip_limit is set.
+  optional float clahe_detail_boost = 6;
+}
+
+message Sam3DetectionConfig {
+  // Default text prompt for SAM3 detection.
+  optional string prompt = 1;
+
+  // Confidence threshold for SAM3 2D proposal detection (default: 0.2).
+  optional float confidence_threshold = 2;
+
+  // Input resolution for vision encoder (default: 1008).
+  optional int32 resolution = 3;
+}
+
+message Sam3RefinementConfig {
+  // SAM3 refinement policy. Unset or SAM3_REFINEMENT_POLICY_UNSPECIFIED uses
+  // the pipeline's default.
+  optional Sam3RefinementPolicy policy = 1;
+
+  // SAM3 refinement lower render-mask-IoU bound (default: 0.2).
+  optional float low_miou = 2;
+
+  // SAM3 refinement upper render-mask-IoU bound (default: 0.8).
+  optional float high_miou = 3;
+
+  // SAM3 refinement mask-NMS threshold (default: 0.6).
+  optional float nms_threshold = 4;
+}
+
+message FoundationPoseConfig {
+  // Number of refinement steps for FoundationPose (default: 5).
+  optional int32 n_refine = 1;
+
+  // Number of hypotheses for FoundationPose (default: 252).
+  optional int32 n_hypotheses = 2;
+
+  // Mini-batch chunk size for FoundationPose TensorRT execution (must divide
+  // n_hypotheses, default: 42).
+  optional int32 batch_size = 3;
+}
+
+message ProposalSelectionConfig {
+  // Proposal selection / reranking policy. Unset or
+  // PROPOSAL_SELECTION_POLICY_UNSPECIFIED uses the pipeline's default.
+  optional ProposalSelectionPolicy policy = 1;
+
+  // Cutoff score for proposal reranking (default: 3.0).
+  optional float cutoff = 2;
+
+  // Optional custom scoring weights.
+  optional float weight_sam_score = 3;
+  optional float weight_render_mask_iou = 4;
+  optional float weight_render_box_iou = 5;
+  optional float fp_score_divisor = 6;
+}
+
+// SAM3 CAD box-prompt mask refinement policy.
+enum Sam3RefinementPolicy {
+  // Uses the pipeline's default policy.
+  SAM3_REFINEMENT_POLICY_UNSPECIFIED = 0;
+  // No refinement pass.
+  SAM3_REFINEMENT_POLICY_NONE = 1;
+  // Replaces proposals whose render-mask IoU falls between low_miou and
+  // high_miou with the refined mask, deduplicated by mask NMS.
+  SAM3_REFINEMENT_POLICY_REPLACE_MID_NMS06 = 2;
+}
+
+// Proposal selection / reranking policy.
+enum ProposalSelectionPolicy {
+  // Uses the pipeline's default policy.
+  PROPOSAL_SELECTION_POLICY_UNSPECIFIED = 0;
+  // Keeps every proposal.
+  PROPOSAL_SELECTION_POLICY_KEEP_ALL = 1;
+  // Reranks proposals by a weighted global score and drops those below
+  // `cutoff`.
+  PROPOSAL_SELECTION_POLICY_SOFT_GLOBAL_V1 = 2;
+}
+
+// Where SensorRoutingConfig takes depth from.
+enum DepthSource {
+  // Treated as DEPTH_SOURCE_AUTO.
+  DEPTH_SOURCE_UNSPECIFIED = 0;
+  // Hardware depth if a depth sensor is present, otherwise stereo.
+  DEPTH_SOURCE_AUTO = 1;
+  // A PIXEL_DEPTH sensor (`hardware_depth_sensor`).
+  DEPTH_SOURCE_HARDWARE = 2;
+  // FoundationStereo over `stereo_sensors`.
+  DEPTH_SOURCE_STEREO = 3;
+}
+
+// Routes the sensors of a multi-sensor capture to the pipeline stages that
+// consume them. Names are matched against `SensorImage.sensor_name`, which for
+// Flowstate cameras is the stringified `sensor_config.id` (e.g. for Orbbec
+// cameras, "1" = RGB, "2"/"3" = IR left/right, "4" = hardware depth).
+//
+// Every field is optional; an unset or unmatched selector falls back to
+// choosing by pixel type (first PIXEL_INTENSITY for detection, first
+// PIXEL_DEPTH for hardware depth).
+message SensorRoutingConfig {
+  // Sensor to run SAM3 detection and FoundationPose on. All depth is
+  // reprojected into this sensor's frame.
+  optional string detection_sensor = 1;
+
+  // Where depth comes from. Unset or DEPTH_SOURCE_UNSPECIFIED means
+  // DEPTH_SOURCE_AUTO.
+  optional DepthSource depth_source = 2;
+
+  // Sensor providing hardware depth. Only consulted for DEPTH_SOURCE_HARDWARE /
+  // DEPTH_SOURCE_AUTO.
+  optional string hardware_depth_sensor = 3;
+
+  // Sensors for stereo depth. The first is the base, whose frame the depth is
+  // computed in. With two sensors the second is the partner; with three or
+  // more, the sensor forming the best horizontal pair with the base is chosen,
+  // skipping sensors without a pose. If none qualifies, no stereo depth is
+  // produced. Only consulted for DEPTH_SOURCE_STEREO /
+  // DEPTH_SOURCE_AUTO.
+  //
+  // NOTE: proto3 repeated fields do not track presence, so an empty list means
+  // unset (inherits the default pair); set `depth_source =
+  // DEPTH_SOURCE_HARDWARE` to disable stereo depth. When non-empty, it must
+  // contain at least two non-empty sensor names and replaces the default list
+  // in resolve_service_config().
+  repeated string stereo_sensors = 4;
+}
+
+message DebugConfig {
+  // Directory to write per-request debug artifacts to (timestamped subdirectory
+  // per request). Unset by default (disabled). Can be set in the service config
+  // or overridden per request via PoseEstimationRunConfig.inference_parameters;
+  // a per-request value must be under /tmp or the request is rejected with
+  // INVALID_ARGUMENT.
+  optional string artifact_dir = 1;
+
+  // Whether to publish the SAM 3 detection overlay (`sam3_proposals.png`) and
+  // CAD pose overlay (`cad_overlay.png`) to Intrinsic PubSub topics
+  // (`ioc_pose_estimator/detections` and `ioc_pose_estimator/poses`).
+  optional bool publish_visualization = 2;
+}

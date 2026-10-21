@@ -34,8 +34,8 @@
 black==25.12.0
 graphviz==0.21
 google-re2==1.1.20240702
-grpcio==1.74.0
-grpcio-status==1.74.0
+grpcio==1.81.1
+grpcio-status==1.81.1
 hypothesis==6.135.14
 ipywidgets==8.1.7
 matplotlib==3.10.7
@@ -45,7 +45,7 @@ numpy==1.26.4
 opencv-python-headless==4.11.0.86
 pandas==2.3.0
 pillow==11.2.1
-retrying==1.4.0
+retrying==1.4.2
 typing-extensions==4.15.0
 
 
@@ -68,6 +68,8 @@ cadexchanger==3.20.0.17379
 cryptography==45.0.7
 chex==0.1.89
 clu==0.0.12
+cuda-bindings==13.2.0
+cuda-pathfinder==1.8.1
 deepeval==4.0.5
 db-dtypes==1.4.3
 dm-tree==0.1.9
@@ -77,6 +79,7 @@ firestore-mock==0.1.5
 flask==3.1.1
 flax==0.10.6
 fire==0.7.0
+ftfy==6.3.1
 gevent==25.9.1
 glfw==2.10.2
 google-adk[a2a, eval]==2.3.0
@@ -95,8 +98,9 @@ google-cloud-storage==3.10.1
 google-genai==2.8.0
 googleapis-common-protos==1.73.1
 grafana-client==4.3.2
-grpcio-reflection==1.74.0
-grpcio-tools==1.74.0
+grain==0.2.18
+grpcio-reflection==1.81.1
+grpcio-tools==1.81.1
 firebase-admin==6.9.0
 httpx==0.28.1
 humanize==4.12.3
@@ -125,12 +129,13 @@ mcap-protobuf-support==0.5.3
 mcp==1.27.2
 mmh3==5.1.0
 ml-collections==1.1.0
+mlflow==3.13.0
 mujoco==3.2.7
 natsort==7.1.1
 nbconvert==7.16.6
 nbformat==5.10.4
 nlopt==2.7.1
-notebook==7.4.3
+notebook==7.6.3
 onnx==1.18.0
 OpenEXR==3.3.4
 OpenImageIO==3.0.6.1
@@ -150,6 +155,7 @@ plotly==6.2.0
 portpicker==1.6.0
 prompt-toolkit==3.0.52
 psutil==7.0.0
+psycopg2-binary==2.9.10
 pyarrow==19.0.1
 pycocotools==2.0.10
 pydantic==2.12.5
@@ -161,7 +167,7 @@ pyink==25.12.0
 python-dateutil==2.9.0.post0
 python-fcl==0.7.0.8
 prometheus-client==0.22.1
-protobuf==6.32.1
+protobuf==6.33.6
 proto-breaking-change-detector @ https://github.com/googleapis/proto-breaking-change-detector/archive/refs/tags/v2.6.0.tar.gz # TODO(b/296864864) Use from pypi.org once the bug is fixed.
 pytorch3d @ https://us-central1-python.pkg.dev/intrinsic-mirror/intrinsic-public-python/pytorch3d/pytorch3d-0.7.8-cp311-cp311-linux_x86_64.whl
 pyyaml==6.0.2
@@ -186,6 +192,7 @@ tensorflow-datasets==4.9.9
 tensorflow-io-gcs-filesystem==0.37.1
 tensorflow-probability==0.25.0
 tensorflow-serving-api==2.20.0
+tensorrt-cu13-bindings==10.16.1.11
 tenacity==9.1.4
 tf-models-official==2.20.0
 timeout-decorator==0.5.0

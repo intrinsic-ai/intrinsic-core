@@ -28,6 +28,7 @@
 #include "grpcpp/security/server_credentials.h"
 #include "grpcpp/server_builder.h"
 #include "intrinsic/icon/release/portable/init_intrinsic.h"
+#include "intrinsic/platform/pubsub/kvstore_grpc/metrics.h"
 #include "intrinsic/platform/pubsub/kvstore_grpc/server_impl.h"
 #include "intrinsic/stats/opencensus.h"
 
@@ -35,7 +36,9 @@ ABSL_FLAG(int, port, 8080, "Port to listen on.");
 
 int main(int argc, char* argv[]) {
   InitIntrinsic(argv[0], argc, argv);
-  intrinsic::OpenCensusPlugin opencensus;
+  intrinsic::OpenCensusPlugin opencensus(/*service_name=*/"kvstore_service",
+                                         /*use_otel_metrics=*/true);
+  intrinsic::kvstore::RegisterKvstoreGrpcMetrics();
 
   intrinsic::kvstore::KVStoreServerImpl kvstore;
   CHECK_OK(kvstore.Init());

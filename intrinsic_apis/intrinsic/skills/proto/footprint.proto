@@ -25,10 +25,21 @@ option go_package = "intrinsic/skills/proto/footprint_go_proto";
 
 // A footprint contains zero or more reservations that must be held when
 // executing a skill. Each reservation has a sharing type which is used to
-// determine when two skills can be scheduled concurrently. Note that volume
-// reservations can also generate conflicts with the geometrical state of the
-// world. E.g., a volume reservation that intersects static geometry would not
-// be schedulable even when the skill is executing by itself.
+// determine when two skills can be scheduled concurrently.
+//
+// Object reservations and volume reservations are checked independently:
+// - Object reservations act as read/write locks on specific world objects and
+//   frames. Two skills conflict if they reserve the same object and at least
+//   one of them requires write access.
+// - Volume reservations define 3D regions of space (e.g. the swept volume of a
+//   moving robot, or an exclusion zone) and conflict only with overlapping
+//   volume reservations of other skills, according to their sharing types.
+//
+// A volume reservation does not implicitly reserve the objects it contains or
+// overlaps, and it is not checked against static scene geometry (e.g. for
+// swept volumes, collision avoidance against the scene is handled during
+// motion planning). A skill that needs exclusive access to objects in a region
+// must reserve them explicitly in `object_reservation`.
 message Footprint {
   // One or more volume reservations.
   repeated VolumeReservation volume = 1;

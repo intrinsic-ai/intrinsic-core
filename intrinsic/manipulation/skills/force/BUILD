@@ -17,7 +17,7 @@ load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
 load("//bazel:python.bzl", "py_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "py_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "py_skill", "skill_manifest")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -85,9 +85,6 @@ py_library(
         ":contact_stiffness_py_pb2",
         ":move_to_contact_proto_py_pb2",
         ":utils",
-        "//intrinsic/logging/proto:log_item_py_pb2",
-        "//intrinsic/platform/pubsub/python:pubsub",
-        "//intrinsic/util:decorators",
         "//intrinsic_control/intrinsic/icon/actions:force_primitive_utils",
         "//intrinsic_control/intrinsic/icon/actions:stop_utils",
         "//intrinsic_control/intrinsic/icon/control/primitives/force_control/proto:controller_params_py_pb2",
@@ -97,9 +94,12 @@ py_library(
         "//intrinsic_control/intrinsic/icon/python:create_action_utils",
         "//intrinsic_control/intrinsic/icon/python:icon",
         "//intrinsic_control/intrinsic/icon/python:icon_logging",
+        "//intrinsic_sdk/intrinsic/logging/proto:log_item_py_pb2",
         "//intrinsic_sdk/intrinsic/math/python:data_types",
         "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
+        "//intrinsic_sdk/intrinsic/platform/pubsub/python:pubsub",
         "//intrinsic_sdk/intrinsic/skills/python:skill_interface",
+        "//intrinsic_sdk/intrinsic/util:decorators",
         "//intrinsic_sdk/intrinsic/world/python:object_world_client",
         "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
         "@ai_intrinsic_sdks_pip_deps//numpy",

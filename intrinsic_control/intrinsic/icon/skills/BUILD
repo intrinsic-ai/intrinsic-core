@@ -16,7 +16,7 @@ load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
 
 # ----------------------------------------------------------------------------
 # Skill definition for 'dio_read_input'
@@ -70,15 +70,15 @@ cc_library(
     hdrs = ["dio_read_input.h"],
     deps = [
         ":dio_read_input_cc_proto",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/grpc:channel_interface",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
         "//intrinsic_control/intrinsic/icon/skills/util:adio_util",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/grpc:channel_interface",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -155,15 +155,15 @@ cc_library(
     hdrs = ["aio_read_input.h"],
     deps = [
         ":aio_read_input_cc_proto",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/grpc:channel_interface",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
         "//intrinsic_control/intrinsic/icon/skills/util:adio_util",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/grpc:channel_interface",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -236,11 +236,11 @@ cc_library(
     hdrs = ["dio_set_output.h"],
     deps = [
         ":dio_set_output_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io_factory",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -312,11 +312,11 @@ cc_library(
     hdrs = ["aio_set_output.h"],
     deps = [
         ":aio_set_output_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io_factory",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -387,12 +387,12 @@ cc_library(
     hdrs = ["dio_wait_for_input.h"],
     deps = [
         ":dio_wait_for_input_cc_proto",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io_factory",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -468,10 +468,7 @@ cc_library(
     deps = [
         ":enable_realtime_control_cc_proto",
         "//intrinsic/skills/internal:kinematic_object_for_position_part",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
         "//intrinsic/stats:scoped_span",
-        "//intrinsic/util/status:status_builder",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
         "//intrinsic_control/intrinsic/icon/cc_client:operational_status",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
@@ -480,6 +477,9 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "@abseil-cpp//absl/base:core_headers",
@@ -553,14 +553,14 @@ cc_library(
     hdrs = ["disable_realtime_control.h"],
     deps = [
         ":disable_realtime_control_cc_proto",
-        "//intrinsic/assets:interface_utils",
-        "//intrinsic/assets/dependencies:utils_cc",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic/util/grpc:channel",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
+        "//intrinsic_sdk/intrinsic/assets:interface_utils",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils_cc",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/grpc:channel",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@com_github_grpc_grpc//:grpc++",
@@ -630,8 +630,6 @@ cc_library(
     hdrs = ["update_robot_joint_positions.h"],
     deps = [
         ":update_robot_joint_positions_cc_proto",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
@@ -639,6 +637,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "@abseil-cpp//absl/log",
@@ -682,10 +682,6 @@ cc_library(
     hdrs = ["move_gripper_joints.h"],
     deps = [
         ":move_gripper_joints_cc_proto",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:get_extended_status",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
         "//intrinsic_control/intrinsic/icon/proto:joint_trajectory_conversion",
@@ -708,6 +704,10 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "@abseil-cpp//absl/log",
@@ -738,6 +738,7 @@ proto_library(
 proto_library(
     name = "move_gripper_joints_proto",
     srcs = ["move_gripper_joints.proto"],
+    visibility = ["//visibility:public"],
     deps = [
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
@@ -803,15 +804,14 @@ cc_library(
     deps = [
         ":set_payload_cc_proto",
         "//intrinsic/skills/internal:kinematic_object_for_position_part",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
-        "//intrinsic_control/intrinsic/icon/release:grpc_time_support",
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
@@ -819,6 +819,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@com_github_grpc_grpc//:grpc++",
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/math/proto:point_cc_proto",
         "@intrinsic_apis//intrinsic/resources/proto:resource_handle_cc_proto",
@@ -839,9 +840,3 @@ cc_skill(
         ":set_payload_cc_proto",
     ],
 )
-
-# ----------------------------------------------------------------------------
-# Skill definition for 'visual_servoing'
-
-# ----------------------------------------------------------------------------
-# Skill definition for 'search_target'

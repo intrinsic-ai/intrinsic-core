@@ -40,11 +40,6 @@ void go_c_ResourceReaderCreate(go_c_StringIn hssAddress,
                                go_c_StatusOut statusOut);
 void go_c_ResourceWorldUpdateResourceSetWorldRelations(
     go_c_Handle handle, go_c_StringIn localWorldID, go_c_StatusOut statusOut);
-void go_c_ResourceWorldUpdateWorldFromResourceSet(go_c_Handle handle,
-                                                  go_c_StringIn worldID,
-                                                  bool skipInvalidUpdates,
-                                                  go_c_ProtoOut out,
-                                                  go_c_StatusOut statusOut);
 void go_c_ResourceReaderGeometricResourceInstanceData(go_c_Handle handle,
                                                       go_c_ProtoIn rsIn,
                                                       go_c_ProtoOut out,
@@ -59,7 +54,6 @@ void go_c_ResourceReaderClose(go_c_Handle handle);
 namespace intrinsic::conductor {
 
 using ::intrinsic::conductor::internal::GeometricResourceSetData;
-using ::intrinsic::conductor::internal::UpdateWorldFromResourceSetResult;
 
 absl::StatusOr<std::unique_ptr<ResourceWorld>> ResourceWorld::Create(
     const std::string& hss_address, const std::string& ows_address,
@@ -93,20 +87,6 @@ absl::Status ResourceWorld::UpdateResourceSetWorldRelations(
     go_c_ResourceWorldUpdateResourceSetWorldRelations(
         handle_, intrinsic::ToStringIn(local_world_id), status_out);
   });
-}
-
-absl::StatusOr<UpdateWorldFromResourceSetResult>
-ResourceWorld::UpdateWorldFromResourceSet(const std::string& world_id,
-                                          bool skip_invalid_updates) const {
-  UpdateWorldFromResourceSetResult proto;
-
-  INTR_RETURN_IF_ERROR(intrinsic::GetStatus([&](go_c_StatusOut status_out) {
-    go_c_ResourceWorldUpdateWorldFromResourceSet(
-        handle_, intrinsic::ToStringIn(world_id), skip_invalid_updates,
-        intrinsic::ProtoOut(&proto), status_out);
-  }));
-
-  return proto;
 }
 
 std::unique_ptr<ResourceReader> ResourceReader::Create(

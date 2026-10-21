@@ -86,10 +86,16 @@ _symlink_tarball = rule(
 )
 
 def _container_tarball(name, image, **kwargs):
+    tags = list(kwargs.get("tags") or [])
+    if "manual" not in tags:
+        tags.append("manual")
+
+    kwargs_without_tags = {k: v for k, v in kwargs.items() if k != "tags"}
     oci_load(
         name = name,
         image = image,
-        **kwargs
+        tags = tags,
+        **kwargs_without_tags
     )
 
     # TODO replace with filegroup() as suggested in https://github.com/bazel-contrib/rules_oci/pull/548
@@ -100,7 +106,7 @@ def _container_tarball(name, image, **kwargs):
         output = "%s.tar" % image,
         compatible_with = kwargs.get("compatible_with"),
         visibility = kwargs.get("visibility"),
-        tags = kwargs.get("tags"),
+        tags = tags,
         testonly = kwargs.get("testonly"),
     )
 

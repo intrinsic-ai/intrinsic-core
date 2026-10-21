@@ -99,7 +99,9 @@ OperationSchedulerInterface::AddOperationWrapped(
                           result_func(std::move(context)));
 
     google::protobuf::Any proto_result;
-    proto_result.PackFrom(op_result);
+    if (!proto_result.PackFrom(op_result)) {
+      return absl::InternalError("Failed to pack operation result proto.");
+    }
     return proto_result;
   };
 
@@ -113,7 +115,9 @@ OperationSchedulerInterface::AddOperationWrapped(
         status_func(start_time, custom_data, operation_context));
 
     google::protobuf::Any proto_status;
-    proto_status.PackFrom(op_status);
+    if (!proto_status.PackFrom(op_status)) {
+      return absl::InternalError("Failed to pack operation status proto.");
+    }
     return proto_status;
   };
 

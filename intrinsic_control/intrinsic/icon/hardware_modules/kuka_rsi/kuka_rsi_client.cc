@@ -488,7 +488,10 @@ absl::Status RealtimeKukaRsiClient::ProvideInspectionData(
     }
     kuka_rsi_inspection_data.set_rsi_active(rsi_communicator_.IsActive());
 
-    data.mutable_hardware_specific_data()->PackFrom(kuka_rsi_inspection_data);
+    if (!data.mutable_hardware_specific_data()->PackFrom(
+            kuka_rsi_inspection_data)) {
+      return absl::InternalError("Failed to pack KukaRsiInspectionData");
+    }
   }
 
   return absl::OkStatus();

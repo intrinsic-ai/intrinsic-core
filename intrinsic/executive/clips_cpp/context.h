@@ -19,12 +19,15 @@
 #include <string>
 #include <vector>
 
+#include "absl/base/attributes.h"
+#include "absl/base/nullability.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "intrinsic/executive/clips_cpp/environment.h"
+#include "third_party/imported/cpp_libraries/clock/clock.h"
 
 namespace intrinsic::executive::clips {
 
@@ -36,7 +39,15 @@ class ClipsContext {
  public:
   virtual ~ClipsContext();
 
-  static absl::StatusOr<std::unique_ptr<ClipsContext>> Create();
+  // Creates a ClipsContext with a fresh environment and its managers.
+  //
+  // `clock` is forwarded to the TraceSpanManager (see
+  // TraceSpanManager::Create). It is not owned. If a custom clock is passed, it
+  // must outlive the returned ClipsContext. The default real clock is never
+  // destroyed.
+  static absl::StatusOr<std::unique_ptr<ClipsContext>> Create(
+      util::Clock* absl_nonnull clock ABSL_ATTRIBUTE_LIFETIME_BOUND =
+          util::Clock::RealClock());
 
   Environment* GetClipsEnvironment() const { return environment_.get(); }
   ProtobufManager* GetProtobufManager() const { return proto_mgr_.get(); }

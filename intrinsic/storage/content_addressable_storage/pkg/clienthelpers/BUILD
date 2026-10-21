@@ -20,7 +20,6 @@ go_library(
     importpath = "intrinsic/storage/content_addressable_storage/pkg/clienthelpers",
     visibility = [
         "//intrinsic/assets/artifacts:__pkg__",
-        "//intrinsic/assets/catalog:__pkg__",
         "//intrinsic/kubernetes/data_store/firestore_shim:__pkg__",
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/storage/content_addressable_storage/pkg/crossproject:__pkg__",

@@ -15,7 +15,7 @@
 """Macros for testing text proto files."""
 
 load("//bazel:cc_macros.bzl", "cc_test")
-load("//intrinsic/util/proto/build_defs:descriptor_set.bzl", "proto_source_code_info_transitive_descriptor_set")
+load("//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl", "proto_source_code_info_transitive_descriptor_set")
 
 def _cc_test_for_srcs(name, srcs, message, tags, transitive_descriptor_set_name, **kwargs):
     srcs_locations = ["$(location %s)" % src for src in srcs]

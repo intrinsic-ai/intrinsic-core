@@ -13,7 +13,6 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -22,15 +21,10 @@ cc_library(
     srcs = ["footprint_util.cc"],
     hdrs = ["footprint_util.h"],
     deps = [
-        "//intrinsic/choreographer/fabrication_toolkit:shape_util",
         "//intrinsic/choreographer/footprints:footprint",
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:status_builder",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic/world",
         "//intrinsic/world:world_acl_spec",
         "//intrinsic/world:world_entity_acl_spec",
-        "//intrinsic/world/collision:coal_collision_checker",
         "//intrinsic/world/util:entity_search_util",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:affine_transform_of_geometry",
@@ -39,10 +33,11 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/api:io",
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_deserializer",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world/hashing",
-        "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/geometry/proto:transformed_geometry_storage_refs_cc_proto",
@@ -51,67 +46,16 @@ cc_library(
     ],
 )
 
-go_library(
-    name = "skillbundle",
-    srcs = ["skillbundle.go"],
-    importpath = "intrinsic/skills/skillbundle",
-    visibility = ["//intrinsic:internal_api_users"],
-    deps = [
-        ":skillmanifest",
-        ":skillvalidate",
-        "//intrinsic/assets:imageutils",
-        "//intrinsic/assets:ioutils",
-        "//intrinsic/util/archive:tartooling",
-        "@com_github_google_safearchive//tar",
-        "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_go_proto",
-        "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
-        "@org_golang_google_protobuf//proto",
-        "@org_golang_google_protobuf//reflect/protodesc:go_default_library",
-        "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
-    ],
-)
-
-go_library(
-    name = "skillmanifest",
-    srcs = ["skillmanifest.go"],
-    importpath = "intrinsic/skills/skillmanifest",
-    visibility = ["//intrinsic:public_api_users"],
-    deps = [
-        "//intrinsic/util/proto:sourcecodeinfoview",
-        "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
-        "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
-    ],
-)
-
-go_library(
+alias(
     name = "skillvalidate",
-    srcs = ["skillvalidate.go"],
-    importpath = "intrinsic/skills/skillvalidate",
+    actual = "//intrinsic_sdk/intrinsic/skills:skillvalidate",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//intrinsic:public_api_users"],
-    deps = [
-        "//intrinsic/assets:idutils",
-        "//intrinsic/assets:interfaceutils",
-        "//intrinsic/assets:metadatautils",
-        "//intrinsic/assets/dependencies:platform",
-        "//intrinsic/assets/dependencies:utils",
-        "//intrinsic/assets/errors:report",
-        "@intrinsic_apis//intrinsic/assets/proto:metadata_go_proto",
-        "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_go_proto",
-        "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
-        "@org_golang_google_protobuf//reflect/protodesc:go_default_library",
-        "@org_golang_google_protobuf//reflect/protoreflect:go_default_library",
-        "@org_golang_google_protobuf//reflect/protoregistry:go_default_library",
-    ],
 )
 
-go_library(
+alias(
     name = "skillfix",
-    srcs = ["skillfix.go"],
-    importpath = "intrinsic/skills/skillfix",
+    actual = "//intrinsic_sdk/intrinsic/skills:skillfix",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//intrinsic:internal_api_users"],
-    deps = [
-        "//intrinsic/util/proto:descriptorcompatibility",
-        "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_go_proto",
-        "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
-    ],
 )

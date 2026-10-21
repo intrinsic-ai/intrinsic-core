@@ -16,6 +16,9 @@
 # limitations under the License.
 
 [type.googleapis.com/intrinsic_proto.simulation.gazebo.v1.GazeboConfig] {
+  intrinsic_runtime {
+    name: "intrinsic_runtime"
+  }
   simulation_options {
     physics_update_rate_hz: 500
   }

@@ -43,7 +43,6 @@ cc_library(
     deps = [
         ":cookies",
         "//intrinsic/util/grpc",
-        "//intrinsic_control/intrinsic/icon/release:grpc_time_support",
         "@abseil-cpp//absl/strings:string_view",
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",

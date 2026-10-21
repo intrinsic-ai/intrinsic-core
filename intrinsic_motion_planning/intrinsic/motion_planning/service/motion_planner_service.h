@@ -15,11 +15,13 @@
 #ifndef INTRINSIC_MOTION_PLANNING_SERVICE_MOTION_PLANNER_SERVICE_H_
 #define INTRINSIC_MOTION_PLANNING_SERVICE_MOTION_PLANNER_SERVICE_H_
 
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <queue>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/random/random.h"
@@ -41,7 +43,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
 #include "intrinsic/motion_planning/proto/v1/robot_specification.pb.h"
-#include "intrinsic/motion_planning/service/motion_planner_cache.h"
+#include "intrinsic/motion_planning/service/cache/motion_planner_cache.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.h"
 #include "intrinsic/platform/pubsub/publisher.h"
@@ -113,7 +115,6 @@ struct WorldAndProto {
   World world;
   intrinsic_proto::world::internal::World world_proto;
 };
-
 // A gRPC server that handles motion planning requests.
 class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
                                  MotionPlannerService::Service {
@@ -222,6 +223,17 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
       bool enable_collision_stats, const object_world::KinematicObject& robot,
       intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse& response
   );
+
+  // Computes the swept volume of `robot_id` moving along `path` in `world`,
+  // stores the resulting meshes in the geometry library, and appends them to
+  // `swept_volumes_out`.
+  // Returns `kUnimplemented` in builds without swept volume support.
+  absl::Status ComputeSweptVolumeAndAssignToResponse(
+      const World& world, const RobotCollectionsEntityId& robot_id,
+      const std::vector<eigenmath::VectorXd>& path,
+      google::protobuf::RepeatedPtrField<
+          intrinsic_proto::geometry::v1::TransformedGeometry>*
+          swept_volumes_out);
   intrinsic_proto::world::ObjectWorldService::StubInterface*
       object_world_service_;           // Not owned.
   GeometryLibrary* geometry_library_;  // Not owned.

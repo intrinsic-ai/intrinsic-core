@@ -54,7 +54,7 @@ cc_test(
     name = "abb_elog_test",
     srcs = ["abb_elog_test.cc"],
     deps = [
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//third_party/abb_hardware_module/abb_hwm:abb_elog",
         "@abseil-cpp//absl/strings:string_view",
         "@com_github_nlohmann_json//:json",

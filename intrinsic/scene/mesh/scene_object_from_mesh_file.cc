@@ -47,7 +47,6 @@
 #include "intrinsic/world/objects/object_world_creation_utils.h"
 #include "intrinsic/world/proto/physics_component.pb.h"
 #include "ortools/base/path.h"
-#include "tiny_gltf.h"
 
 namespace intrinsic::scene_object {
 

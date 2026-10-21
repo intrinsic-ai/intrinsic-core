@@ -14,44 +14,28 @@
 
 #include "intrinsic/platform/pubsub/kvstore_grpc/metrics.h"
 
+#include <algorithm>
+#include <array>
+#include <cstdint>
 #include <string>
+#include <utility>
 
 #include "absl/status/status.h"
-#include "intrinsic/production/external/googleinit/googleinit.h"
-#include "opencensus/stats/stats.h"
-#include "opencensus/tags/tag_map.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "intrinsic/stats/metrics_utils.h"
+#include "opentelemetry/common/attribute_value.h"
+#include "opentelemetry/metrics/meter.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 namespace intrinsic::kvstore {
 
-using ::opencensus::stats::Aggregation;
-using ::opencensus::stats::BucketBoundaries;
-using ::opencensus::stats::MeasureInt64;
-using ::opencensus::stats::Record;
-using ::opencensus::stats::ViewDescriptor;
-using ::opencensus::tags::TagMap;
+using ::opentelemetry::metrics::Counter;
+using ::opentelemetry::metrics::Histogram;
 
 constexpr char kNanoSeconds[] = "ns";
 constexpr char kBytes[] = "bytes";
-
-namespace {
-
-ViewDescriptor BaseViewWithStatus() {
-  return ViewDescriptor().add_column(StatusCodeKey());
-}
-
-}  // namespace
-
-opencensus::tags::TagKey StatusCodeKey() {
-  static const opencensus::tags::TagKey key =
-      opencensus::tags::TagKey::Register("grpc_status");
-  return key;
-}
-
-opencensus::tags::TagKey HighConsistencyKey() {
-  static const opencensus::tags::TagKey key =
-      opencensus::tags::TagKey::Register("high_consistency");
-  return key;
-}
 
 // Get
 
@@ -59,52 +43,52 @@ constexpr char kGetRequestsReceivedName[] =
     "intrinsic/kvstore_grpc/get_requests";
 constexpr char kGetRequestsReceivedDescription[] = "Number of Get requests";
 
-constexpr char kGetDurationNanosName[] =
-    "intrinsic/kvstore_grpc/get_duration_nanos";
-constexpr char kGetDurationNanosDescription[] =
+constexpr char kGetDurationName[] = "intrinsic/kvstore_grpc/get_duration";
+constexpr char kGetDurationDescription[] =
     "Time spent in KVStore Get request in nanoseconds";
 
-MeasureInt64 GetMetricsScope::RequestsReceived() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kGetRequestsReceivedName, kGetRequestsReceivedDescription, "1");
-  return measure;
+// Instruments in this file are intentionally released so they remain alive
+// for the program's lifetime, avoiding global destructor ordering errors on
+// service destruction. Each is a one-time allocation, so this doesn't leak.
+Counter<uint64_t>& GetMetricsScope::RequestsReceived() {
+  static Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(kGetRequestsReceivedName,
+                                kGetRequestsReceivedDescription, "1")
+          .release();
+  return *counter;
 }
 
-MeasureInt64 GetMetricsScope::DurationNanos() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kGetDurationNanosName, kGetDurationNanosDescription, kNanoSeconds);
-  return measure;
+Histogram<uint64_t>& GetMetricsScope::DurationNanos() {
+  static Histogram<uint64_t>* histogram =
+      stats::GetMeter()
+          ->CreateUInt64Histogram(kGetDurationName, kGetDurationDescription,
+                                  kNanoSeconds)
+          .release();
+  return *histogram;
 }
 
 GetMetricsScope::~GetMetricsScope() {
-  std::string status_str = absl::StatusCodeToString(status.code());
-  const TagMap tags = {{StatusCodeKey(), status_str}};
+  const std::string status_str = absl::StatusCodeToString(status.code());
+  const std::array<
+      std::pair<absl::string_view, opentelemetry::common::AttributeValue>, 1>
+      attributes = {{{kStatusCodeKey, status_str}}};
+  const uint64_t duration_ns = absl::ToInt64Nanoseconds(
+      std::max(absl::ZeroDuration(), absl::Now() - start_time));
 
-  Record(
-      {{RequestsReceived(), 1},
-       {DurationNanos(), absl::ToInt64Nanoseconds(absl::Now() - start_time)}},
-      tags);
+  RequestsReceived().Add(1, attributes);
+  DurationNanos().Record(duration_ns, attributes);
 }
 
 void GetMetricsScope::RegisterViews() {
-  GetMetricsScope::RequestsReceived();
-  GetMetricsScope::DurationNanos();
+  stats::RegisterHistogramView(kGetDurationName, /*view_name=*/"",
+                               stats::ExponentialBucketBoundaries(
+                                   /*num_finite_buckets=*/15, /*scale=*/50000,
+                                   /*growth_factor=*/2.0));
 
-  BaseViewWithStatus()
-      .set_name(kGetRequestsReceivedName)
-      .set_measure(kGetRequestsReceivedName)
-      .set_description(kGetRequestsReceivedDescription)
-      .set_aggregation(Aggregation::Count())
-      .RegisterForExport();
-
-  BaseViewWithStatus()
-      .set_name(kGetDurationNanosName)
-      .set_measure(kGetDurationNanosName)
-      .set_description(kGetDurationNanosDescription)
-      .set_aggregation(Aggregation::Distribution(BucketBoundaries::Exponential(
-          /* num_finite_buckets= */ 15, /* scale= */ 50000,
-          /* growth_factor= */ 2.0)))
-      .RegisterForExport();
+  // Eagerly initialize the instruments to register them.
+  RequestsReceived();
+  DurationNanos();
 }
 
 // Set
@@ -113,9 +97,8 @@ constexpr char kSetRequestsReceivedName[] =
     "intrinsic/kvstore_grpc/set_requests";
 constexpr char kSetRequestsReceivedDescription[] = "Number of Set requests";
 
-constexpr char kSetDurationNanosName[] =
-    "intrinsic/kvstore_grpc/set_duration_nanos";
-constexpr char kSetDurationNanosDescription[] =
+constexpr char kSetDurationName[] = "intrinsic/kvstore_grpc/set_duration";
+constexpr char kSetDurationDescription[] =
     "Time spent in KVStore Set request in nanoseconds";
 
 constexpr char kSetPayloadSizeBytesName[] =
@@ -123,73 +106,66 @@ constexpr char kSetPayloadSizeBytesName[] =
 constexpr char kSetPayloadSizeBytesDescription[] =
     "Size of KVStore Set request payload in bytes";
 
-MeasureInt64 SetMetricsScope::RequestsReceived() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kSetRequestsReceivedName, kSetRequestsReceivedDescription, "1");
-  return measure;
+Counter<uint64_t>& SetMetricsScope::RequestsReceived() {
+  static Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(kSetRequestsReceivedName,
+                                kSetRequestsReceivedDescription, "1")
+          .release();
+  return *counter;
 }
 
-MeasureInt64 SetMetricsScope::DurationNanos() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kSetDurationNanosName, kSetDurationNanosDescription, kNanoSeconds);
-  return measure;
+Histogram<uint64_t>& SetMetricsScope::DurationNanos() {
+  static Histogram<uint64_t>* histogram =
+      stats::GetMeter()
+          ->CreateUInt64Histogram(kSetDurationName, kSetDurationDescription,
+                                  kNanoSeconds)
+          .release();
+  return *histogram;
 }
 
-MeasureInt64 SetMetricsScope::PayloadSizeBytes() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kSetPayloadSizeBytesName, kSetPayloadSizeBytesDescription, kBytes);
-  return measure;
+Histogram<uint64_t>& SetMetricsScope::PayloadSizeBytes() {
+  static Histogram<uint64_t>* histogram =
+      stats::GetMeter()
+          ->CreateUInt64Histogram(kSetPayloadSizeBytesName,
+                                  kSetPayloadSizeBytesDescription, kBytes)
+          .release();
+  return *histogram;
 }
 
 SetMetricsScope::~SetMetricsScope() {
-  std::string status_str = absl::StatusCodeToString(status.code());
-  std::string high_consistency_str = high_consistency ? "true" : "false";
+  const std::string status_str = absl::StatusCodeToString(status.code());
+  const absl::string_view high_consistency_str =
+      high_consistency ? "true" : "false";
+  const std::array<
+      std::pair<absl::string_view, opentelemetry::common::AttributeValue>, 2>
+      attributes = {{{kStatusCodeKey, status_str},
+                     {kHighConsistencyKey, high_consistency_str}}};
+  const uint64_t duration_ns = absl::ToInt64Nanoseconds(
+      std::max(absl::ZeroDuration(), absl::Now() - start_time));
 
-  const TagMap tags = {{StatusCodeKey(), status_str},
-                       {HighConsistencyKey(), high_consistency_str}};
-
-  Record(
-      {{RequestsReceived(), 1},
-       {DurationNanos(), absl::ToInt64Nanoseconds(absl::Now() - start_time)}},
-      tags);
+  RequestsReceived().Add(1, attributes);
+  DurationNanos().Record(duration_ns, attributes);
 
   if (payload_bytes > 0) {
-    Record({{PayloadSizeBytes(), payload_bytes}}, tags);
+    PayloadSizeBytes().Record(static_cast<uint64_t>(payload_bytes), attributes);
   }
 }
 
 void SetMetricsScope::RegisterViews() {
-  SetMetricsScope::RequestsReceived();
-  SetMetricsScope::DurationNanos();
-  SetMetricsScope::PayloadSizeBytes();
+  stats::RegisterHistogramView(kSetDurationName, /*view_name=*/"",
+                               stats::ExponentialBucketBoundaries(
+                                   /*num_finite_buckets=*/15, /*scale=*/50000,
+                                   /*growth_factor=*/2.0));
+  stats::RegisterHistogramView(kSetPayloadSizeBytesName, /*view_name=*/"",
+                               stats::ExponentialBucketBoundaries(
+                                   /*num_finite_buckets=*/20, /*scale=*/100,
+                                   /*growth_factor=*/2.0));
 
-  BaseViewWithStatus()
-      .add_column(HighConsistencyKey())
-      .set_name(kSetRequestsReceivedName)
-      .set_measure(kSetRequestsReceivedName)
-      .set_description(kSetRequestsReceivedDescription)
-      .set_aggregation(Aggregation::Count())
-      .RegisterForExport();
-
-  BaseViewWithStatus()
-      .add_column(HighConsistencyKey())
-      .set_name(kSetDurationNanosName)
-      .set_measure(kSetDurationNanosName)
-      .set_description(kSetDurationNanosDescription)
-      .set_aggregation(Aggregation::Distribution(BucketBoundaries::Exponential(
-          /* num_finite_buckets= */ 15, /* scale= */ 50000,
-          /* growth_factor= */ 2.0)))
-      .RegisterForExport();
-
-  BaseViewWithStatus()
-      .add_column(HighConsistencyKey())
-      .set_name(kSetPayloadSizeBytesName)
-      .set_measure(kSetPayloadSizeBytesName)
-      .set_description(kSetPayloadSizeBytesDescription)
-      .set_aggregation(Aggregation::Distribution(BucketBoundaries::Exponential(
-          /* num_finite_buckets= */ 20, /* scale= */ 100,
-          /* growth_factor= */ 2.0)))
-      .RegisterForExport();
+  // Eagerly initialize the instruments to register them.
+  RequestsReceived();
+  DurationNanos();
+  PayloadSizeBytes();
 }
 
 // Delete
@@ -199,52 +175,49 @@ constexpr char kDeleteRequestsReceivedName[] =
 constexpr char kDeleteRequestsReceivedDescription[] =
     "Number of Delete requests";
 
-constexpr char kDeleteDurationNanosName[] =
-    "intrinsic/kvstore_grpc/delete_duration_nanos";
-constexpr char kDeleteDurationNanosDescription[] =
+constexpr char kDeleteDurationName[] = "intrinsic/kvstore_grpc/delete_duration";
+constexpr char kDeleteDurationDescription[] =
     "Time spent in KVStore Delete request in nanoseconds";
 
-MeasureInt64 DeleteMetricsScope::RequestsReceived() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kDeleteRequestsReceivedName, kDeleteRequestsReceivedDescription, "1");
-  return measure;
+Counter<uint64_t>& DeleteMetricsScope::RequestsReceived() {
+  static Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(kDeleteRequestsReceivedName,
+                                kDeleteRequestsReceivedDescription, "1")
+          .release();
+  return *counter;
 }
 
-MeasureInt64 DeleteMetricsScope::DurationNanos() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kDeleteDurationNanosName, kDeleteDurationNanosDescription, kNanoSeconds);
-  return measure;
+Histogram<uint64_t>& DeleteMetricsScope::DurationNanos() {
+  static Histogram<uint64_t>* histogram =
+      stats::GetMeter()
+          ->CreateUInt64Histogram(kDeleteDurationName,
+                                  kDeleteDurationDescription, kNanoSeconds)
+          .release();
+  return *histogram;
 }
 
 DeleteMetricsScope::~DeleteMetricsScope() {
-  std::string status_str = absl::StatusCodeToString(status.code());
-  const TagMap tags = {{StatusCodeKey(), status_str}};
+  const std::string status_str = absl::StatusCodeToString(status.code());
+  const std::array<
+      std::pair<absl::string_view, opentelemetry::common::AttributeValue>, 1>
+      attributes = {{{kStatusCodeKey, status_str}}};
+  const uint64_t duration_ns = absl::ToInt64Nanoseconds(
+      std::max(absl::ZeroDuration(), absl::Now() - start_time));
 
-  Record(
-      {{RequestsReceived(), 1},
-       {DurationNanos(), absl::ToInt64Nanoseconds(absl::Now() - start_time)}},
-      tags);
+  RequestsReceived().Add(1, attributes);
+  DurationNanos().Record(duration_ns, attributes);
 }
 
 void DeleteMetricsScope::RegisterViews() {
-  DeleteMetricsScope::RequestsReceived();
-  DeleteMetricsScope::DurationNanos();
+  stats::RegisterHistogramView(kDeleteDurationName, /*view_name=*/"",
+                               stats::ExponentialBucketBoundaries(
+                                   /*num_finite_buckets=*/15, /*scale=*/50000,
+                                   /*growth_factor=*/2.0));
 
-  BaseViewWithStatus()
-      .set_name(kDeleteRequestsReceivedName)
-      .set_measure(kDeleteRequestsReceivedName)
-      .set_description(kDeleteRequestsReceivedDescription)
-      .set_aggregation(Aggregation::Count())
-      .RegisterForExport();
-
-  BaseViewWithStatus()
-      .set_name(kDeleteDurationNanosName)
-      .set_measure(kDeleteDurationNanosName)
-      .set_description(kDeleteDurationNanosDescription)
-      .set_aggregation(Aggregation::Distribution(BucketBoundaries::Exponential(
-          /* num_finite_buckets= */ 15, /* scale= */ 50000,
-          /* growth_factor= */ 2.0)))
-      .RegisterForExport();
+  // Eagerly initialize the instruments to register them.
+  RequestsReceived();
+  DurationNanos();
 }
 
 // List
@@ -253,59 +226,56 @@ constexpr char kListRequestsReceivedName[] =
     "intrinsic/kvstore_grpc/list_requests";
 constexpr char kListRequestsReceivedDescription[] = "Number of List requests";
 
-constexpr char kListDurationNanosName[] =
-    "intrinsic/kvstore_grpc/list_duration_nanos";
-constexpr char kListDurationNanosDescription[] =
+constexpr char kListDurationName[] = "intrinsic/kvstore_grpc/list_duration";
+constexpr char kListDurationDescription[] =
     "Time spent in KVStore List request in nanoseconds";
 
-MeasureInt64 ListMetricsScope::RequestsReceived() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kListRequestsReceivedName, kListRequestsReceivedDescription, "1");
-  return measure;
+Counter<uint64_t>& ListMetricsScope::RequestsReceived() {
+  static Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(kListRequestsReceivedName,
+                                kListRequestsReceivedDescription, "1")
+          .release();
+  return *counter;
 }
 
-MeasureInt64 ListMetricsScope::DurationNanos() {
-  static const MeasureInt64 measure = MeasureInt64::Register(
-      kListDurationNanosName, kListDurationNanosDescription, kNanoSeconds);
-  return measure;
+Histogram<uint64_t>& ListMetricsScope::DurationNanos() {
+  static Histogram<uint64_t>* histogram =
+      stats::GetMeter()
+          ->CreateUInt64Histogram(kListDurationName, kListDurationDescription,
+                                  kNanoSeconds)
+          .release();
+  return *histogram;
 }
 
 ListMetricsScope::~ListMetricsScope() {
-  std::string status_str = absl::StatusCodeToString(status.code());
-  const TagMap tags = {{StatusCodeKey(), status_str}};
+  const std::string status_str = absl::StatusCodeToString(status.code());
+  const std::array<
+      std::pair<absl::string_view, opentelemetry::common::AttributeValue>, 1>
+      attributes = {{{kStatusCodeKey, status_str}}};
+  const uint64_t duration_ns = absl::ToInt64Nanoseconds(
+      std::max(absl::ZeroDuration(), absl::Now() - start_time));
 
-  Record(
-      {{RequestsReceived(), 1},
-       {DurationNanos(), absl::ToInt64Nanoseconds(absl::Now() - start_time)}},
-      tags);
+  RequestsReceived().Add(1, attributes);
+  DurationNanos().Record(duration_ns, attributes);
 }
 
 void ListMetricsScope::RegisterViews() {
-  ListMetricsScope::RequestsReceived();
-  ListMetricsScope::DurationNanos();
+  stats::RegisterHistogramView(kListDurationName, /*view_name=*/"",
+                               stats::ExponentialBucketBoundaries(
+                                   /*num_finite_buckets=*/15, /*scale=*/50000,
+                                   /*growth_factor=*/2.0));
 
-  BaseViewWithStatus()
-      .set_name(kListRequestsReceivedName)
-      .set_measure(kListRequestsReceivedName)
-      .set_description(kListRequestsReceivedDescription)
-      .set_aggregation(Aggregation::Count())
-      .RegisterForExport();
-
-  BaseViewWithStatus()
-      .set_name(kListDurationNanosName)
-      .set_measure(kListDurationNanosName)
-      .set_description(kListDurationNanosDescription)
-      .set_aggregation(Aggregation::Distribution(BucketBoundaries::Exponential(
-          /* num_finite_buckets= */ 15, /* scale= */ 50000,
-          /* growth_factor= */ 2.0)))
-      .RegisterForExport();
+  // Eagerly initialize the instruments to register them.
+  RequestsReceived();
+  DurationNanos();
 }
 
-REGISTER_MODULE_INITIALIZER(kvstore_grpc_metrics, {
+void RegisterKvstoreGrpcMetrics() {
   GetMetricsScope::RegisterViews();
   SetMetricsScope::RegisterViews();
   DeleteMetricsScope::RegisterViews();
   ListMetricsScope::RegisterViews();
-});
+}
 
 }  // namespace intrinsic::kvstore

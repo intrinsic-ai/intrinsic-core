@@ -16,7 +16,7 @@ load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
 
 proto_library(
     name = "homing_proto",
@@ -63,10 +63,6 @@ cc_library(
     hdrs = ["homing.h"],
     deps = [
         ":homing_cc_proto",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/grpc:channel_interface",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/actions:homing_info",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
         "//intrinsic_control/intrinsic/icon/cc_client:client_utils",
@@ -74,13 +70,16 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/common:id_types",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
-        "//intrinsic_control/intrinsic/icon/release:grpc_time_support",
         "//intrinsic_control/intrinsic/icon/utils:arm_utils",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/grpc:channel_interface",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "@abseil-cpp//absl/cleanup",
@@ -90,6 +89,7 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:string_view",
         "@abseil-cpp//absl/time",
+        "@com_github_grpc_grpc//:grpc++",
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/icon/equipment:icon_equipment_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:point_cc_proto",

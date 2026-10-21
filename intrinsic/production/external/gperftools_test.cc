@@ -14,10 +14,26 @@
 
 #include <gtest/gtest.h>
 
+#include <memory>
+#include <vector>
+
 namespace intrinsic {
 namespace {
 
-TEST(Gperftools, CanRun) {}
+// Memory kept alive until process exit so that the heap profile written by
+// :heap_profiler (when HEAPPROFILE is set) has something in it.
+std::vector<std::unique_ptr<char[]>>& LiveAllocations() {
+  static auto* allocations = new std::vector<std::unique_ptr<char[]>>();
+  return *allocations;
+}
+
+TEST(Gperftools, CanRun) {
+  // Allocate well above tcmalloc's default ~2 MiB sampling interval so the
+  // heap profile reliably contains samples.
+  for (int i = 0; i < 16; ++i) {
+    LiveAllocations().push_back(std::make_unique<char[]>(4 << 20));
+  }
+}
 
 }  // namespace
 }  // namespace intrinsic

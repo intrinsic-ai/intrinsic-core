@@ -17,9 +17,9 @@ load("@rules_pkg//:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("//bazel:container.bzl", "container_image")
 load("//bazel:go_macros.bzl", "go_binary")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
-load("//intrinsic/httpjson:intrinsic_http_image.bzl", "intrinsic_http_image")
-load("//intrinsic/httpjson/openapi:protoc_gen_openapi.bzl", "protoc_gen_openapi")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/httpjson:intrinsic_http_image.bzl", "intrinsic_http_image")
+load("//intrinsic_sdk/intrinsic/httpjson/openapi:protoc_gen_openapi.bzl", "protoc_gen_openapi")
 
 # gazelle:ignore
 
@@ -31,7 +31,7 @@ go_binary(
     name = "camera_service_proxy",
     srcs = ["cameraserviceproxy.go"],
     deps = [
-        "//intrinsic/util/proto:protoio",
+        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:dynamic_reconfiguration_go_proto",
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_state_go_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:camera_config_go_proto",

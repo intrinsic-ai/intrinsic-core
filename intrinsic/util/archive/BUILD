@@ -13,23 +13,10 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_library")
 
 # This package contains the tools to handle tar archives.
 
 package(default_visibility = ["//visibility:private"])
-
-go_library(
-    name = "tartooling",
-    srcs = ["tartooling.go"],
-    importpath = "intrinsic/util/archive/tartooling",
-    visibility = ["//intrinsic:intrinsic_internal"],
-    deps = [
-        "@com_github_google_safearchive//tar",
-        "@com_github_pkg_errors//:go_default_library",
-        "@org_golang_google_protobuf//proto",
-    ],
-)
 
 cc_library(
     name = "unzip",
@@ -38,7 +25,7 @@ cc_library(
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
         "//intrinsic/util:file_helpers",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",

@@ -35,6 +35,7 @@
 #include "absl/time/time.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/client_callback.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/perception/cameras/camera_config.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
@@ -205,6 +206,8 @@ class ConcurrentCamera {
 struct ActiveCameraConfig {
   CameraIdentifier identifier;
   CameraConfig config;
+  std::optional<intrinsic_proto::assets::v1::ResolvedDependency>
+      intrinsic_runtime;
 
   static absl::StatusOr<ActiveCameraConfig> FromProto(
       const intrinsic_proto::perception::v1::CameraConfig& camera_config_proto);
@@ -220,9 +223,10 @@ class CameraManager {
   explicit CameraManager(const ActiveCameraConfig& active_camera);
 
   absl::StatusOr<std::shared_ptr<ConcurrentCamera>> Get(
-      const CameraIdentifier& identifier) ABSL_LOCKS_EXCLUDED(mutex_);
+      const CameraIdentifier& identifier)
+      ABSL_LOCKS_EXCLUDED(creation_mutex_, mutex_);
   absl::StatusOr<std::shared_ptr<ConcurrentCamera>> GetActiveCamera()
-      ABSL_LOCKS_EXCLUDED(mutex_);
+      ABSL_LOCKS_EXCLUDED(creation_mutex_, mutex_);
   absl::StatusOr<ActiveCameraConfig> GetActiveCameraConfig() const
       ABSL_LOCKS_EXCLUDED(mutex_);
 
@@ -230,6 +234,7 @@ class CameraManager {
       ABSL_LOCKS_EXCLUDED(mutex_);
 
  private:
+  mutable absl::Mutex creation_mutex_ ABSL_ACQUIRED_BEFORE(mutex_);
   mutable absl::Mutex mutex_;
   std::optional<ActiveCameraConfig> active_camera_config_
       ABSL_GUARDED_BY(mutex_);

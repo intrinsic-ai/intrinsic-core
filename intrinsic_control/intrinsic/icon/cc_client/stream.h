@@ -26,10 +26,10 @@
 #include "absl/time/time.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/sync_stream.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/icon/common/id_types.h"
 #include "intrinsic/icon/proto/v1/service.grpc.pb.h"
 #include "intrinsic/icon/proto/v1/service.pb.h"
-#include "intrinsic/icon/release/grpc_time_support.h"
 #include "intrinsic/util/grpc/channel_interface.h"
 #include "intrinsic/util/status/status_macros.h"
 

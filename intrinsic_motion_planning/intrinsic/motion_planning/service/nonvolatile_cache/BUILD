@@ -28,10 +28,7 @@ cc_library(
     deps = [
         ":motion_planner_nonvolatile_cache_cc_proto",
         "//intrinsic/storage/content_addressable_storage/cpp:client_helpers_cc",
-        "//intrinsic/util:eigen",
-        "//intrinsic/util:lru_cache",
         "//intrinsic/util/proto:pb_hash",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic/world:cc_proto",
         "//intrinsic/world/objects:object_world",
         "//intrinsic/world/objects:object_world_proto_utils",
@@ -40,11 +37,14 @@ cc_library(
         "//intrinsic_motion_planning/intrinsic/motion_planning/path_planning:path_segment",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_cc_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_specification_cc_proto",
-        "//intrinsic_motion_planning/intrinsic/motion_planning/service:motion_planner_cache_utils",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/service/cache:cache_utils",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util:lru_cache",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//third_party/simple_lru_cache",
         "@abseil-cpp//absl/base:core_headers",
@@ -79,8 +79,6 @@ cc_library(
     hdrs = ["motion_planner_nonvolatile_cache_utils.h"],
     deps = [
         ":motion_planner_nonvolatile_cache",
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic/world/objects:object_world",
         "//intrinsic_motion_planning/intrinsic/motion_planning/motion_planner",
         "//intrinsic_motion_planning/intrinsic/motion_planning/motion_planner:motion_planning_utils",
@@ -89,6 +87,8 @@ cc_library(
         "//intrinsic_motion_planning/intrinsic/motion_planning/path_planning/planners:validation",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_cc_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_specification_cc_proto",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
@@ -109,11 +109,12 @@ proto_library(
     strip_import_prefix = "/intrinsic_motion_planning",
     deps = [
         "//intrinsic_motion_planning/intrinsic/motion_planning/path_planning:path_segment_proto",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_specification_proto",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:robot_specification_proto",
-    ] + [],
+    ],
 )
 
 cc_proto_library(
@@ -127,9 +128,10 @@ go_proto_library(
     proto = ":motion_planner_nonvolatile_cache_proto",
     deps = [
         "//intrinsic_motion_planning/intrinsic/motion_planning/path_planning:path_segment_go_proto",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_go_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_specification_go_proto",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_go_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:robot_specification_go_proto",
-    ] + [],
+    ],
 )

@@ -478,6 +478,16 @@ status_info: [
     recovery_instructions: "Make sure the tree ids are globally unique, e.g., by generating a UUID"
   },
   {
+    code: 70004
+    title: "Duplicate behavior tree element IDs"
+    recovery_instructions: "Make sure all element IDs in the behavior tree are unique"
+  },
+  {
+    code: 70005
+    title: "Malformed behavior tree element IDs"
+    recovery_instructions: "Make sure all element IDs consist of 1 to 20 decimal digits"
+  },
+  {
     code: 70099
     title: "Id handling error"
   },

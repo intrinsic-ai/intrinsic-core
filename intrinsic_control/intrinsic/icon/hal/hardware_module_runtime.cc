@@ -311,10 +311,10 @@ class HardwareModuleRuntime::CallbackHandler final {
       INTRINSIC_RT_LOG_THROTTLED(ERROR)
           << message << "\nLatest stacktrace:\n"
           << GenerateRtErrorStackTrace(
-                 std::span(icon::GetThreadLocalMallocViolations()
-                               .latest_violation_stack_trace->stack_trace,
-                           icon::GetThreadLocalMallocViolations()
-                               .latest_violation_stack_trace->num_frames));
+                 absl::MakeSpan(icon::GetThreadLocalMallocViolations()
+                                    .latest_violation_stack_trace->stack_trace,
+                                icon::GetThreadLocalMallocViolations()
+                                    .latest_violation_stack_trace->num_frames));
       if (SetStateDirectly(intrinsic_fbs::StateCode::kFaulted, message)) {
         // Cancel all requests since we got a new error.
         CancelPendingRequests(
@@ -371,10 +371,10 @@ class HardwareModuleRuntime::CallbackHandler final {
       INTRINSIC_RT_LOG_THROTTLED(ERROR)
           << message << "\nLatest stacktrace:\n"
           << GenerateRtErrorStackTrace(
-                 std::span(icon::GetThreadLocalMallocViolations()
-                               .latest_violation_stack_trace->stack_trace,
-                           icon::GetThreadLocalMallocViolations()
-                               .latest_violation_stack_trace->num_frames));
+                 absl::MakeSpan(icon::GetThreadLocalMallocViolations()
+                                    .latest_violation_stack_trace->stack_trace,
+                                icon::GetThreadLocalMallocViolations()
+                                    .latest_violation_stack_trace->num_frames));
       if (SetStateDirectly(intrinsic_fbs::StateCode::kFaulted, message)) {
         // Cancel all requests since we got a new error.
         CancelPendingRequests(
@@ -1011,8 +1011,8 @@ absl::Status HardwareModuleRuntime::Run(
     auto cycle_time_metrics_helper =
         intrinsic::icon::CycleTimeMetricsHelper::Create(
             cycle_duration,
-            /*log_cycle_time_warnings=*/init_context
-                .AreCycleTimeWarningsEnabled());
+            /*log_cycle_time_warnings=*/
+            init_context.AreCycleTimeWarningsEnabled(), clock_);
 
     if (cycle_time_metrics_helper.ok()) {
       cycle_time_metrics_helper_ = std::make_unique<CycleTimeMetricsHelper>(

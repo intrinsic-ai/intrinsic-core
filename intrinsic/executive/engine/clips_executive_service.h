@@ -180,7 +180,7 @@ class ClipsExecutiveService
   absl::Status InitExecutor();
 
   // Only once at startup.
-  void InitLogging(absl::Duration grpc_connect_timeout);
+  absl::Status InitLogging(absl::Duration grpc_connect_timeout);
 
   absl::StatusOr<OperationData*> FindOperationData(std::string_view name)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(operations_mutex_);

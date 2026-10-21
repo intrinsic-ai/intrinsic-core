@@ -599,8 +599,9 @@ std::string PluginSdfTrait<GenericActionPluginSpec>::ToString(
   if (plugin.has_action_configs()) {
     auto* e = xml_doc.NewElement("generic_action");
     std::string generic_action_string;
-    ::google::protobuf::TextFormat::PrintToString(plugin.action_configs(),
-                                                  &generic_action_string);
+    static_cast<void>(::google::protobuf::TextFormat::PrintToString(
+        plugin.action_configs(),
+        &generic_action_string));  // TODO: Handle return value
     e->SetText(generic_action_string.c_str());
     xml_doc.RootElement()->InsertEndChild(e);
   }

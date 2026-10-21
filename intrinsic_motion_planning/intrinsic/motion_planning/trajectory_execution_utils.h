@@ -25,6 +25,7 @@
 #include "intrinsic/icon/proto/joint_space.pb.h"
 #include "intrinsic/icon/proto/v1/condition_types.pb.h"
 #include "intrinsic/logging/proto/context.pb.h"
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"  
 #include "intrinsic/skills/cc/skill_canceller.h"
 #include "intrinsic/util/grpc/channel_interface.h"
 
@@ -64,6 +65,12 @@ absl::Status ExecuteJointTrajectory(
     std::optional<intrinsic_proto::icon::v1::Condition>
         move_until_signal_condition = std::nullopt,
     bool* stopped_on_signal = nullptr
+
+    ,
+    absl::Span<const intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events = {}
+
+
 );
 
 // Same as above but with the icon equipment broken down for more convenient
@@ -78,6 +85,12 @@ absl::Status ExecuteJointTrajectory(
     std::optional<intrinsic_proto::icon::v1::Condition>
         move_until_signal_condition = std::nullopt,
     bool* stopped_on_signal = nullptr
+
+    ,
+    absl::Span<const intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events = {}
+
+
 );
 
 }  // namespace intrinsic::motion_planning

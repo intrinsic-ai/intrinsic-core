@@ -61,6 +61,9 @@
 #include "intrinsic/icon/proto/generic_part_config.pb.h"
 #include "intrinsic/icon/proto/io_block.pb.h"
 #include "intrinsic/icon/proto/part_status.pb.h"
+
+#include "intrinsic/icon/proto/v1/motion_event_types.pb.h"
+
 #include "intrinsic/icon/proto/v1/service.pb.h"
 #include "intrinsic/icon/skills/update_robot_joint_positions.pb.h"
 #include "intrinsic/kinematics/types/cartesian_limits.h"
@@ -69,6 +72,9 @@
 #include "intrinsic/kinematics/types/joint_limits_xd.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/service/motion_planner_service.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_proxy.h"
@@ -116,6 +122,10 @@ constexpr absl::string_view kRobotLabel = "agilus-04";
 constexpr char kObjectName[] = "tool_target";
 char const kOriginalWorldId[] = "my_world";
 char const kExecutionWorldId[] = "execute_test_world";
+
+constexpr double kTinyTimeIncrement = 0.000001;
+
+
 constexpr char kEchoManifestPath[] =
     "incode/motion_planning/skills/move_robot_manifest.pbbin";
 
@@ -124,6 +134,16 @@ constexpr uint32_t kSignalIndex = 0;
 
 constexpr std::string_view kTestMotionPlannerServiceAssetVersion =
     "0.20260427.5-RC17";
+
+
+struct MotionEventStateVariablesToReport {
+  std::vector<absl::flat_hash_map<std::string, icon::StateVariableValue>>
+      before_event = {};
+  std::vector<absl::flat_hash_map<std::string, icon::StateVariableValue>>
+      after_event = {};
+};
+
+
 struct MoveRobotTestParams {
   absl::string_view world_id = kExecutionWorldId;
   double report_elapsed_stop_time_seconds = 0.0;
@@ -131,6 +151,9 @@ struct MoveRobotTestParams {
   bool test_move_to_signal = false;
   bool report_tracking_done = true;
   std::vector<icon::ActionWill> event_action_will_list = {};
+
+  MotionEventStateVariablesToReport motion_event_state_variables_to_report = {};
+
   icon::RtclControllerFakeSession::ValidationMode validation_mode =
       icon::RtclControllerFakeSession::ValidationMode::kNice;
 };
@@ -402,6 +425,17 @@ class MoveRobotFixtureTest
     {
       icon::ActionWill trajectory_action_will =
           icon::ActionWill().ExpectParameter(parameter_matcher);
+
+      // For now this is the only trigger we test for the event.
+      for (auto state_variable_to_report :
+           test_params.motion_event_state_variables_to_report.before_event) {
+        state_variable_to_report.try_emplace(
+            icon::TrajectoryTrackingActionInfo::kTrajectoryProgress, 0.0);
+        trajectory_action_will.ReportStateVariables(
+            {std::move(state_variable_to_report)});
+      }
+
+
       auto report_state_variables = [&](icon::ActionWill& action_will) {
         if (!test_params.test_move_to_signal) {
           action_will.ReportStateVariables({
@@ -466,6 +500,15 @@ class MoveRobotFixtureTest
           action_instance_id++;
         }
         icon::ActionWill trajectory_action_will_after_event;
+
+        for (auto state_variable_to_report :
+             test_params.motion_event_state_variables_to_report.after_event) {
+          state_variable_to_report.try_emplace(
+              icon::TrajectoryTrackingActionInfo::kTrajectoryProgress, 0.0);
+          trajectory_action_will_after_event.ReportStateVariables(
+              {std::move(state_variable_to_report)});
+        }
+
         report_state_variables(trajectory_action_will_after_event);
         session_actions.ForAlreadyRunningAction(
             icon::ActionInstanceId(0), trajectory_action_will_after_event);
@@ -978,6 +1021,466 @@ TEST_P(MoveRobotFixtureTest, ExecuteStopsNotOnSignal) {
 
   EXPECT_EQ(return_value.stopped_on_signal(), false);
 }
+
+
+TEST_P(MoveRobotFixtureTest, ExecuteCanTriggerTimeBasedMotionEventAdio) {
+  intrinsic_proto::skills::MoveRobotParams params = CreateJointTargetParams();
+
+  icon::ADIOActionInfo::FixedParams expected_adio_event_fixed_params =
+      ParseTextProtoOrDie(
+          absl::StrFormat(R"pb(
+                            outputs {
+                              digital_outputs {
+                                key: "%s"
+                                value { values_by_index { key: 0 value: true } }
+                              }
+                            }
+                          )pb",
+                          icon::test_io_block_names::kDigitalOut));
+  intrinsic_proto::icon::v1::ADIOEvent adio_event;
+  adio_event.set_part_name(icon::test_part_names::kADIOName);
+  *adio_event.mutable_set_analog_digital_outputs() =
+      expected_adio_event_fixed_params.outputs();
+  adio_event.mutable_set_analog_digital_outputs()
+      ->mutable_digital_outputs()
+      ->at(icon::test_io_block_names::kDigitalOut)
+      .mutable_values_by_index()
+      ->at(0) = true;
+
+  const absl::Duration event_offset = absl::Seconds(0.1);
+
+  intrinsic_proto::skills::MotionSegmentEvent motion_segment_event;
+  motion_segment_event.mutable_event_location()->set_relative_to(
+      intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_START);
+  ASSERT_OK_AND_ASSIGN(*motion_segment_event.mutable_event_location()
+                            ->mutable_event_offset()
+                            ->mutable_time(),
+                       FromAbslDuration(event_offset));
+  *motion_segment_event.mutable_trajectory_event()->mutable_adio_event() =
+      adio_event;
+  *params.mutable_motion_segments()
+       ->Mutable(0)
+       ->mutable_motion_segment_events()
+       ->Add() = motion_segment_event;
+
+  auto event_fixed_param_matcher =
+      [expected_adio_event_fixed_params](
+          icon::ADIOActionInfo::FixedParams const& params) -> absl::Status {
+    if (!google::protobuf::util::MessageDifferencer::Equals(
+            params.outputs(), expected_adio_event_fixed_params.outputs())) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Params message does not match expected. Expected: ",
+                       expected_adio_event_fixed_params, " Actual: ", params));
+    }
+    return absl::OkStatus();
+  };
+
+  icon::ActionWill event_action_will = icon::ActionWill();
+  event_action_will.ExpectParameter<icon::ADIOActionInfo::FixedParams>(
+      event_fixed_param_matcher);
+  event_action_will.ReportStateVariables(
+      {{icon::ADIOActionInfo::kOutputsSet, true}});
+
+  MotionEventStateVariablesToReport motion_event_state_variables_to_report{
+      .before_event =
+          {{
+               {icon::kIsDone, false},
+               {icon::TrajectoryTrackingActionInfo::
+                    kTimeSinceTrajectoryStartSeconds,
+                -kTinyTimeIncrement + absl::ToDoubleSeconds(event_offset)},
+           },
+           {
+               {icon::kIsDone, false},
+               {icon::TrajectoryTrackingActionInfo::
+                    kTimeSinceTrajectoryStartSeconds,
+                kTinyTimeIncrement + absl::ToDoubleSeconds(event_offset)},
+           }},
+      .after_event = {{
+          {icon::kIsDone, false},
+          {icon::TrajectoryTrackingActionInfo::kTimeSinceTrajectoryStartSeconds,
+           2 * kTinyTimeIncrement + absl::ToDoubleSeconds(event_offset)},
+      }},
+  };
+
+  eigenmath::VectorNd initial(6);
+  initial << -0.10, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_dio_block(kDioBlock);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_signal_index(kSignalIndex);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_value_of_signal(false);
+
+  ASSERT_OK_AND_ASSIGN(
+      auto return_value,
+      ExecuteMoveRobotTest(
+          params, initial,
+          {.report_elapsed_stop_time_seconds = 0.0,
+           .report_is_settled = true,
+           .test_move_to_signal = false,
+           .event_action_will_list = {event_action_will},
+           .motion_event_state_variables_to_report =
+               motion_event_state_variables_to_report,
+           .validation_mode =
+               icon::RtclControllerFakeSession::ValidationMode::kStrict}));
+
+  EXPECT_EQ(return_value.stopped_on_signal(), false);
+}
+
+TEST_P(MoveRobotFixtureTest,
+       ExecuteCanTriggerTimeBasedMotionEventAdioRelativeToTarget) {
+  intrinsic_proto::skills::MoveRobotParams params = CreateJointTargetParams();
+
+  icon::ADIOActionInfo::FixedParams expected_adio_event_fixed_params =
+      ParseTextProtoOrDie(
+          absl::StrFormat(R"pb(
+                            outputs {
+                              digital_outputs {
+                                key: "%s"
+                                value { values_by_index { key: 0 value: true } }
+                              }
+                            }
+                          )pb",
+                          icon::test_io_block_names::kDigitalOut));
+  intrinsic_proto::icon::v1::ADIOEvent adio_event;
+  adio_event.set_part_name(icon::test_part_names::kADIOName);
+  *adio_event.mutable_set_analog_digital_outputs() =
+      expected_adio_event_fixed_params.outputs();
+  adio_event.mutable_set_analog_digital_outputs()
+      ->mutable_digital_outputs()
+      ->at(icon::test_io_block_names::kDigitalOut)
+      .mutable_values_by_index()
+      ->at(0) = true;
+
+  const absl::Duration event_offset = absl::Seconds(-0.1);
+
+  intrinsic_proto::skills::MotionSegmentEvent motion_segment_event;
+  motion_segment_event.mutable_event_location()->set_relative_to(
+      intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_TARGET);
+  ASSERT_OK_AND_ASSIGN(*motion_segment_event.mutable_event_location()
+                            ->mutable_event_offset()
+                            ->mutable_time(),
+                       FromAbslDuration(event_offset));
+  *motion_segment_event.mutable_trajectory_event()->mutable_adio_event() =
+      adio_event;
+  *params.mutable_motion_segments()
+       ->Mutable(0)
+       ->mutable_motion_segment_events()
+       ->Add() = motion_segment_event;
+
+  auto event_fixed_param_matcher =
+      [expected_adio_event_fixed_params](
+          icon::ADIOActionInfo::FixedParams const& params) -> absl::Status {
+    if (!google::protobuf::util::MessageDifferencer::Equals(
+            params.outputs(), expected_adio_event_fixed_params.outputs())) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Params message does not match expected. Expected: ",
+                       expected_adio_event_fixed_params, " Actual: ", params));
+    }
+    return absl::OkStatus();
+  };
+
+  icon::ActionWill event_action_will = icon::ActionWill();
+  event_action_will.ExpectParameter<icon::ADIOActionInfo::FixedParams>(
+      event_fixed_param_matcher);
+  event_action_will.ReportStateVariables(
+      {{icon::ADIOActionInfo::kOutputsSet, true}});
+
+  MotionEventStateVariablesToReport motion_event_state_variables_to_report{
+      .before_event =
+          {
+              {
+                  {icon::kIsDone, false},
+                  // This is a sanity check that the event has not
+                  // been accidentally been assigned relative to the
+                  // start keypoint. If the event was referenced to the
+                  // start keypoint, these state variables would trigger
+                  // the event and the next state variables would never be
+                  // reported causing a failure due to the Strict validation
+                  // mode.
+                  {icon::TrajectoryTrackingActionInfo::
+                       kTimeSinceTrajectoryStartSeconds,
+                   absl::ToDoubleSeconds(absl::Seconds(kTinyTimeIncrement))},
+              },
+              {
+                  {icon::kIsDone, false},
+                  {icon::TrajectoryTrackingActionInfo::
+                       kTimeSinceTrajectoryStartSeconds,
+                   // Large value to make sure the event is triggered despite
+                   // not knowing the trajectory duration.
+                   absl::ToDoubleSeconds(absl::Seconds(1000))},
+              },
+          },
+      .after_event = {{
+          {icon::kIsDone, false},
+          {icon::TrajectoryTrackingActionInfo::kTimeSinceTrajectoryStartSeconds,
+           absl::ToDoubleSeconds(absl::Seconds(1001))},
+      }},
+  };
+  eigenmath::VectorNd initial(6);
+  initial << -0.10, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_dio_block(kDioBlock);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_signal_index(kSignalIndex);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_value_of_signal(false);
+
+  ASSERT_OK_AND_ASSIGN(
+      auto return_value,
+      ExecuteMoveRobotTest(
+          params, initial,
+          {.report_elapsed_stop_time_seconds = 0.0,
+           .report_is_settled = true,
+           .test_move_to_signal = false,
+           .event_action_will_list = {event_action_will},
+           .motion_event_state_variables_to_report =
+               motion_event_state_variables_to_report,
+           .validation_mode =
+               icon::RtclControllerFakeSession::ValidationMode::kStrict}));
+
+  EXPECT_EQ(return_value.stopped_on_signal(), false);
+}
+
+TEST_P(MoveRobotFixtureTest, ExecuteCanTriggerArclengthBasedMotionEventAdio) {
+  intrinsic_proto::skills::MoveRobotParams params = CreateJointTargetParams();
+
+  icon::ADIOActionInfo::FixedParams expected_adio_event_fixed_params =
+      ParseTextProtoOrDie(
+          absl::StrFormat(R"pb(
+                            outputs {
+                              digital_outputs {
+                                key: "%s"
+                                value { values_by_index { key: 0 value: true } }
+                              }
+                            }
+                          )pb",
+                          icon::test_io_block_names::kDigitalOut));
+  intrinsic_proto::icon::v1::ADIOEvent adio_event;
+  adio_event.set_part_name(icon::test_part_names::kADIOName);
+  *adio_event.mutable_set_analog_digital_outputs() =
+      expected_adio_event_fixed_params.outputs();
+  adio_event.mutable_set_analog_digital_outputs()
+      ->mutable_digital_outputs()
+      ->at(icon::test_io_block_names::kDigitalOut)
+      .mutable_values_by_index()
+      ->at(0) = true;
+
+  double const event_offset = 0.1;
+
+  intrinsic_proto::skills::MotionSegmentEvent motion_segment_event;
+  motion_segment_event.mutable_event_location()->set_relative_to(
+      intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_START);
+  motion_segment_event.mutable_event_location()
+      ->mutable_event_offset()
+      ->set_cartesian_arc_length_meters(event_offset);
+  *motion_segment_event.mutable_trajectory_event()->mutable_adio_event() =
+      adio_event;
+  *params.mutable_motion_segments()
+       ->Mutable(0)
+       ->mutable_motion_segment_events()
+       ->Add() = motion_segment_event;
+
+  auto event_fixed_param_matcher =
+      [expected_adio_event_fixed_params](
+          icon::ADIOActionInfo::FixedParams const& params) -> absl::Status {
+    if (!google::protobuf::util::MessageDifferencer::Equals(
+            params.outputs(), expected_adio_event_fixed_params.outputs())) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Params message does not match expected. Expected: ",
+                       expected_adio_event_fixed_params, " Actual: ", params));
+    }
+    return absl::OkStatus();
+  };
+
+  icon::ActionWill event_action_will = icon::ActionWill();
+  event_action_will.ExpectParameter<icon::ADIOActionInfo::FixedParams>(
+      event_fixed_param_matcher);
+  event_action_will.ReportStateVariables(
+      {{icon::ADIOActionInfo::kOutputsSet, true}});
+
+  MotionEventStateVariablesToReport motion_event_state_variables_to_report{
+      .before_event = {{
+                           {icon::kIsDone, false},
+                           {icon::TrajectoryTrackingActionInfo::
+                                kCartesianArcLengthAlongTrajectoryMeters,
+                            -kTinyTimeIncrement + event_offset},
+                       },
+                       {
+                           {icon::kIsDone, false},
+                           {icon::TrajectoryTrackingActionInfo::
+                                kCartesianArcLengthAlongTrajectoryMeters,
+                            kTinyTimeIncrement + event_offset},
+                       }},
+      .after_event = {{
+          {icon::kIsDone, false},
+          {icon::TrajectoryTrackingActionInfo::
+               kCartesianArcLengthAlongTrajectoryMeters,
+           2 * kTinyTimeIncrement + event_offset},
+      }},
+  };
+
+  eigenmath::VectorNd initial(6);
+  initial << -0.10, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_dio_block(kDioBlock);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_signal_index(kSignalIndex);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_value_of_signal(false);
+
+  ASSERT_OK_AND_ASSIGN(
+      auto return_value,
+      ExecuteMoveRobotTest(
+          params, initial,
+          {.report_elapsed_stop_time_seconds = 0.0,
+           .report_is_settled = true,
+           .test_move_to_signal = false,
+           .event_action_will_list = {event_action_will},
+           .motion_event_state_variables_to_report =
+               motion_event_state_variables_to_report,
+           .validation_mode =
+               icon::RtclControllerFakeSession::ValidationMode::kStrict}));
+
+  EXPECT_EQ(return_value.stopped_on_signal(), false);
+}
+
+TEST_P(MoveRobotFixtureTest,
+       ExecuteCanTriggerArclengthBasedMotionEventAdioRelativeToTarget) {
+  intrinsic_proto::skills::MoveRobotParams params = CreateJointTargetParams();
+
+  icon::ADIOActionInfo::FixedParams expected_adio_event_fixed_params =
+      ParseTextProtoOrDie(
+          absl::StrFormat(R"pb(
+                            outputs {
+                              digital_outputs {
+                                key: "%s"
+                                value { values_by_index { key: 0 value: true } }
+                              }
+                            }
+                          )pb",
+                          icon::test_io_block_names::kDigitalOut));
+  intrinsic_proto::icon::v1::ADIOEvent adio_event;
+  adio_event.set_part_name(icon::test_part_names::kADIOName);
+  *adio_event.mutable_set_analog_digital_outputs() =
+      expected_adio_event_fixed_params.outputs();
+  adio_event.mutable_set_analog_digital_outputs()
+      ->mutable_digital_outputs()
+      ->at(icon::test_io_block_names::kDigitalOut)
+      .mutable_values_by_index()
+      ->at(0) = true;
+
+  double const event_offset = 0.15;
+
+  intrinsic_proto::skills::MotionSegmentEvent motion_segment_event;
+  motion_segment_event.mutable_event_location()->set_relative_to(
+      intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_TARGET);
+  motion_segment_event.mutable_event_location()
+      ->mutable_event_offset()
+      ->set_cartesian_arc_length_meters(event_offset);
+  *motion_segment_event.mutable_trajectory_event()->mutable_adio_event() =
+      adio_event;
+  *params.mutable_motion_segments()
+       ->Mutable(0)
+       ->mutable_motion_segment_events()
+       ->Add() = motion_segment_event;
+
+  auto event_fixed_param_matcher =
+      [expected_adio_event_fixed_params](
+          icon::ADIOActionInfo::FixedParams const& params) -> absl::Status {
+    if (!google::protobuf::util::MessageDifferencer::Equals(
+            params.outputs(), expected_adio_event_fixed_params.outputs())) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Params message does not match expected. Expected: ",
+                       expected_adio_event_fixed_params, " Actual: ", params));
+    }
+    return absl::OkStatus();
+  };
+
+  icon::ActionWill event_action_will = icon::ActionWill();
+  event_action_will.ExpectParameter<icon::ADIOActionInfo::FixedParams>(
+      event_fixed_param_matcher);
+  event_action_will.ReportStateVariables(
+      {{icon::ADIOActionInfo::kOutputsSet, true}});
+
+  MotionEventStateVariablesToReport motion_event_state_variables_to_report{
+      .before_event =
+          {
+              {
+                  {icon::kIsDone, false},
+                  // This is a sanity check that the event has not
+                  // been accidentally been assigned relative to the
+                  // start keypoint. If the event was referenced to the
+                  // start keypoint, these state variables would trigger
+                  // the event and the next state variables would never be
+                  // reported causing a failure due to the Strict validation
+                  // mode.
+                  {icon::TrajectoryTrackingActionInfo::
+                       kCartesianArcLengthAlongTrajectoryMeters,
+                   kTinyTimeIncrement},
+              },
+              {
+                  {icon::kIsDone, false},
+                  {icon::TrajectoryTrackingActionInfo::
+                       kCartesianArcLengthAlongTrajectoryMeters,
+                   // Large value to make sure the event is triggered despite
+                   // not knowing the trajectory arc length.
+                   1000},
+              },
+          },
+      .after_event = {{
+          {icon::kIsDone, false},
+          {icon::TrajectoryTrackingActionInfo::
+               kCartesianArcLengthAlongTrajectoryMeters,
+           1001},
+      }},
+  };
+  eigenmath::VectorNd initial(6);
+  initial << -0.10, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_dio_block(kDioBlock);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_signal_index(kSignalIndex);
+  params.mutable_execution_parameters()
+      ->mutable_move_until_signal_parameters()
+      ->set_value_of_signal(false);
+
+  ASSERT_OK_AND_ASSIGN(
+      auto return_value,
+      ExecuteMoveRobotTest(
+          params, initial,
+          {.report_elapsed_stop_time_seconds = 0.0,
+           .report_is_settled = true,
+           .test_move_to_signal = false,
+           .event_action_will_list = {event_action_will},
+           .motion_event_state_variables_to_report =
+               motion_event_state_variables_to_report,
+           .validation_mode =
+               icon::RtclControllerFakeSession::ValidationMode::kStrict}));
+
+  EXPECT_EQ(return_value.stopped_on_signal(), false);
+}
+
+
 TEST_P(MoveRobotFixtureTest, ExecuteLockMotionId) {
   intrinsic_proto::skills::MoveRobotParams params = CreateJointTargetParams();
   params.mutable_planning_parameters()
@@ -1387,6 +1890,220 @@ TEST_P(MoveRobotFixtureTest, FootprintCachesPlanInSkillData) {
   intrinsic_proto::skills::MoveRobotReturnValue return_value;
   EXPECT_OK(ExecuteSkill(*skill_and_equipment.skill, execute_request,
                          *execute_context, &return_value));
+}
+
+TEST_P(MoveRobotFixtureTest,
+       GetFootprintRecomputesPlanOnReprojectionWithSameContextId) {
+  const intrinsic_proto::skills::MoveRobotParams params =
+      CreateJointTargetParams();
+  constexpr absl::string_view kContextId = "reprojection_recompute_ctx";
+  constexpr double kTolerance = 1e-6;
+
+  eigenmath::VectorNd start_a(6);
+  start_a << -0.10, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  const MoveRobotTestParams test_params_1{
+      .world_id = "reprojection_world_1",
+  };
+  ASSERT_OK_AND_ASSIGN(auto skill_and_equipment_1,
+                       PrepareMoveRobotTest(start_a, test_params_1));
+
+  const GetFootprintRequest footprint_request =
+      skill_test_factory_.MakeGetFootprintRequest(params);
+  const auto footprint_context_1 = skill_test_factory_.MakeGetFootprintContext({
+      .equipment_pack = skill_and_equipment_1.equipment,
+      .world_id = std::string(test_params_1.world_id),
+      .motion_planner_service = motion_planner_stub_,
+      .object_world_service = world_service_->NewObjectStub(),
+      .context_id = std::string(kContextId),
+  });
+
+  ASSERT_OK(skill_and_equipment_1.skill->GetFootprint(footprint_request,
+                                                      *footprint_context_1));
+
+  ASSERT_OK_AND_ASSIGN(
+      const std::optional<intrinsic_proto::skills::MoveRobotInternalData>
+          plan_1,
+      GetSkillData().Get<intrinsic_proto::skills::MoveRobotInternalData>(
+          kContextId, "plan"));
+  ASSERT_TRUE(plan_1.has_value());
+  ASSERT_TRUE(plan_1->execution_plan().has_planned_trajectory());
+  ASSERT_GT(plan_1->execution_plan().planned_trajectory().state_size(), 0);
+  ASSERT_EQ(
+      plan_1->execution_plan().planned_trajectory().state(0).position_size(),
+      start_a.size());
+  for (int i = 0; i < start_a.size(); ++i) {
+    EXPECT_NEAR(
+        plan_1->execution_plan().planned_trajectory().state(0).position(i),
+        start_a[i], kTolerance);
+  }
+
+  eigenmath::VectorNd start_b(6);
+  start_b << 0.00, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  const MoveRobotTestParams test_params_2{
+      .world_id = "reprojection_world_2",
+  };
+  ASSERT_OK_AND_ASSIGN(auto skill_and_equipment_2,
+                       PrepareMoveRobotTest(start_b, test_params_2));
+
+  const auto footprint_context_2 = skill_test_factory_.MakeGetFootprintContext({
+      .equipment_pack = skill_and_equipment_2.equipment,
+      .world_id = std::string(test_params_2.world_id),
+      .motion_planner_service = motion_planner_stub_,
+      .object_world_service = world_service_->NewObjectStub(),
+      .context_id = std::string(kContextId),
+  });
+
+  ASSERT_OK(skill_and_equipment_2.skill->GetFootprint(footprint_request,
+                                                      *footprint_context_2));
+
+  ASSERT_OK_AND_ASSIGN(
+      const std::optional<intrinsic_proto::skills::MoveRobotInternalData>
+          plan_2,
+      GetSkillData().Get<intrinsic_proto::skills::MoveRobotInternalData>(
+          kContextId, "plan"));
+  ASSERT_TRUE(plan_2.has_value());
+  ASSERT_TRUE(plan_2->execution_plan().has_planned_trajectory());
+  ASSERT_GT(plan_2->execution_plan().planned_trajectory().state_size(), 0);
+  ASSERT_EQ(
+      plan_2->execution_plan().planned_trajectory().state(0).position_size(),
+      start_b.size());
+  for (int i = 0; i < start_b.size(); ++i) {
+    EXPECT_NEAR(
+        plan_2->execution_plan().planned_trajectory().state(0).position(i),
+        start_b[i], kTolerance);
+  }
+}
+
+TEST_P(MoveRobotFixtureTest, GetFootprintFailureClearsPreviouslyStoredPlan) {
+  const intrinsic_proto::skills::MoveRobotParams params =
+      CreateJointTargetParams();
+  constexpr absl::string_view kContextId = "reprojection_failure_ctx";
+
+  eigenmath::VectorNd initial(6);
+  initial << -0.10, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  const MoveRobotTestParams test_params_1{
+      .world_id = "reprojection_failure_world_1",
+  };
+  ASSERT_OK_AND_ASSIGN(auto skill_and_equipment_1,
+                       PrepareMoveRobotTest(initial, test_params_1));
+
+  const GetFootprintRequest footprint_request =
+      skill_test_factory_.MakeGetFootprintRequest(params);
+  const auto footprint_context_1 = skill_test_factory_.MakeGetFootprintContext({
+      .equipment_pack = skill_and_equipment_1.equipment,
+      .world_id = std::string(test_params_1.world_id),
+      .motion_planner_service = motion_planner_stub_,
+      .object_world_service = world_service_->NewObjectStub(),
+      .context_id = std::string(kContextId),
+  });
+
+  ASSERT_OK(skill_and_equipment_1.skill->GetFootprint(footprint_request,
+                                                      *footprint_context_1));
+
+  ASSERT_OK_AND_ASSIGN(
+      const std::optional<intrinsic_proto::skills::MoveRobotInternalData>
+          initial_plan,
+      GetSkillData().Get<intrinsic_proto::skills::MoveRobotInternalData>(
+          kContextId, "plan"));
+  ASSERT_TRUE(initial_plan.has_value());
+
+  intrinsic_proto::skills::MoveRobotParams invalid_params = params;
+  invalid_params.clear_motion_segments();
+
+  const MoveRobotTestParams test_params_2{
+      .world_id = "reprojection_failure_world_2",
+  };
+  ASSERT_OK_AND_ASSIGN(auto skill_and_equipment_2,
+                       PrepareMoveRobotTest(initial, test_params_2));
+
+  const GetFootprintRequest invalid_footprint_request =
+      skill_test_factory_.MakeGetFootprintRequest(invalid_params);
+  const auto footprint_context_2 = skill_test_factory_.MakeGetFootprintContext({
+      .equipment_pack = skill_and_equipment_2.equipment,
+      .world_id = std::string(test_params_2.world_id),
+      .motion_planner_service = motion_planner_stub_,
+      .object_world_service = world_service_->NewObjectStub(),
+      .context_id = std::string(kContextId),
+  });
+
+  EXPECT_THAT(skill_and_equipment_2.skill->GetFootprint(
+                  invalid_footprint_request, *footprint_context_2),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+
+  ASSERT_OK_AND_ASSIGN(
+      const std::optional<intrinsic_proto::skills::MoveRobotInternalData>
+          cleared_plan,
+      GetSkillData().Get<intrinsic_proto::skills::MoveRobotInternalData>(
+          kContextId, "plan"));
+  EXPECT_FALSE(cleared_plan.has_value());
+}
+
+TEST_P(MoveRobotFixtureTest, PreviewReusesPlanCachedByGetFootprint) {
+  const intrinsic_proto::skills::MoveRobotParams params =
+      CreateJointTargetParams();
+  constexpr absl::string_view kContextId = "preview_reuses_cached_plan_ctx";
+
+  eigenmath::VectorNd initial(6);
+  initial << -0.10, 0.48, -1.36, -0.77, 0.83, -1.0;
+
+  const MoveRobotTestParams test_params{
+      .world_id = "preview_cached_plan_world",
+  };
+  ASSERT_OK_AND_ASSIGN(const PreparedSkill skill_and_equipment,
+                       PrepareMoveRobotTest(initial, test_params));
+
+  const GetFootprintRequest footprint_request =
+      skill_test_factory_.MakeGetFootprintRequest(params);
+  const auto footprint_context = skill_test_factory_.MakeGetFootprintContext({
+      .equipment_pack = skill_and_equipment.equipment,
+      .world_id = std::string(test_params.world_id),
+      .motion_planner_service = motion_planner_stub_,
+      .object_world_service = world_service_->NewObjectStub(),
+      .context_id = std::string(kContextId),
+  });
+
+  ASSERT_OK(skill_and_equipment.skill->GetFootprint(footprint_request,
+                                                    *footprint_context));
+
+  // Verify the plan is stored in `SkillData` before `Preview()` is called.
+  ASSERT_OK_AND_ASSIGN(
+      const std::optional<intrinsic_proto::skills::MoveRobotInternalData>
+          cached_plan_before,
+      GetSkillData().Get<intrinsic_proto::skills::MoveRobotInternalData>(
+          kContextId, "plan"));
+  ASSERT_TRUE(cached_plan_before.has_value());
+  EXPECT_TRUE(cached_plan_before->execution_plan().has_planned_trajectory());
+
+  const PreviewRequest preview_request =
+      skill_test_factory_.MakePreviewRequest(params);
+  const auto preview_context = skill_test_factory_.MakePreviewContext({
+      .equipment_pack = skill_and_equipment.equipment,
+      .world_id = std::string(test_params.world_id),
+      .motion_planner_service = motion_planner_stub_,
+      .object_world_service = world_service_->NewObjectStub(),
+      .context_id = std::string(kContextId),
+  });
+
+  ASSERT_OK_AND_ASSIGN(
+      const std::unique_ptr<::google::protobuf::Message> preview_message,
+      skill_and_equipment.skill->Preview(preview_request, *preview_context));
+  const auto* preview_return_value =
+      dynamic_cast<const intrinsic_proto::skills::MoveRobotReturnValue*>(
+          preview_message.get());
+  ASSERT_NE(preview_return_value, nullptr);
+  // Verify `Preview()` preserved the plan in `SkillData` without deleting or
+  // recomputing it.
+  ASSERT_OK_AND_ASSIGN(
+      const std::optional<intrinsic_proto::skills::MoveRobotInternalData>
+          cached_plan_after,
+      GetSkillData().Get<intrinsic_proto::skills::MoveRobotInternalData>(
+          kContextId, "plan"));
+  ASSERT_TRUE(cached_plan_after.has_value());
+  EXPECT_EQ(cached_plan_before->SerializeAsString(),
+            cached_plan_after->SerializeAsString());
 }
 
 TEST_P(MoveRobotFixtureTest, ExecuteClearsStaleLockMotionIdOnReplan) {

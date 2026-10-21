@@ -21,8 +21,8 @@ cc_library(
     srcs = ["dynamic_riccati_equation.cc"],
     hdrs = ["dynamic_riccati_equation.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@com_gitlab_libeigen_eigen//:eigen",
     ],

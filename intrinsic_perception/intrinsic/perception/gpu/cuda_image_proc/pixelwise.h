@@ -100,6 +100,12 @@ extern template absl::Status Clamp(CudaImage<Generic32f>& image, float min,
 extern template absl::Status Clamp(CudaImage<Generic32f3>& image, float min,
                                    float max);
 
+extern template absl::Status Clamp(CudaImage<Gray32f>& image, float min,
+                                   float max);
+
+extern template absl::Status Clamp(CudaImage<Rgb32f>& image, float min,
+                                   float max);
+
 // Adds corresponding pixel values and creates image_a + image_b. Input and
 // output images must have the same number of channels.
 template <typename OutputImageTraits, typename ImageTraitsA,
@@ -142,6 +148,28 @@ extern template absl::StatusOr<CudaImage<Generic32f>> Subtract(
 extern template absl::StatusOr<CudaImage<Generic32f3>> Subtract(
     const CudaImage<Generic32f3>& image_a,
     const CudaImage<Generic32f3>& image_b);
+
+// Scales the values in the input `image` by the ratio
+// OutputImageTraits::kIntensityMax / InputImageTraits::kIntensityMax into a
+// pre-allocated `image_out` buffer (which must have the same dimensions as
+// `image`, returning `absl::InvalidArgumentError` otherwise). If the output
+// type is integral, the output value is rounded. Finally the output is clamped
+// to ensure it has the [0..OutputImageTraits::kIntensityMax] range.
+template <typename OutputImageTraits, typename InputImageTraits>
+absl::Status ConvertImage(const CudaImage<InputImageTraits>& image,
+                          CudaImage<OutputImageTraits>& image_out);
+
+extern template absl::Status ConvertImage(const CudaImage<Gray8u>& image,
+                                          CudaImage<Gray32f>& image_out);
+
+extern template absl::Status ConvertImage(const CudaImage<Rgb8u>& image,
+                                          CudaImage<Rgb32f>& image_out);
+
+extern template absl::Status ConvertImage(const CudaImage<Gray32f>& image,
+                                          CudaImage<Gray8u>& image_out);
+
+extern template absl::Status ConvertImage(const CudaImage<Rgb32f>& image,
+                                          CudaImage<Rgb8u>& image_out);
 
 // Scales the values in the input `image` by the ratio
 // OutputImageTraits::kIntensityMax / InputImageTraits::kIntensityMax. If the

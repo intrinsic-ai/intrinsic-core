@@ -67,7 +67,9 @@ absl::Status SetBinaryProto(absl::string_view filename, const T& my_proto) {
   google::protobuf::io::OstreamOutputStream output_stream(&ofs);
   google::protobuf::io::CodedOutputStream coded_stream(&output_stream);
   coded_stream.SetSerializationDeterministic(true);
-  my_proto.SerializePartialToCodedStream(&coded_stream);
+  if (!my_proto.SerializePartialToCodedStream(&coded_stream)) {
+    return absl::InternalError("Failed to serialize proto to coded stream.");
+  }
 
   return absl::OkStatus();
 }

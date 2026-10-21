@@ -18,7 +18,7 @@ load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
 load("//bazel:python.bzl", "py_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "py_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "py_skill", "skill_manifest")
 
 package(default_visibility = [
     "//visibility:public",
@@ -63,11 +63,11 @@ py_library(
     deps = [
         ":estimate_pose_multi_view_py_pb2",
         ":multi_view_pose_utils",
-        "//intrinsic/util:decorators",
         "//intrinsic_perception/intrinsic/perception/service/python:pose_estimation_client_utils",
         "//intrinsic_perception/intrinsic/perception/service/python:pose_estimation_service_client",
         "//intrinsic_sdk/intrinsic/platform/pubsub/python:pubsub",
         "//intrinsic_sdk/intrinsic/skills/python:skill_interface",
+        "//intrinsic_sdk/intrinsic/util:decorators",
         "//intrinsic_sdk/intrinsic/world/python:object_world_client",
         "//intrinsic_sdk/intrinsic/world/python:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
@@ -104,10 +104,10 @@ py_library(
     srcs = ["multi_view_pose_utils.py"],
     deps = [
         "//intrinsic/geometry/api/python:conversion_utils",
-        "//intrinsic/geometry/proto:geometry_service_py_pb2_grpc",
         "//intrinsic/world/python:geometry_component_utils",
         "//intrinsic/world/python:geometry_types",
         "//intrinsic_perception/intrinsic/perception/client/v1/python/camera:data_classes",
+        "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_py_pb2_grpc",
         "//intrinsic_sdk/intrinsic/math/python:data_types",
         "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
         "//intrinsic_sdk/intrinsic/platform/pubsub/python:pubsub",

@@ -106,14 +106,22 @@ message ActionSignature {
 
   // Describes a part slot for an ICON action. To be compatible with a slot, a
   // concrete part must supply at least `required_feature_interfaces`, and _may_
-  // support `optional_feature_interfaces`.
+  // support `optional_feature_interfaces`. If `required_feature_interfaces` is
+  // empty but `optional_feature_interfaces` is not, a compatible part must
+  // supply at least one of `optional_feature_interfaces`. This holds
+  // regardless of `is_optional`.
   //
-  // If `required_feature_interfaces` is empty, the slot itself is optional.
-  // That is, a SlotPartMap may omit the slot completely.
+  // If `is_optional` is true, the slot itself is optional. That is, a
+  // `SlotPartMap` may omit the slot completely, while any part mapped to the
+  // slot must still satisfy the compatibility rules above.
   message PartSlotInfo {
     string description = 2;
     repeated FeatureInterfaceTypes required_feature_interfaces = 3;
     repeated FeatureInterfaceTypes optional_feature_interfaces = 4;
+    // If true, the slot itself is optional and may be omitted from a
+    // `SlotPartMap`, while any part mapped to the slot must still supply all
+    // `required_feature_interfaces`.
+    bool is_optional = 5;
 
     reserved 1;
   }

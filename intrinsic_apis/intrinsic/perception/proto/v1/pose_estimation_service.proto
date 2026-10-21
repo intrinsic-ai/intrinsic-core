@@ -21,7 +21,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "intrinsic/assets/proto/id.proto";
 import "intrinsic/logging/proto/context.proto";
-import "intrinsic/perception/proto/v1/capture_data.proto";
+import public "intrinsic/perception/proto/v1/capture_data.proto";
 import "intrinsic/perception/proto/v1/capture_result.proto";
 import "intrinsic/perception/proto/v1/pose_estimate.proto";
 import "intrinsic/perception/proto/v1/pose_priors.proto";
@@ -39,10 +39,6 @@ service PoseEstimationService {
 
 // LINT.IfChange
 
-
-message CaptureDataList {
-  repeated intrinsic_proto.perception.v1.CaptureData capture_data = 1;
-}
 
 message RunPoseEstimationRequest {
   oneof source_type {

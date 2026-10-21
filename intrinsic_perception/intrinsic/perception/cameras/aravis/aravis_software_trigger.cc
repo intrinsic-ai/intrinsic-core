@@ -26,8 +26,7 @@
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 namespace {
 
 bool HasReadAccess(const ArvGcAccessMode access) {
@@ -90,14 +89,8 @@ absl::Status SetFreeRunningTrigger(ArvCamera* absl_nonnull camera) {
                                   &error);
   INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
 
-  arv_camera_set_string(camera, genicam::kTriggerSelector, "FrameStart",
-                        &error);
-  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-
-  arv_camera_set_string(camera, genicam::kTriggerMode, "Off", &error);
-  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-
-  return absl::OkStatus();
+  arv_camera_clear_triggers(camera, &error);
+  return ValidateAndNullArvError(error);
 }
 
 absl::Status SetPeriodicTrigger(ArvCamera* absl_nonnull camera) {
@@ -115,5 +108,4 @@ absl::Status SetPeriodicTrigger(ArvCamera* absl_nonnull camera) {
   return ValidateAndNullArvError(error);
 }
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception

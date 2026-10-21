@@ -93,7 +93,9 @@ BuildExecuteRequestAndContextWithoutWorld(
     const intrinsic_proto::data_logger::Context& log_context) {
   intrinsic_proto::skills::ExecuteRequest request;
   *request.mutable_instance() = instance;
-  request.mutable_parameters()->PackFrom(params);
+  if (!request.mutable_parameters()->PackFrom(params)) {
+    return absl::InternalError("Failed to pack skill execute parameters.");
+  }
   *request.mutable_footprint() = footprint;
   intrinsic_proto::data_logger::Context skill_context = log_context;
   if (log_context.skill_id() != 0) {
@@ -137,7 +139,9 @@ BuildPreviewRequestAndContextWithoutWorld(
     const intrinsic_proto::data_logger::Context& log_context) {
   intrinsic_proto::skills::PreviewRequest request;
   *request.mutable_instance() = instance;
-  request.mutable_parameters()->PackFrom(params);
+  if (!request.mutable_parameters()->PackFrom(params)) {
+    return absl::InternalError("Failed to pack skill preview parameters.");
+  }
   *request.mutable_footprint() = footprint;
   intrinsic_proto::data_logger::Context skill_context = log_context;
   if (log_context.skill_id() != 0) {
@@ -687,7 +691,7 @@ absl::Status SkillServiceClient::StartPreview(
 
   ::grpc::ClientContext preview_context;
   intrinsic::ConfigureClientContext(&preview_context);
-  // Same timeout that predict/get footprint have.
+  // Same timeout that get footprint has.
   preview_context.set_deadline(
       absl::ToChronoTime(absl::Now() + skills::kClientDefaultTimeout));
   google::longrunning::Operation operation;

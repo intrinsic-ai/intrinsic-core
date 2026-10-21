@@ -34,6 +34,7 @@
   (?result-value))
 (deffunction behavior-tree-import-proto (?bt-proto ?parent-tree-id
                                          ?blackboard-scope ?operation-name
+                                         ?element-path-prefix
                                          ?run-metadata-proto ?run-metadata-proto-path))
 
 ; --------------------------------- FUNCTIONS ---------------------------------
@@ -51,6 +52,47 @@
 (deffunction gen-run-metadata-proto-path (?run-metadata-proto ?prefix ?suffix)
   (if (= ?run-metadata-proto 0) then (return ""))
   (return (proto-path-join ?prefix ?suffix))
+)
+
+; Returns the element path prefix for elements (nodes, conditions, sub-trees)
+; of the tree with ?tree-id: The element ids of the task nodes calling into the
+; (nested) process instance the tree is part of. Read from the tree's element
+; path in ?run-metadata-proto (without the tree's own element id).
+;
+; Requires the tree's element path to be written to ?run-metadata-proto before
+; the tree's elements are imported. Otherwise an error is returned.
+;
+; Args:
+;   ?run-metadata-proto: RunMetadata proto holding the tree's element path,
+;     may be 0.
+;   ?tree-id: Tree the element is part of.
+;
+; Returns:
+;   A multifield with the first entry TRUE/FALSE and
+;   on success: the element ids of the prefix as the remaining entries. Use
+;               rest$ to extract them (not result-value, as the prefix can have
+;               any length). Empty if ?run-metadata-proto is 0, if there is no
+;               behavior-tree fact for ?tree-id, or for elements in the
+;               top-level process tree (including its sub-trees).
+;   on failure: a message describing why the prefix could not be determined
+(deffunction behavior-tree-import-get-element-path-prefix (?run-metadata-proto
+                                                           ?tree-id)
+  (if (= ?run-metadata-proto 0) then (return (result-create TRUE)))
+
+  (do-for-fact ((?bt behavior-tree)) (eq ?bt:id ?tree-id)
+    (bind ?tree-element-path
+      (pb-get-repeated-values ?run-metadata-proto
+        (proto-path-join ?bt:run-metadata-proto-path "element_path.ids")))
+    (if (empty$ ?tree-element-path) then
+      (return (result-create FALSE
+        (str-cat "Element path of tree " ?tree-id " is not set. It must be set "
+                 "before importing the elements of the tree.")))
+    )
+    (return (result-create TRUE
+      (subseq$ ?tree-element-path 1 (- (length$ ?tree-element-path) 1))))
+  )
+
+  (return (result-create TRUE))
 )
 
 ; Imports a condition (recursively).
@@ -79,8 +121,21 @@
                                              ?condition-id ?parent-id
                                              ?blackboard-scope ?operation-name
                                              ?condition-index)
+  (bind ?element-path-prefix (create$))
   (if (<> ?run-metadata-proto 0) then
     (pb-set-field ?run-metadata-proto (proto-path-join ?run-metadata-proto-path "state") ACCEPTED)
+
+    (bind ?element-path-prefix-result
+      (behavior-tree-import-get-element-path-prefix ?run-metadata-proto ?tree-id))
+    (if (not (result-ok ?element-path-prefix-result)) then
+      (return ?element-path-prefix-result)
+    )
+    (bind ?element-path-prefix (rest$ ?element-path-prefix-result))
+    (pb-set-repeated-values ?run-metadata-proto
+      (proto-path-join ?run-metadata-proto-path "element_path.ids")
+      (create$ ?element-path-prefix
+               (pb-get-field ?condition-proto "element_id")))
+
   )
   (switch (pb-which-oneof ?condition-proto "condition_type")
 
@@ -93,6 +148,7 @@
       (bind ?sub-tree-import-result
         (behavior-tree-import-proto ?sub-tree-condition-proto
           ?tree-id ?blackboard-scope ?operation-name
+          ?element-path-prefix
           ?run-metadata-proto ?s-path))
       (pb-remove ?sub-tree-condition-proto)
 
@@ -566,9 +622,23 @@
                               " has no entry set in node_type oneof")))
   )
 
+  (bind ?element-path-prefix (create$))
   (if (<> ?run-metadata-proto 0) then
     (pb-set-field ?run-metadata-proto (proto-path-join ?run-metadata-proto-path "state") ACCEPTED)
     (pb-set-field ?run-metadata-proto (proto-path-join ?run-metadata-proto-path "id") ?node-id)
+
+    (bind ?element-path-prefix-result
+      (behavior-tree-import-get-element-path-prefix ?run-metadata-proto ?tree-id))
+    (if (not (result-ok ?element-path-prefix-result)) then
+      (pb-remove ?nodetype-proto)
+      (return ?element-path-prefix-result)
+    )
+    (bind ?element-path-prefix (rest$ ?element-path-prefix-result))
+    (pb-set-repeated-values ?run-metadata-proto
+      (proto-path-join ?run-metadata-proto-path "element_path.ids")
+      (create$ ?element-path-prefix
+               (pb-get-field ?node-proto "element_id")))
+
   )
   (if (pb-has-field ?node-proto "decorators") then
     (bind ?decorators-proto (pb-get-field ?node-proto "decorators"))
@@ -1060,11 +1130,10 @@
         (case CALL-BEHAVIOR then
           (bind ?behavior-call-proto
             (pb-get-field ?nodetype-proto "call_behavior"))
-          (bind ?s-task-path (gen-run-metadata-proto-path ?run-metadata-proto ?run-metadata-proto-path "task"))
           (bind ?sub-import-result
             (behavior-call-import ?behavior-call-proto ?tree-id ?node-id
                                   ?operation-name
-                                  ?run-metadata-proto ?s-task-path))
+                                  ?run-metadata-proto ?run-metadata-proto-path))
           (if (result-ok ?sub-import-result)
            then
             (bind ?action-or-behavior-call-instance (nth$ 2 ?sub-import-result))
@@ -1117,6 +1186,7 @@
       (bind ?sub-import-result
         (behavior-tree-import-proto ?sub-tree-proto ?tree-id
                                     ?blackboard-scope ?operation-name
+                                    ?element-path-prefix
                                     ?run-metadata-proto ?s-path))
       (if (result-ok ?sub-import-result) then
         (bind ?node-sub-tree-id
@@ -1321,6 +1391,9 @@
 ;   ?parent-tree-id: is the tree id of the tree that contains the imported tree.
 ;   ?blackboard-scope: The blackboard scope to use for the new tree
 ;   ?operation-name: Name of the operation to associate this tree to.
+;   ?element-path-prefix: Multifield of element ids of the task nodes calling
+;     into the (nested) process instance the tree is in. Empty for the
+;     top-level process tree and its sub-trees.
 ;   ?run-metadata-proto: ID of a RunMetadata proto to fill with information about the
 ;                 BT that is being imported.
 ;   ?run-metadata-proto-path: proto path in an enclosing tree (if any) to reference values
@@ -1332,6 +1405,7 @@
 ;   on failure: a message describing why the import failed
 (deffunction behavior-tree-import-proto (?bt-proto ?parent-tree-id
                                          ?blackboard-scope ?operation-name
+                                         ?element-path-prefix
                                          ?run-metadata-proto ?run-metadata-proto-path)
   (bind ?bt-name (pb-get-field ?bt-proto "name"))
   (bind ?tree-id (pb-get-field ?bt-proto "tree_id"))
@@ -1368,6 +1442,11 @@
                   (proto-path-join ?run-metadata-proto-path "blackboard_scope") ?blackboard-scope)
     (pb-set-field ?run-metadata-proto
                   (proto-path-join ?run-metadata-proto-path "tree_id") (str-cat ?tree-id))
+
+    (pb-set-repeated-values ?run-metadata-proto
+      (proto-path-join ?run-metadata-proto-path "element_path.ids")
+      (create$ ?element-path-prefix (pb-get-field ?bt-proto "element_id")))
+
   )
   (bind ?root-id (pb-get-field ?root-proto "id"))
   (if (= ?root-id 0) then
@@ -1448,6 +1527,7 @@
   (bind ?import-tree-result
     (behavior-tree-import-proto ?bt-proto nil
                                 ?blackboard-scope ?operation-name
+                                (create$)
                                 ?run-metadata-proto ?run-metadata-proto-path))
 
   (bind ?tree-id nil)
@@ -1506,6 +1586,9 @@
                 (operation-execution-mode-to-proto-mode NORMAL))
   (pb-set-field ?s-metadata-proto "simulation_mode"
                 (operation-sim-mode-to-proto-mode REALITY))
+  (do-for-fact ((?w world)) TRUE
+    (pb-set-field ?s-metadata-proto "world_id" ?w:id)
+  )
 
   (bind ?tree-import-result
     (behavior-tree-import-top-level-proto ?bt-proto ?operation-name
@@ -1574,6 +1657,16 @@
 
   (bind ?operation-tree-id (result-value ?tree-import-result))
 
+  ; start_tree_id and start_node_id are unset in the RunMetadata proto, which
+  ; means starting from the root of the operation tree. Initialize the tracking
+  ; slots to match, so that run-metadata-proto-update-start-tree-and-node does
+  ; not fire right after import and publish a RunMetadataChangeEvent although
+  ; the proto is unchanged.
+  (bind ?operation-tree-root-id 0)
+  (do-for-fact ((?bt behavior-tree)) (eq ?bt:id ?operation-tree-id)
+    (bind ?operation-tree-root-id ?bt:root)
+  )
+
   (assert (operation-envelope (name ?operation-name)
                               (operation-proto ?operation-proto)
                               (run-metadata-proto ?s-metadata-proto)
@@ -1590,7 +1683,11 @@
                               (return-value-descriptor-pool
                                 ?operation-return-value-pool)
                               (operation-tree-id ?operation-tree-id)
-                              (start-tree-id ?operation-tree-id)))
+                              (start-tree-id ?operation-tree-id)
+                              (run-metadata-proto-start-tree-id
+                                ?operation-tree-id)
+                              (run-metadata-proto-start-node-id
+                                ?operation-tree-root-id)))
 
   (return (result-create TRUE ""))
 )

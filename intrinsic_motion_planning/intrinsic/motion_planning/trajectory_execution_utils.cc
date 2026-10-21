@@ -33,6 +33,7 @@
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "intrinsic/icon/actions/adio_info.h"
+#include "intrinsic/icon/actions/empty_action_signature.h"  
 #include "intrinsic/icon/actions/trajectory_tracking_action_info.h"
 #include "intrinsic/icon/cc_client/client.h"
 #include "intrinsic/icon/cc_client/client_utils.h"
@@ -41,8 +42,11 @@
 #include "intrinsic/icon/common/builtins.h"
 #include "intrinsic/icon/common/id_types.h"
 #include "intrinsic/icon/proto/v1/condition_types.pb.h"
+#include "intrinsic/icon/proto/v1/motion_event_types.pb.h"  
 #include "intrinsic/logging/proto/context.pb.h"
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"  
 #include "intrinsic/skills/cc/skill_canceller.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/grpc/channel_interface.h"
 #include "intrinsic/util/proto/any.h"
 #include "intrinsic/util/proto_time.h"
@@ -66,6 +70,112 @@ namespace {
 // In practice, this is of little concern as this allows
 // us to send ~16 minutes long trajectories at 1kHz.
 constexpr size_t kMaxTrajectorySampleSize = 1'000'000;
+
+constexpr double kEpsilonSpeedOverride = 1e-6;
+// Phase-based completion check. Unlike IsDone(), this stays false after an
+// early path-accurate stop, so unreached events are not fired on early stop,
+// while end-of-trajectory events still fire on nominal completion.
+constexpr double kTrajectoryCompletedProgress = 1.0 - 1e-12;
+
+absl::StatusOr<std::vector<icon::ActionDescriptor>> AddMotionEventsAndActions(
+    icon::ActionDescriptor& motion_action,
+    absl::Span<const intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events,
+    int action_instance_id_start, double speed_override_factor) {
+  std::vector<icon::ActionDescriptor> event_actions;
+  const icon::Condition trajectory_completed_condition = IsGreaterThanOrEqual(
+      icon::TrajectoryTrackingActionInfo::kTrajectoryProgress,
+      kTrajectoryCompletedProgress);
+
+  for (const auto& motion_event : motion_events) {
+    INTR_ASSIGN_OR_RETURN(const auto skill_motion_event,
+                          UnpackAny<intrinsic_proto::icon::v1::TrajectoryEvent>(
+                              motion_event.event()));
+
+    const icon::ActionInstanceId kAdioEventActionId(action_instance_id_start++);
+    const icon::ActionInstanceId kAdioDefaultActionId(
+        action_instance_id_start++);
+
+    icon::ADIOActionInfo::FixedParams adio_event_fixed_params;
+    if (skill_motion_event.has_adio_event()) {
+      *adio_event_fixed_params.mutable_outputs() =
+          skill_motion_event.adio_event().set_analog_digital_outputs();
+    } else {
+      return absl::InvalidArgumentError(
+          "Only ADIO events are supported at the moment.");
+    }
+    auto adio_default_action_descriptor =
+        icon::ActionDescriptor(icon::kEmptyActionTypeName, kAdioDefaultActionId,
+                               {skill_motion_event.adio_event().part_name()});
+    auto adio_event_action_descriptor =
+        icon::ActionDescriptor(icon::ADIOActionInfo::kActionTypeName,
+                               kAdioEventActionId,
+                               {skill_motion_event.adio_event().part_name()})
+            .WithFixedParams(adio_event_fixed_params)
+            .WithReaction(
+                icon::ReactionDescriptor(
+                    icon::IsTrue(icon::ADIOActionInfo::kOutputsSet))
+                    .WithRealtimeActionOnCondition(kAdioDefaultActionId));
+
+    event_actions.push_back(adio_event_action_descriptor);
+    event_actions.push_back(adio_default_action_descriptor);
+
+    if (motion_event.keypoint().event_offset().has_time()) {
+      INTR_ASSIGN_OR_RETURN(
+          absl::Duration time_offset,
+          ToAbslDuration(motion_event.keypoint().event_offset().time()));
+      INTR_ASSIGN_OR_RETURN(
+          absl::Duration time_keypoint,
+          ToAbslDuration(motion_event.keypoint().keypoint_time_from_start()));
+
+      // If the time offset results in a negative time, then the event will
+      // fire immediately on starting the trajectory. If a scheduled event
+      // extends beyond the duration of the trajectory, the event will be
+      // triggered on nominal completion of the trajectory.
+      const double event_time_seconds =
+          absl::ToDoubleSeconds(time_offset) +
+          absl::ToDoubleSeconds(time_keypoint) /
+              std::max(kEpsilonSpeedOverride, speed_override_factor);
+      const icon::Condition time_condition = IsGreaterThanOrEqual(
+          icon::TrajectoryTrackingActionInfo::kTimeSinceTrajectoryStartSeconds,
+          event_time_seconds);
+      const icon::Condition trigger_condition =
+          AnyOf({trajectory_completed_condition, time_condition});
+      motion_action.WithReaction(
+          ReactionDescriptor(trigger_condition)
+              .WithParallelRealtimeActionOnCondition(kAdioEventActionId)
+              .FireOnce());
+    } else if (motion_event.keypoint()
+                   .event_offset()
+                   .has_cartesian_arc_length_meters()) {
+      // If the Cartesian arc length offset results in a negative arc length,
+      // then the event will fire immediately on starting the trajectory. If a
+      // scheduled event extends beyond the arc length of the trajectory, the
+      // event will be triggered on nominal completion of the trajectory.
+      const double event_arc_length =
+          motion_event.keypoint().event_offset().cartesian_arc_length_meters() +
+          motion_event.keypoint()
+              .keypoint_cartesian_arc_length_from_start_meters();
+      const icon::Condition arc_length_condition =
+          IsGreaterThanOrEqual(icon::TrajectoryTrackingActionInfo::
+                                   kCartesianArcLengthAlongTrajectoryMeters,
+                               event_arc_length);
+      const icon::Condition trigger_condition =
+          AnyOf({trajectory_completed_condition, arc_length_condition});
+      motion_action.WithReaction(
+          ReactionDescriptor(trigger_condition)
+              .WithParallelRealtimeActionOnCondition(kAdioEventActionId)
+              .FireOnce());
+    } else {
+      return absl::InvalidArgumentError(
+          "Only time and cartesian_arc_length_meters are supported for "
+          "MotionEventOffsets.");
+    }
+  }
+  return event_actions;
+}
+
+
 }  // namespace
 
 absl::Status ExecuteJointTrajectory(
@@ -77,6 +187,12 @@ absl::Status ExecuteJointTrajectory(
     std::optional<intrinsic_proto::icon::v1::Condition>
         move_until_signal_condition,
     bool* stopped_on_signal
+
+    ,
+    absl::Span<const intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events
+
+
 ) {
   if (!icon_equipment.position_part_name.has_value()) {
     return absl::FailedPreconditionError(
@@ -87,6 +203,11 @@ absl::Status ExecuteJointTrajectory(
       joint_trajectory_proto, settling_timeout_seconds,
       use_is_settled_as_condition, canceller, move_until_signal_condition,
       stopped_on_signal
+
+      ,
+      motion_events
+
+
   );
 }
 
@@ -100,8 +221,18 @@ absl::Status ExecuteJointTrajectory(
     std::optional<intrinsic_proto::icon::v1::Condition>
         move_until_signal_condition,
     bool* stopped_on_signal
+
+    ,
+    absl::Span<const intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events
+
+
 ) {
   // TODO: b/534624482 - Fail early if already cancelled.
+  const stats::ScopedSpan span("skills/ExecuteJointTrajectory");
+  span.AddAttribute("joint_trajectory.size",
+                    joint_trajectory_proto.state_size());
+
   const std::string& arm_part = position_part_name;
 
   if (joint_trajectory_proto.state_size() > kMaxTrajectorySampleSize) {
@@ -177,8 +308,39 @@ absl::Status ExecuteJointTrajectory(
 
   std::vector<std::string> parts_to_control{arm_part};
 
+
+  INTR_ASSIGN_OR_RETURN(double speed_override, icon_client.GetSpeedOverride());
+  absl::flat_hash_set<std::string> adio_part_names;
+  for (const auto& motion_event : motion_events) {
+    INTR_ASSIGN_OR_RETURN(const auto skill_motion_event,
+                          UnpackAny<intrinsic_proto::icon::v1::TrajectoryEvent>(
+                              motion_event.event()));
+    adio_part_names.insert(skill_motion_event.adio_event().part_name());
+  }
+
+  parts_to_control.insert(parts_to_control.end(), adio_part_names.begin(),
+                          adio_part_names.end());
+  // Motion events use a phase-based completion condition (`kTrajectoryProgress
+  // >= 1.0 - 1e-12`) as fallback. Unlike `IsDone()`, this stays false after an
+  // early path-accurate stop, so unreached arc-length events are not fired on
+  // early stop (preventing simultaneous trigger collisions on the same part
+  // slot), while end-of-trajectory events still fire on nominal completion.
+  // Note that time-based events use wall time, which keeps advancing while the
+  // robot decelerates (and settles) after the stop signal, so they may still
+  // fire during that phase.
+  INTR_ASSIGN_OR_RETURN(
+      std::vector<icon::ActionDescriptor> event_actions,
+      AddMotionEventsAndActions(tracking_action_descriptor, motion_events, 2,
+                                speed_override));
+
+
   std::vector<icon::ActionDescriptor> all_actions = {
       final_stop_action_descriptor, tracking_action_descriptor};
+
+
+  std::move(event_actions.begin(), event_actions.end(),
+            std::back_inserter(all_actions));
+
 
   absl::Status icon_status;
 

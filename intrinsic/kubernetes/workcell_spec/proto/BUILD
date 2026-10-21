@@ -38,25 +38,8 @@ go_proto_library(
     protos = [":solution_internal_proto"],
 )
 
-proto_library(
-    name = "deploy_proto",
-    srcs = ["deploy.proto"],
-    deps = [
-        "//intrinsic/config/proto:application_proto",
-        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
-    ],
-)
-
-go_proto_library(
+alias(
     name = "deploy_go_proto",
-    compilers = [
-        "@io_bazel_rules_go//proto:go_grpc_v2",
-        "@io_bazel_rules_go//proto:go_proto",
-    ],
-    importpath = "intrinsic/kubernetes/workcell_spec/proto/deploy_go_proto",
-    protos = [":deploy_proto"],
-    deps = [
-        "//intrinsic/config/proto:application_go_proto",
-        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
-    ],
+    actual = "//intrinsic_sdk/intrinsic/kubernetes/workcell_spec/proto:deploy_go_proto",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )

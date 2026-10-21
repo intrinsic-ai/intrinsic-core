@@ -22,9 +22,9 @@ cc_library(
     name = "state_rn",
     hdrs = ["state_rn.h"],
     deps = [
-        "//intrinsic/util:aggregate_type",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util:aggregate_type",
         "@abseil-cpp//absl/log:check",
         "@com_gitlab_libeigen_eigen//:eigen",
     ],
@@ -58,9 +58,9 @@ cc_library(
         "cart_state.h",
     ],
     deps = [
-        "//intrinsic/util:aggregate_type",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util:aggregate_type",
     ],
 )
 
@@ -69,12 +69,12 @@ cc_library(
     srcs = ["joint_limits.cc"],
     hdrs = ["joint_limits.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -138,13 +138,13 @@ cc_library(
     hdrs = ["check_joint_limits.h"],
     deps = [
         ":joint_state",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:fixed_string",
         "//intrinsic_control/intrinsic/icon/utils:log",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/strings:string_view",
     ],
 )
@@ -170,11 +170,11 @@ cc_library(
         "//intrinsic/math:linspace",
         "//intrinsic/math:time_series_utils",
         "//intrinsic/math/trajectory:discretized_trajectory",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/math:almost_equals",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

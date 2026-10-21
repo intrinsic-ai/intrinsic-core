@@ -43,6 +43,7 @@ cc_library(
         "//intrinsic/platform/pubsub",
         "//intrinsic/platform/pubsub:subscription",
         "//intrinsic/resources/client:resource_registry_client_interface",
+        "//intrinsic/stats:metrics_utils",
         "//intrinsic/util:proto_time",
         "//intrinsic/util/status:ret_check",
         "//intrinsic/util/status:status_macros",
@@ -63,6 +64,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//third_party/ros2/ros_interfaces/jazzy/sensor_msgs/msg:joint_state_cc_proto",
+        "@abseil-cpp//absl/base",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/cleanup",
         "@abseil-cpp//absl/log",
@@ -77,8 +79,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/icon/equipment:icon_equipment_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto:part_status_cc_proto",
         "@intrinsic_apis//intrinsic/resources/proto:resource_registry_cc_proto",
-        "@io_opencensus_cpp//opencensus/stats",
-        "@io_opencensus_cpp//opencensus/tags",
+        "@io_opentelemetry_cpp//api",
     ],
 )
 

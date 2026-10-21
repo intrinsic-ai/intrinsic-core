@@ -439,10 +439,8 @@ func (d *deploy) deleteResource(ctx context.Context, req *pb.DeleteResourceReque
 	// such as STRICT, RELAXED, etc.
 	r := report.New(report.AsWarningIfType[error]())
 	if err := d.validateDependencies(ctx, appClone, graph.WithReport(r), graph.WithOnlyReferencesTo(name)); err != nil {
-		// TODO(b/536078799): As a temporary measure, we only log the errors here instead of fatally
-		// returning them. Once we are reasonably confident that this won't cause breakages for
-		// existing users, we should change this to return the error here.
 		log.ErrorContextf(ctx, "dependency validation failed during deletion of instance %q: %v", name, err)
+		return status.Errorf(codes.FailedPrecondition, "dependency validation failed during deletion of instance %q: %v", name, err)
 	} else if len(r.Warnings()) > 0 {
 		log.WarningContextf(ctx, "dependencies validation warnings: %v", r.Warnings())
 		op.SetMetadata(&pb.DeleteResourceMetadata{
@@ -493,7 +491,7 @@ func (d *deploy) validateDependencies(ctx context.Context, app *apppb.Applicatio
 	}
 	sc, err := runtimegraph.NewSolutionContext(
 		ctx,
-		app,
+		app.GetResources().GetResourceInstances(),
 		rtrs,
 		runtimegraph.WithPlatformRuntime(),
 	)

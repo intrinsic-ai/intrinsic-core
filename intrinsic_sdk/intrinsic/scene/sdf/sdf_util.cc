@@ -288,14 +288,16 @@ absl::StatusOr<intrinsic::shapes::Box> ParseBox(const ::sdf::Box& box_sdf) {
 absl::StatusOr<intrinsic::shapes::Cylinder> ParseCylinder(
     const ::sdf::Cylinder& cylinder_sdf) {
   const double length = cylinder_sdf.Length();
-  if (length < 0.0) {
+  // Avoids degenerate geometries by verifying that length is strictly positive.
+  if (length <= 0.0) {
     return absl::InvalidArgumentError(
-        absl::Substitute("<cylinder> has negative <length>: $0", length));
+        absl::Substitute("<cylinder> has non-positive <length>: $0", length));
   }
   const double radius = cylinder_sdf.Radius();
-  if (radius < 0.0) {
+  // Avoids degenerate geometries by verifying that radius is strictly positive.
+  if (radius <= 0.0) {
     return absl::InvalidArgumentError(
-        absl::Substitute("<cylinder> has negative <radius> $0", radius));
+        absl::Substitute("<cylinder> has non-positive <radius>: $0", radius));
   }
   return intrinsic::shapes::Cylinder(length, radius);
 }
@@ -303,14 +305,16 @@ absl::StatusOr<intrinsic::shapes::Cylinder> ParseCylinder(
 absl::StatusOr<intrinsic::shapes::Capsule> ParseCapsule(
     const ::sdf::Capsule& capsule_sdf) {
   const double length = capsule_sdf.Length();
-  if (length < 0.0) {
+  // Avoids degenerate geometries by verifying that length is strictly positive.
+  if (length <= 0.0) {
     return absl::InvalidArgumentError(
-        absl::Substitute("<capsule> has negative <length>: $0", length));
+        absl::Substitute("<capsule> has non-positive <length>: $0", length));
   }
   const double radius = capsule_sdf.Radius();
-  if (radius < 0.0) {
+  // Avoids degenerate geometries by verifying that radius is strictly positive.
+  if (radius <= 0.0) {
     return absl::InvalidArgumentError(
-        absl::Substitute("<capsule> has negative <radius> $0", radius));
+        absl::Substitute("<capsule> has non-positive <radius>: $0", radius));
   }
   return intrinsic::shapes::Capsule(length, radius);
 }
@@ -318,6 +322,8 @@ absl::StatusOr<intrinsic::shapes::Capsule> ParseCapsule(
 absl::StatusOr<intrinsic::shapes::Ellipsoid> ParseEllipsoid(
     const ::sdf::Ellipsoid& ellipsoid_sdf) {
   const eigenmath::Vector3d radii = GzToIntrinsic(ellipsoid_sdf.Radii());
+  // Avoids degenerate geometries by verifying that all radii are strictly
+  // positive.
   if (radii.minCoeff() <= 0) {
     return ::intrinsic::InvalidArgumentErrorBuilder()
            << "<ellipsoid> has non positive <radii> " << radii;
@@ -329,8 +335,10 @@ absl::StatusOr<intrinsic::shapes::Ellipsoid> ParseEllipsoid(
 absl::StatusOr<intrinsic::shapes::Sphere> ParseSphere(
     const ::sdf::Sphere& sphere_sdf) {
   const double radius = sphere_sdf.Radius();
-  if (radius < 0.0) {
-    return absl::InvalidArgumentError("<sphere> has negative <radius>");
+  // Avoids degenerate geometries by verifying that radius is strictly positive.
+  if (radius <= 0.0) {
+    return absl::InvalidArgumentError(
+        absl::Substitute("<sphere> has non-positive <radius>: $0", radius));
   }
   return intrinsic::shapes::Sphere(radius);
 }

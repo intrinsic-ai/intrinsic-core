@@ -1,0 +1,137 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.motion_planning;
+
+import "intrinsic/icon/proto/joint_space.proto";
+import "intrinsic/kinematics/types/joint_limits.proto";
+import "intrinsic/math/proto/pose.proto";
+import "intrinsic/motion_planning/proto/v1/motion_specification.proto";
+import "intrinsic/motion_planning/proto/v1/robot_specification.proto";
+import "intrinsic/world/proto/collision_settings.proto";
+
+option go_package = "intrinsic_motion_planning/intrinsic/motion_planning/service/cache/motion_planner_cache_go_proto";
+
+// Entry describing a pose of a frame referenced in the motion specification.
+message CacheEntryFramePose {
+  // Normalized hierarchical path or identifier of the referenced frame.
+  string normalized_frame_name = 1;
+  // Pose of the frame relative to the world root.
+  Pose pose = 2;
+}
+
+// Entry describing a pose of an object of a given normalized type.
+message CacheEntryObjectPose {
+  // Normalized token identifying the object class or collision geometry.
+  string normalized_object_name = 1;
+  // Pose of the object relative to the world root.
+  Pose pose = 2;
+}
+
+// Describes an attachment relationship and `parent_t_child` relative pose.
+message CacheEntryAttachmentPose {
+  // Normalized identifier of the child entity or attached object link.
+  string normalized_name = 1;
+  // Normalized identifier of the parent entity to which the link is attached.
+  string normalized_parent_name = 2;
+  // Relative pose from the parent entity frame to the child entity frame.
+  Pose parent_t_child = 3;
+}
+
+// Other kinematic actor in the scene.
+message CacheEntryKinematicActor {
+  // Normalized token identifying the kinematic actor.
+  string normalized_name = 1;
+  // Joint configuration of the kinematic actor in radians or meters.
+  intrinsic_proto.icon.JointVec joint_positions = 2;
+}
+
+// Proto message to hold a `MotionPlanningRequestCacheKey` for logging.
+message MotionPlanningRequestCacheKey {
+  // The MotionSpecification from the planning request but without the collision
+  // settings in each segment or in the high-level.
+  intrinsic_proto.motion_planning.v1.MotionSpecification motion_specification =
+      1;
+  // The RobotSpecification from the planning request but without the
+  // `start_configuration`.
+  intrinsic_proto.motion_planning.v1.RobotSpecification robot_specification = 2;
+  // References and poses of all frames referred in the MotionSpecification.
+  map<string, Pose> poses_of_all_related_frames = 3 [deprecated = true];
+  // References and poses of all objects in the world.
+  map<string, Pose> poses_of_all_objects = 4 [deprecated = true];
+  // References and poses of all attachment components of the robot relative to
+  // their parent.  For kinematic objects, the parent_t_child is the inbound
+  // pose (unaffected by config). Changes in those attachment components are
+  // disallowed for exact and fuzzy match.
+  map<uint32, Pose> poses_of_attachment_components_robot = 15
+      [deprecated = true];
+  // References and poses of all attachment components of the children objects
+  // of the robot relative to their parent.  For kinematic objects, the
+  // parent_t_child is the inbound (unaffected by config). These components are
+  // considered static.
+  map<uint32, Pose> poses_of_attachment_components_robot_children_objects = 17
+      [deprecated = true];
+  // The starting robot configuration in the request.
+  intrinsic_proto.icon.JointVec starting_robot_configuration = 5;
+  // The application joint limits of the robot.
+  intrinsic_proto.JointLimits world_application_limits = 19;
+  // Collision settings of the world.
+  intrinsic_proto.world.CollisionSettings world_collision_settings = 6;
+  // Collision settings for each motion segment.
+  repeated intrinsic_proto.world.CollisionSettings
+      motion_segment_collision_settings = 7;
+  // All parent ids in attachment components in the world.
+  repeated uint32 attachment_parent_ids = 8 [deprecated = true];
+  // Captures the structure of the attachment components of the robot.
+  map<uint32, uint32> attachment_child_to_parent_ids_robot = 16
+      [deprecated = true];
+  // Captures the structure of the attachment components of the children objects
+  // of the robot.
+  map<uint32, uint32> attachment_child_to_parent_ids_robot_children_objects = 18
+      [deprecated = true];
+  // All geometry references in geometry components in the world.
+  repeated bytes geometry_fingerprints = 20;
+  // All geometry ref_t_shape_aff in geometry components in the world.
+  repeated bytes serialized_geometry_ref_t_shape_aff = 12;
+  // Configurations of all kinematic object configs in the world excluding the
+  // robot.
+  map<string, intrinsic_proto.icon.JointVec> other_kinematic_object_configs = 14
+      [deprecated = true];
+  // UUID used for logging only.
+  string uuid = 10;
+  // Poses of all frames referenced in the motion specification, ordered
+  // deterministically.
+  repeated CacheEntryFramePose related_frame_poses = 21;
+  // Poses of all objects in the world (excluding the robot and its children),
+  // ordered deterministically.
+  repeated CacheEntryObjectPose object_poses = 22;
+  // Attachment relationships for the robot links, ordered deterministically.
+  repeated CacheEntryAttachmentPose robot_links = 23;
+  // Attachment relationships for the tools / children objects of the robot,
+  // ordered deterministically.
+  repeated CacheEntryAttachmentPose tool_links = 24;
+  // Configurations of other kinematic actors in the world, ordered
+  // deterministically.
+  repeated CacheEntryKinematicActor other_kinematic_actors = 25;
+
+  reserved "geometry_ids", "serialized_geometry_refs";
+  reserved 9, 11;
+}
+
+message CacheKeyMatchInfo {
+  string given_cache_key_uuid = 1;
+  string matched_cache_key_uuid = 2;
+}

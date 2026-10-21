@@ -159,6 +159,8 @@ RealtimePartStatus ExtractRealtimePartStatus(
   if (const auto* ft_sensor_interface =
           feature_interface_registry.GetInterface<ForceTorqueSensor>();
       ft_sensor_interface != nullptr) {
+    part_status.wrench_at_ft_uncompensated =
+        ft_sensor_interface->WrenchAtSensorUncompensated();
     part_status.wrench_at_ft = ft_sensor_interface->WrenchAtSensor();
     part_status.wrench_at_tip = ft_sensor_interface->WrenchAtTip();
     part_status.wrench_stability_index =

@@ -40,11 +40,17 @@ template <typename ImageTraits>
 absl::StatusOr<CudaImage<ImageTraits>> PyrDown(
     const CudaImage<ImageTraits>& image,
     BorderType border_type = BorderType::kBorderConstantZero) {
-  INTR_ASSIGN_OR_RETURN(
-      const auto image_smooth,
-      SmoothImageWithGaussian5x5(image, border_type, /*sum_weight=*/1.0f));
-  INTR_ASSIGN_OR_RETURN(const auto image_down, Downsample2x2(image_smooth));
-  return image_down;
+  return SmoothWithGaussian5x5AndDownsample2x2(image, border_type);
+}
+
+// Smooths the input image with a 5x5 gaussian kernel and down-samples it by a
+// factor of 0.5 into a pre-allocated `image_down` buffer with dimensions
+// Ceil((cols / 2.0)) x Ceil((rows / 2.0)).
+template <typename ImageTraits>
+absl::Status PyrDown(const CudaImage<ImageTraits>& image,
+                     CudaImage<ImageTraits>& image_down,
+                     BorderType border_type = BorderType::kBorderConstantZero) {
+  return SmoothWithGaussian5x5AndDownsample2x2(image, image_down, border_type);
 }
 
 // Downsamples the input `dimensions` by a factor of 0.5 and returns
@@ -65,11 +71,19 @@ template <typename ImageTraits>
 absl::StatusOr<CudaImage<ImageTraits>> PyrUp(
     const CudaImage<ImageTraits>& image, Dimensions dimensions_up = {},
     BorderType border_type = BorderType::kBorderConstantZero) {
-  INTR_ASSIGN_OR_RETURN(const auto image_up, Upsample2x2(image, dimensions_up));
-  INTR_ASSIGN_OR_RETURN(
-      const auto image_up_smooth,
-      SmoothImageWithGaussian5x5(image_up, border_type, /*sum_weight=*/4.0f));
-  return image_up_smooth;
+  return Upsample2x2AndSmoothWithGaussian5x5(image, dimensions_up, border_type);
+}
+
+// Up-samples an image with dimensions cols x rows and smooths it with a 5x5
+// gaussian kernel into a pre-allocated `image_up` buffer. If `accumulate` is
+// true, adds the result to `image_up` in-place.
+template <typename ImageTraits>
+absl::Status PyrUp(const CudaImage<ImageTraits>& image,
+                   CudaImage<ImageTraits>& image_up,
+                   BorderType border_type = BorderType::kBorderConstantZero,
+                   bool accumulate = false) {
+  return Upsample2x2AndSmoothWithGaussian5x5(image, image_up, border_type,
+                                             accumulate);
 }
 
 // Creates a gaussian pyramid by applying the smooth-and-downsample operation

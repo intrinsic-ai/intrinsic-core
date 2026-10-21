@@ -27,7 +27,7 @@
 #include "grpcpp/server_builder.h"
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
-#include "intrinsic/icon/release/grpc_time_support.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/simulation/gazebo/plugins/sim_inputs/v1/set_simulated_inputs.grpc.pb.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 

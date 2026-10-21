@@ -46,6 +46,35 @@ namespace {
 // refinement. This is used to compute a minimum sampling step and it is
 // particularly useful for short paths.
 constexpr int kDesiredMinNumPathSamples = 25;
+
+
+// Adds keypoint times and Cartesian arc-lengths to the motion events in
+// `trajectory_result`. The `chain` is used to compute and populate Cartesian
+// arc-lengths for both `path_samples` and trajectory data points.
+absl::Status AddMotionEventKeypointData(
+    const kinematics::Chain* chain, std::vector<PathSample>& path_samples,
+    ToppTrajectoryResult& trajectory_result) {
+  if (path_samples.empty()) {
+    return absl::InternalError("Path samples must not be empty.");
+  }
+  if (chain != nullptr) {
+    INTR_RETURN_IF_ERROR(ValidateKinematicsChain(*chain, path_samples.front()));
+
+    INTR_RETURN_IF_ERROR(AddTranslationalCartesianArcLengthsToPathAndTrajectory(
+        *chain, path_samples, trajectory_result.trajectory));
+  }
+
+  INTR_RETURN_IF_ERROR(AddEventKeypointTime(
+      trajectory_result, absl::MakeSpan(trajectory_result.motion_events)));
+
+  if (chain != nullptr) {
+    INTR_RETURN_IF_ERROR(AddEventKeypointCartesianArcLength(
+        path_samples, absl::MakeSpan(trajectory_result.motion_events)));
+  }
+  return absl::OkStatus();
+}
+
+
 absl::StatusOr<ToppTrajectoryResult> ComputeAccelerationLimitedTrajectory(
     const OptimizationOptions& options, const kinematics::Chain* chain,
     icon::RigidBodyInterface* dynamics, absl::Span<PathSample> path_samples) {
@@ -70,6 +99,14 @@ absl::StatusOr<ToppTrajectoryResult> ComputeAccelerationLimitedTrajectory(
       ToppTrajectoryResult trajectory_result,
       ComputeAccelerationLimitedTrajectory(
           options, chain, dynamics, absl::MakeSpan(path_result.path_samples)));
+
+
+  // Populate the motion events of the trajectory result.
+  trajectory_result.motion_events = path_result.motion_events;
+  INTR_RETURN_IF_ERROR(AddMotionEventKeypointData(
+      chain, path_result.path_samples, trajectory_result));
+
+
   return trajectory_result;
 }
 

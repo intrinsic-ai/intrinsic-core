@@ -49,7 +49,7 @@ cc_library(
     srcs = ["gripper.cc"],
     hdrs = ["gripper.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

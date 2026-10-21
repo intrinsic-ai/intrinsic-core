@@ -35,11 +35,12 @@ spec:
           image: {{ .Values.registry }}{{ .Values.images.artifacts_service }}
           args:
             - intrinsic/storage/artifacts/artifact_service
-            - --port=8080
-            - --registry_port=9090
+            - --port=8089
+            - --registry_port=8192
             - --containerd_namespace=k8s.io
+            - --opencensus_metrics_port=9109
           ports:
-            - containerPort: 9090
+            - containerPort: 8192
               hostPort: 17127
               name: http-registry
           volumeMounts:
@@ -75,9 +76,9 @@ metadata:
 spec:
   clusterIP: None
   ports:
-    - port: 8080
+    - port: 8089
       name: grpc-artifacts-deployment
-    - port: 9101
+    - port: 9109
       name: http-metrics
   selector:
     app: artifacts-deployment
@@ -118,4 +119,4 @@ spec:
         - destination:
             host: artifacts-deployment
             port:
-              number: 8080
+              number: 8089

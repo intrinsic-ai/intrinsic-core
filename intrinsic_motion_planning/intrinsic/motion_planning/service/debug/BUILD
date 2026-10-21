@@ -53,8 +53,8 @@ cc_library(
     ],
     deps = [
         ":time_interval_cc_proto",
-        "//intrinsic/logging/proto:log_item_cc_proto",
         "//intrinsic_sdk/intrinsic/logging:data_logger_client",
+        "//intrinsic_sdk/intrinsic/logging/proto:log_item_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/time",
         "@com_google_protobuf//:json_util",

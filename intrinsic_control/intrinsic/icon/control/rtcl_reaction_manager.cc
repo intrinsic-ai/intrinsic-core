@@ -335,7 +335,7 @@ RealtimeStatus RtclReactionManager::StartActions(
           " bytes on the heap.");
       INTRINSIC_RT_LOG(ERROR)
           << message << "\nLatest stacktrace:\n"
-          << GenerateRtErrorStackTrace(std::span<const void* const>(
+          << GenerateRtErrorStackTrace(absl::MakeConstSpan(
                  icon::GetThreadLocalMallocViolations()
                      .latest_violation_stack_trace->stack_trace,
                  icon::GetThreadLocalMallocViolations()

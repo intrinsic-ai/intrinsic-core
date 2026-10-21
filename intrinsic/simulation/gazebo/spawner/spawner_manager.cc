@@ -231,6 +231,14 @@ absl::StatusOr<std::unique_ptr<SpawnerManager>> SpawnerManager::Create(
                  << "spawning.";
   }
 
+  return Create(std::move(object_world_service_stub),
+                std::move(geometry_library), simulator_world_id);
+}
+
+absl::StatusOr<std::unique_ptr<SpawnerManager>> SpawnerManager::Create(
+    std::shared_ptr<ObjectWorldServiceStub> object_world_service_stub,
+    std::unique_ptr<GeometryLibrary> geometry_library,
+    std::string_view simulator_world_id) {
   return absl::WrapUnique(
       new SpawnerManager(std::move(object_world_service_stub),
                          std::move(geometry_library), simulator_world_id));

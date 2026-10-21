@@ -12,50 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_library")
-
 package(default_visibility = [
     "//intrinsic/production:__subpackages__",
 ])
 
-go_library(
-    name = "vm",
-    srcs = [
-        "expire.go",
-        "lease.go",
-        "return.go",
-        "vm.go",
-    ],
-    importpath = "intrinsic/tools/inctl/cmd/vm/vm",
-    visibility = [
-        "//intrinsic/assets:__pkg__",
-        "//intrinsic/tools/inctl:__subpackages__",
-        "//visibility:public",
-    ],
-    deps = [
-        "//intrinsic/assets:cmdutils",
-        "//intrinsic/config:environments",
-        "//intrinsic/kubernetes/vmpool/service/pkg/defaults",
-        "//intrinsic/tools/inctl/auth",
-        "//intrinsic/tools/inctl/cmd:root",
-        "//intrinsic/tools/inctl/cmd/vm/pool",
-        "//intrinsic/tools/inctl/util:cobrautil",
-        "//intrinsic/tools/inctl/util:color",
-        "//intrinsic/tools/inctl/util:orgutil",
-        "//intrinsic/tools/inctl/util:printer",
-        "//intrinsic/tools/inctl/util:vmalias",
-        "@com_github_golang_glog//:go_default_library",
-        "@com_github_pborman_uuid//:go_default_library",
-        "@com_github_rs_xid//:go_default_library",
-        "@com_github_spf13_cobra//:go_default_library",
-        "@com_github_spf13_viper//:go_default_library",
-        "@intrinsic_apis//intrinsic/kubernetes/vmpool/manager/api/v1:lease_api_go_proto",
-        "@intrinsic_apis//intrinsic/kubernetes/vmpool/service/api/v1:vmpool_api_go_proto",
-        "@io_opencensus_go//trace:go_default_library",
-        "@org_golang_google_grpc//:go_default_library",
-        "@org_golang_google_grpc//codes:go_default_library",
-        "@org_golang_google_grpc//status:go_default_library",
-        "@org_golang_google_protobuf//encoding/protojson:go_default_library",
-        "@org_golang_google_protobuf//types/known/timestamppb",
-    ] + [],
+exports_files(
+    ["debug.go"],
+    visibility = ["//intrinsic_sdk/intrinsic/tools/inctl/cmd/vm:__pkg__"],
 )

@@ -26,6 +26,9 @@
 #include "intrinsic/math/proto/quaternion.pb.h"
 #include "intrinsic/motion_planning/proto/v1/geometric_constraints.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_blending_parameter.pb.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/proto/v1/motion_planning_limits.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
 #include "intrinsic/motion_planning/skills/move_robot.pb.h"
@@ -159,6 +162,23 @@ CreateMotionSpecSegment(
     *result.mutable_cartesian_limits() =
         skill_motion_segment.cartesian_limits();
   }
+
+
+  for (auto const& skill_motion_segment_event :
+       skill_motion_segment.motion_segment_events()) {
+    intrinsic_proto::motion_planning::v1::MotionSegmentEvent*
+        motion_segment_event = result.add_motion_segment_events();
+    *motion_segment_event->mutable_event_location() =
+        skill_motion_segment_event.event_location();
+    if (skill_motion_segment_event.has_trajectory_event()) {
+      if (!motion_segment_event->mutable_event()->PackFrom(
+              skill_motion_segment_event.trajectory_event())) {
+        return absl::InternalError("Failed to pack trajectory event");
+      }
+    }
+  }
+
+
   return result;
 }
 

@@ -493,8 +493,10 @@ absl::StatusOr<WorldObjectPlugin::CameraSpec> ConfigureMultiCamera(
 
   std::string camera_identifier_proto;
   if (camera_config.has_identifier()) {
-    google::protobuf::TextFormat::PrintToString(camera_config.identifier(),
-                                                &camera_identifier_proto);
+    if (!google::protobuf::TextFormat::PrintToString(
+            camera_config.identifier(), &camera_identifier_proto)) {
+      return absl::InternalError("Failed to format camera identifier proto");
+    }
   }
 
   WorldObjectPlugin::CameraSpec spec;
@@ -557,8 +559,10 @@ absl::StatusOr<WorldObjectPlugin::CameraSpec> ConfigureSingleCamera(
 
   std::string camera_identifier_proto;
   if (camera_config.has_identifier()) {
-    google::protobuf::TextFormat::PrintToString(camera_config.identifier(),
-                                                &camera_identifier_proto);
+    if (!google::protobuf::TextFormat::PrintToString(
+            camera_config.identifier(), &camera_identifier_proto)) {
+      return absl::InternalError("Failed to format camera identifier proto");
+    }
   }
 
   WorldObjectPlugin::CameraSpec spec;

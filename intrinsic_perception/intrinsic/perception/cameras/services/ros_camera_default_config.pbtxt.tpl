@@ -15,5 +15,8 @@
 # proto-file: google/protobuf/any.proto
 # proto-message: Any
 [type.googleapis.com/intrinsic_proto.perception.v1.CameraConfig] {
+  intrinsic_runtime {
+    name: "intrinsic_runtime"
+  }
   identifier { ros { device_id: "$DEVICE_ID" driver_type: "$DRIVER_TYPE"} }
 }

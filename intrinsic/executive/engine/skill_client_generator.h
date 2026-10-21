@@ -122,8 +122,19 @@ class SkillClientGenerator {
         return_value_file_descriptor_set;
 
     // Behavior tree (if this registration represents a process AND the behavior
-    // tree has already been fetched).
+    // tree has already been fetched). Populated from the installed assets
+    // service when listing process assets.
+
+    // Unique element ids are enforced on first access via
+    // GetAndCacheBehaviorTree (see behavior_tree_element_ids_ensured below).
+
     std::optional<intrinsic_proto::executive::BehaviorTree> behavior_tree;
+
+    // Whether missing element ids have been generated (in place) and all
+    // element ids are validated. Avoids re-validating the cached tree on every
+    // GetAndCacheBehaviorTree().
+    bool behavior_tree_element_ids_ensured = false;
+
 
     // Legacy equipment keys. The skill's manifest dictates the required ground
     // truth. Because skills can mix legacy and new proto dependencies, behavior

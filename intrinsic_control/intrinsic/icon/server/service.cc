@@ -340,7 +340,8 @@ void LogOpenSessionRequest(
     const intrinsic_proto::icon::v1::OpenSessionRequest& req) {
   intrinsic_proto::data_logger::LogItem li;
   li.mutable_metadata()->set_event_source("icon.server.session_request");
-  li.mutable_payload()->mutable_any()->PackFrom(req);
+  static_cast<void>(li.mutable_payload()->mutable_any()->PackFrom(
+      req));  // TODO: Handle return value
   data_logger::LogAsync(std::move(li));
 }
 
@@ -348,7 +349,8 @@ void LogOpenSessionResponse(
     const intrinsic_proto::icon::v1::OpenSessionResponse& resp) {
   intrinsic_proto::data_logger::LogItem li;
   li.mutable_metadata()->set_event_source("icon.server.session_response");
-  li.mutable_payload()->mutable_any()->PackFrom(resp);
+  static_cast<void>(li.mutable_payload()->mutable_any()->PackFrom(
+      resp));  // TODO: Handle return value
   data_logger::LogAsync(std::move(li));
 }
 
@@ -825,7 +827,8 @@ class ApplicationLayerService : public IconApiService {
                   "Failed to handle the initial OpenSessionRequest because:\n",
                   absl_status.message()),
               {.debug_message = debug_message});
-      response.mutable_status()->add_details()->PackFrom(extended_status);
+      static_cast<void>(response.mutable_status()->add_details()->PackFrom(
+          extended_status));  // TODO: Handle return value
     }
     LogOpenSessionResponse(response);
     if (!stream->Write(response)) {
@@ -855,7 +858,8 @@ class ApplicationLayerService : public IconApiService {
                     "Failed to handle an OpenSessionRequest because:\n",
                     absl_status.message()),
                 {.debug_message = debug_message});
-        resp.mutable_status()->add_details()->PackFrom(extended_status);
+        static_cast<void>(resp.mutable_status()->add_details()->PackFrom(
+            extended_status));  // TODO: Handle return value
       }
       LogOpenSessionResponse(resp);
 
@@ -1470,8 +1474,8 @@ class ApplicationLayerService : public IconApiService {
         for (const auto& [part_name, part_status] : *part_status_map) {
           std::string part_status_string;
           absl::StrAppend(&report, "\nPart statuses at time of error:");
-          google::protobuf::TextFormat::PrintToString(part_status,
-                                                      &part_status_string);
+          static_cast<void>(google::protobuf::TextFormat::PrintToString(
+              part_status, &part_status_string));  // TODO: Handle return value
           absl::StrAppend(&report, "\nPart: ", part_name, "\nPart Status:\n",
                           part_status_string);
         }

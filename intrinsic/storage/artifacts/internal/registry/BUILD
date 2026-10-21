@@ -26,7 +26,7 @@ go_library(
     ],
     importpath = "intrinsic/storage/artifacts/internal/registry/registry",
     deps = [
-        "//intrinsic/storage/artifacts/internal:utils",
+        "//intrinsic_sdk/intrinsic/storage/artifacts/internal:utils",
         "@com_github_containerd_containerd//content:go_default_library",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_google_go_containerregistry//pkg/name:go_default_library",

@@ -382,7 +382,10 @@ absl::StatusOr<std::unique_ptr<google::protobuf::Message>> CelValueToProto(
                      absl::StrFormat("Full list item CEL value: %s",
                                      sub_value.DebugString())})));
         google::protobuf::Any local_any_proto;
-        local_any_proto.PackFrom(*sub_message);
+        if (!local_any_proto.PackFrom(*sub_message)) {
+          return absl::InternalError(
+              "Failed to pack sub_message into local_any_proto.");
+        }
         google::protobuf::Message* any_proto =
             reflection->AddMessage(message.get(), items_field);
         const google::protobuf::Reflection* any_reflection =

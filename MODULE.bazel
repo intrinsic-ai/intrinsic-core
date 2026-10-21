@@ -25,10 +25,10 @@ non_module_deps = use_extension("//bazel:non_module_deps.bzl", "non_module_deps_
 # Go #
 ######
 
-bazel_dep(name = "rules_go", version = "0.63.0", repo_name = "io_bazel_rules_go")
+bazel_dep(name = "rules_go", version = "0.64.1", repo_name = "io_bazel_rules_go")
 
 go_sdk = use_extension("@io_bazel_rules_go//go:extensions.bzl", "go_sdk")
-go_sdk.download(version = "1.27.1")
+go_sdk.download(version = "1.27.2")
 
 bazel_dep(name = "gazelle", version = "0.54.0", repo_name = "bazel_gazelle")
 bazel_dep(name = "gazelle_cc", version = "0.6.0")
@@ -55,11 +55,22 @@ go_deps_dev.gazelle_override(
     # Force Gazelle to ignore existing BUILD files and generate its own
     build_file_generation = "on",
     directives = [
-        # Explicitly set the prefix so Gazelle maps labels to //go/pkg/...
-        "gazelle:prefix github.com/googlecloudrobotics/core/src",
+        # Explicitly set the prefix so Gazelle maps labels to //src/go/pkg/...
+        "gazelle:prefix github.com/googlecloudrobotics/core",
     ],
     # Use the exact module path from go.mod
-    path = "github.com/googlecloudrobotics/core/src",
+    path = "github.com/googlecloudrobotics/core",
+)
+
+# kythe.io ships Bazel BUILD files for its own workspace and checked-in .pb.go files:
+# generate BUILD.bazel files (which take precedence) from the Go sources instead.
+go_deps_dev.gazelle_override(
+    build_file_generation = "on",
+    directives = [
+        "gazelle:build_file_name BUILD.bazel",
+        "gazelle:proto disable",
+    ],
+    path = "kythe.io",
 )
 
 # This can be updated with buildozer
@@ -86,6 +97,7 @@ use_repo(
     "com_github_gazebo_web_auth",  
     "com_github_gazebo_web_gz_go_v10",  
     "com_github_gdamore_tcell_v2",  
+    "com_github_go_git_go_git_v5",
     "com_github_go_logr_logr",  
     "com_github_go_playground_validator_v10",  
     "com_github_gobwas_glob",  
@@ -96,14 +108,14 @@ use_repo(
     "com_github_google_gnostic",
     "com_github_google_go_cmp",
     "com_github_google_go_containerregistry",
+    "com_github_google_go_github_v43",
     "com_github_google_safearchive",
     "com_github_google_safehtml",  
     "com_github_google_safetext",  
     "com_github_google_subcommands",
     "com_github_google_uuid",  
     "com_github_googleapis_gax_go_v2",  
-    "com_github_googlecloudplatform_opentelemetry_operations_go_exporter_trace",
-    "com_github_googlecloudrobotics_core_src",  
+    "com_github_googlecloudrobotics_core",  
     "com_github_googlecloudrobotics_ilog",  
     "com_github_gorilla_websocket",
     "com_github_grpc_ecosystem_go_grpc_middleware_v2",  
@@ -133,8 +145,8 @@ use_repo(
     "com_github_pion_turn_v4",  
     "com_github_pion_webrtc_v4",  
     "com_github_pkg_errors",
-    "com_github_prometheus_client_golang",  
-    "com_github_prometheus_otlptranslator",  
+    "com_github_prometheus_client_golang",
+    "com_github_prometheus_otlptranslator",
     "com_github_protocolbuffers_txtpbfmt",
     "com_github_rivo_tview",  
     "com_github_robfig_cron_v3",
@@ -151,6 +163,7 @@ use_repo(
     "com_github_stripe_stripe_go_v74",  
     "com_github_stripe_stripe_go_v79",  
     "com_github_tdewolff_parse",  
+    "com_github_tidwall_jsonc",
     "com_github_toqueteos_webbrowser",  
     "com_github_traviswt_gke_auth_plugin",  
     "com_github_yannh_kubeconform",  
@@ -184,8 +197,9 @@ use_repo(
     "io_k8s_sigs_controller_tools",  
     "io_k8s_sigs_structured_merge_diff_v6",  
     "io_k8s_sigs_yaml",  
+    "io_kythe",
     "io_opencensus_go",
-    "io_opencensus_go_contrib_exporter_prometheus",
+    "io_opentelemetry_go_contrib_detectors_gcp",
     "io_opentelemetry_go_contrib_instrumentation_google_golang_org_grpc_otelgrpc",
     "io_opentelemetry_go_contrib_instrumentation_net_http_otelhttp",
     "io_opentelemetry_go_contrib_propagators_b3",
@@ -193,10 +207,10 @@ use_repo(
     "io_opentelemetry_go_otel",
     "io_opentelemetry_go_otel_bridge_opencensus",
     "io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracegrpc",
-    "io_opentelemetry_go_otel_exporters_prometheus",  
-    "io_opentelemetry_go_otel_metric",  
+    "io_opentelemetry_go_otel_exporters_prometheus",
+    "io_opentelemetry_go_otel_metric",
     "io_opentelemetry_go_otel_sdk",
-    "io_opentelemetry_go_otel_sdk_metric",  
+    "io_opentelemetry_go_otel_sdk_metric",
     "io_opentelemetry_go_otel_trace",
     "io_opentelemetry_go_proto_otlp",
     "org_golang_google_api",  
@@ -241,7 +255,7 @@ python.toolchain(
 
 bazel_dep(name = "pybind11_bazel", version = "3.0.1")
 bazel_dep(name = "pybind11_abseil", version = "202402.0")
-bazel_dep(name = "pybind11_protobuf", version = "0.0.0-20250210-f02a2b7")
+bazel_dep(name = "pybind11_protobuf", version = "0.0.0-20261001-ca1c3d3")
 bazel_dep(name = "aspect_rules_lint", version = "2.9.1")  
 
 pip = use_extension("@rules_python//python/extensions:pip.bzl", "pip")
@@ -259,43 +273,79 @@ use_repo(pip, "ai_intrinsic_sdks_pip_deps")
 # C++ toolchain #
 #################
 
-bazel_dep(name = "toolchains_llvm", version = "1.7.0")
-
-# Inspect supported toolchains at https://github.com/bazel-contrib/toolchains_llvm/blob/master/toolchain/internal/llvm_distributions.bzl
-llvm = use_extension("@toolchains_llvm//toolchain/extensions:llvm.bzl", "llvm", dev_dependency = True)
-
-# When you upgrade this, also upgrade llvm-project and its archive_override below 
-# https://github.com/intrinsic-ai/intrinsic-core/blob/main/intrinsic_control/intrinsic/icon/testing/static_analysis/README.md#llvm-upgrade. 
-llvm.toolchain(
-
-    fastbuild_compile_flags = {
-        "linux-x86_64": [
-            "-O1",
-        ],
-    },
-
-    llvm_version = "21.1.0",
+# TODO(b/568016456) The hermetic llvm toolchain needs to be patched to work seamlessly in our repo.
+# We have split the patches into logical units and put them in review upstream. We have one ticket to
+# track all of them as a unit, and it will be closed when all of them merge.
+bazel_dep(name = "llvm", version = "0.8.24")
+single_version_override(
+    module_name = "llvm",
+    patch_strip = 1,
+    patches = [
+        # The patch below adds --@llvm//config:fastbuild_optimization_mode=<O0|O1|O2|O3|Og|Os|Oz>
+        # to pick the optimization level of `-c fastbuild` builds (default O0),
+        # giving feature parity with toolchains_llvm.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/802
+        "//third_party/llvm:fastbuild_compile_flags.patch",
+        # The patch below fixes a bug that causes several BCR package headers to
+        # be shadowed by LLVM headers.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/806
+        "//third_party/llvm:header_search_paths.patch",
+        # The patch below forces compilation of libc++ and libc++-abi to be compiled
+        # with msan support when using @llvm//config:msan (MSan requires an
+        # instrumented C++ standard library), following the existing inherit_asan pattern.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/803
+        "//third_party/llvm:msan_libcxx.patch",
+        # The patch below makes the cc_stage0_object transition reset user
+        # copt/cxxopt/conlyopt/linkopt (as configure_builder_for_runtimes already does
+        # for the other runtimes) and the fuzzer/profile settings it forgot, so
+        # crtbegin.o/crtend.o never carry -fsanitize-coverage instrumentation into
+        # every shared library.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/815
+        "//third_party/llvm:stage0_object_reset.patch",
+        # The patch below backports @llvm-project//third-party:BUILD.bazel (llvm_enable_zstd)
+        # to LLVM 21.x so sanitizer symbolizer transitions work.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/805
+        "//third_party/llvm:llvm21_third_party_zstd.patch",
+        # The patch below applies the (already declared) ASAN_CFLAGS and
+        # UBSAN_STANDALONE_CFLAGS to the asan / ubsan_standalone runtimes so they are
+        # built with -fno-rtti -fno-exceptions like upstream CMake does. Without it the
+        # runtimes reference __cxa_begin_catch / __gxx_personality_v0 / _Unwind_Resume
+        # and plain-C links (e.g. CMake's compiler check in rules_foreign_cc) fail.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/813
+        "//third_party/llvm:asan_runtime.patch",
+        # The patch below makes sanitizer_common_symbolizer depend on libunwind on
+        # Linux. The toolchain links with --unwindlib=none and only hands libunwind to
+        # C++ links, so a C link against a sanitizer runtime otherwise lacks
+        # _Unwind_Backtrace / _Unwind_GetIP.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/814
+        "//third_party/llvm:sanitizer_runtime_libunwind.patch",
+        # The patch below adds the opt-in @llvm//config:sanitizer_strip_foreign_source_paths
+        # flag. When set, compile command lines exported to foreign build systems
+        # (no `source_file` variable: rules_foreign_cc, rules_rust cargo_build_script)
+        # strip source paths from UBSan locations and disable ASan global metadata,
+        # so code compiled with absolute paths does not embed the build root.
+        # See: https://github.com/hermeticbuild/hermetic-llvm/pull/816
+        "//third_party/llvm:sanitizer_strip_foreign_source_paths.patch",
+    ],
+    version = "0.8.24",
 )
 
-use_repo(non_module_deps, "intrinsic_llvm_sysroot")
-
-llvm.sysroot(
-    label = "@intrinsic_llvm_sysroot//:all_files",
-    targets = ["linux-x86_64"],
+llvm = use_extension("@llvm//extensions:llvm.bzl", "llvm")
+llvm.version(llvm_version = "21.1.8")
+llvm.configure(
+    targets = [
+        "X86",
+    ],
 )
-use_repo(
-    llvm,
-    "llvm_toolchain",
-    "llvm_toolchain_llvm",  
-)
+use_repo(llvm, "llvm-project")
 
 register_toolchains(
-    "@llvm_toolchain//:all",
+    "@llvm//toolchain:all",
     dev_dependency = True,
 )
 
 bazel_dep(name = "rules_cc", version = "0.2.25")
-bazel_dep(name = "rules_foreign_cc", version = "0.16.0")  
+bazel_dep(name = "rules_foreign_cc", version = "0.16.0")
 
 
 ########
@@ -378,26 +428,25 @@ use_repo(
 # Rust #
 ########
 
-bazel_dep(name = "rules_rust", version = "0.69.0")
+bazel_dep(name = "rules_rs", version = "0.1.0")
 
-rust = use_extension("@rules_rust//rust:extensions.bzl", "rust")
-rust.toolchain(
+rules_rs_toolchains = use_extension("@rules_rs//rs/toolchains:module_extension.bzl", "toolchains")
+rules_rs_toolchains.toolchain(
+    name = "rust_1_89_toolchains",
     edition = "2021",
-    versions = [
-        "1.85.0",
-    ],
+    version = "1.89.0",
 )
-use_repo(rust, "rust_toolchains")
+use_repo(rules_rs_toolchains, "default_rust_toolchains", "rust_1_89_toolchains")
 
-register_toolchains("@rust_toolchains//:all")
+register_toolchains("@rust_1_89_toolchains//...")
 
 
 #########
 # JS/TS #
 #########
 
-bazel_dep(name = "rules_nodejs", version = "6.7.5", dev_dependency = True)
-bazel_dep(name = "aspect_rules_js", version = "3.4.1", dev_dependency = True)
+bazel_dep(name = "rules_nodejs", version = "6.7.6", dev_dependency = True)
+bazel_dep(name = "aspect_rules_js", version = "3.5.1", dev_dependency = True)
 bazel_dep(name = "aspect_rules_ts", version = "3.10.1", dev_dependency = True)
 bazel_dep(name = "aspect_rules_esbuild", version = "0.27.1", dev_dependency = True)
 
@@ -430,7 +479,7 @@ use_repo(js_rules, "intrinsic_js_rules")
 bazel_dep(name = "abseil-cpp", version = "20250814.2")
 bazel_dep(name = "abseil-py", version = "2.1.0", repo_name = "com_google_absl_py")
 bazel_dep(name = "aom", version = "3.13.3.bcr.1")  
-bazel_dep(name = "aravis", version = "0.9.2-20251111063445-57983d013883")  
+bazel_dep(name = "aravis", version = "0.9.3-20261012091930-45bea4098b23")  
 bazel_dep(name = "assimp", version = "6.0.5")
 bazel_dep(name = "bazel_lib", version = "3.7.2")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
@@ -446,13 +495,13 @@ bazel_dep(name = "boost.logic", version = "1.90.0.bcr.1")  # used by cgal
 bazel_dep(name = "boost.math", version = "1.90.0.bcr.1")  
 bazel_dep(name = "boost.multiprecision", version = "1.90.0.bcr.1")  # used by cgal 
 bazel_dep(name = "boost.regex", version = "1.90.0.bcr.1")  
-bazel_dep(name = "boringssl", version = "0.20260813.0")
+bazel_dep(name = "boringssl", version = "0.20260929.0")
 bazel_dep(name = "brotli_go", version = "1.2.0", repo_name = "org_brotli_go")  
 bazel_dep(name = "brotli", version = "1.2.0.bcr.3", repo_name = "org_brotli")  
 bazel_dep(name = "cel-cpp", version = "0.14.0", repo_name = "com_google_cel_cpp")
 bazel_dep(name = "cel-spec", version = "0.25.3", repo_name = "com_google_cel_spec")
 bazel_dep(name = "ceres-solver", version = "2.2.0", repo_name = "com_google_ceres_solver")
-bazel_dep(name = "clarabel", version = "0.11.1.bcr.1")  
+bazel_dep(name = "clarabel", version = "0.11.1.bcr.2")  
 bazel_dep(name = "cli11", version = "2.6.2")  
 bazel_dep(name = "coacd", version = "1.0.13.bcr.1")  
 bazel_dep(name = "com_github_mvukov_rules_ros2", version = "0.0.0-20260718-352a8e3")
@@ -460,15 +509,22 @@ bazel_dep(name = "cpp-httplib", version = "0.46.0")
 bazel_dep(name = "cppitertools", version = "2.2")  
 bazel_dep(name = "cppregpattern", version = "1.0.1")  
 bazel_dep(name = "curl", version = "8.22.0", repo_name = "com_github_curl_curl")  
+bazel_dep(name = "daqp", version = "0.10.3")  
 bazel_dep(name = "dumb-init", version = "1.2.5")
 bazel_dep(name = "egl-registry", version = "0.0.0-20250527", repo_name = "egl_registry")  
 bazel_dep(name = "eigen", version = "5.0.1.bcr.2", repo_name = "com_gitlab_libeigen_eigen")
+
+# TODO(b/489481888): Remove once grpc upgrades its transitive envoy_api
+# dependency past 0.0.0-20251216-6ef568c (pulled in by grpc 1.81.1 in #58249),
+# which still imports the removed com_google_googleapis_imports repo from
+# googleapis.
+bazel_dep(name = "envoy_api", version = "0.0.0-20260901-005c18a.bcr.1")
 bazel_dep(name = "etherlab-ethercat", version = "1.6.7.bcr.1")
-bazel_dep(name = "ffmpeg", version = "7.1.1.bcr.beta.10")  
-bazel_dep(name = "flatbuffers", version = "25.12.19", repo_name = "com_github_google_flatbuffers")
+bazel_dep(name = "ffmpeg", version = "7.1.1.bcr.beta.13")  
+bazel_dep(name = "flatbuffers", version = "25.12.19.bcr.1", repo_name = "com_github_google_flatbuffers")
 bazel_dep(name = "fmt", version = "12.2.0")  
 bazel_dep(name = "fuzztest", version = "20250805.0", repo_name = "com_google_fuzztest")
-bazel_dep(name = "glib", version = "2.82.2.bcr.11")  
+bazel_dep(name = "glib", version = "2.84.4")  
 
 
 bazel_dep(name = "gloop", version = "20260828.0")
@@ -485,34 +541,34 @@ archive_override(
 
 
 bazel_dep(name = "google_benchmark", version = "1.9.5", repo_name = "com_google_benchmark")
-bazel_dep(name = "google_cloud_cpp", version = "3.0.0-rc1")
+bazel_dep(name = "google_cloud_cpp", version = "3.7.0")
 bazel_dep(name = "googleapis-cc", version = "1.1.5")
 bazel_dep(name = "googleapis-go", version = "1.1.5")
 bazel_dep(name = "googleapis-grpc-cc", version = "1.1.5")
 bazel_dep(name = "googleapis-python", version = "1.1.5")
-bazel_dep(name = "googleapis", version = "0.0.0-20260922-d6b44118", repo_name = "com_google_googleapis")
+bazel_dep(name = "googleapis", version = "0.0.0-20260929-28769825", repo_name = "com_google_googleapis")
 bazel_dep(name = "googletest", version = "1.17.0.bcr.2", repo_name = "com_google_googletest")
 bazel_dep(name = "grpc_ecosystem_grpc_gateway", version = "2.29.0.bcr.3", repo_name = "com_github_grpc_ecosystem_grpc_gateway_v2")
-bazel_dep(name = "grpc", version = "1.74.0", repo_name = "com_github_grpc_grpc")
+bazel_dep(name = "grpc", version = "1.81.1", repo_name = "com_github_grpc_grpc")
 bazel_dep(name = "gperftools", version = "2.18.1")  
 bazel_dep(name = "gz-common", version = "7.4.0")  
 bazel_dep(name = "gz-math", version = "9.3.0")
 bazel_dep(name = "gz-msgs", version = "12.0.2")
-bazel_dep(name = "gz-physics", version = "9.4.0")  
+bazel_dep(name = "gz-physics", version = "9.5.2")  
 bazel_dep(name = "gz-plugin", version = "4.0.0.bcr.1")  
-bazel_dep(name = "gz-rendering", version = "10.0.2")  
+bazel_dep(name = "gz-rendering", version = "10.1.0")  
 bazel_dep(name = "gz-sim", version = "10.5.0")  
 bazel_dep(name = "gz-transport", version = "15.1.0")
 bazel_dep(name = "intrinsic-clips", version = "0.1.0")  
-bazel_dep(name = "jq.bzl", version = "0.7.0")  
+bazel_dep(name = "jq.bzl", version = "0.7.1")  
 bazel_dep(name = "jwt-cpp", version = "0.7.0.bcr.1", repo_name = "jwt-cpp")  
 bazel_dep(name = "libarchive", version = "3.8.1.bcr.3", repo_name = "com_github_libarchive")  
 bazel_dep(name = "libmodbus", version = "3.1.12")  
 bazel_dep(name = "libxml2-go", version = "0.0.0-20250331-c934e3f.bcr.1")
 bazel_dep(name = "libxml2", version = "2.14.4.bcr.1")  # TODO(b/441702501): Remove when aravis updates this transitive dependency to 2.14 to support clang 21
 bazel_dep(name = "libyuv", version = "1787")  
-bazel_dep(name = "libzip", version = "1.11.4.bcr.3")
-bazel_dep(name = "llvm-project", version = "17.0.3", repo_name = "com_github_llvm_llvm-project")  
+bazel_dep(name = "libzip", version = "1.12.1")
+bazel_dep(name = "libzmq", version = "4.3.5.bcr.7")  
 bazel_dep(name = "magic_enum", version = "0.9.8")  
 bazel_dep(name = "mcap", version = "2.1.3")  
 bazel_dep(name = "meshoptimizer", version = "1.3.bcr.1")
@@ -524,11 +580,11 @@ bazel_dep(name = "ogre-next", version = "2.3.3.bcr.6")
 bazel_dep(name = "onetbb", version = "2022.3.0")
 bazel_dep(name = "open-inference-protocol", version = "0.0.0-20250512-d49cc23.bcr.1", repo_name = "open_inference_protocol")  
 bazel_dep(name = "open62541", version = "1.4.14.bcr.1")  
-bazel_dep(name = "opencensus-cpp", version = "0.0.0-20230502-50eb5de.bcr.2", repo_name = "io_opencensus_cpp")
+bazel_dep(name = "opencensus-cpp", version = "0.0.0-20230502-50eb5de.bcr.3", repo_name = "io_opencensus_cpp")
 bazel_dep(name = "opencv", version = "4.12.0.bcr.5")  
 bazel_dep(name = "opengl-registry", version = "0.0.0-20250707", repo_name = "opengl_registry")  
 bazel_dep(name = "openmesh", version = "11.0")  
-bazel_dep(name = "opentelemetry-cpp", version = "1.19.0", repo_name = "io_opentelemetry_cpp")  
+bazel_dep(name = "opentelemetry-cpp", version = "1.24.0", repo_name = "io_opentelemetry_cpp")  
 bazel_dep(name = "opentelemetry-proto", version = "1.8.0", repo_name = "opentelemetry_proto")  
 bazel_dep(name = "openusd", version = "25.11.bcr.3")
 bazel_dep(name = "or-tools", version = "9.15", repo_name = "or_tools")
@@ -542,11 +598,17 @@ bazel_dep(name = "poco", version = "1.14.2-20250528.bcr.1")
 bazel_dep(name = "postgres", version = "18.4", repo_name = "postgres")  
 bazel_dep(name = "prometheus-cpp", version = "1.3.0.bcr.3", repo_name = "com_github_jupp0r_prometheus_cpp")  
 bazel_dep(name = "protobuf-matchers", version = "0.1.1", repo_name = "com_github_inazarenko_protobuf_matchers")  # TODO(b/229726259) Replace with official version once published. More info at https://github.com/google/googletest/issues/1761
-bazel_dep(name = "protobuf", version = "32.1", repo_name = "com_google_protobuf")
+bazel_dep(name = "protobuf", version = "33.6", repo_name = "com_google_protobuf")
 bazel_dep(name = "qhull", version = "8.0.2.bcr.2")  
 bazel_dep(name = "re2", version = "2025-11-05.bcr.1", repo_name = "com_googlesource_code_re2")
 bazel_dep(name = "riegeli", version = "0.0.0-20250822-9f2744d", repo_name = "com_google_riegeli")
 bazel_dep(name = "roboticslibrary.rl", version = "0.0.0-20250723-5bbd773.bcr.4")  
+
+# TODO(b/489481888): Remove once grpc upgrades its transitive rules_apple
+# dependency from 3.16.0 to >= 4.x (grpc 1.81.1 in #58249 pulls in
+# rules_apple 3.16.0, which is incompatible with rules_swift 3.1.2 from
+# flatbuffers 25.12.19.bcr.1 in #58366).
+bazel_dep(name = "rules_apple", version = "4.3.3", repo_name = "build_bazel_rules_apple")
 bazel_dep(name = "rules_jsonnet", version = "0.7.2")  
 bazel_dep(name = "rules_license", version = "1.0.0")
 bazel_dep(name = "rules_pkg", version = "1.3.0")
@@ -570,39 +632,13 @@ bazel_dep(name = "websocketpp", version = "0.8.2.bcr.6")  # bumping transitive d
 bazel_dep(name = "wsg32", version = "0.0.0-20250117-f73c045")  
 bazel_dep(name = "xacro", version = "2.0.12")  
 bazel_dep(name = "yaml-cpp", version = "0.9.0.bcr.1")  
-bazel_dep(name = "zenoh-c", version = "1.7.2.bcr.1")
+bazel_dep(name = "zenoh-c", version = "1.8.0.bcr.1")
 bazel_dep(name = "zlib", version = "1.3.2")  
 
-
-# To upgrade to a newer version of llvm-project, follow
-# https://github.com/intrinsic-ai/intrinsic-core/blob/main/intrinsic_control/intrinsic/icon/testing/static_analysis/README.md#llvm-upgrade
-# If no upstream solution is available and ICON team does not timely help with the upgrade,
-# remove //intrinsic/icon:realtime_static_analyzer_test from presubmit and proceed.
-# TODO(b/444659116): Avoid override and find upstream solution.
-archive_override(
-    module_name = "llvm-project",
-    integrity = "sha256-toK2+mj29Z2awL7QT8FZtkkLM5m7M3HEEbdHyeG2UcY=",
-    strip_prefix = "llvm-project-e0c6bb7b686cb67e47baedff6935f560746b861d",
-    url = "https://github.com/gaschler/llvm-project/archive/e0c6bb7b686cb67e47baedff6935f560746b861d.zip",
-)
-
-
-
-# We require an override to support a single patch for compatibility with aspect_rules_js v3. The
-# patch is merged upstream but has not been released.
-# TODO(b/489341813): Remove when flatbuffers cuts a new release with the commit included.
-archive_override(
-    module_name = "flatbuffers",
-    integrity = "sha256-+BwxYrEEb+i4S5oNvdOD4k/bz4hYO5y2Ao+Q0E2QaWo=",
-    remote_patch_strip = 1,
-    remote_patches = {
-        "https://github.com/google/flatbuffers/commit/c21bda16493fbf3586820c2f5f952399329f674a.patch": "sha256-e7vj8dq4BP14xUIl7AonJbVMCFgDVkV5xN+QqXq+1ts=",
-    },
-    strip_prefix = "flatbuffers-25.12.19",
-    url = "https://github.com/google/flatbuffers/archive/refs/tags/v25.12.19.tar.gz",
-)
-
-
+# gawk@5.3.2.bcr.7+ includes gawk's own regex.h, so it is not shadowed by the
+# llvm toolchain's glibc headers. This line makes sure that all transitive
+# deps also get the elevated version to prevent header shadowing.
+bazel_dep(name = "gawk", version = "5.3.2.bcr.7")
 
 
 # This is a temporary workaround to include the latest friction compensation updates provided by UR
@@ -616,13 +652,23 @@ archive_override(
     url = "https://github.com/FilipposSot/Universal_Robots_Client_Library/archive/refs/tags/2.7.0-alpha-acceleration.0.tar.gz",
 )
 
+bazel_dep(name = "libpng", version = "1.6.58.bcr.1")
+bazel_dep(name = "tensorrt_headers", version = "10.16")
+
 use_repo(
     non_module_deps,
     "cgal",
     "coal",
     "firestore_emulator",
+    # TODO(b/572956581): Remove NVIDIA Pose Estimator out of insrc
+    "foundation_pose_inference_library",  
+    "foundationpose_perception_pipeline",  
+    "foundationpose_refine_onnx",  
+    "foundationpose_score_onnx",  
+    "foundationstereo_onnx",  
     "kubebuilder_test_tools",
     "kubernetes_json_schema",
+    "nvidia_pose_estimator_models",  # TODO(b/572956581): Remove NVIDIA Pose Estimator out of insrc
     "sysroot_glvnd_stubs",
     "ur_calibration",
 )
@@ -657,7 +703,7 @@ oci.pull(
 )
 oci.pull(
     name = "python3",
-    digest = "sha256:51dafde81dbdb6ebde285137a295cf18a47ca95234fe388a343719cb97305b3d",
+    digest = "sha256:f2dbcc4d0a7ff47b0f35724b56f778ccf0460eb119542f15444ab61ddc416435",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/library/python",
     platforms = ["linux/amd64"],
     tag = "3-slim",  # tag needs to be specified for renovatebot to sync the digest
@@ -677,22 +723,29 @@ oci.pull(
     tag = "2.21.0-gpu",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
+    name = "tensorrt",
+    digest = "sha256:94aa793e6db548940168186172b5acbe413cae9e56f7a656d171cd0dd9b6a869",
+    image = "nvcr.io/nvidia/tensorrt",
+    platforms = ["linux/amd64"],
+    tag = "26.05-py3",
+)
+oci.pull(
     name = "terraform_base",
-    digest = "sha256:985cdc6c1d9b0a65b83377f666efd2f740b47f02ac55be1ced3d18f7d3b0e829",
+    digest = "sha256:bfffc1ded5fbf0a17beaaf22eb4793980abdb19d0761ff6a3a0efb2ab4d9b316",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/hashicorp/terraform",
     platforms = ["linux/amd64"],
     tag = "1.16",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
     name = "nginx_base",
-    digest = "sha256:908dc23e643a1447dbfb2e189ed268bfde6a51a5bf9a34d3dd3440a24f58ccf7",
+    digest = "sha256:8632b3314d74c61f0e27f59055bab13f7793b988c94c090154d867bc29e0f39b",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/library/nginx",
     platforms = ["linux/amd64"],
-    tag = "1.31.6",  # tag needs to be specified for renovatebot to sync the digest
+    tag = "1.31.7",  # tag needs to be specified for renovatebot to sync the digest
 )
 oci.pull(
     name = "distroless_static",
-    digest = "sha256:58133991db06659feaabe0f4e97a35cebf15ef4ea08f8a4c6d2ee5f75e4aa6a0",
+    digest = "sha256:9e0130bec991f471279b70f1630ada11e46dad439ef2949544f96001225329fb",
     image = "gcr.io/distroless/static",
     platforms = ["linux/amd64"],
     tag = "latest",  # tag needs to be specified for renovatebot to sync the digest
@@ -717,10 +770,10 @@ oci.pull(
 # are not required.
 oci.pull(
     name = "tritonserver-cpu",
-    digest = "sha256:48ed7ee5f91189b4d98d90bffce503f1ac6127f9a234bad30511399102f5be4e",
-    image = "gcr.io/giza-workcells/tritonserver-input-validation",
+    digest = "sha256:e24bc1f53155c2e37212f00053fdf382b91033b4fc20e779b3468a76f3b90667",
+    image = "gcr.io/giza-workcells/tritonserver-base",
     platforms = ["linux/amd64"],
-    tag = "25.06-py3-cpu-v1",
+    tag = "25.06-py3-cpu-v3",
 )
 
 # Minimal Triton image with TF support for presubmits, validation and testing with legacy TF models.
@@ -735,10 +788,10 @@ oci.pull(
 # IVM-specific tritonserver image used in cloud deployments.
 oci.pull(
     name = "tritonserver-ivm",
-    digest = "sha256:1d285506a1da48af22d92c8103e13e32f9b24486f57f5c4a09e0057eee5f4d3a",
+    digest = "sha256:8016f5526ef33e110b536d7be75e944e7f6f860cf772b6f9bced6d964ae7fde1",
     image = "gcr.io/giza-workcells/tritonserver-ivm",
     platforms = ["linux/amd64"],
-    tag = "25.06-py3",
+    tag = "25.06-py3-v2",
 )
 
 # This image is updated manually via //incode/agent/agents/hmi/sandbox_runner/base_image:build_and_push.
@@ -764,7 +817,7 @@ oci.pull(
 
 oci.pull(
     name = "distroless_base",
-    digest = "sha256:0ebad3510af52aefe45045cc01b07564570be4feecf8d9f93d3a05d1b5f2f93b",
+    digest = "sha256:65be09d063b5d4737995ca5a17bb7e12ed990412751ec8ec212c9d74db257639",
     image = "gcr.io/distroless/base",
     platforms = ["linux/amd64"],
 )
@@ -777,15 +830,18 @@ oci.pull(
     platforms = ["linux/amd64"],
     tag = "bookworm",
 )
+
+# Prefer using distroless_base over this. distroless_base works for the vast
+# majority of C++ images built with Bazel and is smaller and less exposed.
 oci.pull(
     name = "distroless_cc",
-    digest = "sha256:4594d59540d1948417f6ca2829ddd9294493a7c68b7528f4dd459de7f203a750",
+    digest = "sha256:e530497a861b56fc224f1b37078215dd8ec1f241285ccbc922e179aefe8600f1",
     image = "gcr.io/distroless/cc",
     platforms = ["linux/amd64"],
 )
 oci.pull(
     name = "distroless_python3",
-    digest = "sha256:e866e2f9fbaa19f63e579cf2f61b7f76cd8a74c43a62a0af95d48678d9878436",
+    digest = "sha256:dcb4e83bc06eccbee7b626d8cc1c6177f5c3a549235e70ac6e7f8cc98f4264a1",
     image = "gcr.io/distroless/python3",
     platforms = ["linux/amd64"],
 )
@@ -822,6 +878,8 @@ use_repo(
     "tensorflow-gpu_linux_amd64",  
     "tensorflow_serving",  
     "tensorflow_serving_linux_amd64",  
+    "tensorrt",  
+    "tensorrt_linux_amd64",  
     "terraform_base",  
     "terraform_base_linux_amd64",  
     "timescaledb",  
@@ -848,10 +906,11 @@ use_repo(
 
 use_repo(
     non_module_deps,
+    "com_github_openxla_xla_tsl_net_cc",  
+    "com_github_openxla_xla_tsl_net_h",  
     "com_google_glog_googleinit_h",  
     "com_google_s2geometry_bit_interleave_cc",  
     "com_google_s2geometry_bit_interleave_h",  
-    "com_googlecloudplatform_perfkitbenchmarker_tests_matchers_py",  
     "libkmsp11",  
     "oss_licenses",  
 )
@@ -877,18 +936,6 @@ http_jar(
 ##########
 # Others #
 ##########
-
-# For cloud/alertmanager
-# TODO(https://github.com/abrisco/rules_helm/pull/124): Do not use use_repo_rule
-# once upstream has support fo doing this in an extension
-helm_import_repository = use_repo_rule("@rules_helm//helm:defs.bzl", "helm_import_repository")
-
-helm_import_repository(
-    name = "alertmanager",
-    chart_name = "alertmanager",
-    repository = "https://prometheus-community.github.io/helm-charts",
-    version = "1.13.1",
-)
 
 bazel_dep(name = "rules_distroless", version = "0.8.0")
 
@@ -927,22 +974,16 @@ single_version_override(
     version = "4.12.0.bcr.5",
 )
 
-# ffmpeg@7.1.1.bcr.beta.7 depends on libxml2@2.15.1.bcr.1, which is incompatible with
-# insrc. We must force 2.14.4.bcr.1 until we have fixed this incompatibility.
+# TODO(b/567681027): Upstream a patch to toybox to use libxcrypt under llvm.
+# The patch also adds a bazel_dep on libxcrypt to toybox's own MODULE.bazel,
+# so the root module doesn't need to depend on it.
 single_version_override(
-    module_name = "libxml2",
-    version = "2.14.4.bcr.1",
-)
-
-# The upstream maintainer of libvpx didn't want to add includes = ["."] to their BUILD file.
-# They arrived at a solution that worked for the BCR CI but does not appear to work for us.
-# See: https://github.com/bazelbuild/bazel-central-registry/pull/9883   Attempt #1
-#      https://github.com/bazelbuild/bazel-central-registry/pull/10000  Attempt #2
-#      https://github.com/bazelbuild/bazel-central-registry/pull/10005  Attempt #3 (problem)
-single_version_override(
-    module_name = "libvpx",
-    patch_strip = 0,
-    patches = ["//third_party/libvpx:includes.patch"],
+    module_name = "toybox",
+    patch_strip = 1,
+    patches = [
+        "//third_party/toybox:toybox_dynamic_link.patch",
+    ],
+    version = "0.8.12.bcr.1",
 )
 
 
@@ -962,10 +1003,24 @@ use_repo(
     "ros2_rosidl",
 )
 
+# TODO(b/567681750): Upstream a fix to libxml2-go to support libxml2@2.15 or newer.
 single_version_override(
-    module_name = "zenoh-c",
-    patch_strip = 1,
-    patches = ["//third_party/zenohc:static.patch"],
+    module_name = "libxml2",
+    version = "2.14.4.bcr.1",
+)
+
+# Naive workaround to work around system_python dependency in Protobuf 33 and later.
+# Reqired for targets depending in pybind11_protobuf, but should help with
+# hermeticity overall.
+# Patch from https://github.com/protocolbuffers/protobuf/issues/24084#issuecomment-5619303017.
+# References:
+# * b/388805879
+# * https://github.com/protocolbuffers/protobuf/issues/24084
+single_version_override(
+    module_name = "protobuf",
+    patch_cmds = [
+        "sed -i 's|@system_python//:python_headers|@rules_python//python/cc:current_py_cc_headers|g' python/build_targets.bzl python/py_extension.bzl",
+    ],
 )
 
 

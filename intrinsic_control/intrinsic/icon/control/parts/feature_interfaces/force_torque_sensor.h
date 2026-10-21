@@ -92,6 +92,10 @@ class ForceTorqueSensorFeature : public HalFeatureInterfaceBase,
   RealtimeStatus ApplyCommand(
       RealtimePartInterface::ApplyCommandParameters params) override;
 
+  Wrench WrenchAtSensorUncompensated() const override {
+    return force_sensor_variables_.wrench_at_ft_uncompensated;
+  }
+
   Wrench WrenchAtSensor() const override {
     return force_sensor_variables_.wrench_at_ft;
   }
@@ -184,6 +188,7 @@ class ForceTorqueSensorFeature : public HalFeatureInterfaceBase,
     // the mounted_payload during compensation.
     icon::PostSensorPayload grasped_payload;
 
+    Wrench wrench_at_ft_uncompensated;
     Wrench wrench_at_ft;
     Wrench wrench_at_target;
     double wrench_stability_index = 0.0;

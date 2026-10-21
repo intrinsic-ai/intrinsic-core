@@ -1,0 +1,18 @@
+diff --git a/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel b/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel
+--- a/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel
++++ b/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel
+@@ -1362,6 +1362,14 @@ cc_library(
+         "include",
+         "lib",
+     ],
++    # sanitizer_unwind_linux_libcdep.cpp calls _Unwind_Backtrace/_Unwind_GetIP.
++    # The toolchain links with --unwindlib=none and only provides libunwind to
++    # C++ links (via static_runtime_lib), so a plain C link against the ASan
++    # runtime has no unwinder at all. Carry the dependency explicitly instead.
++    deps = select({
++        "@platforms//os:linux": ["@llvm-project//libunwind:libunwind"],
++        "//conditions:default": [],
++    }),
+     alwayslink = True,
+ )
+ 

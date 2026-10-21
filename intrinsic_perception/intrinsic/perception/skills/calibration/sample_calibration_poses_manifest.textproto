@@ -50,15 +50,6 @@ options {
     create_skill: "::intrinsic::skills::SampleCalibrationPoses::CreateSkill"
   }
 }
-dependencies {
-  required_equipment {
-    key: "robot"
-    value {
-      capability_names: "intrinsic_proto.icon.v1.IconApi"
-      capability_names: "Icon2PositionPart"
-    }
-  }
-}
 parameter {
   message_full_name: "intrinsic_proto.skills.SampleCalibrationPosesParams"
 }

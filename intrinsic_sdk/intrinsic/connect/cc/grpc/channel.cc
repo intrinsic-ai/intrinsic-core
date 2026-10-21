@@ -34,7 +34,7 @@
 #include "grpcpp/security/credentials.h"
 #include "grpcpp/support/channel_arguments.h"
 #include "grpcpp/support/status.h"
-#include "intrinsic/icon/release/grpc_time_support.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/util/grpc/limits.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"

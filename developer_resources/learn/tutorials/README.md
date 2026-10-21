@@ -75,4 +75,4 @@ These standalone modules cover advanced integrations with robotics community fra
 
 ### 14. [MoveIt Grasp Planning](moveit_grasp_planning.md)
 * **Status**: Available
-* **Summary**: Integrate the MoveIt motion and grasp planning ecosystem with Intrinsic Core. Configure the ROS bridge, stream workcell collision geometry, and generate collision-free grasp proposals for objects in the scene.
+* **Summary**: Integrate the MoveIt motion and grasp planning ecosystem with Intrinsic Core. Stream workcell collision geometry into the MoveIt planning scene, generate collision-free grasp proposals for objects in the scene, and use them as the grasp planner of the OMTS machine tending cycle.

@@ -22,8 +22,8 @@ load("@aspect_rules_lint//lint:clang_tidy.bzl", "lint_clang_tidy_aspect")
 load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 
 clang_tidy = lint_clang_tidy_aspect(
-    # Use the hermetic LLVM Clang-Tidy binary provided by @toolchains_llvm
-    binary = Label("@llvm_toolchain_llvm//:clang-tidy"),
+    # Use the hermetic LLVM Clang-Tidy binary provided by @llvm
+    binary = Label("@llvm-project//clang-tools-extra/clang-tidy:clang-tidy"),
 
     # Mount and pass the repository root .clang-tidy configuration file
     global_config = [Label("//:.clang-tidy")],

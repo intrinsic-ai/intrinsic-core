@@ -25,6 +25,7 @@
 #include "google/protobuf/descriptor.pb.h"
 #include "intrinsic/icon/proto/v1/types.pb.h"
 #include "intrinsic/icon/release/source_location.h"
+#include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic {
 namespace icon {
@@ -60,9 +61,9 @@ absl::Status ActionSignatureBuilder::SetFixedParametersTypeImpl(
 
 absl::Status ActionSignatureBuilder::AddPartSlot(
     absl::string_view slot_name, absl::string_view slot_description,
-    absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>
+    const absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
         required_feature_interfaces,
-    absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>
+    const absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
         optional_feature_interfaces,
     intrinsic::SourceLocation loc) {
   if (bool inserted = part_slot_names_.emplace(slot_name).second; !inserted) {
@@ -94,6 +95,20 @@ absl::Status ActionSignatureBuilder::AddPartSlot(
       optional_feature_interfaces.begin(), optional_feature_interfaces.end()};
   signature_.mutable_part_slot_infos()->insert({std::string(slot_name), info});
 
+  return absl::OkStatus();
+}
+
+absl::Status ActionSignatureBuilder::AddOptionalPartSlot(
+    absl::string_view slot_name, absl::string_view slot_description,
+    const absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
+        required_feature_interfaces,
+    const absl::flat_hash_set<intrinsic_proto::icon::v1::FeatureInterfaceTypes>&
+        optional_feature_interfaces,
+    intrinsic::SourceLocation loc) {
+  INTR_RETURN_IF_ERROR(AddPartSlot(slot_name, slot_description,
+                                   required_feature_interfaces,
+                                   optional_feature_interfaces, loc));
+  signature_.mutable_part_slot_infos()->at(slot_name).set_is_optional(true);
   return absl::OkStatus();
 }
 

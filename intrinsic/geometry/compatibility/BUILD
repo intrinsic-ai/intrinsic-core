@@ -28,8 +28,6 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        "//intrinsic/util/status:status_builder",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
@@ -42,6 +40,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/shapes:geometry_shape",
         "//intrinsic_sdk/intrinsic/util/object_store",
         "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

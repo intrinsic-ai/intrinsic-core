@@ -13,15 +13,15 @@
 # limitations under the License.
 
 load("//bazel:python.bzl", "py_test")
-load("//intrinsic/assets/build_defs:asset.bzl", "intrinsic_asset_instance")
 load("//intrinsic/assets/build_defs:solution.bzl", "intrinsic_solution")
+load("//intrinsic_sdk/intrinsic/assets/build_defs:asset.bzl", "intrinsic_asset_instance")
 
 intrinsic_solution(
     name = "ioc_example_application",
     assets = [
         "//intrinsic/resources/catalog/resourcedata/product/building_block",
         "//intrinsic/simulation/gazebo/asset:gazebo_simulator_type",
-        "//intrinsic/assets/services/examples/calcserver:calculator_service",
+        "//intrinsic_sdk/intrinsic/assets/services/examples/calcserver:calculator_service",
         "//intrinsic/skills/examples:adder_skill",
     ],
     instances = [

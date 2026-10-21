@@ -317,7 +317,7 @@ func instanceAssetInfo(rtr *rtrpb.ResourceTypeRuntime) *assetInfo {
 }
 
 func platformDefaultResolution(config *anypb.Any, fds *descriptorpb.FileDescriptorSet, ris map[string]*rrpb.ResourceInstance, rtrs map[string]*rtrpb.ResourceTypeRuntime) (*anypb.Any, error) {
-	if err := traversal.ForEachResolvedDependency(config, fds, func(annotations *dependencypb.Dependency, msg *rdpb.ResolvedDependency) (*rdpb.ResolvedDependency, error) {
+	if err := traversal.ForEachResolvedDependency(config, fds, func(annotations *dependencypb.Dependency, msg *rdpb.ResolvedDependency, _ traversal.FieldContext) (*rdpb.ResolvedDependency, error) {
 		if msg == nil {
 			msg = &rdpb.ResolvedDependency{}
 		}

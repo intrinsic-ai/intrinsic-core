@@ -21,4 +21,7 @@ pkg_tar(
         "//intrinsic_runtime/kubernetes/intrinsic_base:intrinsic-base",
     ],
     include_runfiles = True,
+    tags = [
+        "manual",
+    ],
 )

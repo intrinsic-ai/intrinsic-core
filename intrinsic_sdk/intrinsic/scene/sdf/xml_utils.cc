@@ -73,6 +73,12 @@ absl::StatusOr<std::string> GetPrettifiedXml(
 }
 
 std::string EscapeXml(absl::string_view s) {
+  // Avoids redundant allocations and character copying when no special XML
+  // characters exist.
+  if (s.find_first_of("&<>\"'") == absl::string_view::npos) {
+    return std::string(s);
+  }
+
   std::string result;
   result.reserve(s.size());
   for (char c : s) {

@@ -25,7 +25,7 @@ cc_library(
     deps = [
         ":compute_bounded_hausdorff_distance",
         "//intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -41,7 +41,7 @@ cc_library(
     deps = [
         ":hausdorff_optimization_state",
         "//intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

@@ -21,8 +21,8 @@ go_library(
     visibility = [
         "//intrinsic/assets/artifacts:__pkg__",
         "//intrinsic/assets/build_defs:__pkg__",
-        "//intrinsic/assets/catalog:__pkg__",
         "//intrinsic/tools/inctl/util:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:__pkg__",
     ],
     deps = [
         "//intrinsic/storage/content_addressable_storage/pkg/clienthelpers",

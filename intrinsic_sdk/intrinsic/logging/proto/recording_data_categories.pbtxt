@@ -1,0 +1,93 @@
+# Copyright 2026 Intrinsic Innovation LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# A single source of truth for recording data categories, event source matchers,
+# and what constitutes a "lightweight" event source across the stack.
+#
+# Proto definition (RecordingDataCategories): intrinsic/logging/proto/recording_data_categories.proto
+#
+# Note: Some files might still need some changes propagated.
+# LINT.IfChange(recording_data_categories)
+categories: {
+  category_id: "text_logs"
+  display_name: "Text logs"
+  description: "Contains all text logs (including ones from user installed assets)."
+  event_sources: [
+    "/text-log-out",
+    "/asset-text-log-out"
+  ]
+  is_lightweight: true
+}
+categories: {
+  category_id: "flowstate_data"
+  display_name: "Flowstate data"
+  description: "Contains Flowstate data, such as Flowstate events."
+  event_sources: [
+    "/flowstate_events"
+  ]
+  is_lightweight: true
+}
+categories: {
+  category_id: "scene_data"
+  display_name: "Scene data"
+  description: "Contains scene data, such as TFs, world geometries, and markers."
+  event_sources: [
+    "/assets/.*/markers",
+    "/tf",
+    "/tf_associations",
+    "trace_cube_.*"
+  ]
+  is_lightweight: false
+}
+categories: {
+  category_id: "robot_data"
+  display_name: "Robot data"
+  description: "Contains robot-related data, such as robot status and motion planning information."
+  event_sources: [
+    "motion_planner_service.PlanTrajectory.debug_data",
+    "/icon/.*/robot_status"
+  ]
+  is_lightweight: false
+}
+categories: {
+  category_id: "perception_data"
+  display_name: "Perception data"
+  description: "Contains perception data, such as camera images and pose estimations."
+  event_sources: [
+    "perception.*"
+  ]
+  is_lightweight: false
+}
+categories: {
+  category_id: "debug_data"
+  display_name: "Debug data"
+  description: "Contains debug data, such as system metrics and the executive state."
+  event_sources: [
+    "executive.*",
+    "/system/metrics",
+    "error_report"
+  ]
+  is_lightweight: false
+}
+categories: {
+  category_id: "skill_data"
+  display_name: "Skill data"
+  description: "Contains skill data, such as skill inputs and execution results."
+  event_sources: [
+    "executive.extended_status",
+    "skills..*"
+  ]
+  is_lightweight: false
+}
+# LINT.ThenChange(//incode/datalogging/skills/create_recording/proto_conversions.py, //incode/datalogging/skills/create_recording/proto_conversions_test.py)

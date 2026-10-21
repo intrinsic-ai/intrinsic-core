@@ -64,6 +64,7 @@ class AdmittanceStateVariables {
     bool is_done;
     bool is_settled;
     double settled_for_seconds;
+    int64_t streaming_input_message_count = 0;
   };
   // Updates the state variables with the given values. Computes the values for
   // reference and force related state variables internally.
@@ -90,6 +91,7 @@ class AdmittanceStateVariables {
   std::optional<bool> reference_pose_reached_ = std::nullopt;
   std::optional<double> reference_position_error_ = std::nullopt;
   std::optional<double> reference_orientation_error_ = std::nullopt;
+  int64_t streaming_input_message_count_ = 0;
   std::optional<double> settled_for_seconds_ = std::nullopt;
   std::optional<double> sensed_force_ = std::nullopt;
   std::optional<double> sensed_torque_ = std::nullopt;

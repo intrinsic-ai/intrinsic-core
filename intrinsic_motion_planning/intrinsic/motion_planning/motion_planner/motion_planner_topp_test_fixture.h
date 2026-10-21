@@ -17,7 +17,6 @@
 
 #include <gtest/gtest.h>
 
-#include <memory>
 #include <ostream>
 #include <string>
 #include <vector>
@@ -30,9 +29,8 @@ namespace intrinsic {
 // Parameters for testing different Time-Optimal Path Parameterization (TOPP)
 // solvers within `MotionPlannerTest`. The `set_infinite_jerk_limits` flag
 // controls whether joint jerk limits are finite, which determines if a
-// jerk-limited or an acceleration-limited TOPP solver is used. If set to false,
-// a valid parameterization service is required to run the jerk-limited TOPP
-// solver. In OSS builds, given that a jerk-limited TOPP is unavailable, setting
+// jerk-limited or an acceleration-limited TOPP solver is used. In OSS builds,
+// given that a jerk-limited TOPP is unavailable, setting
 // `set_infinite_jerk_limits` to false will cause tests to be skipped.
 struct ToppTestParams {
   std::string test_name;
@@ -49,19 +47,14 @@ struct ToppTestParams {
 // environment.
 std::vector<ToppTestParams> GetToppTestParams();
 
-// Unparameterized base fixture holding the TOPP service state and lifecycle
+// Unparameterized base fixture holding the TOPP state and lifecycle
 // methods.
 class MotionPlannerToppBaseTest : public MotionPlannerBaseTest {
  protected:
-  MotionPlannerToppBaseTest();
-  ~MotionPlannerToppBaseTest() override;
   void SetUpTopp(const ToppTestParams& topp_params);
 
   ToppTestParams topp_test_params_;
   MotionPlannerFlags motion_planner_flags_;
-
-  struct ParameterizationService;
-  std::unique_ptr<ParameterizationService> parameterization_service_;
 };
 
 // Parameterized test fixture solely for testing TOPP variations

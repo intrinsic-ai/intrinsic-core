@@ -505,10 +505,13 @@ void WorldStorage::FlushImpl() {
                                      ? GetProtoFilepathForWorldId(world_id)
                                      : GetFilepathForWorldId(world_id);
 
-    // Delete the on disk world
-    absl::Status delete_status = file::Delete(filepath, file::Defaults());
-    LOG_IF(WARNING, !delete_status.ok() && !absl::IsNotFound(delete_status))
-        << "Failed to delete world file " << filepath << ": " << delete_status;
+    // Deletes the on disk world. A missing file is not an error since worlds
+    // that are deleted before the next flush, e.g., temporary worlds, are never
+    // written to disk.
+    std::error_code error;
+    std::filesystem::remove(filepath, error);
+    LOG_IF(WARNING, error) << "Failed to delete world file " << filepath << ": "
+                           << error.message();
   }
 }
 

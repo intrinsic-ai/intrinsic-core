@@ -70,7 +70,8 @@ void PubSub::DestroySessionWhenUnused() {
 
 absl::StatusOr<Publisher> PubSub::CreatePublisher(
     absl::string_view topic_name, const TopicConfig& config) const {
-  auto prefixed_name = ZenohHandle::add_topic_prefix(topic_name);
+  absl::StatusOr<std::string> prefixed_name =
+      ZenohHandle::add_topic_prefix(topic_name);
   if (!prefixed_name.ok()) {
     return prefixed_name.status();
   }
@@ -79,7 +80,7 @@ absl::StatusOr<Publisher> PubSub::CreatePublisher(
       prefixed_name->c_str(),
       intrinsic::PubSubQoSToZenohQos(config.topic_qos).c_str());
 
-  if (ret == IMW_ERROR) {
+  if (ret != IMW_OK) {
     return absl::InternalError("Error creating a publisher");
   }
   auto publisher_data = std::make_unique<PublisherData>();
@@ -376,7 +377,8 @@ absl::StatusOr<intrinsic_proto::pubsub::PubSubQueryResponse> PubSub::GetOneImpl(
   if (options.timeout.has_value()) {
     query_options.timeout_ms = *options.timeout / absl::Milliseconds(1);
   }
-  if (Zenoh().imw_query(key.data(), &GetCallbackFn, &GetOnDoneCallbackFn,
+  const std::string key_str(key);
+  if (Zenoh().imw_query(key_str.c_str(), &GetCallbackFn, &GetOnDoneCallbackFn,
                         serialized_request.c_str(), serialized_request.size(),
                         &query_data, &query_options) != IMW_OK) {
     return absl::InternalError(
@@ -391,13 +393,6 @@ absl::StatusOr<intrinsic_proto::pubsub::PubSubQueryResponse> PubSub::GetOneImpl(
   }
   if (query_data.responses->empty()) {
     return absl::DeadlineExceededError("Get operation timed out");
-  }
-
-  if (query_data.responses->empty()) {
-    return absl::NotFoundError(
-        absl::StrFormat("When calling GetOne for queryable '%s' received %d "
-                        "no results",
-                        key, query_data.responses->size()));
   }
 
   if (query_data.responses->size() > 1) {
@@ -419,7 +414,8 @@ PubSub::GetImpl(absl::string_view key,
   if (options.timeout.has_value()) {
     query_options.timeout_ms = *options.timeout / absl::Milliseconds(1);
   }
-  if (Zenoh().imw_query(key.data(), &GetCallbackFn, &GetOnDoneCallbackFn,
+  const std::string key_str(key);
+  if (Zenoh().imw_query(key_str.c_str(), &GetCallbackFn, &GetOnDoneCallbackFn,
                         serialized_request.c_str(), serialized_request.size(),
                         &query_data, &query_options) != IMW_OK) {
     return absl::InternalError(
@@ -434,7 +430,7 @@ PubSub::GetImpl(absl::string_view key,
   }
 
   std::vector<intrinsic_proto::pubsub::PubSubQueryResponse> results;
-  for (auto response : *query_data.responses) {
+  for (GetData::Response& response : *query_data.responses) {
     results.push_back(std::move(response.proto));
   }
   return results;

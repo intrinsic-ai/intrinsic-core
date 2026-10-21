@@ -12,58 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_library")
-
 package(default_visibility = ["//visibility:public"])
 
-go_library(
-    name = "logs",
-    srcs = [
-        "logs.go",
-        "logs_cp.go",
-        "logs_historian.go",
-        "logs_pull.go",
-        "logs_sync.go",
-        "processor.go",
-    ],
-    importpath = "intrinsic/tools/inctl/cmd/logs/logs",
-    deps = [
-        "//intrinsic/assets:cmdutils",
-        "//intrinsic/assets:idutils",
-        "//intrinsic/logging/proto:log_dispatcher_service_go_proto",
-        "//intrinsic/logging/proto:logger_service_go_proto",
-        "//intrinsic/simulation/gazebo/proto:introspection_go_proto",
-        "//intrinsic/skills/tools/skill/cmd:dialerutil",
-        "//intrinsic/skills/tools/skill/cmd:solutionutil",
-        "//intrinsic/tools/inctl/auth",
-        "//intrinsic/tools/inctl/cmd:root",
-        "//intrinsic/tools/inctl/util",
-        "//intrinsic/tools/inctl/util:color",
-        "//intrinsic/tools/inctl/util:orgutil",
-        "@com_github_cenkalti_backoff_v4//:go_default_library",
-        "@com_github_gdamore_tcell_v2//:go_default_library",
-        "@com_github_golang_glog//:go_default_library",
-        "@com_github_pkg_errors//:go_default_library",
-        "@com_github_rivo_tview//:go_default_library",
-        "@com_github_spf13_cobra//:go_default_library",
-        "@com_github_spf13_viper//:go_default_library",
-        "@com_google_cloud_go_longrunning//autogen/longrunningpb",
-        "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_go_proto",
-        "@intrinsic_apis//intrinsic/hardware/gripper:gripper_go_proto",
-        "@intrinsic_apis//intrinsic/icon/equipment:icon_equipment_go_proto",
-        "@intrinsic_apis//intrinsic/logging/proto:blob_go_proto",
-        "@intrinsic_apis//intrinsic/logging/textlogfetcher/proto/v1:textlogfetcher_go_proto",
-        "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
-        "@io_opencensus_go//plugin/ocgrpc:go_default_library",
-        "@org_golang_google_grpc//:go_default_library",
-        "@org_golang_google_grpc//codes:go_default_library",
-        "@org_golang_google_grpc//credentials:go_default_library",
-        "@org_golang_google_grpc//metadata:go_default_library",
-        "@org_golang_google_grpc//status:go_default_library",
-        "@org_golang_google_protobuf//encoding/prototext:go_default_library",
-        "@org_golang_google_protobuf//proto",
-        "@org_golang_google_protobuf//types/known/emptypb",
-        "@org_golang_google_protobuf//types/known/timestamppb",
-        "@org_golang_x_sync//errgroup:go_default_library",
-    ],
+exports_files(
+    ["logs_historian.go"],
+    visibility = ["//intrinsic_sdk/intrinsic/tools/inctl/cmd/logs:__pkg__"],
 )

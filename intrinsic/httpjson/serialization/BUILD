@@ -12,16 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_library")
-
-go_library(
+alias(
     name = "serialization",
-    srcs = ["serialization.go"],
-    importpath = "intrinsic/httpjson/serialization",
+    actual = "//intrinsic_sdk/intrinsic/httpjson/serialization",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//visibility:public"],
-    deps = [
-        "//intrinsic/httpjson/any",
-        "@com_github_grpc_ecosystem_grpc_gateway_v2//runtime",
-        "@org_golang_google_protobuf//encoding/protojson:go_default_library",
-    ],
 )

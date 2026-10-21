@@ -16,9 +16,9 @@
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("//bazel:xacro.bzl", "xacro_file")
-load("//intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
-load("//intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
-load("//intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
+load("//intrinsic_sdk/intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
+load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
+load("//intrinsic_sdk/intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
 
 def basler_hardware_device(
         name,

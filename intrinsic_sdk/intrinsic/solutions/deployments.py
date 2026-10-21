@@ -567,9 +567,9 @@ def _create_grpc_channel(
     except auth.OrgNotFoundError as error:
       raise solution_errors.NotFoundError(
           f"Credentials for organization '{error.organization}' not found."
-          f" Run 'inctl auth login --org {error.organization}' on a terminal"
-          " to login with this organization, or run 'inctl auth list' to see"
-          " the organizations you are currently logged in with."
+          " Run 'inctl auth login' on a terminal to login, or run"
+          " 'inctl auth list' to see the organizations you are currently"
+          " logged in with."
       ) from error
 
   if solution is not None:

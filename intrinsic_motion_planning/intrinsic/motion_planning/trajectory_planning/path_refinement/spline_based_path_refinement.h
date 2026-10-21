@@ -24,6 +24,9 @@
 #include "intrinsic/math/spline/bspline_sampler.h"
 #include "intrinsic/math/spline/bspline_utils.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/trajectory_planning/topp/path_sample.h"
 
 namespace intrinsic {
@@ -68,9 +71,18 @@ struct SplineBasedPathRefinementSettings {
 // This includes the `path_samples` that describe the path, its derivatives and
 // limits to be respected along it. In addition, it contains the `spline` which
 // is a continuous representation of the path.
+
+// Finally, `motion_events` contains the list of events to be triggered along
+// the path. Each motion event returned from this function will have its
+// `keypoint_joint_path_variable_from_start` set while other keypoint values
+// will not be changed.
+
 struct SplineBasedPathRefinementResult {
   std::vector<PathSample> path_samples;
   std::unique_ptr<BSplineNd> spline;
+
+  std::vector<intrinsic_proto::motion_planning::v1::MotionEvent> motion_events;
+
 };
 
 // Performs path refinement by interpolating the critical points extracted from

@@ -56,9 +56,9 @@ cc_library(
     deps = [
         ":constraint_interface",
         ":costfunction_interface",
-        "//intrinsic/util/status:ret_check",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:ret_check",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -74,8 +74,8 @@ cc_library(
     srcs = ["ruiz_equilibration.cc"],
     hdrs = ["ruiz_equilibration.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -88,8 +88,8 @@ cc_library(
     hdrs = ["simplex.h"],
     deps = [
         ":ruiz_equilibration",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -110,8 +110,8 @@ cc_library(
     srcs = ["incremental_convex_hull_3d.cc"],
     hdrs = ["incremental_convex_hull_3d.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -127,9 +127,9 @@ cc_library(
     deps = [
         ":incremental_convex_hull_3d",
         ":linear_constraint_utils",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:almost_equals",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

@@ -66,6 +66,111 @@ py_proto_library(
 )
 
 proto_library(
+    name = "behavior_call_proto",
+    srcs = ["behavior_call.proto"],
+    deps = [
+        "@com_google_googleapis//google/api:annotations_proto",
+        "@com_google_googleapis//google/api:field_behavior_proto",
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:footprint_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "behavior_call_cc_proto",
+    deps = [":behavior_call_proto"],
+)
+
+go_proto_library(
+    name = "behavior_call_go_proto",
+    importpath = "intrinsic/executive/proto/behavior_call_go_proto",
+    protos = [":behavior_call_proto"],
+    deps = [
+        "@intrinsic_apis//intrinsic/skills/proto:footprint_go_proto",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+    ],
+)
+
+py_proto_library(
+    name = "behavior_call_py_pb2",
+    deps = [":behavior_call_proto"],
+)
+
+proto_library(
+    name = "code_execution_proto",
+    srcs = ["code_execution.proto"],
+    deps = [
+        ":any_with_assignments_proto",
+        "@com_google_googleapis//google/api:field_behavior_proto",
+        "@com_google_protobuf//:descriptor_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "code_execution_cc_proto",
+    deps = [":code_execution_proto"],
+)
+
+go_proto_library(
+    name = "code_execution_go_proto",
+    importpath = "intrinsic/executive/proto/code_execution_go_proto",
+    protos = [":code_execution_proto"],
+    deps = [
+        ":any_with_assignments_go_proto",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+    ],
+)
+
+py_proto_library(
+    name = "code_execution_py_pb2",
+    deps = [":code_execution_proto"],
+)
+
+proto_library(
+    name = "behavior_tree_proto",
+    srcs = ["behavior_tree.proto"],
+    deps = [
+        ":any_list_proto",
+        ":any_with_assignments_proto",
+        ":behavior_call_proto",
+        ":code_execution_proto",
+        "@com_google_cel_spec//proto/cel/expr:syntax_proto",
+        "@com_google_googleapis//google/api:annotations_proto",
+        "@com_google_googleapis//google/api:field_behavior_proto",
+        "@com_google_protobuf//:any_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:skills_proto",
+        "@intrinsic_apis//intrinsic/util/status:extended_status_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "behavior_tree_cc_proto",
+    deps = [":behavior_tree_proto"],
+)
+
+go_proto_library(
+    name = "behavior_tree_go_proto",
+    importpath = "intrinsic/executive/proto/behavior_tree_go_proto",
+    protos = [":behavior_tree_proto"],
+    deps = [
+        ":any_list_go_proto",
+        ":any_with_assignments_go_proto",
+        ":behavior_call_go_proto",
+        ":code_execution_go_proto",
+        "@com_google_cel_spec//:expr",
+        "@intrinsic_apis//intrinsic/skills/proto:skills_go_proto",
+        "@intrinsic_apis//intrinsic/util/status:extended_status_go_proto",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+    ],
+)
+
+py_proto_library(
+    name = "behavior_tree_py_pb2",
+    deps = [":behavior_tree_proto"],
+)
+
+proto_library(
     name = "blackboard_service_proto",
     srcs = ["blackboard_service.proto"],
     deps = [
@@ -140,36 +245,6 @@ go_proto_library(
 py_proto_library(
     name = "clips_snapshot_py_pb2",
     deps = [":clips_snapshot_proto"],
-)
-
-proto_library(
-    name = "code_execution_proto",
-    srcs = ["code_execution.proto"],
-    deps = [
-        ":any_with_assignments_proto",
-        "@com_google_googleapis//google/api:field_behavior_proto",
-        "@com_google_protobuf//:descriptor_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "code_execution_cc_proto",
-    deps = [":code_execution_proto"],
-)
-
-go_proto_library(
-    name = "code_execution_go_proto",
-    importpath = "intrinsic/executive/proto/code_execution_go_proto",
-    protos = [":code_execution_proto"],
-    deps = [
-        ":any_with_assignments_go_proto",
-        "@org_golang_google_genproto_googleapis_api//annotations",
-    ],
-)
-
-py_proto_library(
-    name = "code_execution_py_pb2",
-    deps = [":code_execution_proto"],
 )
 
 proto_library(

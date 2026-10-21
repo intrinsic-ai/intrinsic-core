@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//intrinsic/util/proto/build_defs:descriptor_set.bzl", "proto_source_code_info_transitive_descriptor_set")
+load("//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl", "proto_source_code_info_transitive_descriptor_set")
 
 package(default_visibility = [
     "//visibility:public",
@@ -26,8 +26,8 @@ proto_source_code_info_transitive_descriptor_set(
 proto_source_code_info_transitive_descriptor_set(
     name = "intrinsic_descriptor_set",
     deps = [
-        "//intrinsic/executive/proto:executive_events_proto",
-        "//intrinsic/logging/proto:log_item_proto",
+        "//intrinsic_sdk/intrinsic/executive/proto:executive_events_proto",
+        "//intrinsic_sdk/intrinsic/logging/proto:log_item_proto",
         "@intrinsic_apis//intrinsic/icon/proto:part_status_proto",
         "@intrinsic_apis//intrinsic/math/proto:tf_message_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:capture_result_proto",

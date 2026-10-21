@@ -39,7 +39,6 @@ cc_library(
     hdrs = ["action_factory_context_wrapper.h"],
     deps = [
         ":string_wrapper",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:action_factory_context",
         "//intrinsic_control/intrinsic/icon/control:realtime_signal_types",
         "//intrinsic_control/intrinsic/icon/control:slot_types",
@@ -47,6 +46,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/control/c_api:convert_c_realtime_status",
         "//intrinsic_control/intrinsic/icon/control/c_api:icon_c_api",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

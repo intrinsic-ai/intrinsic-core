@@ -43,6 +43,7 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "intrinsic/icon/release/source_location.h"
@@ -77,9 +78,7 @@
 
 extern "C" void arv_fake_camera_register_resource(void);
 
-namespace intrinsic {
-namespace perception {
-
+namespace intrinsic::perception {
 namespace {
 // Pixel formats not yet in Aravis.
 // Used by Photoneo.
@@ -106,6 +105,8 @@ constexpr char kPhotoneoWorldToCameraTranslationVector[] =
     "CurrentCamera_WorldToCameraTranslationVector";
 constexpr char kPhotoneoOperationMode[] = "OperationMode";
 constexpr char kPhotoneoOperationModeScanner[] = "Scanner";
+
+constinit absl::Mutex device_list_mutex(absl::kConstInit);
 
 const Version& PhotoneoMinimumFirmwareVersion() {
   static const absl::NoDestructor<Version> kPhotoneoMinimumFirmwareVersion(
@@ -819,21 +820,48 @@ absl::StatusOr<ArvGcAccessMode> GetAccessMode(std::string_view name,
   return arv_device_get_feature_access_mode(device, name.data());
 }
 
+std::vector<std::string> ListAvailableDeviceIds() {
+  absl::MutexLock lock(device_list_mutex);
+  arv_update_device_list();
+  const unsigned int num_devices = arv_get_n_devices();
+  std::vector<std::string> device_ids;
+  device_ids.reserve(num_devices);
+  for (unsigned int device_idx = 0; device_idx < num_devices; ++device_idx) {
+    if (const char* device_id = arv_get_device_id(device_idx);
+        device_id != nullptr) {
+      device_ids.emplace_back(device_id);
+    }
+  }
+  return device_ids;
+}
+
 absl::StatusOr<GObjectPtr<ArvCamera>> DiscoverCamera(std::string_view device_id,
                                                      absl::Duration timeout) {
-  // Only enable/disable the interfaces required for the camera.
-  UpdateInterfaces(device_id);
-
   GError* error = nullptr;
   absl::Status status;
   const absl::Time deadline = ToDeadline(timeout);
   while (true) {
-    arv_update_device_list();
-    GObjectPtr<ArvCamera> camera(arv_camera_new(device_id.data(), &error));
-    status = ValidateAndNullArvError(error, "Error during camera creation.");
-    if (status.ok()) {
-      LOG(INFO) << "Camera discovered.";
-      return camera;
+    {
+      absl::MutexLock lock(device_list_mutex);
+      // Update global Aravis interface availability under `device_list_mutex`
+      // on each attempt in case another thread toggled interfaces while we
+      // slept.
+      UpdateInterfaces(device_id);
+      // `arv_camera_new` connects directly if `device_id` is already cached in
+      // the interface's device map, or performs a targeted discovery for
+      // `device_id` without waiting for a full broadcast scan timeout.
+      GObjectPtr<ArvCamera> camera(arv_camera_new(device_id.data(), &error));
+      status = ValidateAndNullArvError(error, "Error during camera creation.");
+      if (status.ok()) {
+        LOG(INFO) << "Camera discovered.";
+        return camera;
+      }
+      // If `device_id` was cached with stale connection info, `arv_camera_new`
+      // fails without re-discovering; refresh the device list for the next
+      // retry.
+      if (!absl::IsNotFound(status) && !absl::IsPermissionDenied(status)) {
+        arv_update_device_list();
+      }
     }
 
     const absl::Duration wait_duration =
@@ -1319,5 +1347,4 @@ absl::StatusOr<CaptureResult> BufferHelper::ToCaptureResult(
   };
 }
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception

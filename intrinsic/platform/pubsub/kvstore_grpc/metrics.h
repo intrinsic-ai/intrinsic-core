@@ -15,21 +15,23 @@
 #ifndef INTRINSIC_PLATFORM_PUBSUB_KVSTORE_GRPC_METRICS_H_
 #define INTRINSIC_PLATFORM_PUBSUB_KVSTORE_GRPC_METRICS_H_
 
+#include <cstdint>
+
 #include "absl/status/status.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "grpcpp/support/status.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
-#include "opencensus/stats/stats.h"
-#include "opencensus/tags/tag_key.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 namespace intrinsic::kvstore {
 
-// Tag key to represent the status of a gRPC operation.
-opencensus::tags::TagKey StatusCodeKey();
+// Attribute key to represent the status of a gRPC operation.
+inline constexpr absl::string_view kStatusCodeKey = "grpc_status";
 
-// Tag key to represent whether the Set request required high consistency.
-opencensus::tags::TagKey HighConsistencyKey();
+// Attribute key to represent whether the Set request required high consistency.
+inline constexpr absl::string_view kHighConsistencyKey = "high_consistency";
 
 // Base context for RPC metrics.
 struct KvstoreGrpcBaseRpcMetricsContext {
@@ -58,8 +60,8 @@ struct GetMetricsScope : public KvstoreGrpcBaseRpcMetricsContext {
   GetMetricsScope() = default;
   ~GetMetricsScope();
 
-  static opencensus::stats::MeasureInt64 RequestsReceived();
-  static opencensus::stats::MeasureInt64 DurationNanos();
+  static opentelemetry::metrics::Counter<uint64_t>& RequestsReceived();
+  static opentelemetry::metrics::Histogram<uint64_t>& DurationNanos();
 
   static void RegisterViews();
 };
@@ -74,9 +76,9 @@ struct SetMetricsScope : public KvstoreGrpcBaseRpcMetricsContext {
 
   void RecordPayloadSize(int64_t bytes) { payload_bytes = bytes; }
 
-  static opencensus::stats::MeasureInt64 RequestsReceived();
-  static opencensus::stats::MeasureInt64 DurationNanos();
-  static opencensus::stats::MeasureInt64 PayloadSizeBytes();
+  static opentelemetry::metrics::Counter<uint64_t>& RequestsReceived();
+  static opentelemetry::metrics::Histogram<uint64_t>& DurationNanos();
+  static opentelemetry::metrics::Histogram<uint64_t>& PayloadSizeBytes();
 
   static void RegisterViews();
 };
@@ -85,8 +87,8 @@ struct DeleteMetricsScope : public KvstoreGrpcBaseRpcMetricsContext {
   DeleteMetricsScope() = default;
   ~DeleteMetricsScope();
 
-  static opencensus::stats::MeasureInt64 RequestsReceived();
-  static opencensus::stats::MeasureInt64 DurationNanos();
+  static opentelemetry::metrics::Counter<uint64_t>& RequestsReceived();
+  static opentelemetry::metrics::Histogram<uint64_t>& DurationNanos();
 
   static void RegisterViews();
 };
@@ -95,11 +97,16 @@ struct ListMetricsScope : public KvstoreGrpcBaseRpcMetricsContext {
   ListMetricsScope() = default;
   ~ListMetricsScope();
 
-  static opencensus::stats::MeasureInt64 RequestsReceived();
-  static opencensus::stats::MeasureInt64 DurationNanos();
+  static opentelemetry::metrics::Counter<uint64_t>& RequestsReceived();
+  static opentelemetry::metrics::Histogram<uint64_t>& DurationNanos();
 
   static void RegisterViews();
 };
+
+// Registers views and eagerly initializes metrics for the KVStore gRPC service.
+// Must be called in main() right after intrinsic::OpenCensusPlugin is
+// constructed.
+void RegisterKvstoreGrpcMetrics();
 
 }  // namespace intrinsic::kvstore
 

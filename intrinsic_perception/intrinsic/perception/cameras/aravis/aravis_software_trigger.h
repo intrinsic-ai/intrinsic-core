@@ -21,8 +21,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 // Puts the camera in a mode where frames are acquired through sending a
 // software triggering command to it.
@@ -38,7 +37,6 @@ absl::Status SetPeriodicTrigger(ArvCamera* absl_nonnull camera);
 // Returns true, if the camera has configured software triggering.
 absl::StatusOr<bool> UsesSoftwareTrigger(ArvCamera* absl_nonnull camera);
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception
 
 #endif  // INTRINSIC_PERCEPTION_CAMERAS_ARAVIS_ARAVIS_SOFTWARE_TRIGGER_H_

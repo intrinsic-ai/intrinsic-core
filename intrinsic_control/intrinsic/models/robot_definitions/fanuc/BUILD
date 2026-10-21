@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("//bazel:xacro.bzl", "xacro_file")
-load("//intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
+load("//intrinsic_sdk/intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
 
 package(
     default_visibility = [
@@ -24,7 +24,7 @@ package(
 filegroup(
     name = "plugins",
     srcs = [
-        "timeslicer_plugins.xacro",
+        "simulation_plugins.xacro",
     ],
 )
 
@@ -239,7 +239,7 @@ xacro_file(
     src = "lr_mate_200id_7l/lr_mate_200id_7l.sdf.xacro",
     out = "lr_mate_200id_7l_world.sdf",
     data = [":lr_mate_200id_7l_data"],
-    visibility = ["//visibility:private"],
+    visibility = ["//visibility:public"],
 )
 
 sdf_scene_object(

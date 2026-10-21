@@ -100,6 +100,24 @@ bool SkillData::LRUCache::Erase(absl::string_view context_id) {
   return true;
 }
 
+bool SkillData::LRUCache::Erase(absl::string_view context_id,
+                                absl::string_view key) {
+  if (context_id.empty()) {
+    return false;
+  }
+  absl::MutexLock lock(&mutex_);
+  auto it = contexts_.find(context_id);
+  if (it == contexts_.end()) {
+    return false;
+  }
+  bool erased = it->second.values.erase(key) > 0;
+  if (it->second.values.empty()) {
+    lru_contexts_.erase(it->second.lru_it);
+    contexts_.erase(it);
+  }
+  return erased;
+}
+
 SkillData::SkillData(size_t max_contexts) : cache_(max_contexts) {}
 
 bool SkillData::Delete(absl::string_view context_id) {

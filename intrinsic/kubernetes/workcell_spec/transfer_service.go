@@ -326,21 +326,21 @@ func (s *TransferService) CurrentExclusiveChart(ctx context.Context) (*v1alpha1.
 	return &ca, nil
 }
 
-func IsSolutionRunning(ca *v1alpha1.ChartAssignment) (bool, error) {
+func IsSolutionRunning(ca *v1alpha1.ChartAssignment) (bool, string, error) {
 	if ca == nil || ca.Spec.Chart.Values == nil {
-		return false, nil
+		return false, "", nil
 	}
 	val, solExists := ca.Spec.Chart.Values["solution_deployment_id"]
 	solID, ok := val.(string)
 	if solExists && !ok {
-		return false, fmt.Errorf("solution_deployment_id is not a string")
+		return false, "", fmt.Errorf("solution_deployment_id is not a string")
 	}
 	val, appExists := ca.Spec.Chart.Values["app_deployment_id"]
 	appID, ok := val.(string)
 	if appExists && !ok {
-		return false, fmt.Errorf("app_deployment_id is not a string")
+		return false, "", fmt.Errorf("app_deployment_id is not a string")
 	}
-	return (solExists && solID != "") || (!solExists && appExists && appID != ""), nil
+	return (solExists && solID != "") || (!solExists && appExists && appID != ""), appID, nil
 }
 
 func (s *TransferService) DeleteWorkcellSpec(ctx context.Context, wait bool) error {
@@ -374,7 +374,7 @@ func (s *TransferService) GetWorkcellStatus(ctx context.Context, req *epb.Empty)
 		ClusterName: s.clusterInfo.Name,
 	}
 
-	if running, err := IsSolutionRunning(ca); err != nil {
+	if running, _, err := IsSolutionRunning(ca); err != nil {
 		return nil, fmt.Errorf("failed to check running state of exclusive chart: %w", err)
 	} else if !running {
 		response.Status = sipb.GetWorkcellStatusResponse_UNKNOWN

@@ -21,6 +21,7 @@
 #include <future>  // NOLINT(build/c++11)
 #include <memory>
 #include <optional>
+#include <ranges>
 #include <set>
 #include <string>
 #include <utility>
@@ -70,6 +71,7 @@
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/skills/footprint_util.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
+#include "intrinsic/stats/metrics_utils.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/aggregate_type.h"
 #include "intrinsic/util/eigen.h"
@@ -123,8 +125,7 @@
 #include "intrinsic/world/update_world.h"
 #include "intrinsic/world/util/compose_world_util.h"
 #include "intrinsic/world/world.h"
-#include "opencensus/stats/measure.h"
-#include "opencensus/stats/stats.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 #include "re2/re2.h"
 
 ABSL_FLAG(bool, enable_on_change_pubsub, true,
@@ -146,6 +147,37 @@ namespace {
 
 constexpr char kWorldIdHintPattern[] = "[_a-zA-Z][_a-zA-Z0-9]*";
 const LazyRE2 kWorldIdHintRegexp = {kWorldIdHintPattern};
+
+// Sorts objects or frames by name.
+template <typename T>
+void SortByName(std::vector<T*>& items) {
+  absl::c_sort(items, [](const T* a, const T* b) {
+    return a->GetName().value() < b->GetName().value();
+  });
+}
+
+// Returns the given entity ids of an object sorted by local entity name,
+// which are unique within the scope of an object.
+template <typename Container>
+std::vector<typename Container::value_type> SortedByLocalName(
+    const World& world, const Container& entity_ids) {
+  using Id = typename Container::value_type;
+
+  // Creates a vector to only call `GetLocalNameForEntityById` once.
+  std::vector<std::pair<std::string, Id>> keyed;
+  keyed.reserve(entity_ids.size());
+  for (const Id& id : entity_ids) {
+    keyed.emplace_back(world.GetLocalNameForEntityById(id), id);
+  }
+  absl::c_sort(keyed,
+               [](const auto& a, const auto& b) { return a.first < b.first; });
+  std::vector<Id> result;
+  result.reserve(keyed.size());
+  for (const auto& [_, id] : keyed) {
+    result.push_back(id);
+  }
+  return result;
+}
 
 bool ShouldKeep(const WorldObject& object,
                 const WorldHashSet<std::string>& object_ids,
@@ -385,9 +417,19 @@ MaybeExtractUpdateKinematicObjectPropertiesRequest(
   intrinsic_proto::world::UpdateKinematicObjectPropertiesRequest object_update;
   bool has_updates = false;
 
+  // Named joint configurations are processed in name order to generate a stable
+  // order of updates.
+  const auto sorted_names = [](const auto& configurations) {
+    auto keys = std::views::keys(configurations);
+    std::vector<std::string> names(keys.begin(), keys.end());
+    absl::c_sort(names);
+    return names;
+  };
+
   // Removes named joint configurations that are in the baseline object but not
   // in the updated object.
-  for (const auto& [name, config] : baseline_visitor.joint_configurations) {
+  for (const std::string& name :
+       sorted_names(baseline_visitor.joint_configurations)) {
     if (!visitor.joint_configurations.contains(name)) {
       object_update.add_named_joint_configurations_to_remove(name);
       has_updates = true;
@@ -395,7 +437,8 @@ MaybeExtractUpdateKinematicObjectPropertiesRequest(
   }
 
   // Adds the new named joint configurations.
-  for (const auto& [name, config] : visitor.joint_configurations) {
+  for (const std::string& name : sorted_names(visitor.joint_configurations)) {
+    const eigenmath::VectorXd& config = visitor.joint_configurations.at(name);
     const auto& baseline_configs = baseline_visitor.joint_configurations;
     bool approx_equal = baseline_configs.contains(name);
     for (int i = 0; i < config.size(); ++i) {
@@ -413,6 +456,9 @@ MaybeExtractUpdateKinematicObjectPropertiesRequest(
   }
 
   if (!visitor.kinematic_chain.empty() && visitor.are_kinematics_updated) {
+    std::vector<intrinsic_proto::world::RobotEntityKinematicProperties::Entity>
+        entity_updates;
+    entity_updates.reserve(visitor.kinematic_chain.size());
     for (const auto& entity_data : visitor.kinematic_chain) {
       intrinsic_proto::world::RobotEntityKinematicProperties::Entity update;
       if (entity_data.first.EntityNames().size() != 1) {
@@ -422,6 +468,14 @@ MaybeExtractUpdateKinematicObjectPropertiesRequest(
       }
       update.set_entity_name(*entity_data.first.EntityNames().begin());
       *update.mutable_parent_t_entity() = ToProto(entity_data.second);
+      entity_updates.push_back(std::move(update));
+    }
+    // The kinematic chain is sorted by entity name to generate a stable order
+    // of updates.
+    absl::c_sort(entity_updates, [](const auto& a, const auto& b) {
+      return a.entity_name() < b.entity_name();
+    });
+    for (auto& update : entity_updates) {
       *object_update.mutable_robot_kinematics_update()
            ->mutable_robot_entity_updates()
            ->add_entities() = std::move(update);
@@ -699,6 +753,50 @@ absl::StatusOr<bool> NonFrameEntityPosesEqual(const WorldObject* object_a,
   return true;
 }
 
+// Returns whether `object` is a KinematicObject.
+absl::StatusOr<bool> IsKinematicObject(const WorldObject& object) {
+  struct IsKinematicVisitor : public WorldObjectConstVisitor {
+    absl::Status Visit(const RootObject& root_object) override {
+      return absl::OkStatus();
+    }
+    absl::Status Visit(const PhysicalObject& physical_object) override {
+      return absl::OkStatus();
+    }
+    absl::Status Visit(const KinematicObject& kinematic_object) override {
+      is_kinematic = true;
+      return absl::OkStatus();
+    }
+    bool is_kinematic = false;
+  };
+  IsKinematicVisitor visitor;
+  INTR_RETURN_IF_ERROR(object.Accept(visitor));
+  return visitor.is_kinematic;
+}
+
+// Returns whether the kinematic state of `object` (joint values and kinematic
+// object properties) is memorized as ObjectWorldUpdates. Such updates reference
+// the object as a KinematicObject and thus are only applicable if the object
+// is a KinematicObject:
+absl::StatusOr<bool> ShouldExtractKinematicUpdates(
+    const WorldObject& object, const WorldObject* baseline_object) {
+  INTR_ASSIGN_OR_RETURN(const bool is_kinematic, IsKinematicObject(object));
+  if (!is_kinematic) {
+    return false;
+  }
+  // `baseline_object` should never really be nullptr for a kinematic object,
+  // but it happens, we try to extract updates for it anyway.
+  if (baseline_object == nullptr) {
+    return true;
+  }
+  INTR_ASSIGN_OR_RETURN(const bool baseline_is_kinematic,
+                        IsKinematicObject(*baseline_object));
+  LOG_IF(INFO, !baseline_is_kinematic)
+      << "Not memorizing kinematic state of '" << object.GetName().value()
+      << "' since it is not a kinematic object when composed from asset "
+         "instance.";
+  return baseline_is_kinematic;
+}
+
 // Returns a UpdateObjectJointsRequest that will position the object correctly
 // if it is a kinematic object. Returns nullopt if the object is not a kinematic
 // object.
@@ -713,6 +811,14 @@ MaybeExtractUpdateObjectJointsRequest(
   // If we did not get any updatable values we can skip this object.
   if (!visitor.positions.has_value() && !visitor.system_limits.has_value() &&
       !visitor.application_limits.has_value()) {
+    return std::nullopt;
+  }
+
+  // Kinematic objects without any DOF (e.g., legacy multi-camera objects which
+  // only carry a RobotComponent for simulated devices) have no joint state to
+  // memorize. An update would contain neither joint positions nor limits and
+  // could not be applied when composing the world.
+  if (visitor.positions.has_value() && visitor.positions->size() == 0) {
     return std::nullopt;
   }
 
@@ -979,9 +1085,12 @@ ExtractChildFramesTree(const Frame* frame, const std::string& object_name) {
       by_name->set_object_name(object_name);
     }
 
-    for (const Frame* child_frame : current_frame->GetChildFrames()) {
-      stack.push_back(child_frame);
-    }
+    // Child frames are pushed onto the stack in reverse name order so that
+    // popping from the back visits siblings in ascending alphabetical order
+    // while preserving topological (parent-before-child) pre-order traversal.
+    const std::vector<const Frame*> child_frames =
+        current_frame->GetChildFramesSorted();
+    stack.insert(stack.end(), child_frames.rbegin(), child_frames.rend());
   }
   return updates;
 }
@@ -1009,7 +1118,11 @@ ExtractChildFrames(const WorldObject* baseline_object,
         absl::StrJoin(object.GetFullPathName(), ".", absl::StreamFormatter())));
   }
 
-  std::vector<const Frame*> frames_to_check = object.GetChildFrames();
+  // Frames are pushed onto the stack in reverse name order so that popping from
+  // the back visits siblings in ascending alphabetical order while preserving
+  // topological (parent-before-child) pre-order traversal.
+  std::vector<const Frame*> frames_to_check = object.GetChildFramesSorted();
+  absl::c_reverse(frames_to_check);
   while (!frames_to_check.empty()) {
     const Frame* frame = frames_to_check.back();
     frames_to_check.pop_back();
@@ -1099,7 +1212,8 @@ ExtractChildFrames(const WorldObject* baseline_object,
         }
 
         // Added child frames should be saved.
-        for (const Frame* child_frame : frame->GetChildFrames()) {
+        std::vector<const Frame*> ppr_child_frames;
+        for (const Frame* child_frame : frame->GetChildFramesSorted()) {
           INTR_ASSIGN_OR_RETURN(
               const WorldEntity* child_frame_entity,
               world.GetEntityById(child_frame->GetEntityId()));
@@ -1109,9 +1223,13 @@ ExtractChildFrames(const WorldObject* baseline_object,
                 ExtractChildFramesTree(child_frame, object.GetName().value()));
             updates.MergeFrom(frame_updates);
           } else {
-            frames_to_check.push_back(child_frame);
+            ppr_child_frames.push_back(child_frame);
           }
         }
+        // Resource child frames are pushed in reverse name order so that
+        // popping from `frames_to_check` visits them in ascending name order.
+        frames_to_check.insert(frames_to_check.end(), ppr_child_frames.rbegin(),
+                               ppr_child_frames.rend());
 
         continue;
       }
@@ -1123,7 +1241,7 @@ ExtractChildFrames(const WorldObject* baseline_object,
                    << "' which doesn't belong to its parent object instance '"
                    << object.GetName()
                    << "'. Skipping this virtual frame but saving its children.";
-      for (const Frame* child_frame : frame->GetChildFrames()) {
+      for (const Frame* child_frame : frame->GetChildFramesSorted()) {
         INTR_ASSIGN_OR_RETURN(
             const auto frame_updates,
             ExtractChildFramesTree(child_frame, object.GetName().value()));
@@ -1234,8 +1352,16 @@ ExtractCollisionExclusions(
   INTR_ASSIGN_OR_RETURN(
       const auto collision_exclusions_by_object,
       GetAllCollisionExclusionsByObject(object, world, entity_id_to_object));
-  for (const auto& [other_object, other_entities] :
-       collision_exclusions_by_object) {
+  // Iterates in a stable order.
+  auto object_keys = std::views::keys(collision_exclusions_by_object);
+  std::vector<const WorldObject*> other_objects(object_keys.begin(),
+                                                object_keys.end());
+  SortByName(other_objects);
+  const std::vector<AttachmentEntityId> sorted_entity_ids =
+      SortedByLocalName(world, object.GetEntityIds());
+  for (const WorldObject* other_object : other_objects) {
+    const std::vector<EntityId> other_entities = SortedByLocalName(
+        world, collision_exclusions_by_object.at(other_object));
     // TODO(b/260390260) remove this check and use references by id to objects
     // once resource ids are stable across world decomposition and recomposition
     // into resources
@@ -1303,7 +1429,7 @@ ExtractCollisionExclusions(
     }
 
     // Case 3: entity is collision excluded from entire other object.
-    for (const AttachmentEntityId& entity_id : object.GetEntityIds()) {
+    for (const AttachmentEntityId& entity_id : sorted_entity_ids) {
       INTR_ASSIGN_OR_RETURN(const WorldEntity* entity,
                             world.GetEntityById(entity_id));
       if (!entity->HasComponent<CollisionComponent>()) {
@@ -1359,7 +1485,8 @@ ExtractResourceDeletions(const World& baseline_entity_world,
                         ObjectWorld::CreateView(current_entity_world));
 
   intrinsic_proto::world::ObjectWorldUpdates deletion_updates;
-  for (const WorldObject* baseline_object : baseline_world->GetObjects()) {
+  for (const WorldObject* baseline_object :
+       baseline_world->GetObjectsSorted()) {
     absl::StatusOr<const WorldObject*> current_object =
         current_world->GetObject(baseline_object->GetName());
     if (!current_object.ok()) {
@@ -1409,9 +1536,13 @@ ExtractResourceDeletions(const World& baseline_entity_world,
       }
     }
 
-    // Traverse child frames, recording the ones that were deleted.
+    // Traverse child frames in breadth-first ascending name order, recording
+    // the ones that were deleted. Resource frames cannot be deleted through
+    // the API when asset frame edits are disabled, but deletions are still
+    // emitted when such edits are enabled or when the baseline asset differs
+    // from the one the world was composed from.
     std::vector<const Frame*> baseline_frames =
-        baseline_object->GetChildFrames();
+        baseline_object->GetChildFramesSorted();
     std::deque<const Frame*> baseline_frame_queue(baseline_frames.begin(),
                                                   baseline_frames.end());
     while (!baseline_frame_queue.empty()) {
@@ -1466,7 +1597,8 @@ ExtractResourceDeletions(const World& baseline_entity_world,
         frame_by_name->set_frame_name(baseline_frame->GetName().value());
         delete_frame->set_force(true);
       } else {
-        for (const Frame* child_frame : baseline_frame->GetChildFrames()) {
+        for (const Frame* child_frame :
+             baseline_frame->GetChildFramesSorted()) {
           baseline_frame_queue.push_back(child_frame);
         }
       }
@@ -1532,24 +1664,29 @@ constexpr absl::string_view kRemainingEntitiesAfterResourceExtractionName =
     "intrinsic/object_world_service/"
     "remaining_entities_after_resource_extraction";
 
-opencensus::stats::MeasureInt64 RemainingEntitiesAfterResourceExtraction() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      kRemainingEntitiesAfterResourceExtractionName,
-      "Count of entities remaining in the world after resource extraction.",
-      "1");
-  return measure;
+// Instruments in this file are intentionally released so they remain alive
+// for the program's lifetime, avoiding global destructor ordering errors on
+// service destruction. Each is a one-time allocation, so this doesn't leak.
+opentelemetry::metrics::Counter<uint64_t>&
+RemainingEntitiesAfterResourceExtraction() {
+  static opentelemetry::metrics::Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(
+              kRemainingEntitiesAfterResourceExtractionName,
+              "Count of entities remaining in the world after resource "
+              "extraction.",
+              "1")
+          .release();
+  return *counter;
 }
 
-void RegisterMetricsViews() {
+void RegisterMetrics() {
   static absl::once_flag called;
   absl::call_once(called, []() {
-    RemainingEntitiesAfterResourceExtraction();
-    opencensus::stats::ViewDescriptor()
-        .set_name(kRemainingEntitiesAfterResourceExtractionName)
-        .set_measure(kRemainingEntitiesAfterResourceExtractionName)
-        .set_aggregation(opencensus::stats::Aggregation::Count())
-        .RegisterForExport();
-    RegisterObjectWorldUpdatesMetricsViews();
+    // Eagerly initialize the instruments to register them. The counter only
+    // records counts > 0, so add 0 to export its time series from the start.
+    RemainingEntitiesAfterResourceExtraction().Add(0);
+    RegisterObjectWorldUpdatesMetrics();
   });
 }
 
@@ -1614,7 +1751,7 @@ ObjectWorldService::ObjectWorldService(
         make_geo_lib)
     : world_storage_future_(std::move(world_storage)),
       make_geo_lib_(std::move(make_geo_lib)) {
-  RegisterMetricsViews();
+  RegisterMetrics();
 }
 
 WorldStorage& ObjectWorldService::WorldStore() {
@@ -2552,76 +2689,15 @@ grpc::Status ObjectWorldService::AreFootprintsCompatible(
 
 namespace {
 
-absl::Status AddEntityAsProto(
-    EntityId entity_id, const World& entity_world,
-    intrinsic_proto::world::WorldEntitiesById& entities) {
-  INTR_ASSIGN_OR_RETURN(const WorldEntity* entity,
-                        entity_world.GetEntityById(entity_id));
-  INTR_ASSIGN_OR_RETURN(
-      intrinsic_proto::world::internal::WorldEntity entity_proto,
-      entity->ToProto());
-  entities.mutable_entities()->insert(
-      {entity_id.value(), std::move(entity_proto)});
-  return absl::OkStatus();
-}
-
-absl::StatusOr<google::protobuf::Map<std::string,
-                                     intrinsic_proto::world::WorldEntitiesById>>
-BuildEntitiesByObjectWorldResourceId(const ObjectWorld& world,
-                                     const World& entity_world) {
-  google::protobuf::Map<std::string, intrinsic_proto::world::WorldEntitiesById>
-      result;
-  for (const WorldObject* object : world.GetObjects()) {
-    // Add entities for 'object'.
-    intrinsic_proto::world::WorldEntitiesById object_entities;
-    if (object->GetCollectionEntity().has_value()) {
-      INTR_RETURN_IF_ERROR_GRPC(AddEntityAsProto(
-          *object->GetCollectionEntity(), entity_world, object_entities));
-    }
-    for (AttachmentEntityId entity_id : object->GetEntityIds()) {
-      INTR_RETURN_IF_ERROR_GRPC(
-          AddEntityAsProto(entity_id, entity_world, object_entities));
-    }
-    result.insert({object->GetId().value(), std::move(object_entities)});
-
-    // Add entities for each frame of 'object'.
-    for (const Frame* frame : object->GetFrames()) {
-      intrinsic_proto::world::WorldEntitiesById frame_entities;
-      INTR_RETURN_IF_ERROR_GRPC(
-          AddEntityAsProto(frame->GetEntityId(), entity_world, frame_entities));
-      result.insert({frame->GetId().value(), std::move(frame_entities)});
-    }
-  }
-  return result;
-}
-
-absl::StatusOr<intrinsic_proto::world::WorldWithEntities>
-BuildWorldWithEntities(const std::string& world_id,
-                       WorldStorage& world_storage) {
-  const stats::ScopedSpan span("ObjectWorldService/BuildWorldWithEntities");
-
-  intrinsic_proto::world::WorldWithEntities response;
-
-  // Get access to objects and entities of given world.
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<WorldAndMutex> world_ptr,
-                        world_storage.GetWorld(world_id));
-  absl::MutexLock lock(*world_ptr->mtx);
-  INTR_ASSIGN_OR_RETURN(const auto world, world_ptr->GetObjectWorld());
-
-  INTR_ASSIGN_OR_RETURN(*response.mutable_world_metadata(),
-                        ToProtoLocked(*world_ptr, world_id));
-  INTR_ASSIGN_OR_RETURN(
-      *response.mutable_objects(),
-      AllWorldObjects(*world, world_id, {},
-                      intrinsic_proto::world::ObjectView::FULL));
-  INTR_ASSIGN_OR_RETURN(
-      *response.mutable_entities_by_object_world_resource_id(),
-      BuildEntitiesByObjectWorldResourceId(*world, world_ptr->world));
-
-  *response.mutable_collision_settings() =
-      MakeCollisionSettings((*world_ptr)->GetDefaultRuleSet());
-
-  return response;
+absl::StatusOr<intrinsic_proto::world::CollisionSettings>
+GetCollisionSettingsInternal(WorldAndMutex& world_ptr)
+    ABSL_EXCLUSIVE_LOCKS_REQUIRED(world_ptr.mtx) {
+  INTR_ASSIGN_OR_RETURN(const auto world, world_ptr.GetObjectWorld());
+  std::multiset<intrinsic_proto::Rule> rules =
+      FillRuleSet(world_ptr.world, world_ptr.world.GetDefaultRuleSet());
+  intrinsic_proto::RuleSet filled_rule_set;
+  *filled_rule_set.mutable_rules() = {rules.begin(), rules.end()};
+  return MakeCollisionSettings(*world, filled_rule_set);
 }
 
 absl::StatusOr<intrinsic_proto::world::World> BuildWorldProto(
@@ -2650,8 +2726,8 @@ absl::StatusOr<intrinsic_proto::world::World> BuildWorldProto(
           *response.mutable_objects(),
           AllWorldObjects(*world, world_id, {},
                           intrinsic_proto::world::ObjectView::FULL));
-      *response.mutable_collision_settings() =
-          MakeCollisionSettings(world_ptr->GetDefaultRuleSet());
+      INTR_ASSIGN_OR_RETURN(*response.mutable_collision_settings(),
+                            GetCollisionSettingsInternal(world_ptr));
       return response;
     }
     default:
@@ -2660,22 +2736,6 @@ absl::StatusOr<intrinsic_proto::world::World> BuildWorldProto(
   }
 }
 
-}  // namespace
-
-grpc::Status ObjectWorldService::GetWorldWithEntities(
-    grpc::ServerContext* context,
-    const intrinsic_proto::world::GetWorldWithEntitiesRequest* request,
-    intrinsic_proto::world::WorldWithEntities* response) {
-  const stats::ScopedSpan span("ObjectWorldService/GetWorldWithEntities",
-                               context);
-
-  INTR_ASSIGN_OR_RETURN_GRPC(
-      *response, BuildWorldWithEntities(request->world_id(), WorldStore()));
-
-  return grpc::Status::OK;
-}
-
-namespace {
 absl::Status PopulateGetWorldStateResponseExceptMetadata(
     const World& world,
     intrinsic_proto::world::GetWorldStateResponse* response) {
@@ -2738,27 +2798,6 @@ absl::StatusOr<const WorldObject*> GetBaselineObject(
 
 }  // namespace
 
-grpc::Status ObjectWorldService::GetWorldState(
-    grpc::ServerContext* context,
-    const intrinsic_proto::world::GetWorldStateRequest* request,
-    intrinsic_proto::world::GetWorldStateResponse* response) {
-  const stats::ScopedSpan span("ObjectWorldService/GetWorldState", context);
-
-  // Get access to objects and entities of given world.
-  INTR_ASSIGN_OR_RETURN_GRPC(std::shared_ptr<WorldAndMutex> world_ptr,
-                             WorldStore().GetWorld(request->world_id()));
-
-  absl::ReaderMutexLock lock(*world_ptr->mtx);
-
-  INTR_RETURN_IF_ERROR_GRPC(
-      PopulateGetWorldStateResponseExceptMetadata(world_ptr->world, response));
-
-  INTR_ASSIGN_OR_RETURN_GRPC(*response->mutable_world_metadata(),
-                             ToProtoLocked(*world_ptr, request->world_id()));
-
-  return grpc::Status::OK;
-}
-
 grpc::Status ObjectWorldService::GetCollisionSettings(
     grpc::ServerContext* context,
     const intrinsic_proto::world::GetCollisionSettingsRequest* request,
@@ -2768,12 +2807,8 @@ grpc::Status ObjectWorldService::GetCollisionSettings(
   INTR_ASSIGN_OR_RETURN_GRPC(std::shared_ptr<WorldAndMutex> world_ptr,
                              WorldStore().GetWorld(request->world_id()));
   absl::WriterMutexLock lock(*world_ptr->mtx);
-  INTR_ASSIGN_OR_RETURN_GRPC(const auto world, world_ptr->GetObjectWorld());
-  std::multiset<intrinsic_proto::Rule> rules =
-      FillRuleSet(world_ptr->world, world_ptr->world.GetDefaultRuleSet());
-  intrinsic_proto::RuleSet filled_rule_set;
-  *filled_rule_set.mutable_rules() = {rules.begin(), rules.end()};
-  *response = MakeCollisionSettings(*world, filled_rule_set);
+  INTR_ASSIGN_OR_RETURN_GRPC(*response,
+                             GetCollisionSettingsInternal(*world_ptr));
   return grpc::Status::OK;
 }
 
@@ -2868,9 +2903,11 @@ grpc::Status ObjectWorldService::ExtractResourceInstances(
   while (!stack.empty()) {
     auto* object = stack.back();
     stack.pop_back();
-    for (auto* child : object->GetChildren()) {
-      stack.push_back(child);
-    }
+    // Children are pushed in descending name order, so that they are visited
+    // in ascending name and deterministic order.
+    std::vector<WorldObject*> children = object->GetChildren();
+    SortByName(children);
+    stack.insert(stack.end(), children.rbegin(), children.rend());
 
     // Skip root object
     if (!object->GetCollectionEntity().has_value()) {
@@ -2914,29 +2951,35 @@ grpc::Status ObjectWorldService::ExtractResourceInstances(
     LOG_IF(INFO, baseline_object == nullptr)
         << "Baseline object not found: " << object->GetName().value();
 
-    // Memorize the kinematic object joint values.
     INTR_ASSIGN_OR_RETURN_GRPC(
-        auto joint_update,
-        MaybeExtractUpdateObjectJointsRequest(baseline_object, *cloned_world,
-                                              object, entity_id_to_object),
-        _ << " Failed to extract joint update for resource "
-             "instance in the world.");
-    if (joint_update.has_value()) {
-      *composition_updates.add_updates()->mutable_update_object_joints() =
-          std::move(joint_update).value();
-    }
+        const bool extract_kinematic_updates,
+        ShouldExtractKinematicUpdates(*object, baseline_object));
 
-    // Memorize the kinematic object property data.
-    INTR_ASSIGN_OR_RETURN_GRPC(
-        auto kinematic_object_update,
-        MaybeExtractUpdateKinematicObjectPropertiesRequest(
-            baseline_object, *cloned_world, object),
-        _ << " Failed to extract kinematic object properties for "
-             "resource instance in the world.");
-    if (kinematic_object_update.has_value()) {
-      *composition_updates.add_updates()
-           ->mutable_update_kinematic_object_properties() =
-          std::move(kinematic_object_update).value();
+    if (extract_kinematic_updates) {
+      // Memorize the kinematic object joint values.
+      INTR_ASSIGN_OR_RETURN_GRPC(
+          auto joint_update,
+          MaybeExtractUpdateObjectJointsRequest(baseline_object, *cloned_world,
+                                                object, entity_id_to_object),
+          _ << " Failed to extract joint update for asset "
+               "instance in the world.");
+      if (joint_update.has_value()) {
+        *composition_updates.add_updates()->mutable_update_object_joints() =
+            std::move(joint_update).value();
+      }
+
+      // Memorize the kinematic object property data.
+      INTR_ASSIGN_OR_RETURN_GRPC(
+          auto kinematic_object_update,
+          MaybeExtractUpdateKinematicObjectPropertiesRequest(
+              baseline_object, *cloned_world, object),
+          _ << " Failed to extract kinematic object properties for "
+               "asset instance in the world.");
+      if (kinematic_object_update.has_value()) {
+        *composition_updates.add_updates()
+             ->mutable_update_kinematic_object_properties() =
+            std::move(kinematic_object_update).value();
+      }
     }
 
     // Memorize entity properties for all links.
@@ -3072,7 +3115,11 @@ grpc::Status ObjectWorldService::ExtractResourceInstances(
 
   // Root is handled specially because it is not a resource, but can still have
   // child frames composed in using world updates.
-  for (Frame* frame : root_object->GetChildFrames()) {
+  // Root child frames are deleted while iterating, so the mutable frames are
+  // sorted here instead of using the const-only `GetChildFramesSorted()`.
+  std::vector<Frame*> root_child_frames = root_object->GetChildFrames();
+  SortByName(root_child_frames);
+  for (Frame* frame : root_child_frames) {
     INTR_ASSIGN_OR_RETURN_GRPC(
         const auto frame_updates,
         ExtractChildFramesTree(frame, root_object->GetName().value()),
@@ -3115,8 +3162,9 @@ grpc::Status ObjectWorldService::ExtractResourceInstances(
     remaining_entity_count++;
   }
 
-  opencensus::stats::Record(
-      {{RemainingEntitiesAfterResourceExtraction(), remaining_entity_count}});
+  if (remaining_entity_count > 0) {
+    RemainingEntitiesAfterResourceExtraction().Add(remaining_entity_count);
+  }
 
   return grpc::Status::OK;
 }

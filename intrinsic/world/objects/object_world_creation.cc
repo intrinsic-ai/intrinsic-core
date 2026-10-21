@@ -297,10 +297,16 @@ class ObjectWorldCreationProcess {
     INTR_RETURN_IF_ERROR(
         CheckEntityLocalNamesAreUnique(non_frame_member_ids, object_name));
 
-    if (absl::StatusOr<RobotCollectionsEntityId> robot_collections_id =
-            world.ValidateEntity<RobotCollectionsEntityId>(
-                collection_entity_id);
-        robot_collections_id.ok()) {
+    absl::StatusOr<RobotCollectionsEntityId> robot_collections_id =
+        world.ValidateEntity<RobotCollectionsEntityId>(collection_entity_id);
+    absl::StatusOr<std::vector<JointEntityId>> robot_dofs;
+    if (robot_collections_id.ok()) {
+      robot_dofs = world.GetRobotDofs(*robot_collections_id);
+    }
+    // Non-robot collections or collections with devices may have a
+    // RobotComponent without any kinematic degrees of freedom. Such
+    // collections represent physical objects rather than kinematic objects.
+    if (robot_collections_id.ok() && robot_dofs.ok() && !robot_dofs->empty()) {
       INTR_RETURN_IF_ERROR(
           data_->InsertObject(std::make_unique<KinematicObject>(
               object_id, object_name, *robot_collections_id,

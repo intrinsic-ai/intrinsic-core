@@ -33,8 +33,8 @@ cc_library(
     srcs = ["timeout_predicate.cc"],
     hdrs = ["timeout_predicate.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/marshal:riegeli_coder",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

@@ -55,7 +55,8 @@ proto::PipelinePathPlannerConfig DefaultPipelineConfig() {
         GetDefaultPointValidatorSpecification();
     auto* spec = pipeline_config.add_specs();
     spec->set_name("RrtConnectPathPlanner");
-    spec->mutable_config()->PackFrom(rrt_config);
+    static_cast<void>(spec->mutable_config()->PackFrom(
+        rrt_config));  // TODO: Handle return value
   }
   {
     proto::JointShortcutterConfig shortcutter_config;
@@ -66,7 +67,8 @@ proto::PipelinePathPlannerConfig DefaultPipelineConfig() {
         GetDefaultPointValidatorSpecification();
     auto* spec = pipeline_config.add_specs();
     spec->set_name("JointShortcutter");
-    spec->mutable_config()->PackFrom(shortcutter_config);
+    static_cast<void>(spec->mutable_config()->PackFrom(
+        shortcutter_config));  // TODO: Handle return value
   }
   return pipeline_config;
 }

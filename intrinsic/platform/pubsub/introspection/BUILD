@@ -12,16 +12,27 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_binary")
+load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
 load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 
 package(default_visibility = ["//visibility:public"])
+
+cc_library(
+    name = "metrics",
+    srcs = ["metrics.cc"],
+    hdrs = ["metrics.h"],
+    deps = [
+        "//intrinsic/stats:metrics_utils",
+        "@abseil-cpp//absl/strings:string_view",
+        "@io_opentelemetry_cpp//api",
+    ],
+)
 
 cc_binary(
     name = "zenoh_introspection",
     srcs = ["zenoh_introspection.cc"],
     deps = [
-        "//intrinsic/production/external/googleinit",
+        ":metrics",
         "//intrinsic/stats:opencensus",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
         "//intrinsic_sdk/intrinsic/platform/pubsub/zenoh_util:zenoh_config",
@@ -30,9 +41,8 @@ cc_binary(
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings:string_view",
         "@com_github_nlohmann_json//:json",
-        "@io_opencensus_cpp//opencensus/stats",
-        "@io_opencensus_cpp//opencensus/tags",
         "@or_tools//ortools/base:file",
     ],
 )

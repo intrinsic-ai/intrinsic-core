@@ -16,7 +16,9 @@ load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@rules_cc//cc:cc_binary.bzl", "cc_binary")
 load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+
+exports_files(["gazebo_simulator_default_config.textproto"])
 
 proto_library(
     name = "gazebo_simulator_config_proto",

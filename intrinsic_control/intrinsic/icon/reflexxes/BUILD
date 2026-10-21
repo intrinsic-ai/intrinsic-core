@@ -75,8 +75,8 @@ cc_library(
         "velocity_outputs.h",
     ],
     deps = [
-        "//intrinsic/util:fixed_vector",
         "//intrinsic/util:functional",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/functional:bind_front",
         "@abseil-cpp//absl/functional:function_ref",

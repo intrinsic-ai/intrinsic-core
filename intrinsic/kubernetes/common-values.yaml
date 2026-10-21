@@ -22,7 +22,7 @@ deploy_environment: "GCP"
 registry: "gcr.io/giza-workcells"
 # Image label for Cloud Robotics Core containers (http-relay-server and
 # http-relay-client).
-crc_version_label: "crc-0.1.0-d9f9373"
+crc_version_label: "crc-0.1.0-8f1571c"
 
 # Values filled in by inctl
 # LINT.IfChange

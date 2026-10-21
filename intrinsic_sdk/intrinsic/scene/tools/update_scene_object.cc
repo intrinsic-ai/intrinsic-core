@@ -103,9 +103,14 @@ absl::StatusOr<SceneObject> ApplyUpdatesProtoFile(
            "build rule if you are using custom proto(s) to specify "
            "SceneObject user_data.");
   std::string serialized;
-  parsed_msg.message->SerializeToString(&serialized);
+  if (!parsed_msg.message->SerializeToString(&serialized)) {
+    return absl::InternalError("Failed to serialize message to string");
+  }
   SceneObjectUpdates scene_object_updates;
-  scene_object_updates.ParseFromString(serialized);
+  if (!scene_object_updates.ParseFromString(serialized)) {
+    return absl::InternalError(
+        "Failed to parse SceneObjectUpdates from string");
+  }
   INTR_ASSIGN_OR_RETURN(
       const auto result,
       ProcessSceneObjectUpdates(scene_object, scene_object_updates));

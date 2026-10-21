@@ -27,7 +27,6 @@ go_library(
     importpath = "intrinsic/longrunning/go/operations",
     visibility = [
         "//intrinsic/assets/artifacts:__pkg__",
-        "//intrinsic/assets/catalog:__pkg__",
         "//intrinsic/assets/deploy:__pkg__",
         "//intrinsic/assets/install:__pkg__",
         "//intrinsic/assets/instances:__pkg__",

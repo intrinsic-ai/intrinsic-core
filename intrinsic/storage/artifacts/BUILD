@@ -42,8 +42,8 @@ go_binary(
     deps = [
         ":artifacts",
         "//intrinsic/kubernetes:intrinsic",
-        "//intrinsic/stats/go:telemetry",
         "//intrinsic/storage/artifacts/internal",
+        "//intrinsic_sdk/intrinsic/stats/go:telemetry",
         "@com_github_containerd_containerd//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/storage/artifacts/proto/v1:artifact_go_proto",
@@ -60,7 +60,7 @@ go_library(
     importpath = "intrinsic/storage/artifacts/artifacts",
     deps = [
         "//intrinsic/storage/artifacts/internal",
-        "//intrinsic/storage/artifacts/internal:utils",
+        "//intrinsic_sdk/intrinsic/storage/artifacts/internal:utils",
         "@com_github_containerd_containerd//content:go_default_library",
         "@com_github_containerd_containerd//namespaces:go_default_library",
         "@com_github_golang_glog//:go_default_library",

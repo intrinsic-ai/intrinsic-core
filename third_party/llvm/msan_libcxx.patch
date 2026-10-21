@@ -1,0 +1,103 @@
+diff --git a/3rd_party/llvm-project/x.x/libcxxabi/libcxxabi.BUILD.bazel b/3rd_party/llvm-project/x.x/libcxxabi/libcxxabi.BUILD.bazel
+--- a/3rd_party/llvm-project/x.x/libcxxabi/libcxxabi.BUILD.bazel
++++ b/3rd_party/llvm-project/x.x/libcxxabi/libcxxabi.BUILD.bazel
+@@ -1,7 +1,7 @@
+ load("@bazel_lib//lib:copy_to_directory.bzl", "copy_to_directory")
+ load("@bazel_skylib//lib:selects.bzl", "selects")
+-load("@llvm//toolchain/runtimes:cc_runtime_shared_library.bzl", "cc_runtime_stage0_shared_library")
+-load("@llvm//toolchain/runtimes:cc_runtime_static_library.bzl", "cc_runtime_stage0_static_library")
++load("@llvm//toolchain/runtimes:cc_runtime_shared_library.bzl", "cc_runtime_stage0_msan_shared_library")
++load("@llvm//toolchain/runtimes:cc_runtime_static_library.bzl", "cc_runtime_stage0_msan_static_library")
+ load("@llvm-project//:vars.bzl", "LLVM_VERSION_MAJOR")
+ load("@rules_cc//cc:cc_library.bzl", "cc_library")
+ 
+@@ -161,7 +161,7 @@ cc_library(
+     visibility = ["//compiler-rt:__pkg__"],
+ )
+ 
+-cc_runtime_stage0_static_library(
++cc_runtime_stage0_msan_static_library(
+     name = "libcxxabi.static",
+     visibility = ["//visibility:public"],
+     deps = [
+@@ -169,7 +169,7 @@ cc_runtime_stage0_static_library(
+     ],
+ )
+ 
+-cc_runtime_stage0_shared_library(
++cc_runtime_stage0_msan_shared_library(
+     name = "libcxxabi.shared",
+     shared_lib_name = "libc++abi.so.1",
+     user_link_flags = [
+diff --git a/toolchain/runtimes/cc_runtime_shared_library.bzl b/toolchain/runtimes/cc_runtime_shared_library.bzl
+--- a/toolchain/runtimes/cc_runtime_shared_library.bzl
++++ b/toolchain/runtimes/cc_runtime_shared_library.bzl
+@@ -9,11 +9,18 @@ _builder = with_cfg(
+ )
+ 
+ cc_runtime_stage0_shared_library, _cc_stage0_shared_library_internal = configure_builder_for_runtimes(_builder.clone(), "stage0", "dynamic").build()
++cc_runtime_stage0_msan_shared_library, _cc_stage0_msan_shared_library_internal = configure_builder_for_runtimes(
++    _builder.clone(),
++    "stage0",
++    "dynamic",
++    inherit_msan = True,
++).build()
+ cc_runtime_stage1_shared_library, _cc_stage1_shared_library_internal = configure_builder_for_runtimes(_builder.clone(), "stage1", "dynamic").build()
+ cc_runtime_stage1_asan_shared_library, _cc_stage1_asan_shared_library_internal = configure_builder_for_runtimes(
+     _builder.clone(),
+     "stage1",
+     "dynamic",
+     inherit_asan = True,
++    inherit_msan = True,
+ ).build()
+ cc_runtime_stage2_shared_library, _cc_stage2_shared_library_internal = configure_builder_for_runtimes(_builder.clone(), "stage2", "dynamic").build()
+ cc_runtime_stage3_shared_library, _cc_stage3_shared_library_internal = configure_builder_for_runtimes(_builder.clone(), "stage3", "dynamic").build()
+diff --git a/toolchain/runtimes/cc_runtime_static_library.bzl b/toolchain/runtimes/cc_runtime_static_library.bzl
+--- a/toolchain/runtimes/cc_runtime_static_library.bzl
++++ b/toolchain/runtimes/cc_runtime_static_library.bzl
+@@ -13,4 +13,10 @@ cc_runtime_stage0_asan_static_library, _cc_stage0_asan_static_library_internal =
+     _builder.clone(),
+     "stage0",
+     inherit_asan = True,
++    inherit_msan = True,
++).build()
++cc_runtime_stage0_msan_static_library, _cc_stage0_msan_static_library_internal = configure_builder_for_runtimes(
++    _builder.clone(),
++    "stage0",
++    inherit_msan = True,
+ ).build()
+diff --git a/toolchain/runtimes/with_cfg_runtimes_common.bzl b/toolchain/runtimes/with_cfg_runtimes_common.bzl
+--- a/toolchain/runtimes/with_cfg_runtimes_common.bzl
++++ b/toolchain/runtimes/with_cfg_runtimes_common.bzl
+@@ -1,4 +1,4 @@
+-def configure_builder_for_runtimes(builder, runtime_stage, linkmode = "static", sanitizers = False, inherit_asan = False):
++def configure_builder_for_runtimes(builder, runtime_stage, linkmode = "static", sanitizers = False, inherit_asan = False, inherit_msan = False):
+     # The problem is that compiler-rt and start libs can only be compiled with
+     # a specific set of flags and compilation mode. It is not safe to let the user
+     # interfere with them using default command line flags.
+@@ -36,7 +36,6 @@ def configure_builder_for_runtimes(builder, runtime_stage, linkmode = "static",
+     if sanitizers == False:
+         builder.set(Label("//config:ubsan"), False)
+         builder.set(Label("//config:cfi"), False)
+-        builder.set(Label("//config:msan"), False)
+         builder.set(Label("//config:dfsan"), False)
+         builder.set(Label("//config:nsan"), False)
+         builder.set(Label("//config:safestack"), False)
+@@ -49,7 +48,6 @@ def configure_builder_for_runtimes(builder, runtime_stage, linkmode = "static",
+         builder.set(Label("//config:profile"), False)
+         builder.set(Label("//config:host_ubsan"), False)
+         builder.set(Label("//config:host_cfi"), False)
+-        builder.set(Label("//config:host_msan"), False)
+         builder.set(Label("//config:host_dfsan"), False)
+         builder.set(Label("//config:host_nsan"), False)
+         builder.set(Label("//config:host_safestack"), False)
+@@ -64,5 +62,9 @@ def configure_builder_for_runtimes(builder, runtime_stage, linkmode = "static",
+         if not inherit_asan:
+             builder.set(Label("//config:asan"), False)
+             builder.set(Label("//config:host_asan"), False)
+ 
++        if not inherit_msan:
++            builder.set(Label("//config:msan"), False)
++            builder.set(Label("//config:host_msan"), False)
++
+     return builder

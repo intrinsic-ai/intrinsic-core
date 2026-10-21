@@ -43,7 +43,9 @@ namespace topp {
 
 namespace {
 
-constexpr double kDoubleEqualityThreshold = 1e-10;
+constexpr double kNumericalTolerance = 1e-10;
+constexpr double kJointEqualitySegmentMarginRad = kJointConfigEqualityMarginRad;
+constexpr double kJointEqualityNumericalMarginRad = kNumericalTolerance;
 constexpr double kDefaultPathVariableTolerance = 1e-4;
 
 // Validates the structural and numerical consistency of a `PathSegment`.
@@ -411,8 +413,14 @@ absl::StatusOr<bool> IsCornerBlendingSegmentEnd(
 // - Verifies that the input path segments list is not empty.
 // - Validates the structure and limits of each path segment.
 // - Checks that consecutive path segments are compatible and continuous.
-// - Deduplicates consecutive coincident points (both within and between
-//   segments) by:
+
+// - Ensures all indexed motion event indices are within valid bounds.
+
+// - Deduplicates consecutive coincident points (using
+//   `kJointEqualitySegmentMarginRad` at segment connections `i_wp == 0` to
+//   match `ValidateSegmentCompatibility`, and
+//   `kJointEqualityNumericalMarginRad` within a segment `i_wp > 0` so that
+//   closely spaced waypoints within a segment are preserved) by:
 //      - Keeping the largest (least restrictive) blending deviation.
 //      - Taking the most conservative joint and Cartesian limits (at segment
 //        connections).
@@ -445,13 +453,55 @@ absl::StatusOr<std::vector<PathPolylinePoint>> CreatePathPolylinePoints(
           ValidateSegmentCompatibility(segment, path_segments[segment_idx - 1]))
           << " (at segment " << segment_idx << ")";
     }
+
+
+    // For convenience we put the motion events into a map with the path segment
+    // joint configuration indices as keys. In this way we can efficiently
+    // access the motion events for a given sample index without searching the
+    // vector. We also check here to make sure that the indices are valid.
+    absl::flat_hash_map<
+        int, std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>>
+        joint_configuration_index_to_motion_event;
+    for (const auto& motion_event_and_joint_configuration_index :
+         segment.indexed_motion_events) {
+      if (motion_event_and_joint_configuration_index.joint_configuration_index <
+              0 ||
+          motion_event_and_joint_configuration_index
+                  .joint_configuration_index >=
+              segment.joint_configurations.size()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("Joint configuration index ",
+                         motion_event_and_joint_configuration_index
+                             .joint_configuration_index,
+                         " is out of bounds [0, ",
+                         segment.joint_configurations.size() - 1, "]."));
+      }
+      joint_configuration_index_to_motion_event
+          [motion_event_and_joint_configuration_index.joint_configuration_index]
+              .push_back(
+                  motion_event_and_joint_configuration_index.motion_event);
+    }
+
+
     for (int i_wp = 0; i_wp < segment.joint_configurations.size(); ++i_wp) {
       // Deduplicate coincident consecutive points within the segment and at
       // segments connection.
+      // At segment connections (`i_wp == 0`), `ValidateSegmentCompatibility`
+      // allows an offset up to `kJointEqualitySegmentMarginRad`
+      // (`kJointConfigEqualityMarginRad`) between the last waypoint of the
+      // previous segment and the first waypoint of the current segment, so
+      // `kJointEqualitySegmentMarginRad` is used to merge the boundary points
+      // into a single connection point.
+      // Within a segment (`i_wp > 0`), only numerically identical points
+      // (within `kJointEqualityNumericalMarginRad`) are deduplicated so that
+      // closely spaced waypoints within a segment are not discarded.
+      const double deduplication_threshold_rad =
+          (i_wp == 0) ? kJointEqualitySegmentMarginRad
+                      : kJointEqualityNumericalMarginRad;
       if (!polyline_points.empty() &&
           (segment.joint_configurations[i_wp] -
            polyline_points.back().joint_configuration)
-                  .norm() < kJointConfigEqualityMarginRad) {
+                  .norm() <= deduplication_threshold_rad) {
         // Take the largest blending deviation.
         polyline_points.back().blending_deviation_rad =
             std::max(polyline_points.back().blending_deviation_rad,
@@ -490,6 +540,17 @@ absl::StatusOr<std::vector<PathPolylinePoint>> CreatePathPolylinePoints(
         };
         polyline_points.push_back(std::move(point));
       }
+
+      // Regardless of whether a new point was added or not, we need to add the
+      // motion events to the last added path polyline point. This accounts for
+      // the deduplication above.
+      if (joint_configuration_index_to_motion_event.contains(i_wp)) {
+        for (const auto& motion_event :
+             joint_configuration_index_to_motion_event[i_wp]) {
+          polyline_points.back().motion_events.push_back(motion_event);
+        }
+      }
+
     }
   }
 
@@ -808,7 +869,7 @@ absl::StatusOr<std::vector<PathSample>> PathPolyline::GetSamples(
     // interval.
     int current_edge_start_point_index = GetLowerIndexForValue<double>(
         absl::MakeConstSpan(point_distances_from_start_), s);
-    if (s >= polyline_length - kDoubleEqualityThreshold) {
+    if (s >= polyline_length - kNumericalTolerance) {
       current_edge_start_point_index =
           std::max(0, static_cast<int>(points_.size()) - 2);
     }

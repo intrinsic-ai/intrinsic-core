@@ -33,15 +33,17 @@ enum class HdrMode { kOff, kSoftwareMertens };
 
 class SoftwareHdr {
  public:
-  // Constructs a software HDR wrapper with the minimum and maximum exposure
-  // times supported by the underlying camera.
-  explicit SoftwareHdr(absl::Duration min_exposure_time,
-                       absl::Duration max_exposure_time);
-
-  // Creates a software HDR wrapper with minimum and maximum exposure times
-  // derived from the exposure time range of the underlying camera.
+  // Constructs a software HDR wrapper with the minimum, maximum, and increment
+  // exposure times supported by the underlying camera.
   explicit SoftwareHdr(
-      const CameraSettingProperties::Float::Range& exposure_time_range);
+      absl::Duration min_exposure_time, absl::Duration max_exposure_time,
+      absl::Duration exposure_time_increment = absl::ZeroDuration());
+
+  // Creates a software HDR wrapper with minimum, maximum, and increment
+  // exposure times derived from the exposure time properties of the underlying
+  // camera.
+  explicit SoftwareHdr(
+      const CameraSettingProperties::Float& exposure_time_properties);
 
   // Specifies, whether a specific camera setting can be handled by software
   // HDR.
@@ -61,11 +63,22 @@ class SoftwareHdr {
   // Updates a software HDR camera setting.
   absl::Status UpdateCameraSetting(const CameraSetting& camera_setting);
 
-  // Constructs a list of sorted valid HDR exposure time settings within the
-  // minimum and maximum exposure times without the passed initial exposure
-  // time.
-  absl::StatusOr<std::vector<CameraSetting>> HdrExposureTimeSettings(
-      const CameraSetting& init_exposure_time) const;
+  // Constructs the list of HDR exposure times, starting with
+  // `init_exposure_time` followed by the sorted unique knee-point exposure
+  // times clamped and rounded to the camera's exposure time range and
+  // increment. Returns an empty vector if HDR is disabled or no additional
+  // distinct exposure times exist.
+  //
+  // Placing `init_exposure_time` first allows single-frame `Capture` to
+  // converge any active auto settings (`ExposureAuto`, `GainAuto`,
+  // `BalanceWhiteAuto`) at the base exposure and reuse that initial frame as
+  // the first HDR bracket, and records the base exposure at `front()` to
+  // restore after capture or streaming. Sorting the remaining knee-point
+  // exposures in ascending order ensures at most one downward exposure
+  // transition (`init_exposure_time` -> shortest knee-point exposure) during
+  // bracket acquisition, with all subsequent transitions strictly increasing.
+  absl::StatusOr<std::vector<absl::Duration>> HdrExposureTimes(
+      absl::Duration init_exposure_time) const;
 
   // Returns whether the HDR mode is enabled.
   bool IsEnabled() const;
@@ -79,6 +92,9 @@ class SoftwareHdr {
 
   // The maximum exposure time supported by the underlying camera.
   absl::Duration max_exposure_time_ = absl::InfiniteDuration();
+
+  // The exposure time increment supported by the underlying camera.
+  absl::Duration exposure_time_increment_ = absl::ZeroDuration();
 
   // This variable is used to enable multi-slope mode.
   HdrMode multi_slope_mode_ = HdrMode::kOff;

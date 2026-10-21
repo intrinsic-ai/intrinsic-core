@@ -18,6 +18,7 @@
 #include <grpcpp/grpcpp.h>
 
 #include <functional>
+#include <memory>
 #include <stop_token>
 #include <string>
 #include <vector>
@@ -28,6 +29,7 @@
 #include "intrinsic/assets/proto/asset_deployment.grpc.pb.h"
 #include "intrinsic/assets/proto/installed_assets.grpc.pb.h"
 #include "intrinsic/assets/proto/v1/asset_instances.grpc.pb.h"
+#include "intrinsic/assets/proto/v1alpha1/asset_info_internal.grpc.pb.h"
 #include "intrinsic/conductor/execution_context.h"
 #include "intrinsic/conductor/proto/conductor.grpc.pb.h"
 #include "intrinsic/conductor/proto/conductor.pb.h"
@@ -49,12 +51,14 @@ struct SrvParams {
   std::string hss_service_address;
   std::string sim_service_address;
 
-  // Used by save scene monitor loop.
+  // Used by ResourceWorld to update the resource set from the edit world.
   std::string object_world_service_address;
   std::string workcell_cluster_service_address;
   std::string asset_deployment_service_address;
   std::string asset_instances_service_address;
   std::string runtimedb_service_address;
+  // Required. Used to fetch the resource set data to compose worlds.
+  std::string asset_info_internal_service_address;
 
   // Whether to enable simulation pause.
   bool enable_sim_pause;
@@ -69,7 +73,6 @@ struct SrvParams {
 struct ConductorOptions {
   std::shared_ptr<intrinsic::KeyValueStore> kv_store;
   std::unique_ptr<ResourceWorld> resource_world;
-  std::unique_ptr<SaveSceneMonitor> save_scene_monitor;
   std::unique_ptr<ExecutionContext> execution_context;
 
   // Direct in-process services
@@ -90,8 +93,16 @@ struct ConductorOptions {
       asset_deployment_lro_stub;
   std::unique_ptr<intrinsic_proto::assets::v1::InstalledAssets::Stub>
       installed_assets_stub;
+  // Must not be null.
+  std::unique_ptr<
+      intrinsic_proto::assets::v1alpha1::AssetInfoInternal::StubInterface>
+      asset_info_internal_stub;
 
   bool enable_sim_pause = false;
+
+  // References `asset_info_internal_stub` and `world_service` from its polling
+  // thread, so both must outlive it.
+  std::unique_ptr<SaveSceneMonitor> save_scene_monitor;
 };
 
 inline grpc::Status ErrInvalidExecutionContext() {
@@ -114,6 +125,18 @@ class ConductorImpl final
 
   explicit ConductorImpl(ConductorOptions opts);
   ~ConductorImpl() override;
+
+  // Creates the solution worlds (edit world, belief world and sim world) if a
+  // valid execution context exists, e.g., one recovered from a previous run of
+  // the conductor. Existing worlds with the same IDs are overwritten. Invalid
+  // world updates are skipped and reported through the edit world status.
+  //
+  // Does nothing and returns OK if no valid execution context was found, i.e.,
+  // if there is no execution context or any of its world IDs is empty.
+  //
+  // Intended to be called once before the conductor starts serving requests.
+  absl::Status CreateSolutionWorldsIfValidExecutionContext()
+      ABSL_LOCKS_EXCLUDED(mu_);
 
   grpc::Status StartSolution(
       grpc::ServerContext* context,
@@ -212,10 +235,17 @@ class ConductorImpl final
       installed_assets_stub_;
   std::unique_ptr<google::longrunning::Operations::Stub>
       installed_assets_lro_stub_;
+  // Never null.
+  std::unique_ptr<
+      intrinsic_proto::assets::v1alpha1::AssetInfoInternal::StubInterface>
+      asset_info_internal_stub_;
   [[maybe_unused]] bool pause_sim_;
 
   absl::Mutex ec_op_mu_;
   std::unique_ptr<ExecutionContextOperation> ec_op_ ABSL_GUARDED_BY(ec_op_mu_);
+  // References `asset_info_internal_stub_` and `world_service_` from its
+  // polling thread. Declared after them so that it is destroyed first; the
+  // destructor additionally resets it explicitly.
   std::unique_ptr<SaveSceneMonitor> save_scene_monitor_;
 
   grpc::Status ResetWorldService(

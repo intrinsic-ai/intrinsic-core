@@ -35,8 +35,8 @@ go_library(
     importpath = "github.com/intrinsic-ai/insrc/intrinsic_runtime/httpjson/webrtc",
     visibility = ["//visibility:public"],
     deps = [
-        "//intrinsic/httpjson/serialization",
         "//incode/cloud/devicemanager/shared",
+        "//intrinsic_sdk/intrinsic/httpjson/serialization",
         "//intrinsic_sdk/intrinsic/platform/pubsub/golang:pubsubinterface",
         "@com_github_gorilla_websocket//:websocket",
         "@com_github_grpc_ecosystem_grpc_gateway_v2//runtime",

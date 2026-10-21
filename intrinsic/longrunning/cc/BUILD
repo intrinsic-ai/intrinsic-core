@@ -21,10 +21,9 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":operations_proxy",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic_control/intrinsic/icon/release:grpc_time_support",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log:die_if_null",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -57,8 +56,8 @@ cc_library(
     deps = [
         ":operation_context",
         ":operation_scheduler_interface",
-        "//intrinsic/util/status:status_conversion_rpc",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_rpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread:stop_token",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_map",
@@ -84,7 +83,7 @@ cc_library(
     deps = [
         ":operation_context",
         ":operations_proxy",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
@@ -111,7 +110,7 @@ cc_library(
     visibility = ["//visibility:public"],
     deps = [
         ":operations_proxy",
-        "//intrinsic/util/status:status_macros_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
         "@abseil-cpp//absl/log:die_if_null",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googleapis//google/longrunning:longrunning_cc_grpc",
@@ -128,7 +127,7 @@ cc_library(
     deps = [
         ":operation_context",
         ":operation_scheduler_interface",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

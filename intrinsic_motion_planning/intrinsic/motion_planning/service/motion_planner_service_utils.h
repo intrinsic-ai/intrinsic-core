@@ -58,17 +58,6 @@ PlanTrajectoryImplMotionPlannerResponse(
     const intrinsic_proto::motion_planning::v1::MotionPlanningRequest& request,
     const MotionPlannerFlags& flags = {});
 
-inline constexpr double kDefaultSweptVolumeJointTravel = 0.2;
-
-// Computes the continuous swept volume geometries along the provided joint
-// path. `max_joint_travel_per_step` defines the maximum angular travel (in
-// radians) allowed for any joint between consecutive swept volume sampling
-// poses.
-absl::StatusOr<std::vector<TransformedGeometry>> ComputeSweptVolumeFromPath(
-    const World& world, RobotCollectionsEntityId robot_id,
-    const std::vector<eigenmath::VectorXd>& path,
-    double max_joint_travel_per_step = kDefaultSweptVolumeJointTravel);
-
 // Creates a `MotionPlanningRequest` from a `point_path` (i.e. a vector of
 // target joint configurations) and `motion_types`. The size of `point_path` and
 // `motion_types` must be the same, otherwise a `kInvalidArgument` error is

@@ -40,12 +40,12 @@ cc_library(
         ":sysinfo",
         ":thread",
         ":thread_options",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
         "//intrinsic_control/intrinsic/icon/utils:log",  # buildcleaner: keep
         "//intrinsic_control/intrinsic/icon/utils:malloc_guard",
         "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
         "//intrinsic_control/intrinsic/icon/utils:realtime_stack_trace",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/functional:any_invocable",
         "@abseil-cpp//absl/status",
@@ -69,8 +69,8 @@ cc_library(
     ],
     deps = [
         ":stop_token",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
     ],
 )
 
@@ -94,7 +94,7 @@ cc_library(
     srcs = ["util.cc"],
     hdrs = ["util.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/functional:any_invocable",
@@ -144,6 +144,23 @@ cc_library(
         "@abseil-cpp//absl/functional:any_invocable",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/time",
+    ],
+)
+
+cc_library(
+    name = "periodic",
+    srcs = ["periodic.cc"],
+    hdrs = ["periodic.h"],
+    deps = [
+        ":thread",
+        ":thread_options",
+        ":thread_utils",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/functional:any_invocable",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
     ],
 )

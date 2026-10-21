@@ -32,7 +32,8 @@ documentation {
     "The motion specification allow the user to set a sequence of motion"
     " segments. Each segment consists of a motion target, motion type,"
     " collision settings, path constraints, robot (joint and cartesian) limits"
-    "."
+    ", and optional motion events."  
+
     " Instead of multiple consecutive separate"
     " invocations prefer one invocation with multiple motion segments.\n"
     "\n"

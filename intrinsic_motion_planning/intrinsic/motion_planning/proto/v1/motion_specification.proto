@@ -16,8 +16,10 @@ syntax = "proto3";
 
 package intrinsic_proto.motion_planning.v1;
 
+import "google/protobuf/any.proto"; 
 import "intrinsic/motion_planning/proto/v1/geometric_constraints.proto";
 import "intrinsic/motion_planning/proto/v1/motion_blending_parameter.proto";
+import "intrinsic/motion_planning/proto/v1/motion_events.proto"; 
 import "intrinsic/motion_planning/proto/v1/motion_planning_limits.proto";
 import "intrinsic/world/proto/collision_settings.proto";
 
@@ -43,6 +45,14 @@ message PathConstraint {
   reserved "joint_position_limits";
   reserved 2, 3, 4;
 }
+
+
+message MotionSegmentEvent {
+  MotionEventSegmentLocation event_location = 1;
+  google.protobuf.Any event = 2;
+}
+
+
 message MotionSegment {
   enum MotionType {
     ANY = 0;
@@ -85,6 +95,10 @@ message MotionSegment {
   // apply to the origin of the moving frame defined in the motion target.
   optional intrinsic_proto.motion_planning.v1.DynamicCartesianLimits
       cartesian_limits = 18;
+
+  // Motion segment events that will be added to the motion segment.
+  repeated MotionSegmentEvent motion_segment_events = 19;
+
   reserved "joint_position", "target_constraints", "limit_constraint";
   reserved 1, 2, 4;
 }

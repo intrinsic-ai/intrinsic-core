@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//intrinsic/platform:flatbuffers.bzl", "cc_flatbuffers_library", "flatbuffers_library")
+load("//intrinsic_sdk/intrinsic/platform:flatbuffers.bzl", "cc_flatbuffers_library", "flatbuffers_library")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -49,8 +49,8 @@ cc_library(
     hdrs = ["segment_info_utils.h"],
     deps = [
         ":segment_info_fbs_cc",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/flatbuffers:fixed_string",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
     ],
 )
@@ -71,8 +71,8 @@ cc_library(
         ":memory_segment",
         ":segment_header",
         ":segment_info_fbs_cc",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/flatbuffers:flatbuffer_utils",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
@@ -91,8 +91,8 @@ cc_library(
     deps = [
         ":domain_socket_utils",
         ":segment_header",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:core_time",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
@@ -109,9 +109,9 @@ cc_library(
         ":domain_socket_utils",
         ":segment_info_fbs_cc",
         ":shared_memory_manager",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/flatbuffers:fixed_string",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_registry",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//intrinsic_sdk/intrinsic/util/thread:stop_token",
         "//intrinsic_sdk/intrinsic/util/thread:thread_options",
@@ -138,8 +138,8 @@ cc_library(
     deps = [
         ":segment_info_fbs_cc",
         ":segment_info_utils",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/flatbuffers:flatbuffer_utils",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/cleanup",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",

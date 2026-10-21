@@ -30,6 +30,7 @@ metadata {
   display_name: "Gazebo Simulator"
 }
 service_def {
+  config_message_full_name: "intrinsic_proto.simulation.gazebo.v1.GazeboConfig"
   service_proto_prefixes: "/intrinsic_proto.simulation.v1.SimulatorControlService/"
   service_proto_prefixes: "/intrinsic_proto.simulation.v1.GazeboService/"
 
@@ -98,14 +99,6 @@ service_def {
         env_vars {
           name: "SET_SIMULATED_INPUTS_SERVICE_ADDRESS"
           value: "0.0.0.0:12476"
-        }
-        env_vars {
-          name: "WORLD_SERVICE_ADDRESS"
-          value: "istio-ingressgateway.app-ingress.svc.cluster.local:80"
-        }
-        env_vars {
-          name: "GEOMETRY_SERVICE_ADDRESS"
-          value: "istio-ingressgateway.app-ingress.svc.cluster.local:80"
         }
         env_vars {
           name: "NVIDIA_DRIVER_CAPABILITIES"

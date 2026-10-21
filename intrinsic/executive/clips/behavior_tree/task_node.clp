@@ -729,8 +729,8 @@
       (eq ?dep:waiting-action-uid ?action-uid)
     (retract ?dep)
   )
-  ; Reset back to ACCEPTED to start the action from scratch (predict/get
-  ; footprint) when resumed.
+  ; Reset back to ACCEPTED to start the action from scratch (get footprint)
+  ; when resumed.
   (if (eq ?action-state FOOTPRINT-CONFLICT-WAITING) then
     (modify ?action (state ACCEPTED))
   )

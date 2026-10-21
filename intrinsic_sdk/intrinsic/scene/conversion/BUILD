@@ -25,7 +25,6 @@ cc_library(
     visibility = [
         "//intrinsic/scene/sdf:__subpackages__",
         "//intrinsic/scene/util:__subpackages__",
-        "//intrinsic/scene/validate:__subpackages__",
         "//intrinsic/world:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
         "//intrinsic_sdk/intrinsic/scene/util:__subpackages__",
@@ -33,9 +32,9 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world:__subpackages__",
     ],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -44,13 +43,31 @@ cc_library(
 )
 
 cc_library(
+    name = "scene_object_model_utils",
+    srcs = ["scene_object_model_utils.cc"],
+    hdrs = ["scene_object_model_utils.h"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:kinematics_component_cc_proto",
+    ],
+)
+
+cc_library(
     name = "user_data",
     srcs = ["user_data.cc"],
     hdrs = ["user_data.h"],
     deps = [
-        "//intrinsic/util/proto:descriptors",
-        "//intrinsic/util/proto:dynamic_message_parser",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors",
+        "//intrinsic_sdk/intrinsic/util/proto:dynamic_message_parser",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@com_google_protobuf//:protobuf",

@@ -44,9 +44,16 @@ std::ostream& operator<<(std::ostream& os, const RobotPayloadBase& payload) {
 }
 
 bool RobotPayloadBase::IsApprox(const intrinsic::RobotPayloadBase& other,
-                                double precision) const {
+                                const double precision) const {
+  // Eigen's DenseBase::isApprox is purely relative
+  // (||A - B||_F <= precision * min(||A||_F, ||B||_F)), which always returns
+  // false when comparing a zero inertia (point mass) against a tiny non-zero
+  // inertia, and scales `precision` down when inertia values in kg*m^2 are
+  // small (< 1). Include an absolute Frobenius-norm check to match the
+  // near-zero behavior of AlmostEquals(mass) and Pose3::isApprox(tip_t_cog).
   return intrinsic::AlmostEquals(mass(), other.mass(), precision) &&
          tip_t_cog().isApprox(other.tip_t_cog(), precision) &&
-         inertia().isApprox(other.inertia(), precision);
+         ((inertia() - other.inertia()).norm() <= precision ||
+          inertia().isApprox(other.inertia(), precision));
 }
 }  // namespace intrinsic

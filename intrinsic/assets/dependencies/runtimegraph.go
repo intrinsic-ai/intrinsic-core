@@ -28,11 +28,13 @@ import (
 	"intrinsic/executive/go/behaviortree"
 	"intrinsic/util/proto/names"
 
+	log "github.com/golang/glog"
+
 	processassetpb "intrinsic/assets/processes/proto/process_asset_go_proto"
 	atypepb "intrinsic/assets/proto/asset_type_go_proto"
 	iapb "intrinsic/assets/proto/installed_assets_go_proto"
 	aipb "intrinsic/assets/proto/v1/asset_instances_go_proto"
-	applicationpb "intrinsic/config/proto/application_go_proto"
+	ripb "intrinsic/resources/proto/resource_instance_go_proto"
 	rtrpb "intrinsic/resources/proto/resource_type_runtime_go_proto"
 
 	anypb "google.golang.org/protobuf/types/known/anypb"
@@ -53,21 +55,24 @@ func WithPlatformRuntime() SolutionContextOption {
 }
 
 // NewSolutionContext parses runtime information and returns a populated graph.SolutionContext.
-func NewSolutionContext(ctx context.Context, app *applicationpb.Application, rtrs []*rtrpb.ResourceTypeRuntime, options ...SolutionContextOption) (*graph.SolutionContext, error) {
+func NewSolutionContext(ctx context.Context, ris []*ripb.ResourceInstance, rtrs []*rtrpb.ResourceTypeRuntime, options ...SolutionContextOption) (*graph.SolutionContext, error) {
 	opts := &solutionContextOpts{}
 	for _, opt := range options {
 		opt(opts)
 	}
 
+	assets, err := assetsFromRuntime(ctx, rtrs)
+	if err != nil {
+		return nil, err
+	}
+	instances, err := instancesFromRuntime(assets, ris)
+	if err != nil {
+		return nil, err
+	}
+
 	sc := &graph.SolutionContext{
-		Assets:    make(map[string]*graph.AssetContext),
-		Instances: make(map[string]*graph.InstanceContext),
-	}
-	if err := assetsFromRuntime(ctx, sc, rtrs); err != nil {
-		return nil, err
-	}
-	if err := instancesFromRuntime(sc, app); err != nil {
-		return nil, err
+		Assets:    assets,
+		Instances: instances,
 	}
 
 	if opts.includePlatformRuntime {
@@ -122,34 +127,36 @@ func assetFromInstalledAsset(ctx context.Context, ia *iapb.InstalledAsset) (*gra
 	return info, nil
 }
 
-func assetsFromRuntime(ctx context.Context, sc *graph.SolutionContext, rtrs []*rtrpb.ResourceTypeRuntime) error {
+func assetsFromRuntime(ctx context.Context, rtrs []*rtrpb.ResourceTypeRuntime) (map[string]*graph.AssetContext, error) {
+	assets := make(map[string]*graph.AssetContext)
 	for _, rtr := range rtrs {
 		info, err := processRuntimeAsset(ctx, rtr)
 		if err != nil {
-			return err
+			return nil, err
 		}
-		sc.Assets[info.ID] = info
+		assets[info.ID] = info
 	}
-	return nil
+	return assets, nil
 }
 
-func instancesFromRuntime(sc *graph.SolutionContext, app *applicationpb.Application) error {
-	for _, ri := range app.GetResources().GetResourceInstances() {
+func instancesFromRuntime(assets map[string]*graph.AssetContext, ris []*ripb.ResourceInstance) (map[string]*graph.InstanceContext, error) {
+	instances := make(map[string]*graph.InstanceContext)
+	for _, ri := range ris {
 		id, err := idutils.RemoveVersionFrom(ri.GetTypeIdVersion())
 		if err != nil {
-			return fmt.Errorf("invalid type_id_version for instance %q: %w", ri.GetName(), err)
+			return nil, fmt.Errorf("invalid type_id_version for instance %q: %w", ri.GetName(), err)
 		}
-		if _, ok := sc.Assets[id]; !ok {
-			return fmt.Errorf("asset %q for instance %q not found", id, ri.GetName())
+		if _, ok := assets[id]; !ok {
+			return nil, fmt.Errorf("asset %q for instance %q not found", id, ri.GetName())
 		}
 
-		sc.Instances[ri.GetName()] = &graph.InstanceContext{
+		instances[ri.GetName()] = &graph.InstanceContext{
 			Asset:  id,
 			Config: ri.GetConfiguration(),
 			Name:   ri.GetName(),
 		}
 	}
-	return nil
+	return instances, nil
 }
 
 // processRuntimeAsset extracts metadata and capability information from a ResourceTypeRuntime.
@@ -202,7 +209,10 @@ func processRuntimeAsset(ctx context.Context, rtr *rtrpb.ResourceTypeRuntime) (*
 			info.FileDescriptorSet = rtr.GetMetadata().GetFileDescriptorSet()
 			info.ConfigMessageName = skill.GetDetails().GetParameter().GetMessageFullName()
 		}
-
+	case atypepb.AssetType_ASSET_TYPE_UNSPECIFIED:
+		// TODO(b/517345754): Currently just log instead of returning an error.
+		// Solutions with legacy pose estimators have an unspecified Asset type.
+		log.WarningContextf(ctx, "unspecified Asset type for %q: %v", id, assetType)
 	default:
 		return nil, fmt.Errorf("unknown Asset type for %q: %v", id, assetType)
 	}

@@ -40,7 +40,7 @@ go_library(
     visibility = ["//intrinsic/executive/code:__subpackages__"],
     deps = [
         ":jupyter",
-        "//intrinsic/util/status:extstatus",
+        "//intrinsic_sdk/intrinsic/util/status:extstatus",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_gorilla_websocket//:go_default_library",
         "@com_github_pborman_uuid//:go_default_library",

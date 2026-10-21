@@ -33,8 +33,9 @@
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
 #include "grpcpp/support/client_callback.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/assets/interface_utils.h"
-#include "intrinsic/icon/release/grpc_time_support.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/perception/cameras/camera_factory.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/camera_lister.h"
@@ -58,8 +59,7 @@
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 namespace {
 constexpr char kCameraConfigEquipmentKey[] = "CameraConfig";
@@ -236,15 +236,26 @@ absl::StatusOr<ActiveCameraConfig> ActiveCameraConfig::FromProto(
   INTR_ASSIGN_OR_RETURN(
       (auto [camera_config, camera_id]),
       intrinsic_proto::perception::v1::FromProto(camera_config_proto));
+  std::optional<intrinsic_proto::assets::v1::ResolvedDependency>
+      intrinsic_runtime;
+  if (camera_config_proto.has_intrinsic_runtime()) {
+    intrinsic_runtime = camera_config_proto.intrinsic_runtime();
+  }
   return ActiveCameraConfig{
       .identifier = std::move(camera_id),
       .config = std::move(camera_config),
+      .intrinsic_runtime = std::move(intrinsic_runtime),
   };
 }
 
 intrinsic_proto::perception::v1::CameraConfig ActiveCameraConfig::ToProto()
     const {
-  return intrinsic_proto::perception::v1::ToProto(config, identifier);
+  intrinsic_proto::perception::v1::CameraConfig proto =
+      intrinsic_proto::perception::v1::ToProto(config, identifier);
+  if (intrinsic_runtime.has_value()) {
+    *proto.mutable_intrinsic_runtime() = *intrinsic_runtime;
+  }
+  return proto;
 }
 
 CameraManager::CameraManager(const ActiveCameraConfig& active_camera)
@@ -261,15 +272,9 @@ absl::StatusOr<ActiveCameraConfig> CameraManager::GetActiveCameraConfig()
 
 absl::StatusOr<std::shared_ptr<ConcurrentCamera>>
 CameraManager::GetActiveCamera() {
-  CameraIdentifier identifier;
-  {
-    const absl::MutexLock lock(mutex_);
-    if (!active_camera_config_.has_value()) {
-      return absl::FailedPreconditionError("No active camera set.");
-    }
-    identifier = active_camera_config_->identifier;
-  }
-  return Get(identifier);
+  INTR_ASSIGN_OR_RETURN(const ActiveCameraConfig active_camera_config,
+                        GetActiveCameraConfig());
+  return Get(active_camera_config.identifier);
 }
 
 absl::StatusOr<std::shared_ptr<ConcurrentCamera>> CameraManager::Get(
@@ -278,15 +283,38 @@ absl::StatusOr<std::shared_ptr<ConcurrentCamera>> CameraManager::Get(
     return absl::FailedPreconditionError("No valid camera identifier.");
   }
 
-  const absl::MutexLock lock(mutex_);
-  auto it = camera_by_id_.find(identifier);
-  if (it != camera_by_id_.end()) {
-    if (std::shared_ptr<ConcurrentCamera> camera = it->second.lock();
-        camera != nullptr) {
-      return camera;
+  auto find_cached =
+      [&]() ABSL_LOCKS_EXCLUDED(mutex_) -> std::shared_ptr<ConcurrentCamera> {
+    const absl::MutexLock lock(mutex_);
+    if (auto it = camera_by_id_.find(identifier); it != camera_by_id_.end()) {
+      return it->second.lock();
     }
+    return nullptr;
+  };
+
+  // Fast path: only lock `mutex_` to check `camera_by_id_` so that lookups for
+  // already-cached cameras (as well as `GetActiveCameraConfig()` and
+  // `SetActiveCamera()`) do not wait on `creation_mutex_` while a slow
+  // `ConcurrentCamera::Create()` is in flight.
+  if (std::shared_ptr<ConcurrentCamera> camera = find_cached();
+      camera != nullptr) {
+    return camera;
   }
-  INTR_ASSIGN_OR_RETURN(auto camera, ConcurrentCamera::Create(identifier));
+
+  // `creation_mutex_` serializes `ConcurrentCamera::Create()` calls without
+  // holding `mutex_` during slow hardware discovery. Once `creation_mutex_` is
+  // acquired, `find_cached()` still locks `mutex_` (nested under
+  // `creation_mutex_`) to safely read `camera_by_id_` in case another thread
+  // created and inserted this camera while we waited for `creation_mutex_`.
+  const absl::MutexLock creation_lock(creation_mutex_);
+  if (std::shared_ptr<ConcurrentCamera> camera = find_cached();
+      camera != nullptr) {
+    return camera;
+  }
+
+  INTR_ASSIGN_OR_RETURN(std::shared_ptr<ConcurrentCamera> camera,
+                        ConcurrentCamera::Create(identifier));
+  const absl::MutexLock lock(mutex_);
   camera_by_id_[identifier] = camera;
   if (active_camera_config_.has_value() &&
       identifier == active_camera_config_->identifier) {
@@ -296,14 +324,24 @@ absl::StatusOr<std::shared_ptr<ConcurrentCamera>> CameraManager::Get(
 }
 
 void CameraManager::SetActiveCamera(const ActiveCameraConfig& active_camera) {
-  absl::MutexLock lock(mutex_);
+  absl::ReleasableMutexLock lock(mutex_);
   if (active_camera_config_.has_value() &&
       active_camera_config_->identifier == active_camera.identifier) {
-    active_camera_config_->config = active_camera.config;
+    *active_camera_config_ = active_camera;
     return;
   }
-  active_concurrent_camera_ = nullptr;
+  std::shared_ptr<ConcurrentCamera> old_active_camera =
+      std::move(active_concurrent_camera_);
   active_camera_config_ = active_camera;
+  // If a caller currently holds an open instance for the new active camera,
+  // retain it immediately so the connection stays open.
+  if (auto it = camera_by_id_.find(active_camera.identifier);
+      it != camera_by_id_.end()) {
+    active_concurrent_camera_ = it->second.lock();
+  }
+  // Release `mutex_` before `old_active_camera` is destroyed so closing the
+  // old hardware connection does not happen under lock.
+  lock.Release();
 }
 
 absl::StatusOr<std::shared_ptr<GrpcCamera::CameraConnection>>
@@ -324,5 +362,4 @@ GrpcCamera::GetCameraConfig(const ConnectionParams& connection_params) const {
   return response;
 }
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception

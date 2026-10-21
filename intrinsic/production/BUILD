@@ -47,9 +47,9 @@ go_library(
     ],
 )
 
-go_library(
+alias(
     name = "intrinsic",
-    srcs = ["init.go"],
-    importpath = "intrinsic/production/intrinsic",
+    actual = "//intrinsic_sdk/intrinsic/production:intrinsic",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//intrinsic:intrinsic_internal"],
 )

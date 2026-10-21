@@ -29,7 +29,7 @@ proto_library(
         "simulation_service.proto",
     ],
     deps = [
-        "//intrinsic/world/proto:object_world_updates_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
         "@com_google_googleapis//google/rpc:status_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:empty_proto",
@@ -72,7 +72,7 @@ go_proto_library(
     importpath = "intrinsic/simulation/service/proto/first_party/simulation_service_go_proto",
     protos = [":simulation_service_proto"],
     deps = [
-        "//intrinsic/world/proto:object_world_updates_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
         "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
         "@org_golang_google_genproto_googleapis_rpc//status",

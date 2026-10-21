@@ -25,8 +25,8 @@ cc_library(
     srcs = ["metrics.cc"],
     hdrs = ["metrics.h"],
     deps = [
-        "//intrinsic/production/external/googleinit",
-        "@io_opencensus_cpp//opencensus/stats",
-        "@io_opencensus_cpp//opencensus/tags",
+        "//intrinsic/stats:metrics_utils",
+        "@abseil-cpp//absl/strings:string_view",
+        "@io_opentelemetry_cpp//api",
     ],
 )

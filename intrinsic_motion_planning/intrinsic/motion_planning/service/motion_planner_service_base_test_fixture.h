@@ -220,10 +220,7 @@ using MotionPlannerBaseTest = MotionPlannerServiceBaseTest;
 
 // The flag `set_infinite_jerk_limits` allows to set a finite/infinite value for
 // joint jerk limits so that it triggers the use of an acceleration-limited or
-// a jerk-limited TOPP solver. If `set_infinite_jerk_limits` is true, the
-// acceleration-limited TOPP solver should be used and planning should work
-// without a jerk-limited parameterization client. Otherwise, a parameterization
-// service is started.
+// a jerk-limited TOPP solver.
 class MotionPlannerServiceWithoutLoggerTest
     : public MotionPlannerServiceBaseTest,
       public ::testing::TestWithParam<MotionPlannerServiceTestParams> {
@@ -235,7 +232,6 @@ class MotionPlannerServiceWithoutLoggerTest
   // - Loads the default `4_robots_cube_world` world with configured Cartesian
   //   limits and merges any additional worlds in `extra_worlds`.
   // - Configures motion planner flags according to `test_params`.
-  // - Sets up the parameterization service if jerk limits are finite.
   // - Initializes the in-memory test services and motion planner service.
   void SetUpWithTestParams(const MotionPlannerServiceTestParams& test_params,
                            WorldHashMap<std::string, World> extra_worlds = {});

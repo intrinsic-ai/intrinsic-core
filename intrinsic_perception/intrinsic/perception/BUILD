@@ -34,7 +34,7 @@ cc_library(
     srcs = ["asset_utils.cc"],
     hdrs = ["asset_utils.h"],
     deps = [
-        "//intrinsic/util/status:status_macros_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

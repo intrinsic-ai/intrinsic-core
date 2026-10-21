@@ -37,9 +37,25 @@
 
 namespace intrinsic_proto::perception::v1 {
 
-absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
-    const SensorImage& sensor_image) {
-  const ImageBuffer& image_buffer = sensor_image.buffer();
+namespace {
+
+template <typename ImageTrait, typename ImageBufferRef>
+absl::StatusOr<intrinsic::perception::SensorImage> CreateSensorImage(
+    const SensorImage& sensor_image, absl::Time acquisition_time,
+    const std::optional<intrinsic::perception::CameraParams>& camera_params,
+    const std::optional<intrinsic::Pose3d>& camera_t_sensor,
+    ImageBufferRef&& image_buffer) {
+  INTR_ASSIGN_OR_RETURN(
+      intrinsic::perception::Image<ImageTrait> image,
+      FromProto<ImageTrait>(std::forward<ImageBufferRef>(image_buffer)));
+  return intrinsic::perception::SensorImage(sensor_image.sensor_config().id(),
+                                            acquisition_time, camera_params,
+                                            camera_t_sensor, std::move(image));
+}
+
+template <typename ImageBufferRef>
+absl::StatusOr<intrinsic::perception::SensorImage> FromProtoImpl(
+    const SensorImage& sensor_image, ImageBufferRef&& image_buffer) {
   if (image_buffer.packing_type() == PACKING_TYPE_UNSPECIFIED) {
     return absl::InvalidArgumentError("Invalid packing type");
   }
@@ -63,58 +79,37 @@ absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
       return absl::InvalidArgumentError("8U image must have Intensity pixels");
     }
     if (image_buffer.num_channels() == 3) {
-      INTR_ASSIGN_OR_RETURN(
-          intrinsic::perception::Image<intrinsic::perception::Rgb8u> rgb8u,
-          FromProto<intrinsic::perception::Rgb8u>(image_buffer));
-      return intrinsic::perception::SensorImage(
-          sensor_image.sensor_config().id(), acquisition_time, camera_params,
-          camera_t_sensor, std::move(rgb8u));
+      return CreateSensorImage<intrinsic::perception::Rgb8u>(
+          sensor_image, acquisition_time, camera_params, camera_t_sensor,
+          std::forward<ImageBufferRef>(image_buffer));
     } else if (image_buffer.num_channels() == 1) {
-      INTR_ASSIGN_OR_RETURN(
-          intrinsic::perception::Image<intrinsic::perception::Gray8u> gray8u,
-          FromProto<intrinsic::perception::Gray8u>(image_buffer));
-      return intrinsic::perception::SensorImage(
-          sensor_image.sensor_config().id(), acquisition_time, camera_params,
-          camera_t_sensor, std::move(gray8u));
+      return CreateSensorImage<intrinsic::perception::Gray8u>(
+          sensor_image, acquisition_time, camera_params, camera_t_sensor,
+          std::forward<ImageBufferRef>(image_buffer));
     } else {
       return absl::InvalidArgumentError("8U image must have 1 or 3 channels");
     }
   } else if (image_buffer.type() == DataType::TYPE_FLOAT32) {
     if (image_buffer.pixel_type() == PixelType::PIXEL_INTENSITY &&
         image_buffer.num_channels() == 1) {
-      INTR_ASSIGN_OR_RETURN(
-          intrinsic::perception::Image<intrinsic::perception::Gray32f> gray32f,
-          FromProto<intrinsic::perception::Gray32f>(image_buffer));
-      return intrinsic::perception::SensorImage(
-          sensor_image.sensor_config().id(), acquisition_time, camera_params,
-          camera_t_sensor, std::move(gray32f));
+      return CreateSensorImage<intrinsic::perception::Gray32f>(
+          sensor_image, acquisition_time, camera_params, camera_t_sensor,
+          std::forward<ImageBufferRef>(image_buffer));
     } else if (image_buffer.pixel_type() == PIXEL_NORMAL &&
                image_buffer.num_channels() == 3) {
-      INTR_ASSIGN_OR_RETURN(
-          intrinsic::perception::Image<intrinsic::perception::Normal32f>
-              normal32f,
-          FromProto<intrinsic::perception::Normal32f>(image_buffer));
-      return intrinsic::perception::SensorImage(
-          sensor_image.sensor_config().id(), acquisition_time, camera_params,
-          camera_t_sensor, std::move(normal32f));
+      return CreateSensorImage<intrinsic::perception::Normal32f>(
+          sensor_image, acquisition_time, camera_params, camera_t_sensor,
+          std::forward<ImageBufferRef>(image_buffer));
     } else if (image_buffer.pixel_type() == PixelType::PIXEL_DEPTH &&
                image_buffer.num_channels() == 1) {
-      INTR_ASSIGN_OR_RETURN(
-          intrinsic::perception::Image<intrinsic::perception::Depth32f>
-              depth32f,
-          FromProto<intrinsic::perception::Depth32f>(image_buffer));
-      return intrinsic::perception::SensorImage(
-          sensor_image.sensor_config().id(), acquisition_time, camera_params,
-          camera_t_sensor, std::move(depth32f));
+      return CreateSensorImage<intrinsic::perception::Depth32f>(
+          sensor_image, acquisition_time, camera_params, camera_t_sensor,
+          std::forward<ImageBufferRef>(image_buffer));
     } else if (image_buffer.pixel_type() == PixelType::PIXEL_POINT &&
                image_buffer.num_channels() == 3) {
-      INTR_ASSIGN_OR_RETURN(
-          intrinsic::perception::Image<intrinsic::perception::Point32f>
-              point32f,
-          FromProto<intrinsic::perception::Point32f>(image_buffer));
-      return intrinsic::perception::SensorImage(
-          sensor_image.sensor_config().id(), acquisition_time, camera_params,
-          camera_t_sensor, std::move(point32f));
+      return CreateSensorImage<intrinsic::perception::Point32f>(
+          sensor_image, acquisition_time, camera_params, camera_t_sensor,
+          std::forward<ImageBufferRef>(image_buffer));
     } else {
       return absl::InvalidArgumentError(
           "Invalid pixel type/channel combination");
@@ -122,6 +117,18 @@ absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
   } else {
     return absl::InvalidArgumentError("Image must have 8U or 32F data");
   }
+}
+
+}  // namespace
+
+absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
+    const SensorImage& sensor_image) {
+  return FromProtoImpl(sensor_image, sensor_image.buffer());
+}
+
+absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
+    SensorImage&& sensor_image) {
+  return FromProtoImpl(sensor_image, std::move(*sensor_image.mutable_buffer()));
 }
 
 absl::StatusOr<SensorImage> ToProto(

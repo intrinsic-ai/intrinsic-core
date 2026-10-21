@@ -23,6 +23,7 @@ from absl import app
 from absl import flags
 import grpc
 
+from intrinsic_perception.intrinsic.perception.service.ioc_train_service.proto import ioc_train_service_config_pb2
 from intrinsic_perception.intrinsic.perception.service.ioc_train_service.service import ioc_train_service
 from intrinsic.perception.proto.v1 import train_service_pb2_grpc
 from intrinsic.resources.proto import runtime_context_pb2
@@ -63,9 +64,16 @@ def main(argv: Sequence[str]) -> None:
     raise app.UsageError("Too many command-line arguments.")
 
   runtime_context: runtime_context_pb2.RuntimeContext | None = None
+  ioc_train_service_config = (
+      ioc_train_service_config_pb2.IocTrainServiceConfig()
+  )
   if pathlib.Path(_RUNTIME_CONTEXT_FILE.value).exists():
     with open(_RUNTIME_CONTEXT_FILE.value, "rb") as f:
       runtime_context = runtime_context_pb2.RuntimeContext.FromString(f.read())
+      if runtime_context.HasField("config") and runtime_context.config.Is(
+          ioc_train_service_config_pb2.IocTrainServiceConfig.DESCRIPTOR
+      ):
+        runtime_context.config.Unpack(ioc_train_service_config)
 
   logging.info("--- Starting Custom Sideloaded IOC TrainService ---")
 
@@ -73,7 +81,7 @@ def main(argv: Sequence[str]) -> None:
       futures.ThreadPoolExecutor(max_workers=10), options=_GRPC_OPTIONS
   )
   train_service_pb2_grpc.add_TrainServiceServicer_to_server(
-      ioc_train_service.IocTrainService(), server
+      ioc_train_service.IocTrainService(config=ioc_train_service_config), server
   )
 
   if runtime_context is not None and runtime_context.port > 0:

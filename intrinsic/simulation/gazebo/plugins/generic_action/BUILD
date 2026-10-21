@@ -27,9 +27,9 @@ cc_library(
     deps = [
         ":generic_action_gpio_connection",
         "//intrinsic/simulation/gazebo/plugins/gpio:gpio_service",
-        "//intrinsic/util:eigen",
         "//intrinsic/world/proto:generic_action_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util:eigen",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

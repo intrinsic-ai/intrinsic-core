@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("//bazel:xacro.bzl", "xacro_file")
-load("//intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
+load("//intrinsic_sdk/intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
 
 package(
     default_visibility = [

@@ -141,10 +141,10 @@ proto_library(
     name = "resource_type_runtime_proto",
     srcs = ["resource_type_runtime.proto"],
     deps = [
-        "//intrinsic/assets/processes/proto:process_asset_proto",
         "//intrinsic/assets/proto:installation_origin_proto",
-        "//intrinsic/assets/proto/v1:asset_proto",
         "//intrinsic/world/proto:world_fragment_proto",
+        "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_proto",
+        "//intrinsic_sdk/intrinsic/assets/proto/v1:asset_proto",
         "@com_google_protobuf//:any_proto",
         "@com_google_protobuf//:descriptor_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_proto",
@@ -161,10 +161,10 @@ go_proto_library(
     importpath = "intrinsic/resources/proto/resource_type_runtime_go_proto",
     protos = [":resource_type_runtime_proto"],
     deps = [
-        "//intrinsic/assets/processes/proto:process_asset_go_proto",
         "//intrinsic/assets/proto:installation_origin_go_proto",
-        "//intrinsic/assets/proto/v1:asset_go_proto",
         "//intrinsic/world/proto:world_fragment_go_proto",
+        "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_go_proto",
+        "//intrinsic_sdk/intrinsic/assets/proto/v1:asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:metadata_go_proto",
         "@intrinsic_apis//intrinsic/resources/proto:resource_service_definition_go_proto",
@@ -216,6 +216,7 @@ go_proto_library(
         "//intrinsic/resources/service:__pkg__",
         "//intrinsic/skills/internal:__pkg__",
         "//intrinsic/skills/tools:__pkg__",
+        "//intrinsic_sdk/intrinsic/skills/internal:__pkg__",
     ],
 )
 

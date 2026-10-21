@@ -397,7 +397,7 @@ function inctl_app_stop() {
   args=(
     --cluster="${CLUSTER_NAME}"
   )
-  inctl app stop \
+  inctl solution stop \
       "${args[@]}" \
       "$@"
 }
@@ -439,6 +439,16 @@ function inctl_vm_lease() {
 function inctl_vm_return() {
 
   inctl vm return \
+      "$@"
+}
+
+function inctl_service_add() {
+  inctl service add \
+      "$@"
+}
+
+function inctl_asset_install() {
+  inctl asset install \
       "$@"
 }
 

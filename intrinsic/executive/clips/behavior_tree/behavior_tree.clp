@@ -1036,13 +1036,6 @@
   (if (neq (fact-slot-value ?node sub-tree-id) nil) then
     (behavior-tree-reset (fact-slot-value ?node sub-tree-id) ?keep-counters))
 
-  (if (neq ?run-metadata-proto-path "") then
-    (bind ?s-path (proto-path-join ?run-metadata-proto-path "state"))
-    (run-metadata-proto-update-field ?s-path ACCEPTED ?operation-name)
-    (bind ?s-path (proto-path-join ?run-metadata-proto-path "recovered"))
-    (run-metadata-proto-update-field ?s-path FALSE ?operation-name)
-  )
-
   (bind ?retry-num-tries 0)
   (bind ?loop-num-times 0)
   (if ?keep-counters then
@@ -1051,8 +1044,6 @@
   )
 
   (modify ?node (state ACCEPTED)
-                (run-metadata-proto-state ACCEPTED)
-                (run-metadata-proto-recovered-state NONE)
                 (retry-num-tries ?retry-num-tries)
                 (loop-num-times ?loop-num-times)
                 (task-action-uid nil)
@@ -1082,16 +1073,7 @@
     )
 
     (bind ?operation-name ?tree:operation-name)
-    ; Either we do have a non-empty path (which then is assumed valid),
-    ; or we could be at the top-level tree in which case the path would
-    ; be empty but valid nevertheless.
-    (if (or (neq ?tree:run-metadata-proto-path "")
-            (eq ?tree:parent-behavior-tree-id nil))
-     then
-       (bind ?s-path (proto-path-join ?tree:run-metadata-proto-path "state"))
-       (run-metadata-proto-update-field ?s-path ACCEPTED ?tree:operation-name)
-    )
-    (modify ?tree (state ACCEPTED) (run-metadata-proto-state ACCEPTED))
+    (modify ?tree (state ACCEPTED))
   )
   ; Reset all nodes in the tree.
   ; These do not need to reset all their children as that is already part of

@@ -75,6 +75,12 @@ absl::StatusOr<SlotInfo> ActionFactoryContext::GetSlotInfo(
         "Action type '", signature_.action_type_name(),
         "' does not declare slot '", slot_name, "' in its signature."));
   }
+  if (signature_.part_slot_infos().at(slot_name).is_optional()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Slot '", slot_name, "' is an optional slot for action type '",
+        signature_.action_type_name(),
+        "'. Use GetOptionalSlotInfo() instead!"));
+  }
   auto slot_info = slot_name_to_slot_info_.find(slot_name);
   if (slot_info == slot_name_to_slot_info_.end()) {
     return absl::NotFoundError(
@@ -95,17 +101,17 @@ ActionFactoryContext::GetOptionalSlotInfo(absl::string_view slot_name) {
         "Action type '", signature_.action_type_name(),
         "' does not declare slot '", slot_name, "' in its signature."));
   }
-  if (slot_info->second.required_feature_interfaces_size() > 0) {
+  if (!slot_info->second.is_optional()) {
     return absl::InvalidArgumentError(absl::StrCat(
         "Slot '", slot_name, "' is not an optional slot for action type '",
         signature_.action_type_name(), "'. Use GetSlotInfo() instead!"));
   }
 
+  used_slot_names_.insert(std::string(slot_name));
   if (!slot_name_to_slot_info_.contains(slot_name)) {
-    used_slot_names_.insert(std::string(slot_name));
     return std::nullopt;
   }
-  return GetSlotInfo(slot_name);
+  return slot_name_to_slot_info_.at(slot_name);
 }
 
 absl::StatusOr<RealtimeSignalId> ActionFactoryContext::GetRealtimeSignalId(

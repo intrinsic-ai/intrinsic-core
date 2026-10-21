@@ -47,28 +47,29 @@ namespace intrinsic {
 
 namespace {
 absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>>
-CreateConcurrentKinematicsProxy(
-    int thread_count, const object_world::ObjectWorld& object_world,
-    const object_world::KinematicObject& robot,
-    const intrinsic_proto::world::CollisionCheckerConfig&
-        collision_checker_config,
-    std::optional<
-        intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
-        constraints_proto,
-    const intrinsic_proto::RuleSet& rule_set, bool disable_collision_checking) {
+CreateConcurrentKinematicsProxy(const object_world::ObjectWorld& object_world,
+                                const object_world::KinematicObject& robot,
+                                const KinematicsProxyOptions& options) {
+  // The caller only dispatches here when a thread count is set; a missing value
+  // is treated like a non-positive one so that the guard below covers both.
+  const int thread_count = options.maybe_concurrent_thread_count.value_or(0);
   if (thread_count < 1) {
     return absl::InvalidArgumentError("thread_count must be > 0!");
   }
 
-  auto create_single_proxy = [&object_world, &robot, &collision_checker_config,
-                              &constraints_proto, &rule_set,
-                              disable_collision_checking]()
+  // Worker proxies must be plain (non-concurrent) proxies, so clear the thread
+  // count. Copying the options once here (instead of re-listing each field per
+  // worker) keeps all other fields in sync automatically and lets the worker
+  // threads share the options by const reference without further copies.
+  KinematicsProxyOptions single_proxy_options = options;
+  single_proxy_options.maybe_concurrent_thread_count = std::nullopt;
+
+  auto create_single_proxy = [&object_world, &robot, &single_proxy_options]()
       -> absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> {
     INTR_ASSIGN_OR_RETURN(
         std::unique_ptr<KinematicsSystemProxy> proxy,
-        CreateKinematicsProxyWithConfig(
-            object_world, robot, collision_checker_config, constraints_proto,
-            rule_set, disable_collision_checking));
+        CreateKinematicsProxy(object_world, robot, single_proxy_options),
+        _ << "Failed to create single kinematics proxy for concurrent proxy.");
     // We disable collision check statistics for concurrent proxies to avoid the
     // possibility of multiple collision checkers trying to accumulate the same
     // statistics variable.
@@ -121,49 +122,27 @@ intrinsic_proto::RuleSet RelaxCollisionMargins(
 }
 }  // namespace
 
-absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>>
-CreateKinematicsProxyWithConfig(
+absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
     const object_world::ObjectWorld& object_world,
     const object_world::KinematicObject& robot,
-    const intrinsic_proto::world::CollisionCheckerConfig&
-        collision_checker_config,
-    std::optional<
-        intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
-        constraints_proto,
-    const intrinsic_proto::RuleSet& rule_set, bool disable_collision_checking,
-    std::optional<int> maybe_concurrent_thread_count) {
-  if (maybe_concurrent_thread_count.has_value()) {
-    return CreateConcurrentKinematicsProxy(
-        *maybe_concurrent_thread_count, object_world, robot,
-        collision_checker_config, constraints_proto, rule_set,
-        disable_collision_checking);
+    const KinematicsProxyOptions& options) {
+  if (options.maybe_concurrent_thread_count.has_value()) {
+    return CreateConcurrentKinematicsProxy(object_world, robot, options);
   }
 
   const World& world = object_world.GetEntityWorld();
 
   std::vector<std::unique_ptr<ConstraintInterface>> constraints;
-  if (constraints_proto.has_value()) {
+  if (options.constraints_proto.has_value()) {
     INTR_ASSIGN_OR_RETURN(constraints,
                           GetUniformGeometricConstraintsFromProto(
-                              object_world, constraints_proto.value()));
+                              object_world, *options.constraints_proto));
   }
 
   return CreateKinematicsProxyWithConfig(
-      world, robot.GetRobotEntityId(), collision_checker_config,
-      std::move(constraints), rule_set, disable_collision_checking);
-}
-
-absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
-    const object_world::ObjectWorld& object_world,
-    const object_world::KinematicObject& robot,
-    std::optional<
-        intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
-        constraints_proto,
-    const intrinsic_proto::RuleSet& rule_set, bool disable_collision_checking,
-    std::optional<int> maybe_concurrent_thread_count) {
-  return CreateKinematicsProxyWithConfig(
-      object_world, robot, /*collision_checker_config=*/{}, constraints_proto,
-      rule_set, disable_collision_checking, maybe_concurrent_thread_count);
+      world, robot.GetRobotEntityId(), options.collision_checker_config,
+      std::move(constraints), options.rule_set,
+      options.disable_collision_checking);
 }
 
 absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
@@ -176,8 +155,13 @@ absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
                         object_world::ObjectWorld::CreateView(world));
   INTR_ASSIGN_OR_RETURN(auto* robot,
                         object_world->GetKinematicObject(robot_name));
-  return CreateKinematicsProxy(*object_world, *robot, constraints_proto,
-                               rule_set, disable_collision_checking);
+  return CreateKinematicsProxy(
+      *object_world, *robot,
+      KinematicsProxyOptions{
+          .constraints_proto = std::move(constraints_proto),
+          .rule_set = rule_set,
+          .disable_collision_checking = disable_collision_checking,
+      });
 }
 
 absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>>
@@ -225,19 +209,27 @@ CreateKinematicsProxyWithConfig(
         intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
         constraints_proto) {
   if (!path_segment.collision_rule_set.has_value()) {
-    return CreateKinematicsProxyWithConfig(
-        object_world, robot, collision_checker_config, constraints_proto,
-        /*rule_set=*/intrinsic_proto::RuleSet(),
-        /*disable_collision_checking=*/true);
+    return CreateKinematicsProxy(
+        object_world, robot,
+        KinematicsProxyOptions{
+            .collision_checker_config = collision_checker_config,
+            .constraints_proto = std::move(constraints_proto),
+            .rule_set = intrinsic_proto::RuleSet(),
+            .disable_collision_checking = true,
+        });
   }
   intrinsic_proto::RuleSet rule_set_proto;
   rule_set_proto.mutable_rules()->Assign(
       path_segment.collision_rule_set.value().begin(),
       path_segment.collision_rule_set.value().end());
-  return CreateKinematicsProxyWithConfig(object_world, robot,
-                                         collision_checker_config,
-                                         constraints_proto, rule_set_proto,
-                                         /*disable_collision_checking=*/false);
+  return CreateKinematicsProxy(
+      object_world, robot,
+      KinematicsProxyOptions{
+          .collision_checker_config = collision_checker_config,
+          .constraints_proto = std::move(constraints_proto),
+          .rule_set = std::move(rule_set_proto),
+          .disable_collision_checking = false,
+      });
 }
 
 absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> CreateKinematicsProxy(
@@ -262,17 +254,11 @@ ConstraintManifoldProjector CreateConstraintManifoldProjector(
 }
 
 absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>>
-CreateProxyWithRelaxedMargins(
-    const object_world::ObjectWorld& object_world,
-    const object_world::KinematicObject& robot,
-    const intrinsic_proto::world::CollisionCheckerConfig&
-        collision_checker_config,
-    std::optional<
-        intrinsic_proto::motion_planning::v1::UniformGeometricConstraint>
-        constraints_proto,
-    const intrinsic_proto::RuleSet& rule_set, bool disable_collision_checking,
-    const double relative_factor, const double absolute_factor,
-    std::optional<int> maybe_concurrent_thread_count) {
+CreateProxyWithRelaxedMargins(const object_world::ObjectWorld& object_world,
+                              const object_world::KinematicObject& robot,
+                              const KinematicsProxyOptions& options,
+                              const double relative_factor,
+                              const double absolute_factor) {
   INTR_ASSIGN_OR_RETURN(const intrinsic_proto::RuleSet world_rule_set,
                         object_world.GetDefaultCollisionSettings());
 
@@ -289,16 +275,16 @@ CreateProxyWithRelaxedMargins(
           object_world_with_relaxed_margins,
       object_world::ObjectWorld::CreateView(world_with_relaxed_margins));
 
-  const intrinsic_proto::RuleSet motion_rule_set_with_relaxed_margins =
-      RelaxCollisionMargins(relative_factor, absolute_factor, rule_set);
+  // Only the rule set is relaxed; all other options are passed through
+  // unchanged by copying `options` rather than re-listing each field.
+  KinematicsProxyOptions options_with_relaxed_margins = options;
+  options_with_relaxed_margins.rule_set =
+      RelaxCollisionMargins(relative_factor, absolute_factor, options.rule_set);
 
   // TODO(b/470440149): the World will get cloned again inside
   // CreateKinematicsProxy. Maybe try to avoid the extra clone?
-  return CreateKinematicsProxyWithConfig(
-      *object_world_with_relaxed_margins, robot, collision_checker_config,
-      constraints_proto, motion_rule_set_with_relaxed_margins,
-      /*disable_collision_checking=*/disable_collision_checking,
-      maybe_concurrent_thread_count);
+  return CreateKinematicsProxy(*object_world_with_relaxed_margins, robot,
+                               options_with_relaxed_margins);
 }
 
 }  // namespace intrinsic

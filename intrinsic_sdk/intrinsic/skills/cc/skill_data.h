@@ -61,9 +61,10 @@ class SkillData {
   //
   // If `validate_fn` is provided and a cached value exists:
   // - Returns cached value if `validate_fn` returns true.
-  // - Returns std::nullopt if `validate_fn` returns false.
-  // - Returns error status immediately if `validate_fn` returns an error
-  // status.
+  // - Evicts the cached key and returns std::nullopt if `validate_fn` returns
+  //   false.
+  // - Evicts the cached key and returns error status immediately if
+  //   `validate_fn` returns an error status.
   //
   // Returns an InvalidArgumentError if the cached value's type does not match
   // T.
@@ -88,10 +89,15 @@ class SkillData {
         return *val;
       }
 
-      INTR_ASSIGN_OR_RETURN(bool is_valid, validate_fn(*val));
-      if (is_valid) {
-        return *val;
+      absl::StatusOr<bool> is_valid = validate_fn(*val);
+      if (!is_valid.ok() || !*is_valid) {
+        cache_.Erase(context_id, key);
+        if (!is_valid.ok()) {
+          return is_valid.status();
+        }
+        return std::nullopt;
       }
+      return *val;
     }
 
     return std::nullopt;
@@ -105,10 +111,10 @@ class SkillData {
   //
   // If `validate_fn` is provided and a cached value exists:
   // - Returns cached value if `validate_fn` returns true.
-  // - Recomputes via `compute_fn`, updates cache, and returns fresh value if
-  //   `validate_fn` returns false.
-  // - Returns error status immediately if `validate_fn` returns an error
-  // status.
+  // - Evicts the cached key, recomputes via `compute_fn`, updates cache, and
+  //   returns fresh value if `validate_fn` returns false.
+  // - Evicts the cached key and returns error status immediately if
+  //   `validate_fn` returns an error status.
   //
   // Automatically evicts the least recently used context_id (and all its
   // associated keys) if the context capacity is reached.
@@ -153,6 +159,7 @@ class SkillData {
     void Put(absl::string_view context_id, absl::string_view key,
              std::any value);
     bool Erase(absl::string_view context_id);
+    bool Erase(absl::string_view context_id, absl::string_view key);
 
    private:
     struct ContextEntry {

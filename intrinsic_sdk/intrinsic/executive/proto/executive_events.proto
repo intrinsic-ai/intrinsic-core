@@ -1,0 +1,144 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.executive;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/timestamp.proto";
+import "google/rpc/status.proto";
+import "intrinsic/executive/proto/behavior_tree.proto";
+import "intrinsic/executive/proto/executive_execution_mode.proto";
+import "intrinsic/executive/proto/run_metadata.proto";
+
+option go_package = "intrinsic/executive/proto/executive_events_go_proto";
+
+message TreeStateChangeEvent {
+
+  BehaviorTree.ElementPath element_path = 1;
+
+  BehaviorTree.State state = 2;
+}
+
+message NodeStateChangeEvent {
+
+  BehaviorTree.ElementPath element_path = 1;
+
+  BehaviorTree.Node.State state = 2;
+  // The recovered flag from BehaviorTree.Node. Usually true, when a state
+  // change originated from recovery
+  bool recovered = 3;
+}
+
+message ConditionStateChangeEvent {
+
+  BehaviorTree.ElementPath element_path = 1;
+
+  BehaviorTree.Condition.State state = 2;
+  optional bool satisfied =
+      3;  // Only set when the condition was evaluated successfully
+}
+
+message BreakpointChangeEvent {
+  // The breakpoint that changed. If breakpoint.type is TYPE_UNSPECIFIED, the
+  // breakpoint was removed/cleared from the node.
+  BehaviorTree.Breakpoint breakpoint = 1;
+}
+message NodeExecutionSettingsChangeEvent {
+
+  BehaviorTree.ElementPath element_path = 1;
+
+  BehaviorTree.Node.ExecutionSettings settings = 2;
+}
+
+message TaskNodeStateChangeEvent {
+
+  BehaviorTree.ElementPath element_path = 1;
+
+  BehaviorTree.TaskNode.State state = 2;
+}
+message TaskNodeExecuteCodeStdoutEvent {
+
+  BehaviorTree.ElementPath element_path = 1;
+
+  string stdout = 2;
+}
+
+// Counter value change for a loop or retry node
+message CounterChangeEvent {
+
+  BehaviorTree.ElementPath element_path = 1;
+
+  uint32 value = 2;
+}
+
+// Issued when one or many of the generic fields in RunMetadata was changed.
+// These are not all fields of RunMetadata as some never change after an
+// operation has been created and others are covered by other events in
+// particular the behavior_tree field.
+message RunMetadataChangeEvent {
+  string world_id = 19;
+  string scene_id = 29;
+  ExecutionMode execution_mode = 20;
+  SimulationMode simulation_mode = 21;
+
+  optional string start_tree_id = 24;
+  optional uint32 start_node_id = 25;
+
+  optional google.protobuf.Timestamp start_time = 26;
+}
+
+// Changes to the operation_state field in RunMetadata
+message OperationStateChangeEvent {
+  RunMetadata.State operation_state = 1;
+}
+
+// Changes to the done/result fields of the google.longrunning.Operation.
+// Emitted with done=true and the result when the operation reaches a terminal
+// state (SUCCEEDED, FAILED, CANCELED), and once with done=false and no result
+// when a done operation is reset to a non-terminal state.
+message OperationResultChangeEvent {
+  bool done = 3;
+  oneof result {
+    google.rpc.Status error = 4;
+    google.protobuf.Any response = 5;
+  }
+}
+
+// A single event that is emitted for an operation
+message OperationEvent {
+  oneof event_type {
+    TreeStateChangeEvent tree_state = 1;
+    NodeStateChangeEvent node_state = 2;
+    ConditionStateChangeEvent condition_state = 3;
+    BreakpointChangeEvent breakpoint = 4;
+    NodeExecutionSettingsChangeEvent node_execution_settings = 5;
+    TaskNodeStateChangeEvent task_node_state = 6;
+    TaskNodeExecuteCodeStdoutEvent task_node_execute_code_stdout = 7;
+    CounterChangeEvent counter = 8;
+    RunMetadataChangeEvent run_metadata = 9;
+    OperationStateChangeEvent operation_state = 10;
+    OperationResultChangeEvent operation_result = 11;
+  }
+}
+
+// An ordered list of events that are emitted in relation to an operation with
+// sequence_number - 1 The sequence_number relates to the sequence_number field
+// in the RunMetadata. Events with a sequence_number smaller or equal to that in
+// the RunMetadata are already contained in the RunMetadata.
+message OperationEvents {
+  repeated OperationEvent events = 1;
+  uint64 sequence_number = 2;
+}

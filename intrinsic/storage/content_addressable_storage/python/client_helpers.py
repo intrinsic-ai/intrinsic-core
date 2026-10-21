@@ -17,17 +17,14 @@
 from collections.abc import Iterator
 from collections.abc import Sequence
 import io
-import random
-import time
 from typing import Any
 from typing import List
 from typing import Optional
-from typing import Protocol
-from typing import runtime_checkable
 from typing import Tuple
 
 from absl import logging
 import grpc
+import tenacity
 
 from intrinsic.storage.content_addressable_storage.proto import cas_service_pb2
 from intrinsic.storage.content_addressable_storage.proto import cas_service_pb2_grpc
@@ -43,25 +40,6 @@ DEFAULT_UPLOAD_CHUNK_SIZE = 1 * 1024 * 1024  # 1 MiB
 # client_helpers.get. The function is memory intensive and can be slow due
 # to repeated memory re-allocation.
 FILE_SIZE_THRESHOLD = 500 * 1024 * 1024  # 500 MiB.
-
-
-@runtime_checkable
-class BinaryWriter(Protocol):
-  """Protocol representing an object that can write raw bytes"""
-
-  def write(self, data: bytes, /) -> Any:
-    ...
-
-
-@runtime_checkable
-class Seeker(Protocol):
-  """Protocol representing a seekable stream (similar to Go's io.Seeker)."""
-
-  def seek(self, offset: int, whence: int = 0, /) -> int:
-    ...
-
-  def tell(self) -> int:
-    ...
 
 
 class IncompleteDownloadError(RuntimeError):
@@ -89,135 +67,321 @@ def _is_retriable(exc: BaseException) -> bool:
   )
 
 
-class _CountingWriter:
-  """Wrapper around a writer that tracks total bytes written."""
+class ResumableReader(io.BufferedIOBase):
+  """Read-only binary stream over a CAS object that resumes on transient errors.
 
-  def __init__(self, writer: BinaryWriter):
-    self._writer = writer
-    self.bytes_written = 0
+  Inherits from io.BufferedIOBase so instances can be passed directly to
+  standard library stream consumers (e.g. tarfile, shutil.copyfileobj).
+  Implements read1() to yield uncopied server chunks and inherits readinto()
+  for caller-allocated buffers.
 
-  def write(self, data: bytes) -> int:
-    n = self._writer.write(data)
-    written = len(data) if n is None else n
-    self.bytes_written += written
-    return written
+  Chunks are pulled lazily from the CAS service via GetRange starting at the
+  configured offset. Transient gRPC failures (and streams that end before
+  reaching the object's total size) are retried with exponential backoff by
+  re-opening GetRange at the current offset. The retry budget applies per
+  chunk: it is reset whenever a chunk is received successfully.
 
+  If the server does not implement GetRange and the reader is at offset 0, it
+  falls back to Get. Since Get always streams from byte 0, transient errors on
+  the Get stream are only retried while no bytes have been consumed yet, and
+  the total received size is checked against Stat.
 
-def get_range(
-    cas_stub: cas_service_pb2_grpc.ContentAddressableStorageServiceStub,
-    object_id: str,
-    start_offset: int,
-    writer: BinaryWriter,
-    grpc_metadata: Optional[Sequence[Tuple[str, str]]] = None,
-) -> int:
-  """Downloads content from the CAS service starting from start_offset.
+  Once a terminal error occurs, the reader closes itself so subsequent calls
+  fail fast with ValueError without issuing new RPCs. Reads after the end of
+  the object return b"" without issuing new RPCs.
 
-  Args:
-    cas_stub: Stub for the content-addressable storage service.
-    object_id: CAS object ID.
-    start_offset: Zero-based byte offset to start reading from.
-    writer: An object that implements write(bytes).
-    grpc_metadata: Optional gRPC metadata.
-
-  Returns:
-    Total bytes read and written to the writer.
-
-  Raises:
-    ValueError: If start_offset is invalid (< 0).
-    IncompleteDownloadError: If received byte count doesn't match expected size.
-    grpc.RpcError: If the gRPC call fails.
+  Instances are not thread-safe. Use as a context manager (or call close()) to
+  cancel the in-flight gRPC call. Prefer constructing instances with
+  get_resumable_reader().
   """
-  if start_offset < 0:
-    raise ValueError(f"Invalid start offset {start_offset}; must be >= 0.")
 
-  request = cas_service_pb2.GetRangeRequest(
-      object_id=object_id,
-      read_offset=start_offset,
-  )
+  def __init__(
+      self,
+      object_id: str,
+      *,
+      cas_stub: (
+          cas_service_pb2_grpc.ContentAddressableStorageServiceStub | None
+      ) = None,
+      start_offset: int = 0,
+      max_retries: int | None = 5,
+      initial_backoff_sec: float = 0.1,
+      max_backoff_sec: float = 2.0,
+      backoff_multiplier: float = 1.5,
+      grpc_metadata: Sequence[Tuple[str, str]] | None = None,
+  ):
+    """Initializes the reader. See get_resumable_reader() for arguments."""
+    # Active GetRange/Get response iterator (usually also a grpc.Call). Set
+    # first because IOBase.__del__ calls close() even if __init__ raises.
+    self._call: Iterator[Any] | None = None
+    self._closed = False
+    if cas_stub is None:
+      raise ValueError("cas_stub must not be None.")
+    if start_offset < 0:
+      raise ValueError(f"Invalid start offset {start_offset}; must be >= 0.")
+    if max_retries is not None and max_retries < 0:
+      raise ValueError(
+          f"Invalid max_retries {max_retries}; must be >= 0 or None."
+      )
+    super().__init__()
+    self._stub = cas_stub
+    self._object_id = object_id
+    self._offset = start_offset
+    self._grpc_kwargs = {"metadata": grpc_metadata} if grpc_metadata else {}
+    self._retrying = tenacity.Retrying(
+        stop=(
+            tenacity.stop_never
+            if max_retries is None
+            else tenacity.stop_after_attempt(max_retries + 1)
+        ),
+        wait=tenacity.wait_random_exponential(
+            multiplier=initial_backoff_sec,
+            max=max_backoff_sec,
+            exp_base=backoff_multiplier,
+        ),
+        retry=tenacity.retry_if_exception(self._can_retry),
+        before_sleep=self._log_retry,
+        reraise=True,
+    )
 
-  bytes_read = 0
-  total_object_size: Optional[int] = None
-  grpc_kwargs = {"metadata": grpc_metadata} if grpc_metadata else {}
+    # Unread data of the most recently received chunk is _chunk[_pos:].
+    self._chunk = b""
+    self._pos = 0
+    # Not all servers implement GetRange. Get is only usable from offset 0.
+    self._use_get = False
+    # Total object size as reported by GetRange or Stat, if known.
+    self._total_size: int | None = None
+    self._eof = False
 
-  for response in cas_stub.GetRange(request, **grpc_kwargs):
-    if response.total_object_size:
-      total_object_size = response.total_object_size
-    chunk = response.checksummed_data.content
-    writer.write(chunk)
-    bytes_read += len(chunk)
+  def readable(self) -> bool:
+    """Returns True so stream consumers (e.g. shutil) accept this reader.
 
-  if total_object_size:
-    expected_bytes = total_object_size - start_offset
-    if bytes_read != expected_bytes:
-      raise IncompleteDownloadError(
-          f"The total expected size for '{object_id}' from offset"
-          f" {start_offset} is {expected_bytes} bytes, but received"
-          f" {bytes_read} bytes."
+    io.IOBase defaults readable() to False, which causes standard library
+    consumers to raise io.UnsupportedOperation before attempting to read.
+    """
+    self._check_open()
+    return True
+
+  def tell(self) -> int:
+    """Returns the offset in the CAS object of the next byte to be read."""
+    self._check_open()
+    return self._offset
+
+  def read(self, size: int | None = -1) -> bytes:
+    """Reads up to size bytes; reads until the end of the object if size < 0.
+
+    Fewer than size bytes are returned only at the end of the object.
+
+    Args:
+      size: Maximum number of bytes to read. None or negative reads all
+        remaining bytes.
+
+    Returns:
+      The bytes read; b"" at the end of the object.
+    """
+    self._check_open()
+    if size is None or size < 0:
+      return b"".join(iter(self.read1, b""))
+    parts = []
+    remaining = size
+    while remaining > 0:
+      chunk = self.read1(remaining)
+      if not chunk:
+        break
+      parts.append(chunk)
+      remaining -= len(chunk)
+    return b"".join(parts)
+
+  def read1(self, size: int = -1) -> bytes:
+    """Reads up to size bytes, pulling at most one chunk from the server.
+
+    With size < 0, returns the remainder of the current chunk (or the whole next
+    chunk) without copying. This is the most efficient way to stream an object:
+
+      while chunk := reader.read1():
+        writer.write(chunk)
+
+    Args:
+      size: Maximum number of bytes to read. Negative means "one chunk".
+
+    Returns:
+      The bytes read; b"" at the end of the object.
+    """
+    self._check_open()
+    if size == 0:
+      return b""
+    # Loop so that empty chunks are skipped rather than reported as EOF.
+    while not self._eof and self._pos >= len(self._chunk):
+      self._pull()
+    if self._eof:
+      return b""
+    if self._pos == 0 and (size < 0 or size >= len(self._chunk)):
+      data = self._chunk
+    else:
+      end = len(self._chunk) if size < 0 else self._pos + size
+      data = self._chunk[self._pos : end]
+    self._pos += len(data)
+    self._offset += len(data)
+    return data
+
+  def close(self) -> None:
+    """Cancels the in-flight gRPC call (if any) and closes the reader."""
+    if not self._closed:
+      self._closed = True
+      self._discard_call()
+    super().close()
+
+  def _check_open(self) -> None:
+    """Raises ValueError if the reader has been closed.
+
+    Python's io.IOBase contract requires stream methods (read, tell, readable)
+    to fail fast with ValueError rather than initiating I/O after close().
+    """
+    if self._closed:
+      raise ValueError("I/O operation on closed file.")
+
+  def _pull(self) -> None:
+    """Receives the next chunk (or EOF), retrying transient errors."""
+    try:
+      self._retrying(self._receive_next)
+    except (grpc.RpcError, RuntimeError):
+      self.close()
+      raise
+
+  def _can_retry(self, exc: BaseException) -> bool:
+    # Get always streams from byte 0, so it can only be retried before any
+    # bytes have been handed out to the caller.
+    return _is_retriable(exc) and (not self._use_get or self._offset == 0)
+
+  def _log_retry(self, retry_state: tenacity.RetryCallState) -> None:
+    logging.warning(
+        "Transient error during CAS download of %r at offset %d: %s."
+        " Retrying (%d) in %.2fs...",
+        self._object_id,
+        self._offset,
+        retry_state.outcome.exception() if retry_state.outcome else None,
+        retry_state.attempt_number,
+        retry_state.upcoming_sleep,
+    )
+
+  def _receive_next(self) -> None:
+    """Receives the next response from the active stream (opening it if needed).
+
+    On success, either buffers the received chunk or marks the end of the
+    object.
+
+    Raises:
+      grpc.RpcError: If the RPC fails.
+      IncompleteDownloadError: If the stream ends before the object's end.
+      RuntimeError: If the server returns a chunk at an unexpected offset.
+    """
+    while True:
+      try:
+        call = self._call
+        if call is None:
+          call = self._call = self._open()
+        response = next(call)
+        break
+      except StopIteration:
+        response = None
+        break
+      except grpc.RpcError as e:
+        self._discard_call()
+        # Server-streaming RPCs usually report UNIMPLEMENTED on the first
+        # next() rather than when the call is created.
+        if (
+            self._use_get
+            or self._offset != 0
+            or _grpc_status_code(e) != grpc.StatusCode.UNIMPLEMENTED
+        ):
+          raise
+        logging.info(
+            "GetRange is not implemented by the CAS server; falling back to"
+            " Get for %r.",
+            self._object_id,
+        )
+        self._use_get = True
+
+    if response is None:
+      self._call = None
+      if self._total_size is not None and self._offset != self._total_size:
+        raise IncompleteDownloadError(
+            f"The CAS stream for '{self._object_id}' ended at offset"
+            f" {self._offset}, but the object size is {self._total_size} bytes."
+        )
+      self._eof = True
+      return
+
+    if not self._use_get:
+      if response.chunk_offset != self._offset:
+        raise RuntimeError(
+            f"Unexpected chunk offset for '{self._object_id}': got"
+            f" {response.chunk_offset}, want {self._offset}."
+        )
+      if response.total_object_size:
+        self._total_size = response.total_object_size
+    self._chunk = response.checksummed_data.content
+    self._pos = 0
+
+  def _open(self) -> Iterator[Any]:
+    """Opens a GetRange stream at the current offset (or a Get stream)."""
+    if not self._use_get:
+      return self._stub.GetRange(
+          cas_service_pb2.GetRangeRequest(
+              object_id=self._object_id, read_offset=self._offset
+          ),
+          **self._grpc_kwargs,
       )
 
-  return bytes_read
+    # Get responses don't carry the object size, so fetch it via Stat to
+    # detect streams that end early without an error.
+    if self._total_size is None:
+      stat_response = self._stub.Stat(
+          cas_service_pb2.StatRequest(object_id=self._object_id),
+          **self._grpc_kwargs,
+      )
+      self._total_size = stat_response.size
+    return self._stub.Get(
+        cas_service_pb2.GetRequest(object_id=self._object_id),
+        **self._grpc_kwargs,
+    )
+
+  def _discard_call(self) -> None:
+    """Cancels and forgets the active stream so the next pull re-opens it."""
+    call, self._call = self._call, None
+    if call is None:
+      return
+    # Real calls are grpc.Call objects; intercepted calls may be generators.
+    cancel = getattr(call, "cancel", None) or getattr(call, "close", None)
+    if callable(cancel):
+      cancel()
 
 
-def _prepare_retry(
-    exc: BaseException,
+def get_resumable_reader(
     object_id: str,
-    seeker: Optional[Seeker],
-    resume_offset: int,
-    consecutive_retries: int,
-    current_backoff: float,
-) -> None:
-  """Logs the retry attempt, rewinds seeker if needed, and sleeps.
-
-  Raises:
-    RuntimeError: If rewinding the seeker to the resume offset fails.
-  """
-  logging.warning(
-      "Transient error during CAS download of %r at offset %d: %s."
-      " Retrying (%d) in %.2fs...",
-      object_id,
-      resume_offset,
-      exc,
-      consecutive_retries,
-      current_backoff,
-  )
-
-  # sync the cursor before retrying
-  if seeker:
-    try:
-      seeker.seek(resume_offset)
-    except (OSError, io.UnsupportedOperation) as seek_err:
-      raise RuntimeError(
-          f"Failed to seek back on retry: {seek_err} (original error: {exc})"
-      ) from exc
-
-  time.sleep(random.uniform(0, current_backoff))
-
-
-def get_resumable(
+    *,
     cas_stub: cas_service_pb2_grpc.ContentAddressableStorageServiceStub,
-    object_id: str,
-    writer: BinaryWriter,
-    max_retries: int = 5,
+    start_offset: int = 0,
+    max_retries: int | None = 5,
     initial_backoff_sec: float = 0.1,
     max_backoff_sec: float = 2.0,
     backoff_multiplier: float = 1.5,
-    infinite_retries: bool = False,
-    grpc_metadata: Optional[Sequence[Tuple[str, str]]] = None,
-) -> int:
-  """Downloads an object with automatic chunk-level resumption on transient
-    failures.
+    grpc_metadata: Sequence[Tuple[str, str]] | None = None,
+) -> ResumableReader:
+  """Returns a ResumableReader streaming object_id from start_offset.
+
+  The underlying gRPC stream is opened lazily on the first read. Errors from the
+  CAS service are raised as unwrapped grpc.RpcError so that callers can inspect
+  their status code.
 
   Args:
-    cas_stub: Stub for the content-addressable storage service.
     object_id: CAS object ID.
-    writer: An object implementing write(bytes). If seekable, it will be rewound
-      to the current offset on retry.
-    max_retries: Maximum consecutive retries before failing (ignored if
-      infinite_retries is True).
+    cas_stub: Stub for the content-addressable storage service.
+    start_offset: Zero-based byte offset to start reading from.
+    max_retries: Maximum consecutive retries per chunk before failing. None
+      retries indefinitely.
     initial_backoff_sec: Initial backoff duration in seconds.
     max_backoff_sec: Maximum backoff duration in seconds.
     backoff_multiplier: Multiplier for exponential backoff.
-    infinite_retries: If True, retries indefinitely on retriable errors.
     grpc_metadata: Optional gRPC metadata to attach to each RPC. Note: any
       credentials passed here are static and will not be refreshed. If
       credentials need to be auto-updated (e.g. for long-running downloads that
@@ -225,11 +389,10 @@ def get_resumable(
       channel used to initialize cas_stub.
 
   Returns:
-    Total bytes written to the writer.
+    A ResumableReader. Close it (or use it as a context manager) when done.
 
   Raises:
-    RuntimeError / grpc.RpcError: If download fails permanently or retries are
-      exhausted.
+    ValueError: If cas_stub is None, start_offset < 0, or max_retries < 0.
 
   Example:
     To ensure credentials auto-refresh across long downloads (> 1 hour),
@@ -244,65 +407,22 @@ def get_resumable(
       org_info = auth.parse_info_from_string("<org>@<project>")
       with dialerutil.create_channel_from_org(org_info) as channel:
         stub = cas_service_pb2_grpc.ContentAddressableStorageServiceStub(channel)
-        client_helpers.get_resumable(stub, object_id, writer)
+        with client_helpers.get_resumable_reader(
+            object_id, cas_stub=stub
+        ) as reader:
+          with tarfile.open(fileobj=reader, mode="r|") as tar:
+            tar.extractall(dest_dir)
   """
-  start_offset = 0
-  seeker: Optional[Seeker] = writer if isinstance(writer, Seeker) else None
-  if seeker:
-    try:
-      start_offset = seeker.tell()
-    except (OSError, io.UnsupportedOperation) as e:
-      logging.warning("Writer is not seekable (tell() failed): %s", e)
-      seeker = None
-
-  counting_writer = _CountingWriter(writer)
-  consecutive_retries = 0
-  current_backoff = initial_backoff_sec
-
-  while True:
-    bytes_before = counting_writer.bytes_written
-    try:
-      current_offset = start_offset + bytes_before
-      get_range(
-          cas_stub,
-          object_id,
-          current_offset,
-          counting_writer,
-          grpc_metadata=grpc_metadata,
-      )
-      return counting_writer.bytes_written
-    except (grpc.RpcError, IncompleteDownloadError) as e:
-      if (
-          _grpc_status_code(e) == grpc.StatusCode.UNIMPLEMENTED
-          and start_offset == 0
-          and counting_writer.bytes_written == 0
-      ):
-        for chunk in get_iter(cas_stub, object_id, grpc_metadata):
-          counting_writer.write(chunk)
-        return counting_writer.bytes_written
-
-      if not _is_retriable(e):
-        raise
-
-      if counting_writer.bytes_written > bytes_before:
-        consecutive_retries = 0
-        current_backoff = initial_backoff_sec
-
-      consecutive_retries += 1
-      if not infinite_retries and consecutive_retries > max_retries:
-        raise
-
-      _prepare_retry(
-          exc=e,
-          object_id=object_id,
-          seeker=seeker,
-          resume_offset=start_offset + counting_writer.bytes_written,
-          consecutive_retries=consecutive_retries,
-          current_backoff=current_backoff,
-      )
-      current_backoff = min(
-          current_backoff * backoff_multiplier, max_backoff_sec
-      )
+  return ResumableReader(
+      object_id,
+      cas_stub=cas_stub,
+      start_offset=start_offset,
+      max_retries=max_retries,
+      initial_backoff_sec=initial_backoff_sec,
+      max_backoff_sec=max_backoff_sec,
+      backoff_multiplier=backoff_multiplier,
+      grpc_metadata=grpc_metadata,
+  )
 
 
 def get_iter(

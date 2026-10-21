@@ -72,20 +72,47 @@ std::string HdrModeToStr(const HdrMode hdr_mode) {
   return mode_name.erase(0, 1);
 }
 
+absl::Duration ClampAndRoundExposureTime(
+    absl::Duration exposure_time, absl::Duration min_exposure_time,
+    absl::Duration max_exposure_time, absl::Duration exposure_time_increment) {
+  exposure_time =
+      std::clamp(exposure_time, min_exposure_time, max_exposure_time);
+  if (exposure_time_increment <= absl::ZeroDuration()) {
+    return exposure_time;
+  }
+  return absl::Microseconds(ClampAndRoundToIncrement(
+      absl::ToDoubleMicroseconds(exposure_time),
+      CameraSettingProperties::Float{
+          .range =
+              CameraSettingProperties::Float::Range{
+                  .minimum = absl::ToDoubleMicroseconds(min_exposure_time),
+                  .maximum = absl::ToDoubleMicroseconds(max_exposure_time)},
+          .increment = absl::ToDoubleMicroseconds(exposure_time_increment)}));
+}
+
 }  // namespace
 
 SoftwareHdr::SoftwareHdr(absl::Duration min_exposure_time,
-                         absl::Duration max_exposure_time)
+                         absl::Duration max_exposure_time,
+                         absl::Duration exposure_time_increment)
     : min_exposure_time_(std::min(min_exposure_time, max_exposure_time)),
       max_exposure_time_(std::max(min_exposure_time, max_exposure_time)),
+      exposure_time_increment_(
+          std::max(exposure_time_increment, absl::ZeroDuration())),
       knee_point_exposure_percentages_(
           kKneePointExposurePercentagesPresetMedium.begin(),
           kKneePointExposurePercentagesPresetMedium.end()) {}
 
 SoftwareHdr::SoftwareHdr(
-    const CameraSettingProperties::Float::Range& exposure_time_range)
-    : SoftwareHdr(absl::Microseconds(exposure_time_range.minimum),
-                  absl::Microseconds(exposure_time_range.maximum)) {}
+    const CameraSettingProperties::Float& exposure_time_properties)
+    : SoftwareHdr(
+          exposure_time_properties.range.has_value()
+              ? absl::Microseconds(exposure_time_properties.range->minimum)
+              : absl::ZeroDuration(),
+          exposure_time_properties.range.has_value()
+              ? absl::Microseconds(exposure_time_properties.range->maximum)
+              : absl::InfiniteDuration(),
+          absl::Microseconds(exposure_time_properties.increment)) {}
 
 bool SoftwareHdr::CanHandleCameraSetting(std::string_view name) {
   return absl::c_any_of(
@@ -216,49 +243,44 @@ absl::Status SoftwareHdr::UpdateCameraSetting(
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::vector<CameraSetting>> SoftwareHdr::HdrExposureTimeSettings(
-    const CameraSetting& init_exposure_time) const {
-  if (init_exposure_time.name != genicam::kExposureTime) {
-    return ::intrinsic::InvalidArgumentErrorBuilder()
-           << "The passed camera setting must be named `"
-           << genicam::kExposureTime << "`.";
-  }
-  INTR_ASSIGN_OR_RETURN(const double init_exposure_time_us,
-                        GetValue<double>(init_exposure_time));
-
-  const absl::Duration base_exposure_time =
-      absl::Microseconds(init_exposure_time_us);
-
-  if (base_exposure_time !=
-      std::clamp(base_exposure_time, min_exposure_time_, max_exposure_time_)) {
+absl::StatusOr<std::vector<absl::Duration>> SoftwareHdr::HdrExposureTimes(
+    absl::Duration init_exposure_time) const {
+  if (init_exposure_time !=
+      std::clamp(init_exposure_time, min_exposure_time_, max_exposure_time_)) {
     return ::intrinsic::InvalidArgumentErrorBuilder()
            << "The initial exposure time must be between " << min_exposure_time_
            << " and " << max_exposure_time_ << ".";
   }
 
   if (multi_slope_mode_ == HdrMode::kOff) {
-    return std::vector<CameraSetting>{};
+    return std::vector<absl::Duration>{};
   }
+
+  init_exposure_time =
+      ClampAndRoundExposureTime(init_exposure_time, min_exposure_time_,
+                                max_exposure_time_, exposure_time_increment_);
 
   absl::btree_set<absl::Duration> sorted_unique_exposure_times;
   for (const double exposure_percentage : knee_point_exposure_percentages_) {
-    absl::Duration exposure_time =
-        std::clamp(exposure_percentage / 100.0 * base_exposure_time,
-                   min_exposure_time_, max_exposure_time_);
+    const absl::Duration exposure_time = ClampAndRoundExposureTime(
+        exposure_percentage / 100.0 * init_exposure_time, min_exposure_time_,
+        max_exposure_time_, exposure_time_increment_);
     if (exposure_time > absl::ZeroDuration() &&
-        absl::AbsDuration(exposure_time - base_exposure_time) >=
+        absl::AbsDuration(exposure_time - init_exposure_time) >=
             absl::Nanoseconds(1)) {
       sorted_unique_exposure_times.insert(exposure_time);
     }
   }
-  std::vector<CameraSetting> exposure_times;
-  exposure_times.reserve(sorted_unique_exposure_times.size());
-  for (const absl::Duration t : sorted_unique_exposure_times) {
-    // Update exposure time.
-    exposure_times.push_back({.name = genicam::kExposureTime,
-                              .value = CameraSetting::Float{
-                                  .value = absl::ToDoubleMicroseconds(t)}});
+  if (sorted_unique_exposure_times.empty()) {
+    return std::vector<absl::Duration>{};
   }
+
+  std::vector<absl::Duration> exposure_times;
+  exposure_times.reserve(sorted_unique_exposure_times.size() + 1);
+  exposure_times.push_back(init_exposure_time);
+  exposure_times.insert(exposure_times.end(),
+                        sorted_unique_exposure_times.begin(),
+                        sorted_unique_exposure_times.end());
   return exposure_times;
 }
 

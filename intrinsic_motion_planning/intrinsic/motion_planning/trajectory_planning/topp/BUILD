@@ -49,13 +49,13 @@ cc_library(
     hdrs = ["topp_polynomials.h"],
     deps = [
         ":topp_polynomial_roots",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:almost_equals",
         "//intrinsic_sdk/intrinsic/math:ipow",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
     ],
 )
 
@@ -67,12 +67,12 @@ cc_library(
         ":elliptic_integral",
         ":topp_polynomial_roots",
         ":topp_polynomials",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:ipow",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
     ],
 )
 
@@ -99,7 +99,7 @@ cc_library(
     deps = [
         ":bspline_squared_path_velocity_cc_proto",
         ":topp_trajectory_result_cc_proto",
-        "//intrinsic/util:fixed_vector",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
         "@abseil-cpp//absl/status:statusor",
     ],
 )
@@ -120,13 +120,13 @@ cc_library(
         "//intrinsic/math:time_series_utils",
         "//intrinsic/math/signals:gauss_legendre_quadrature",
         "//intrinsic/math/spline:bspline",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:almost_equals",
         "//intrinsic_sdk/intrinsic/math:ipow",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -157,10 +157,10 @@ cc_library(
     hdrs = ["integrate_squared_path_velocity_polynomial.h"],
     deps = [
         ":topp_polynomials",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_kinematics/intrinsic/kinematics/types:to_string",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:ipow",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -215,8 +215,6 @@ cc_library(
     hdrs = ["path_sample.h"],
     deps = [
         ":path_sample_cc_proto",
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/proto:cart_space_conversion",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
@@ -224,6 +222,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_cc_proto",
@@ -242,7 +242,6 @@ cc_library(
         ":topp_trajectory_result",
         "//intrinsic/math/spline:bspline_sampler",
         "//intrinsic/math/spline:uniform_between_knots_bspline_sampler",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/dynamics:rigid_body_interface",
         "//intrinsic_kinematics/intrinsic/kinematics:group",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
@@ -251,6 +250,7 @@ cc_library(
         "//intrinsic_motion_planning/intrinsic/motion_planning/trajectory_planning/path_refinement:path_refinement_utils",
         "//intrinsic_motion_planning/intrinsic/motion_planning/trajectory_planning/path_refinement:spline_based_path_refinement",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/types:span",
     ],
@@ -285,10 +285,11 @@ proto_library(
     # keep
     strip_import_prefix = "/intrinsic_motion_planning",
     deps = [
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/trajectory_planning/topp:bspline_squared_path_velocity_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/trajectory_planning/topp:piecewise_linear_squared_path_velocity_proto",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_proto",
-    ] + [],
+    ],
 )
 
 cc_proto_library(
@@ -308,7 +309,7 @@ cc_library(
         ":squared_path_velocity_interface",
         ":topp_trajectory_result_cc_proto",
         "//intrinsic/math:time_series_utils",
-        "//intrinsic/util:fixed_vector",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/types:span",
@@ -325,11 +326,12 @@ cc_library(
         ":reachability_node",
         ":squared_path_velocity_interface",
         ":topp_trajectory_result_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/proto:joint_trajectory_conversion",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_trajectories",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
-    ] + [],
+    ],
 )
 
 cc_library(
@@ -351,7 +353,6 @@ cc_library(
         ":path_sample",
         ":phase_space_cartesian_acceleration_two_norm_constraint",
         "//intrinsic/math:within_margin",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control/algorithms:joint_limit_checker",
         "//intrinsic_control/intrinsic/icon/dynamics:rigid_body_interface",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
@@ -371,6 +372,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:almost_equals",
         "//intrinsic_sdk/intrinsic/math:ipow",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -396,8 +398,8 @@ cc_library(
     deps = [
         ":topp_solver_commons",
         "//intrinsic/math/numopt:simplex",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/types:span",
@@ -466,6 +468,7 @@ go_proto_library(
     deps = [
         ":bspline_squared_path_velocity_go_proto",
         ":piecewise_linear_squared_path_velocity_go_proto",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_go_proto",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_go_proto",
-    ] + [],
+    ],
 )

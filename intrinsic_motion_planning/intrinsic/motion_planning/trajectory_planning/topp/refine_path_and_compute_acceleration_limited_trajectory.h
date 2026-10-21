@@ -66,6 +66,7 @@ ComputeRefinedPathForAccelerationLimitedTrajectory(
 //
 // Returns:
 //  A `PathAndTrajectory` containing the parameterized trajectory,
+//  fully populated motion events,  
 //  and refined path result.
 absl::StatusOr<PathAndTrajectory>
 RefinePathAndComputeAccelerationLimitedTrajectory(

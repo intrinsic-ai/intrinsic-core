@@ -18,6 +18,7 @@ package intrinsic_proto.skills;
 
 import "intrinsic/assets/proto/field_metadata.proto";
 import "intrinsic/assets/proto/v1/resolved_dependency.proto";
+import "intrinsic/icon/proto/v1/field_metadata.proto";
 import "intrinsic/motion_planning/proto/v1/geometric_constraints.proto";
 import "intrinsic/perception/proto/v1/camera_setup.proto";
 import "intrinsic/skills/proto/skills.proto";
@@ -65,6 +66,20 @@ message PreCalibrationParams {
 }
 
 message SampleCalibrationPosesParams {
+  // Robot used for calibration.
+  intrinsic_proto.assets.v1.ResolvedDependency robot = 10
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.icon.v1.IconApi",
+        skill_annotations: { fallback_manifest_dependency_key: "robot" }
+      }];
+
+  // Name of the ICON arm part to control. If not provided but only a single
+  // arm part is present in the ICON instance, that part will be used.
+  optional intrinsic_proto.world.ObjectReference arm_part = 8 [
+    (intrinsic_proto.assets.field_metadata) = { is_icon2_position_part: true },
+    (intrinsic_proto.icon.v1.field_metadata) = { resolved_at_runtime: "robot" }
+  ];
+
   // The `MotionPlannerService` (MPS) Asset specification.
   intrinsic_proto.assets.v1.ResolvedDependency
       motion_planner_service = 7 [(intrinsic_proto.assets.field_metadata)
@@ -116,12 +131,6 @@ message SampleCalibrationPosesParams {
   // make the execution of the skill quite slow, and therefore is not
   // recommended to use.
   optional int32 seed = 6;
-
-  // Name of the ICON arm part to control. If not provided but only a single
-  // arm part is present in the ICON instance, that part will be used.
-  optional intrinsic_proto.world.ObjectReference arm_part = 8 [
-    (intrinsic_proto.assets.field_metadata) = { is_icon2_position_part: true }
-  ];
 }
 
 message SampleCalibrationPosesResult {

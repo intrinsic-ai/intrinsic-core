@@ -15,7 +15,7 @@
 """Bazel rules and macros for packaging ML models as Intrinsic data assets."""
 
 load("@bazel_lib//lib:paths.bzl", "relative_file")
-load("//intrinsic/assets/data/build_defs:data.bzl", "intrinsic_data")
+load("//intrinsic_sdk/intrinsic/assets/data/build_defs:data.bzl", "intrinsic_data")
 
 def _intrinsic_mlmodel_manifest_impl(ctx):
     output_file = ctx.actions.declare_file(ctx.label.name + ".manifest.textproto")

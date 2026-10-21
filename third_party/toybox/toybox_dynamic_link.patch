@@ -1,0 +1,41 @@
+diff --git a/MODULE.bazel b/MODULE.bazel
+--- a/MODULE.bazel
++++ b/MODULE.bazel
+@@ -5,3 +5,5 @@
+ )
+ bazel_dep(name = "rules_cc", version = "0.1.1")
+ bazel_dep(name = "rules_license", version = "1.0.0")
++bazel_dep(name = "libxcrypt", version = "4.4.36.bcr.1")
++bazel_dep(name = "rules_coreutils", version = "1.0.2")
+diff --git a/BUILD b/BUILD
+--- a/BUILD
++++ b/BUILD
+@@ -57,7 +57,10 @@ cc_library(
+         "lib/portability.h",
+     ],
+     visibility = ["//visibility:private"],
+-    deps = [":generated_lib"],
++    deps = [
++        ":generated_lib",
++        "@libxcrypt",
++    ],
+ )
+ 
+ cc_library(
+@@ -92,16 +95,11 @@ cc_binary(
+     name = "toybox",
+     srcs = ["main.c"],
+     copts = COPTS,
+-    features = [
+-        "fully_static_link",
+-        "static_pie",
+-    ],
+     linkopts = [
+         "-s",
+         "-Wl,--no-export-dynamic",
+         "-Wl,--gc-sections",
+         "-Wl,--as-needed",
+-        "-lcrypt",
+         "-lutil",
+         "-lm",
+     ],

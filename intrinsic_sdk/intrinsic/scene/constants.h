@@ -27,7 +27,7 @@ namespace scene_object {
 constexpr absl::string_view kSceneObjectAssetUserDataKey =
     "FLOWSTATE_ASSET_USER_DATA";
 // LINT.ThenChange(
-// //intrinsic/frontend/world_viewer/utils/world_ids.ts
+// //intrinsic/frontend/world_viewer/core/model/world_ids.ts
 // )
 constexpr int kSceneObjectNumReservedUserDataKeys = 4;
 constexpr std::array<absl::string_view, kSceneObjectNumReservedUserDataKeys>

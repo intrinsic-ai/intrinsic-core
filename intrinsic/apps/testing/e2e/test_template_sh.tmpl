@@ -19,6 +19,10 @@ source "$(rlocation "intrinsic-core/intrinsic/apps/testing/e2e/app_e2e_test.sh")
 
 readonly INTRINSIC_SOLUTION="$(rlocation "{{.Solution}}")"
 readonly OPERATION_MODE="{{.OperationMode}}"
+readonly RUN_AS_SERVICE="{{.RunAsService}}"
+{{if .ServiceBundle}}readonly SERVICE_BUNDLE="$(rlocation "{{.ServiceBundle}}")"{{else}}readonly SERVICE_BUNDLE=""{{end}}
+readonly SERVICE_ID="{{.ServiceId}}"
+readonly SERVICE_NAME="{{.ServiceName}}"
 
 {{define "join_quoted_escaped" -}}
 {{/* Escapes quotes within elements and quote each element as a whole by using %q. Then join using spaces. */ -}}

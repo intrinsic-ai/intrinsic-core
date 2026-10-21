@@ -24,5 +24,6 @@ go_library(
     visibility = [
         "//intrinsic/tools/inctl/cmd/cluster:__subpackages__",
         "//incode/cloud/devicemanager:__subpackages__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/cluster:__subpackages__",
     ],
 )

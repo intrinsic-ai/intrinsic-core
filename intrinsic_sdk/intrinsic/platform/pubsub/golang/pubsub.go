@@ -34,6 +34,7 @@
 package pubsub
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"flag"
@@ -49,6 +50,7 @@ import (
 
 	"github.com/cenkalti/backoff/v4"
 	log "github.com/golang/glog"
+	"golang.org/x/time/rate"
 	"google.golang.org/protobuf/proto"
 
 	pubsubpb "intrinsic/platform/pubsub/adapters/pubsub_go_proto"
@@ -79,6 +81,8 @@ void intrinsic_ImwLivelinessOnDoneCallback(void*, void*);
 import "C"
 
 var (
+	logDeprecatedHighConsistencyWarning = rate.Sometimes{Interval: 10 * time.Second}
+
 	zenohRouter = flag.String(
 		"zenoh_router",
 		"",
@@ -90,16 +94,26 @@ var (
 )
 
 const (
-	highConsistencyTimeout           = 30 * time.Second
+	// Default budget for verification polling when no deadline is set on ctx,
+	// and frozen timeout for the deprecated Set/SetAny highConsistency=true path.
+	defaultVerificationTimeout = 30 * time.Second
+
+	// Maximum timeout for the pre-write initial read under HighConsistency mode.
+	// Clamped to the caller's remaining context deadline if shorter.
 	highConsistencyInitialGetTimeout = 10 * time.Second
-	highConsistencyGetTimeout        = 100 * time.Millisecond
-	highConsistencyRetryDelayMin     = 10 * time.Millisecond
-	highConsistencyRetryDelayMax     = 2500 * time.Millisecond
-	highConsistencyRetryDelayFactor  = 5
-	defaultKeyPrefix                 = "kv_store"
-	replicationKeyPrefix             = "kv_store_repl"
-	workcellInfoKey                  = "workcell_info"
-	globalReplicationNamespace       = "global"
+
+	// Per-poll query timeout during verification polling (clamped to remaining deadline).
+	verificationGetTimeout       = 100 * time.Millisecond
+	verificationRetryDelayMin    = 10 * time.Millisecond
+	verificationRetryDelayMax    = 2500 * time.Millisecond
+	verificationRetryDelayFactor = 5
+
+	payloadByteSizeWarningThreshold = 25 * 1024 * 1024 // 25 MiB
+
+	defaultKeyPrefix           = "kv_store"
+	replicationKeyPrefix       = "kv_store_repl"
+	workcellInfoKey            = "workcell_info"
+	globalReplicationNamespace = "global"
 )
 
 // NewPubSub creates a new PubSub adapter if possible. Returns either a valid handle
@@ -618,7 +632,7 @@ func (kv *kvStoreHandle) addKeyPrefix(key string) string {
 	return keyPrefix + "/" + key
 }
 
-func (kv *kvStoreHandle) Set(key string, value proto.Message, highConsistency bool) error {
+func (kv *kvStoreHandle) SetWithVerification(ctx context.Context, key string, value proto.Message, opts ...kvstore.SetWithVerificationOption) error {
 	valueAny, ok := value.(*anypb.Any)
 	if !ok {
 		var err error
@@ -628,89 +642,187 @@ func (kv *kvStoreHandle) Set(key string, value proto.Message, highConsistency bo
 		}
 	}
 
-	return kv.SetAny(key, valueAny, highConsistency)
+	return kv.SetAnyWithVerification(ctx, key, valueAny, opts...)
 }
 
-func (kv *kvStoreHandle) SetAny(key string, valueAny *anypb.Any, highConsistency bool) error {
+func verificationContextErr(ctx context.Context, key string) error {
+	if err := ctx.Err(); err != nil {
+		if errors.Is(err, context.DeadlineExceeded) {
+			return fmt.Errorf("timeout waiting for verification for key %q: %w", key, kvstore.ErrDeadlineExceeded)
+		}
+		return err
+	}
+	return nil
+}
+
+func (kv *kvStoreHandle) SetAnyWithVerification(ctx context.Context, key string, valueAny *anypb.Any, opts ...kvstore.SetWithVerificationOption) error {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	if _, ok := ctx.Deadline(); !ok {
+		var cancel context.CancelFunc
+		ctx, cancel = context.WithTimeout(ctx, defaultVerificationTimeout)
+		defer cancel()
+	}
+
+	options := kvstore.SetWithVerificationOptions{
+		Mode: kvstore.HighConsistency,
+	}
+	for _, opt := range opts {
+		opt(&options)
+	}
+	switch options.Mode {
+	case kvstore.HighConsistency, kvstore.FirstReply:
+	default:
+		return fmt.Errorf("unsupported verification mode: %v", options.Mode)
+	}
+
+	if err := validZenohKey(key); err != nil {
+		return err
+	}
+	if err := verificationContextErr(ctx, key); err != nil {
+		return err
+	}
+
+	prefixedKey := kv.addKeyPrefix(key)
+	log.Infof("KVStore SetWithVerification for key: %s", prefixedKey)
+	valueBytes, err := proto.Marshal(valueAny)
+	if err != nil {
+		return err
+	}
+	if len(valueBytes) > payloadByteSizeWarningThreshold {
+		log.Warningf("Setting value with large byte size (actual: %d, threshold: %d) for key %q. This can lead to performance issues.", len(valueBytes), payloadByteSizeWarningThreshold, key)
+	}
+
+	var initialBytes []byte
+	var hasInitialValue bool
+	if options.Mode == kvstore.HighConsistency {
+		timeout := highConsistencyInitialGetTimeout
+		initialBytes, err = kv.getRawBytes(ctx, prefixedKey, &timeout)
+		if err == nil {
+			hasInitialValue = true
+		} else if !errors.Is(err, kvstore.ErrNotFound) {
+			// If the initial read failed for another reason (e.g. timeout),
+			// we log a warning and proceed without an initial value.
+			// Leaving hasInitialValue as false means that if a value actually
+			// existed in the store and we couldn't read it, the verification
+			// loop will treat any non-matching value as a conflict and abort.
+			log.Warningf("Initial read failed during high consistency check for key %q: %v", key, err)
+			hasInitialValue = false
+		}
+	}
+
+	if err := verificationContextErr(ctx, key); err != nil {
+		return err
+	}
+	if err := kv.zenohHandle.ImwSet(prefixedKey, valueBytes); err != nil {
+		return err
+	}
+
+	return kv.waitForVerification(ctx, prefixedKey, key, valueBytes, initialBytes, hasInitialValue, options)
+}
+
+// TODO(methyldragon): Remove the deprecated highConsistency parameter so the two-argument
+// Set(key, value) signature becomes the canonical unverified write API.
+func (kv *kvStoreHandle) Set(key string, value proto.Message, highConsistency ...bool) error {
+	valueAny, ok := value.(*anypb.Any)
+	if !ok {
+		var err error
+		valueAny, err = anypb.New(value)
+		if err != nil {
+			return err
+		}
+	}
+
+	return kv.SetAny(key, valueAny, highConsistency...)
+}
+
+// TODO(methyldragon): Remove the deprecated highConsistency parameter so the two-argument
+// SetAny(key, valueAny) signature becomes the canonical unverified write API.
+func (kv *kvStoreHandle) SetAny(key string, valueAny *anypb.Any, highConsistency ...bool) error {
+	if len(highConsistency) > 1 {
+		return fmt.Errorf("at most one highConsistency value may be specified, got %d", len(highConsistency))
+	}
+	useHighConsistency := false
+	if len(highConsistency) > 0 {
+		useHighConsistency = highConsistency[0]
+	}
+
+	if useHighConsistency {
+		logDeprecatedHighConsistencyWarning.Do(func() {
+			log.Warning("Passing highConsistency to Set() or SetAny() is deprecated. Use SetWithVerification() or SetAnyWithVerification() instead.")
+		})
+		ctx, cancel := context.WithTimeout(context.Background(), defaultVerificationTimeout)
+		defer cancel()
+		return kv.SetAnyWithVerification(ctx, key, valueAny)
+	}
+
+	if err := validZenohKey(key); err != nil {
+		return err
+	}
+
 	prefixedKey := kv.addKeyPrefix(key)
 	log.Infof("KVStore Set for key: %s", prefixedKey)
 	valueBytes, err := proto.Marshal(valueAny)
 	if err != nil {
 		return err
 	}
-
-	var initialValue *anypb.Any
-	if highConsistency {
-		timeout := highConsistencyInitialGetTimeout
-		var err error
-		initialValue, err = kv.Get(key, &timeout)
-		if err != nil && !errors.Is(err, kvstore.ErrNotFound) {
-			// If the initial read fails due to a transient error (e.g. deadline exceeded),
-			// we intentionally leave initialValue empty (nil). This ensures that if
-			// the key was already populated, our conflict check later will see the pre-existing
-			// value and abort the operation. The caller can then retry the set idempotently.
-			// This is preferred over skipping the conflict check.
-			log.Warningf("Initial read failed during high consistency check for key %q: %v", key, err)
-			initialValue = nil
-		}
+	if len(valueBytes) > payloadByteSizeWarningThreshold {
+		log.Warningf("Setting value with large byte size (actual: %d, threshold: %d) for key %q. This can lead to performance issues.", len(valueBytes), payloadByteSizeWarningThreshold, key)
 	}
 
-	if err := kv.zenohHandle.ImwSet(kv.addKeyPrefix(key), valueBytes); err != nil {
-		return err
-	}
-
-	if highConsistency {
-		return kv.waitForHighConsistency(context.Background(), key, valueAny, initialValue)
-	}
-	return nil
+	return kv.zenohHandle.ImwSet(prefixedKey, valueBytes)
 }
 
-// fetchCurrentState returns the current state of a key based on the output of a Get operation.
-// Returning (nil, nil) represents an unset key (kvstore.ErrNotFound), while returning
+// fetchCurrentRawState returns the current raw byte state of a key based on the output of a getRawBytes operation.
+// The boolean return value indicates whether the key exists in the store.
+// Returning (nil, false, nil) represents an unset key (kvstore.ErrNotFound), while returning
 // a non-nil error indicates a transient failure or unexpected state.
-func fetchCurrentState(key string, currentValue *anypb.Any, err error) (*anypb.Any, error) {
+func fetchCurrentRawState(key string, currentBytes []byte, err error) ([]byte, bool, error) {
 	switch {
 	case err == nil:
 		// Value exists.
-		return currentValue, nil
+		return currentBytes, true, nil
 	case errors.Is(err, kvstore.ErrNotFound):
 		// Value does not exist (unset).
-		return nil, nil
+		return nil, false, nil
 	case errors.Is(err, kvstore.ErrDeadlineExceeded):
 		// Transient network timeout reading value. Propagate to retry.
-		return nil, err
+		return nil, false, err
 	default:
-		return nil, fmt.Errorf("failed to read current state for key %q during high consistency check: %w", key, err)
+		return nil, false, fmt.Errorf("failed to read current state for key %q during verification check: %w", key, err)
 	}
 }
 
-// waitForHighConsistency polls the KVStore until the specified key converges to the given valueAny.
+// waitForVerification polls the KVStore until the specified key converges to the given valueBytes.
 //
-// It uses exponential backoff internally via the backoff library and fails if the operation
-// takes longer than highConsistencyTimeout.
-// It aborts with kvstore.ErrAborted if the value changes to a value other than the newly-written
-// valueAny, indicating a race condition with other writers (using initialValue to know what the
+// It uses exponential backoff internally via the backoff library until ctx expires or is canceled.
+// Under HighConsistency mode, it aborts with kvstore.ErrAborted if the value changes to a value other than the newly-written
+// valueBytes, indicating a race condition with other writers (using initialBytes/hasInitialValue to know what the
 // key started with).
+// Under FirstReply mode, it just returns as soon as any value exists.
 //
 // Returns kvstore.ErrDeadlineExceeded if the value did not converge in time.
-func (kv *kvStoreHandle) waitForHighConsistency(parentCtx context.Context, key string, valueAny *anypb.Any, initialValue *anypb.Any) error {
-	if parentCtx == nil {
-		parentCtx = context.Background()
+func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey string, key string, valueBytes []byte, initialBytes []byte, hasInitialValue bool, options kvstore.SetWithVerificationOptions) error {
+	if ctx == nil {
+		ctx = context.Background()
 	}
-	ctx, cancel := context.WithTimeout(parentCtx, highConsistencyTimeout)
-	defer cancel()
 
 	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = highConsistencyRetryDelayMin
-	b.MaxInterval = highConsistencyRetryDelayMax
-	b.Multiplier = highConsistencyRetryDelayFactor
+	b.InitialInterval = verificationRetryDelayMin
+	b.MaxInterval = verificationRetryDelayMax
+	b.Multiplier = verificationRetryDelayFactor
 	b.MaxElapsedTime = 0 // Handled by ctx timeout
 
 	operation := func() error {
-		timeout := highConsistencyGetTimeout
-		currentValue, err := kv.Get(key, &timeout)
+		if err := ctx.Err(); err != nil {
+			return backoff.Permanent(err)
+		}
 
-		currentState, err := fetchCurrentState(key, currentValue, err)
+		timeout := verificationGetTimeout
+		currentBytes, err := kv.getRawBytes(ctx, prefixedKey, &timeout)
+
+		stateBytes, exists, err := fetchCurrentRawState(key, currentBytes, err)
 		if err != nil {
 			if errors.Is(err, kvstore.ErrDeadlineExceeded) {
 				return err // Retryable
@@ -718,12 +830,20 @@ func (kv *kvStoreHandle) waitForHighConsistency(parentCtx context.Context, key s
 			return backoff.Permanent(err)
 		}
 
-		if proto.Equal(currentState, valueAny) {
+		if options.Mode == kvstore.FirstReply {
+			if exists {
+				return nil
+			}
+			return kvstore.ErrDeadlineExceeded
+		}
+
+		// HighConsistency mode
+		if exists && bytes.Equal(stateBytes, valueBytes) {
 			// Key value is committed.
 			return nil
 		}
 
-		if !proto.Equal(currentState, initialValue) {
+		if exists != hasInitialValue || (exists && !bytes.Equal(stateBytes, initialBytes)) {
 			return backoff.Permanent(fmt.Errorf("value for key %q was modified by another process while waiting for high consistency: %w", key, kvstore.ErrAborted))
 		}
 
@@ -736,10 +856,10 @@ func (kv *kvStoreHandle) waitForHighConsistency(parentCtx context.Context, key s
 			return err
 		}
 
-		if errors.Is(ctx.Err(), context.DeadlineExceeded) || errors.Is(err, context.DeadlineExceeded) || errors.Is(err, kvstore.ErrDeadlineExceeded) {
-			return fmt.Errorf("timeout waiting for high consistency for key %q: %w", key, kvstore.ErrDeadlineExceeded)
+		if errors.Is(ctx.Err(), context.Canceled) {
+			return ctx.Err()
 		}
-		return err
+		return fmt.Errorf("timeout waiting for verification for key %q: %w", key, kvstore.ErrDeadlineExceeded)
 	}
 	return nil
 }
@@ -819,14 +939,14 @@ func (kv *kvStoreHandle) GetAll(key string, valueCallback func(*anypb.Any), ondo
 	queryCallback := func(keyexpr string, bytes []byte) {
 		valueCallback(value(bytes))
 	}
-	return kv.query(kv.addKeyPrefix(key), queryCallback, ondoneCallback)
+	return kv.query(kv.addKeyPrefix(key), queryCallback, ondoneCallback, nil)
 }
 
 func (kv *kvStoreHandle) ListAllKeys(key string, keyCallback func(string), ondoneCallback func(string)) (kvstore.KVQuery, error) {
 	queryCallback := func(keyexpr string, bytes []byte) {
 		keyCallback(keyexpr)
 	}
-	return kv.query(kv.addKeyPrefix(key), queryCallback, ondoneCallback)
+	return kv.query(kv.addKeyPrefix(key), queryCallback, ondoneCallback, nil)
 }
 
 func value(bytes []byte) *anypb.Any {
@@ -842,7 +962,7 @@ func value(bytes []byte) *anypb.Any {
 //
 // This function is not exported because the raw keys contain prefixes not known
 // to the client code, such as `kv_store` or `kv_store_repl`.
-func (kv *kvStoreHandle) query(rawKey string, queryCallback func(keyexpr string, bytes []byte), ondoneCallback func(string)) (kvstore.KVQuery, error) {
+func (kv *kvStoreHandle) query(rawKey string, queryCallback func(keyexpr string, bytes []byte), ondoneCallback func(string), timeout *time.Duration) (kvstore.KVQuery, error) {
 	var qh *queryHandle
 	qh = &queryHandle{
 		query: queryCallback,
@@ -852,7 +972,13 @@ func (kv *kvStoreHandle) query(rawKey string, queryCallback func(keyexpr string,
 	}
 	qh.handle = cgo.NewHandle(qh)
 
-	if err := kv.zenohHandle.ImwQuery(rawKey, qh); err != nil {
+	var timeoutMs uint64
+	if timeout != nil && *timeout > 0 {
+		timeoutMs = uint64(max(timeout.Milliseconds(), 1))
+	}
+
+	if err := kv.zenohHandle.ImwQuery(rawKey, qh, timeoutMs); err != nil {
+		qh.handle.Delete()
 		return nil, err
 	}
 
@@ -891,21 +1017,61 @@ func (kv *kvStoreHandle) Get(key string, timeout *time.Duration) (*anypb.Any, er
 // This function is not exported because the raw keys contain prefixes not known
 // to the client code, such as `kv_store` or `kv_store_repl`.
 func (kv *kvStoreHandle) getRaw(rawKey string, timeout *time.Duration) (*anypb.Any, error) {
-	ctx := context.Background()
+	bytes, err := kv.getRawBytes(context.Background(), rawKey, timeout)
+	if err != nil {
+		return nil, err
+	}
+	val := &anypb.Any{}
+	if err := proto.Unmarshal(bytes, val); err != nil {
+		return nil, fmt.Errorf("failed to unmarshal value for %q: %w", rawKey, err)
+	}
+	return val, nil
+}
 
+func rawQueryContextErr(ctx context.Context, rawKey string) error {
+	err := ctx.Err()
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("timeout waiting for %q: %w", rawKey, kvstore.ErrDeadlineExceeded)
+	}
+	return fmt.Errorf("context canceled while waiting for %q: %w", rawKey, err)
+}
+
+// getRawBytes returns the raw bytes for the given key.
+// The key is used as-is, i.e. no prefixes are added to it.
+func (kv *kvStoreHandle) getRawBytes(ctx context.Context, rawKey string, timeout *time.Duration) ([]byte, error) {
+	if ctx == nil {
+		ctx = context.Background()
+	}
+	var cancel context.CancelFunc
 	if timeout != nil {
-		ctx, _ = context.WithTimeout(ctx, *timeout)
+		ctx, cancel = context.WithTimeout(ctx, *timeout)
+		defer cancel()
+	}
+	if err := rawQueryContextErr(ctx, rawKey); err != nil {
+		return nil, err
+	}
+
+	var effectiveTimeout *time.Duration
+	if deadline, ok := ctx.Deadline(); ok {
+		// Pad the C-level Zenoh query timeout so Go's ctx.Done() is the sole
+		// timeout authority and never loses a sub-millisecond truncation race
+		// against onDoneCallback, while still bounding query handle cleanup.
+		cTimeout := max(time.Until(deadline), 0) + 250*time.Millisecond
+		effectiveTimeout = &cTimeout
 	}
 
 	// queryResult represents the final outcome of processing a query.
-	// That outcome may be a value obtained from the KV store, or an error.
+	// That outcome may be raw bytes obtained from the KV store, or an error.
 	type queryResult struct {
-		result *anypb.Any
+		result []byte
 		err    error
 	}
 
 	// Channel for query results.
-	resultCh := make(chan *queryResult)
+	resultCh := make(chan *queryResult, 1)
 
 	// Channel for notifying the goroutine executing the query that the query can be
 	// closed. The query can only be closed after it completes, so a value is pushed
@@ -914,7 +1080,7 @@ func (kv *kvStoreHandle) getRaw(rawKey string, timeout *time.Duration) (*anypb.A
 
 	var once sync.Once
 
-	sendFirstQueryResult := func(result *anypb.Any, err error) {
+	sendFirstQueryResult := func(result []byte, err error) {
 		once.Do(func() {
 			resultCh <- &queryResult{result: result, err: err}
 		})
@@ -926,26 +1092,30 @@ func (kv *kvStoreHandle) getRaw(rawKey string, timeout *time.Duration) (*anypb.A
 		// wildcards), then this behavior is always correct.
 		// If the `key` parameter contains wildcards, then the first value
 		// passed to this callback will be returned to the caller of `Get`.
-		sendFirstQueryResult(value(bytes), nil /* error */)
+		sendFirstQueryResult(bytes, nil /* error */)
 	}
 
 	onDoneCallback := func(keyexpr string) {
-		sendFirstQueryResult(
-			nil, /* result */
-			fmt.Errorf("%q not found: %w", rawKey, kvstore.ErrNotFound))
+		if err := rawQueryContextErr(ctx, rawKey); err != nil {
+			sendFirstQueryResult(nil /* result */, err)
+		} else {
+			sendFirstQueryResult(
+				nil, /* result */
+				fmt.Errorf("%q not found: %w", rawKey, kvstore.ErrNotFound))
+		}
 		canCloseQueryCh <- struct{}{}
 	}
 
 	// Starting the query in a separate goroutine. Callbacks will be called
 	// in that goroutine.
 	go func() {
-		query, err := kv.query(rawKey, queryCallback, onDoneCallback)
+		query, err := kv.query(rawKey, queryCallback, onDoneCallback, effectiveTimeout)
 		if err != nil {
 			sendFirstQueryResult(nil /* result */, err)
 			return
 		}
 		// When a value for the given key exists in the KV store,
-		// kv.query is blocks until the query completes. But when there is
+		// kv.query blocks until the query completes. But when there is
 		// no value, kv.query may return before onDoneCallback is called.
 		// We need to keep the query alive until all callbacks are called,
 		// otherwise, we'll get a "use of invalid handle" error.
@@ -953,15 +1123,13 @@ func (kv *kvStoreHandle) getRaw(rawKey string, timeout *time.Duration) (*anypb.A
 		query.Close()
 	}()
 
-	for {
-		select {
-		case result := <-resultCh:
-			return result.result, result.err
-		case _ = <-ctx.Done():
-			go sendFirstQueryResult(
-				nil, /* result */
-				fmt.Errorf("timeout waiting for %q: %w", rawKey, kvstore.ErrDeadlineExceeded))
-		}
+	select {
+	case result := <-resultCh:
+		return result.result, result.err
+	case <-ctx.Done():
+		sendFirstQueryResult(nil /* result */, rawQueryContextErr(ctx, rawKey))
+		result := <-resultCh
+		return result.result, result.err
 	}
 }
 
@@ -1086,7 +1254,7 @@ type zenohHandle interface {
 	ImwDestroyLivelinessSubscription(keyExpr string, sub *livelinessSubscriptionHandle) error
 	ImwLivelinessGet(keyExpr string, query *livelinessQueryHandle) error
 	ImwSet(keyExpr string, value []byte) error
-	ImwQuery(keyExpr string, query *queryHandle) error
+	ImwQuery(keyExpr string, query *queryHandle, timeoutMs uint64) error
 	ImwCreateQueryable(keyExpr string, queryable *queryableHandle, isRosService bool) error
 	ImwDestroyQueryable(keyExpr string, queryable *queryableHandle) error
 	ImwQueryableReply(queryContext unsafe.Pointer, keyExpr string, reply []byte) error
@@ -1124,11 +1292,9 @@ func getZenohHandle() (zenohHandle, error) {
 // no active PubSub handles or child entities (publishers, subscriptions,
 // queryables) remain.
 func DestroySessionWhenUnused() error {
-	zenohHandleMutex.Lock()
-	zh := globalZenohHandle
-	zenohHandleMutex.Unlock()
-	if zh == nil {
-		return nil
+	zh, err := getZenohHandle()
+	if err != nil {
+		return err
 	}
 	return zh.ImwDestroySessionWhenUnused()
 }
@@ -1354,11 +1520,11 @@ func (z *zenohHandleImpl) ImwSet(keyExpr string, value []byte) error {
 	return nil
 }
 
-func (z *zenohHandleImpl) ImwQuery(keyExpr string, query *queryHandle) error {
+func (z *zenohHandleImpl) ImwQuery(keyExpr string, query *queryHandle, timeoutMs uint64) error {
 	keyExprString := C.CString(keyExpr)
 	defer C.free(unsafe.Pointer(keyExprString))
 
-	if res := C.ZenohHandleImwQuery(z.ptr, keyExprString, C.zenoh_handle_imw_query_callback_fn(C.intrinsic_ImwQueryStaticCallback), C.zenoh_handle_imw_query_on_done_fn(C.intrinsic_ImwQueryDoneStaticCallback), nil, 0, unsafe.Pointer(&query.handle), C.uint64_t(0), false); res != 0 {
+	if res := C.ZenohHandleImwQuery(z.ptr, keyExprString, C.zenoh_handle_imw_query_callback_fn(C.intrinsic_ImwQueryStaticCallback), C.zenoh_handle_imw_query_on_done_fn(C.intrinsic_ImwQueryDoneStaticCallback), nil, 0, unsafe.Pointer(&query.handle), C.uint64_t(timeoutMs), false); res != 0 {
 		return errorFromImwRet(res)
 	}
 

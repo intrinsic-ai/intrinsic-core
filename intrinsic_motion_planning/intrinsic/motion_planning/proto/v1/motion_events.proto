@@ -1,0 +1,67 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.motion_planning.v1;
+
+import "google/protobuf/any.proto";
+import "google/protobuf/duration.proto";
+
+option go_package = "intrinsic/motion_planning/proto/v1/motion_events_go_proto";
+
+// Describes the offset of a motion event from a motion target.
+// Offset definitions are aligned with the natural progress along the motion.
+// Example:
+// 200 ms time offset means "200 ms _after_ reaching a keypoint".
+// -300 ms time offset means "300 ms _before_ reaching a keypoint".
+message MotionEventOffset {
+  oneof offset {
+    google.protobuf.Duration time = 1;
+    double cartesian_arc_length_meters = 2;
+  }
+}
+
+// A motion-segment specific definition of motion event placement (relative to
+// start and end of the motion segment).
+message MotionEventSegmentLocation {
+  enum DefinedRelativeTo {
+    UNKNOWN = 0;
+    SEGMENT_START = 1;
+    SEGMENT_TARGET = 2;
+  }
+  DefinedRelativeTo relative_to = 1;
+  MotionEventOffset event_offset = 2;
+}
+
+// Uniquely defines an event location (keypoint) along the trajectory.
+message Keypoint {
+  // Offset of the event from the keypoint. This offset is defined relative to
+  // keypoint_cartesian_arc_length_from_start_meters or keypoint_time_from_start
+  // depending on the event_offset type.
+  MotionEventOffset event_offset = 1;
+  // Cartesian path distance variable where the keypoint is placed.
+  double keypoint_cartesian_arc_length_from_start_meters = 2;
+  // Time variable where the keypoint is placed.
+  google.protobuf.Duration keypoint_time_from_start = 3;
+  // Joint path variable where the keypoint is placed.
+  double keypoint_joint_path_variable_from_start = 4;
+}
+
+// A MotionEvent is composed of a motion keypoint that defines a unique point
+// along the motion trajectory and an event that is triggered at that point.
+message MotionEvent {
+  Keypoint keypoint = 1;
+  google.protobuf.Any event = 2;
+}

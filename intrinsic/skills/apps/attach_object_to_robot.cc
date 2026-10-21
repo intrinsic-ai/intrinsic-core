@@ -15,6 +15,7 @@
 #include "intrinsic/skills/apps/attach_object_to_robot.h"
 
 #include <memory>
+#include <optional>
 
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
@@ -28,12 +29,32 @@
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/world/objects/kinematic_object.h"
 #include "intrinsic/world/objects/object_entity_filter.h"
 #include "intrinsic/world/objects/object_world_client.h"
 #include "intrinsic/world/objects/world_object.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
 
 namespace intrinsic::skills {
+namespace {
+
+// Returns the entity filter to use when attaching an object to `gripper`.
+// If `gripper` is a robot arm (indicated by having an ISO flange frame),
+// attach to its final entity (the flange) rather than the stationary base.
+// Otherwise (e.g., for single- or multi-finger grippers whose base is already
+// mounted to the robot flange), attach to its base entity.
+world::ObjectEntityFilter GetAttachmentEntityFilter(
+    const world::WorldObject& gripper) {
+  std::optional<world::KinematicObject> kinematic_object =
+      world::KinematicObject::FromTransformNode(gripper);
+  if (kinematic_object.has_value() &&
+      !kinematic_object->IsoFlangeFrameIds().empty()) {
+    return world::ObjectEntityFilter().IncludeFinalEntity();
+  }
+  return world::ObjectEntityFilter().IncludeBaseEntity();
+}
+
+}  // namespace
 
 std::unique_ptr<SkillInterface> AttachObjectToRobotSkill::CreateSkill() {
   return std::make_unique<AttachObjectToRobotSkill>();
@@ -74,7 +95,7 @@ AttachObjectToRobotSkill::ExecuteImpl(
                         world.GetObject(params.object_entity()));
 
   INTR_RETURN_IF_ERROR(world.ReparentObject(
-      object, gripper, world::ObjectEntityFilter().IncludeFinalEntity()));
+      object, gripper, GetAttachmentEntityFilter(gripper)));
   INTR_RETURN_IF_ERROR(world.DisableCollisions(object, gripper));
 
   if (params.has_gripper_t_object()) {
@@ -121,7 +142,7 @@ AttachObjectToRobotSkill::Preview(const PreviewRequest& request,
   *reparent_object->mutable_object() = object.ObjectReference();
   *reparent_object->mutable_new_parent() =
       gripper.ObjectReferenceWithEntityFilter(
-          world::ObjectEntityFilter().IncludeFinalEntity());
+          GetAttachmentEntityFilter(gripper));
   INTR_RETURN_IF_ERROR(context.RecordWorldUpdate(
       reparent_update, absl::ZeroDuration(), absl::ZeroDuration()));
 

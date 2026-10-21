@@ -16,6 +16,7 @@
 #define INTRINSIC_PERCEPTION_CALIBRATION_SERVICES_V1_CALIBRATION_SERVICE_IMPL_H_
 
 #include <cstdint>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,13 +28,16 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/types/span.h"
 #include "google/longrunning/operations.grpc.pb.h"
 #include "google/protobuf/empty.pb.h"
+#include "google/protobuf/repeated_ptr_field.h"
 #include "grpcpp/channel.h"
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
 #include "intrinsic/assets/proto/asset_deployment.grpc.pb.h"
 #include "intrinsic/assets/proto/v1/asset_instances.grpc.pb.h"
+#include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/calibration/pattern_detector.h"
 #include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/core/camera_params.h"
@@ -45,8 +49,10 @@
 #include "intrinsic/perception/proto/v1/calibration_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/calibration_service.pb.h"
 #include "intrinsic/perception/proto/v1/camera_setup.pb.h"
+#include "intrinsic/perception/proto/v1/capture_data.pb.h"
 #include "intrinsic/perception/proto/v1/pattern_detection_config.pb.h"
 #include "intrinsic/perception/proto/v1/pattern_detection_result.pb.h"
+#include "intrinsic/perception/storage/capture_result_storage.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/resources/proto/resource_handle.pb.h"
 #include "intrinsic/util/grpc/connection_params.h"
@@ -72,7 +78,7 @@ class CalibrationServiceImpl final
           asset_deployment_service_stub,
       std::shared_ptr<intrinsic_proto::world::ObjectWorldService::StubInterface>
           object_world_service_stub = nullptr,
-      std::unique_ptr<KeyValueStore> kvstore = nullptr);
+      KeyValueStoreFactory kvstore_factory = CreateKeyValueStoreFactory());
 
   grpc::Status Initialize(
       grpc::ServerContext* context,
@@ -111,10 +117,9 @@ class CalibrationServiceImpl final
  private:
   perception::GrpcCamera grpc_camera_;
   PubSub pubsub_;
+  const KeyValueStoreFactory kvstore_factory_;
 
   absl::Mutex mutex_;
-  // For testing with a fake kvstore.
-  std::unique_ptr<KeyValueStore> kvstore_ ABSL_GUARDED_BY(mutex_);
   int64_t next_capture_id_ ABSL_GUARDED_BY(mutex_) = 0;
   std::string session_id_ ABSL_GUARDED_BY(mutex_);
 
@@ -125,6 +130,7 @@ class CalibrationServiceImpl final
     std::vector<intrinsic_proto::perception::v1::PatternDetection>
         pattern_detections;
     std::vector<std::optional<CameraParams>> camera_params_from_capture;
+    std::vector<std::optional<Pose3d>> camera_ts_sensor_from_capture;
     // Optional field for robot pose, in case camera-to-robot calibration should
     // be performed.
     std::optional<intrinsic_proto::Pose> base_t_flange;
@@ -198,6 +204,8 @@ class CalibrationServiceImpl final
   absl::StatusOr<std::vector<CameraParams>>
   GetCameraParamsFromCachedResultsOrData(const CalibrationDataPoint& data_point)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  std::vector<Pose3d> GetCameraTsSensor(const CalibrationDataPoint& data_point)
+      const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   absl::Status CalibrateIntrinsics(
       const intrinsic_proto::perception::v1::CalibrationRequest* request,
       intrinsic_proto::perception::v1::CalibrationResult* response,
@@ -213,6 +221,21 @@ class CalibrationServiceImpl final
       intrinsic_proto::perception::v1::CalibrationResult* response,
       absl::Span<const CalibrationDataPoint> calibration_data)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  struct ProvidedCaptureDetection {
+    std::optional<CameraParams> camera_params;
+    std::optional<intrinsic_proto::perception::v1::PatternDetection>
+        pattern_detection;
+  };
+  absl::StatusOr<ProvidedCaptureDetection> PatternDetectionFromProvidedCapture(
+      const intrinsic_proto::perception::v1::CaptureData& capture_data,
+      absl::string_view capture_name, absl::string_view camera_name,
+      grpc::ServerContext* context) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  // Converts provided captures into calibration data points, one per capture.
+  absl::StatusOr<std::vector<CalibrationDataPoint>>
+  CalibrationDataFromProvidedCaptures(
+      const google::protobuf::RepeatedPtrField<
+          intrinsic_proto::perception::v1::CaptureDataList>& captures,
+      grpc::ServerContext* context) ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
   absl::Status ValidateIntrinsics(
       const intrinsic_proto::perception::v1::ValidateRequest* request,
       intrinsic_proto::perception::v1::ValidationResult* response,

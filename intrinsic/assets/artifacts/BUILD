@@ -20,12 +20,12 @@ go_library(
     importpath = "intrinsic/assets/artifacts/processor",
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/assets:baseclientutils",
-        "//intrinsic/assets:referenceddata",
         "//intrinsic/longrunning/go:operations",
         "//intrinsic/storage/content_addressable_storage/pkg/clienthelpers",
         "//intrinsic/storage/content_addressable_storage/pkg/crossproject",
         "//intrinsic/storage/content_addressable_storage/pkg/observability",
+        "//intrinsic_sdk/intrinsic/assets:baseclientutils",
+        "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_pborman_uuid//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
@@ -64,7 +64,7 @@ go_library(
     deps = [
         ":processor",
         ":uploader",
-        "//intrinsic/assets:referenceddata",
+        "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "@com_github_golang_glog//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:referenced_data_go_proto",

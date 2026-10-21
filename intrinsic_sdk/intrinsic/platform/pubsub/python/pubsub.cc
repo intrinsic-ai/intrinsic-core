@@ -14,6 +14,7 @@
 
 #include "intrinsic/platform/pubsub/pubsub.h"
 
+#include <pybind11/eval.h>
 #include <pybind11/functional.h>
 #include <pybind11/pybind11.h>
 #include <pybind11/pytypes.h>
@@ -469,8 +470,8 @@ PYBIND11_MODULE(pubsub, m) {
   pybind11_protobuf::ImportNativeProtoCasters();
 
   pybind11::enum_<TopicConfig::TopicQoS>(m, "TopicQoS")
-      .value("HighReliability", TopicConfig::TopicQoS::HighReliability)
-      .value("Sensor", TopicConfig::TopicQoS::Sensor)
+      .value("HIGH_RELIABILITY", TopicConfig::TopicQoS::HighReliability)
+      .value("SENSOR", TopicConfig::TopicQoS::Sensor)
       .export_values();
 
   pybind11::class_<TopicConfig>(m, "TopicConfig")
@@ -481,48 +482,55 @@ PYBIND11_MODULE(pubsub, m) {
 
   pybind11::class_<
       GilAwarePubSub,
-      std::unique_ptr<GilAwarePubSub, PyReleaseGilDeleter<GilAwarePubSub>>>(
-      m, "PubSub")
-      .def(pybind11::init<>())
+      std::unique_ptr<GilAwarePubSub, PyReleaseGilDeleter<GilAwarePubSub>>>
+      pubsub_class(m, "PubSub");
+  pubsub_class
+      .def(pybind11::init<>(),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def(pybind11::init<std::string_view>(),
-           pybind11::arg("participant_name"))
+           pybind11::arg("participant_name"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def(pybind11::init<std::string_view, std::string_view>(),
-           pybind11::arg("participant_name"), pybind11::arg("config"))
-      .def_static("DestroySessionWhenUnused", &PubSub::DestroySessionWhenUnused,
+           pybind11::arg("participant_name"), pybind11::arg("config"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def_static("destroy_session_when_unused",
+                  &PubSub::DestroySessionWhenUnused,
                   pybind11::call_guard<pybind11::gil_scoped_release>())
       // Cast required for overloaded methods:
       // https://pybind11.readthedocs.io/en/stable/classes.html#overloaded-methods
-      .def("CreatePublisher", &GilAwarePubSub::CreatePublisher,
+      .def("create_publisher", &GilAwarePubSub::CreatePublisher,
            pybind11::arg("topic"), pybind11::arg("config") = TopicConfig{})
-      .def("CreateSubscription", &CreateRawSubscription, pybind11::arg("topic"),
-           pybind11::arg("config"), pybind11::arg("msg_callback") = nullptr)
-      .def("CreateSubscription", &CreateSubscriptionWithConfig,
+      .def("create_subscription", &CreateRawSubscription,
+           pybind11::arg("topic"), pybind11::arg("config"),
+           pybind11::arg("msg_callback") = nullptr)
+      .def("create_subscription", &CreateSubscriptionWithConfig,
            pybind11::arg("topic"), pybind11::arg("config"),
            pybind11::arg("exemplar"), pybind11::arg("msg_callback") = nullptr,
            pybind11::arg("error_callback") = nullptr)
-      .def("CreateSubscription", &CreateSubscription, pybind11::arg("topic"),
+      .def("create_subscription", &CreateSubscription, pybind11::arg("topic"),
            pybind11::arg("exemplar"), pybind11::arg("msg_callback") = nullptr,
            pybind11::arg("error_callback") = nullptr)
-      .def("KeyValueStore", &CreateKeyValueStore,
+      .def("key_value_store", &CreateKeyValueStore,
            pybind11::arg("prefix_override") = std::nullopt)
-      .def("ReplicationKeyValueStore", &CreateReplicationKVStore)
-      .def("DeclareLivelinessToken", &DeclareLivelinessToken)
-      .def("DropLivelinessToken", &DropLivelinessToken)
-      .def("CreateLivelinessSubscription", &CreateLivelinessSubscription)
-      .def("LivelinessGet", &LivelinessGet, pybind11::arg("keyexpr"),
+      .def("replication_key_value_store", &CreateReplicationKVStore)
+      .def("declare_liveliness_token", &DeclareLivelinessToken)
+      .def("drop_liveliness_token", &DropLivelinessToken)
+      .def("create_liveliness_subscription", &CreateLivelinessSubscription)
+      .def("liveliness_get", &LivelinessGet, pybind11::arg("keyexpr"),
            pybind11::arg("callback"), pybind11::arg("on_done"))
-      .def("LivelinessGetAllSynchronous", &LivelinessGetAllSynchronous,
+      .def("liveliness_get_all_synchronous", &LivelinessGetAllSynchronous,
            pybind11::arg("keyexpr"));
 
   pybind11::class_<Publisher,
-                   std::unique_ptr<Publisher, PyReleaseGilDeleter<Publisher>>>(
-      m, "Publisher")
-      .def("Publish",
+                   std::unique_ptr<Publisher, PyReleaseGilDeleter<Publisher>>>
+      publisher_class(m, "Publisher");
+  publisher_class
+      .def("publish",
            static_cast<absl::Status (Publisher::*)(
                const google::protobuf::Message&) const>(&Publisher::Publish),
            pybind11::arg("message"))
-      .def("TopicName", &Publisher::TopicName)
-      .def("HasMatchingSubscribers", &Publisher::HasMatchingSubscribers);
+      .def("topic_name", &Publisher::TopicName)
+      .def("has_matching_subscribers", &Publisher::HasMatchingSubscribers);
 
   pybind11::class_<KVQuery>(m, "KVQuery");
 
@@ -549,20 +557,21 @@ PYBIND11_MODULE(pubsub, m) {
             opt.timeout = absl::Seconds(s);
           });
 
-  pybind11::class_<KeyValueStore>(m, "KeyValueStore")
-      .def("Set",
+  pybind11::class_<KeyValueStore> kvstore_class(m, "KeyValueStore");
+  kvstore_class
+      .def("set",
            static_cast<absl::Status (KeyValueStore::*)(
                absl::string_view, const google::protobuf::Message&,
                std::optional<bool>)>(
                &KeyValueStore::Set<const google::protobuf::Message&>),
            pybind11::arg("key"), pybind11::arg("value"),
            pybind11::arg("high_consistency"))
-      .def("Set",
+      .def("set",
            static_cast<absl::Status (KeyValueStore::*)(
                absl::string_view, const google::protobuf::Message&)>(
                &KeyValueStore::Set<const google::protobuf::Message&>),
            pybind11::arg("key"), pybind11::arg("value"))
-      .def("SetWithVerification",
+      .def("set_with_verification",
            static_cast<absl::Status (KeyValueStore::*)(
                absl::string_view, const google::protobuf::Message&,
                const KeyValueStore::SetWithVerificationOptions&)>(
@@ -571,42 +580,42 @@ PYBIND11_MODULE(pubsub, m) {
            pybind11::arg("key"), pybind11::arg("value"),
            pybind11::arg("options") =
                KeyValueStore::SetWithVerificationOptions())
-      .def("Get", &Get, pybind11::arg("key"), pybind11::arg("timeout") = 10)
-      .def("GetAll", &GetAll)
-      .def("GetAllSynchronous", &GetAllSynchronous, pybind11::arg("keyexpr"),
+      .def("get", &Get, pybind11::arg("key"), pybind11::arg("timeout") = 10)
+      .def("get_all", &GetAll)
+      .def("get_all_synchronous", &GetAllSynchronous, pybind11::arg("keyexpr"),
            pybind11::arg("timeout") = 10)
-      .def("ListAllKeys", &ListAllKeys, pybind11::arg("timeout") = 10)
-      .def("ListAllGlobalKeys", &ListAllGlobalKeys,
+      .def("list_all_keys", &ListAllKeys, pybind11::arg("timeout") = 10)
+      .def("list_all_global_keys", &ListAllGlobalKeys,
            pybind11::arg("timeout") = 10)
-      .def("ListAllOnpremKeys", &ListAllOnpremKeys,
+      .def("list_all_onprem_keys", &ListAllOnpremKeys,
            pybind11::arg("workcell_name"), pybind11::arg("timeout") = 10)
-      .def("Delete", &KeyValueStore::Delete, pybind11::arg("key"))
-      .def("AdminCloudCopy", &AdminCloudCopy, pybind11::arg("source_key"),
+      .def("delete", &KeyValueStore::Delete, pybind11::arg("key"))
+      .def("admin_cloud_copy", &AdminCloudCopy, pybind11::arg("source_key"),
            pybind11::arg("target_key"), pybind11::arg("timeout") = 10)
-      .def("CreateSubscription", &CreateRawKVStoreSubscription,
+      .def("create_subscription", &CreateRawKVStoreSubscription,
            pybind11::arg("key_expression"), pybind11::arg("config"),
            pybind11::arg("value_callback") = nullptr,
            pybind11::arg("del_callback") = nullptr)
-      .def("CreateSubscription", &CreateKVStoreSubscription,
+      .def("create_subscription", &CreateKVStoreSubscription,
            pybind11::arg("key_expression"), pybind11::arg("config"),
            pybind11::arg("exemplar"), pybind11::arg("value_callback") = nullptr,
            pybind11::arg("del_callback") = nullptr,
            pybind11::arg("err_callback") = nullptr)
-      .def("GetWorkcellReplicationNamespace", &GetWorkcellReplicationNamespace,
-           pybind11::arg("timeout") = 10)
-      .def("GetGlobalReplicationNamespace",
+      .def("get_workcell_replication_namespace",
+           &GetWorkcellReplicationNamespace, pybind11::arg("timeout") = 10)
+      .def("get_global_replication_namespace",
            &KeyValueStore::GetGlobalReplicationNamespace)
-      .def_static("MakeKey", &MakeKey);
+      .def_static("make_key", &MakeKey);
 
   // The python GIL does not need to be locked during the entire destructor
   // of this class. Instead, the custom deleter provided during its
   // construction will acquire the GIL only during the deletion of the
   // SubscriptionData object, which holds the Python callback.
   pybind11::class_<Subscription,
-                   std::unique_ptr<Subscription, PySubscriptionDeleter>>(
-      m, "Subscription")
-      .def("TopicName", &Subscription::TopicName)
-      .def("Unsubscribe", &Subscription::Unsubscribe,
+                   std::unique_ptr<Subscription, PySubscriptionDeleter>>
+      sub_class(m, "Subscription");
+  sub_class.def("topic_name", &Subscription::TopicName)
+      .def("unsubscribe", &Subscription::Unsubscribe,
            pybind11::call_guard<pybind11::gil_scoped_release>());
 
   // The python GIL does not need to be locked during the entire destructor
@@ -615,10 +624,11 @@ PYBIND11_MODULE(pubsub, m) {
   // SubscriptionData object, which holds the Python callback.
   pybind11::class_<
       LivelinessSubscription,
-      std::unique_ptr<LivelinessSubscription, PyLivelinessSubscriptionDeleter>>(
-      m, "LivelinessSubscription")
-      .def("KeyExpression", &LivelinessSubscription::KeyExpression)
-      .def("Unsubscribe", &LivelinessSubscription::Unsubscribe,
+      std::unique_ptr<LivelinessSubscription, PyLivelinessSubscriptionDeleter>>
+      liveliness_sub_class(m, "LivelinessSubscription");
+  liveliness_sub_class
+      .def("key_expression", &LivelinessSubscription::KeyExpression)
+      .def("unsubscribe", &LivelinessSubscription::Unsubscribe,
            pybind11::call_guard<pybind11::gil_scoped_release>());
 
   // Helper function for passing command line flags from Python code
@@ -626,6 +636,99 @@ PYBIND11_MODULE(pubsub, m) {
   // and need to pass their URLs to C++ code.
   m.def("parse_command_line", &ParseCommandLine);
   m.def("imw_is_initialized", []() { return Zenoh().imw_is_initialized(); });
+
+  // Deprecation wrappers for legacy CamelCase Python APIs.
+  // We use `pybind11::exec` to dynamically wrap and bind legacy methods to
+  // their new snake_case equivalents. This avoids duplicating `.def()` calls in
+  // C++, keeping the binary smaller and ensuring default arguments are not
+  // duplicated.
+  //
+  // TODO: Remove this block and the `_deprecate` helpers when the legacy
+  // CamelCase signatures are fully obsoleted.
+  pybind11::exec(R"(
+import warnings
+import functools
+
+def _deprecate_enum(cls, old_name, new_name):
+    # Enum members are aliased directly rather than wrapped: neither
+    # pybind11::enum_ nor enum.Enum supports per-member descriptors, so no
+    # DeprecationWarning is emitted. The alias avoids duplicating the value in
+    # the C++ bindings.
+    setattr(cls, old_name, getattr(cls, new_name))
+
+def _deprecate(cls, old_name, new_name):
+    target = getattr(cls, new_name)
+
+    @functools.wraps(target)
+    def deprecated_wrapper(*args, **kwargs):
+        warnings.warn(
+            f"{cls.__name__}.{old_name} is deprecated. Use {cls.__name__}.{new_name} instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return target(*args, **kwargs)
+
+    deprecated_wrapper.__doc__ = f"Deprecated: Use `{new_name}` instead.\n\n" + (target.__doc__ or "")
+    setattr(cls, old_name, deprecated_wrapper)
+
+def _deprecate_static(cls, old_name, new_name):
+    target = getattr(cls, new_name)
+
+    @functools.wraps(target)
+    def deprecated_wrapper(*args, **kwargs):
+        warnings.warn(
+            f"{cls.__name__}.{old_name} is deprecated. Use {cls.__name__}.{new_name} instead.",
+            DeprecationWarning,
+            stacklevel=2,
+        )
+        return target(*args, **kwargs)
+
+    deprecated_wrapper.__doc__ = f"Deprecated: Use `{new_name}` instead.\n\n" + (target.__doc__ or "")
+    setattr(cls, old_name, staticmethod(deprecated_wrapper))
+
+_deprecate_enum(TopicQoS, "HighReliability", "HIGH_RELIABILITY")
+_deprecate_enum(TopicQoS, "Sensor", "SENSOR")
+
+_deprecate_enum(SetWithVerificationOptions.VerificationMode, "kFirstReply", "FIRST_REPLY")
+_deprecate_enum(SetWithVerificationOptions.VerificationMode, "kHighConsistency", "HIGH_CONSISTENCY")
+
+_deprecate_static(PubSub, "DestroySessionWhenUnused", "destroy_session_when_unused")
+_deprecate(PubSub, "CreatePublisher", "create_publisher")
+_deprecate(PubSub, "CreateSubscription", "create_subscription")
+_deprecate(PubSub, "KeyValueStore", "key_value_store")
+_deprecate(PubSub, "ReplicationKeyValueStore", "replication_key_value_store")
+_deprecate(PubSub, "DeclareLivelinessToken", "declare_liveliness_token")
+_deprecate(PubSub, "DropLivelinessToken", "drop_liveliness_token")
+_deprecate(PubSub, "CreateLivelinessSubscription", "create_liveliness_subscription")
+_deprecate(PubSub, "LivelinessGet", "liveliness_get")
+_deprecate(PubSub, "LivelinessGetAllSynchronous", "liveliness_get_all_synchronous")
+
+_deprecate(Publisher, "Publish", "publish")
+_deprecate(Publisher, "TopicName", "topic_name")
+_deprecate(Publisher, "HasMatchingSubscribers", "has_matching_subscribers")
+
+_deprecate(KeyValueStore, "Set", "set")
+_deprecate(KeyValueStore, "SetWithVerification", "set_with_verification")
+_deprecate(KeyValueStore, "Get", "get")
+_deprecate(KeyValueStore, "GetAll", "get_all")
+_deprecate(KeyValueStore, "GetAllSynchronous", "get_all_synchronous")
+_deprecate(KeyValueStore, "ListAllKeys", "list_all_keys")
+_deprecate(KeyValueStore, "ListAllGlobalKeys", "list_all_global_keys")
+_deprecate(KeyValueStore, "ListAllOnpremKeys", "list_all_onprem_keys")
+_deprecate(KeyValueStore, "Delete", "delete")
+_deprecate(KeyValueStore, "AdminCloudCopy", "admin_cloud_copy")
+_deprecate(KeyValueStore, "CreateSubscription", "create_subscription")
+_deprecate(KeyValueStore, "GetWorkcellReplicationNamespace", "get_workcell_replication_namespace")
+_deprecate(KeyValueStore, "GetGlobalReplicationNamespace", "get_global_replication_namespace")
+_deprecate_static(KeyValueStore, "MakeKey", "make_key")
+
+_deprecate(Subscription, "TopicName", "topic_name")
+_deprecate(Subscription, "Unsubscribe", "unsubscribe")
+
+_deprecate(LivelinessSubscription, "KeyExpression", "key_expression")
+_deprecate(LivelinessSubscription, "Unsubscribe", "unsubscribe")
+)",
+                 m.attr("__dict__"));
 }
 
 }  // namespace pubsub

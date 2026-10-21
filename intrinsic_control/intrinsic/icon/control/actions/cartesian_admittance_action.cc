@@ -214,6 +214,7 @@ RealtimeStatus CartesianAdmittanceAction::OnEnter(OnEnterParameters params)
     INTRINSIC_CHECK_REALTIME_SAFE {
   state_variables_.Reset();
   task_t_tool_start_ = std::nullopt;
+  streaming_input_message_count_ = 0;
   distance_tracker_->Clear();
 
   const ForceTorqueSensor* ft_sensor =
@@ -521,7 +522,8 @@ RealtimeStatus CartesianAdmittanceAction::SenseSubStep(
            jvel_estimator.GetVelocityEstimate(),
            state_variable_config_.translational_velocity_error_threshold,
            state_variable_config_.angular_velocity_error_threshold,
-           state_variable_config_.joint_velocity_threshold)});
+           state_variable_config_.joint_velocity_threshold),
+       .streaming_input_message_count = streaming_input_message_count_});
 
   return OkStatus();
 }
@@ -551,6 +553,7 @@ RealtimeStatus CartesianAdmittanceAction::Sense(SenseParameters params) {
       params.streaming_io_access.PollInput<CartesianImpedanceParameters>(
           streaming_input_id_));
   if (streaming_parameters != nullptr) {
+    ++streaming_input_message_count_;
     // New controller goal received, run real-time pre-processing steps and set.
     // We can receive previous joint state and base_t_tip from the controller
     // because it has either been updated in the control cycle or set in

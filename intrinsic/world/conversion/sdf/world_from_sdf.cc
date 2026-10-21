@@ -727,8 +727,9 @@ WorldFromSdf::ParseModel(const ::sdf::Model& model,
         collections_ent->GetOrCreateComponent<UserDataComponent>());
     google::protobuf::StringValue str_val;
     str_val.set_value(absl::StrJoin(extra_plugins_for_user_data, "\n"));
-    collections_user_data->MutableUserDataProtos()[kGazeboPlugins].PackFrom(
-        str_val);
+    static_cast<void>(
+        collections_user_data->MutableUserDataProtos()[kGazeboPlugins].PackFrom(
+            str_val));  // TODO: Handle return value
   }
 
   if (!icon_sim_devices.empty()) {

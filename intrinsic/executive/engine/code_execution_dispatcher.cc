@@ -35,6 +35,7 @@
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
+#include "grpcpp/support/time.h"  // for grpc::TimePoint<absl::Time>
 #include "intrinsic/executive/clips_cpp/assert_facade.h"
 #include "intrinsic/executive/clips_cpp/function_facade.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
@@ -43,7 +44,6 @@
 #include "intrinsic/executive/clips_cpp/value.h"
 #include "intrinsic/executive/proto/code_execution_service.grpc.pb.h"
 #include "intrinsic/executive/proto/code_execution_service.pb.h"
-#include "intrinsic/icon/release/grpc_time_support.h"  // for grpc::TimePoint<absl::Time>
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/grpc/grpc.h"
 #include "intrinsic/util/proto_time.h"

@@ -26,6 +26,9 @@
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 #include "intrinsic/math/spline/bspline.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/trajectory_planning/topp/path_sample.h"
 #include "intrinsic/motion_planning/trajectory_planning/topp/topp_trajectory_result.h"
 
@@ -66,6 +69,31 @@ absl::Status FilterOutByDistanceToNeighbour(double min_path_var_distance,
 absl::Status AddTranslationalCartesianArcLengthsToPathAndTrajectory(
     const kinematics::Chain& chain, std::vector<PathSample>& path_samples,
     JointTrajectoryPVA& trajectory);
+
+
+// Adds keypoint `keypoint_time_from_start` to each event in `motion_events`
+// based on the provided `topp_trajectory_result`. The
+// `keypoint_time_from_start` is calculated by extracting it from the
+// `BSplineSquaredPathVelocity` in the `topp_trajectory_result`.  This method
+// expects that the `motion_events` have joint path variable data.
+absl::Status AddEventKeypointTime(
+    const ToppTrajectoryResult& topp_trajectory_result,
+    absl::Span<intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events);
+
+// Adds keypoint `keypoint_cartesian_arc_length_from_start_meters` to each event
+// in `motion_events` based on the provided `path_samples`. The
+// `keypoint_cartesian_arc_length_from_start_meters` is calculated by linearly
+// interpolating the `s_c` variable in the `path_samples` in relation to the
+// path variable. This method expects that the `motion_events` have joint path
+// variable data which is used to interpolate `s_c`. Returns an error if the
+// `path_samples` has fewer than 2 samples.
+absl::Status AddEventKeypointCartesianArcLength(
+    absl::Span<const PathSample> path_samples,
+    absl::Span<intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events);
+
+
 // Computes the length of the path defined by the `path_segments`. The length is
 // computed on the polyline defined by the sequence of joint configurations
 // in the `path_segments`.

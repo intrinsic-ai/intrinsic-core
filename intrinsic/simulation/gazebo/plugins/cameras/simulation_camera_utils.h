@@ -20,14 +20,17 @@
 #include <string_view>
 
 #include "absl/status/statusor.h"
+#include "gz/math/Pose3.hh"
+#include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/core/camera_params.h"
 #include "intrinsic/perception/core/pixel_type.h"
 #include "sdf/Camera.hh"
 #include "sdf/Element.hh"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
+
+Pose3d GzToIntrinsicSensorPose(const gz::math::Pose3d& gz_pose);
 
 absl::StatusOr<PixelType> PixelTypeFromSdfPluginImageType(
     std::string_view plugin_image_type);
@@ -37,7 +40,6 @@ CameraParams GetCameraParamsFromSdf(const sdf::Camera& camera_sdf);
 absl::StatusOr<CameraIdentifier> GetCameraIdentifierFromSdf(
     const std::shared_ptr<const sdf::Element>& plugin_sdf);
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception
 
 #endif  // INTRINSIC_SIMULATION_GAZEBO_PLUGINS_CAMERAS_SIMULATION_CAMERA_UTILS_H_

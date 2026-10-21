@@ -71,7 +71,6 @@
 #include "intrinsic/util/thread/thread.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/service/updater/world_updater.grpc.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
 #include "intrinsic/world/service/world_service.grpc.pb.h"
 #include "opentelemetry/trace/span.h"
 
@@ -106,9 +105,6 @@ class ClipsExecutor {
         object_world_service_stub;
     std::shared_ptr<intrinsic_proto::world::WorldUpdater::StubInterface>
         world_updater_stub;
-    std::shared_ptr<
-        intrinsic_proto::world::WorldCompatibilityService::StubInterface>
-        world_compatibility_service_stub;
     std::shared_ptr<intrinsic_proto::simulation::first_party::
                         SimulationService::StubInterface>
         simulation_service_stub;
@@ -545,9 +541,6 @@ class ClipsExecutor {
       object_world_service_stub_;
   std::shared_ptr<intrinsic_proto::world::WorldUpdater::StubInterface>
       world_updater_stub_;
-  std::shared_ptr<
-      intrinsic_proto::world::WorldCompatibilityService::StubInterface>
-      world_compatibility_service_stub_;
   std::shared_ptr<intrinsic_proto::simulation::first_party::SimulationService::
                       StubInterface>
       simulation_service_stub_;

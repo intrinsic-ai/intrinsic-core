@@ -19,8 +19,8 @@ go_library(
     srcs = ["find.go"],
     importpath = "intrinsic/frontend/solution_service/sequencelist/find",
     deps = [
-        "//intrinsic/executive/go:behaviortree",
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
+        "//intrinsic_sdk/intrinsic/executive/go:behaviortree",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
     ],
 )
 
@@ -31,12 +31,12 @@ go_library(
     visibility = ["//intrinsic/frontend/solution_service:__subpackages__"],
     deps = [
         ":find",
-        "//intrinsic/executive/go:behaviortree",
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
-        "//intrinsic/executive/proto:run_metadata_go_proto",
-        "//intrinsic/frontend/solution_service/proto:sequence_list_go_proto",
-        "//intrinsic/logging/proto:log_item_go_proto",
+        "//intrinsic_sdk/intrinsic/executive/go:behaviortree",
+        "//intrinsic_sdk/intrinsic/executive/proto:run_metadata_go_proto",
+        "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:sequence_list_go_proto",
+        "//intrinsic_sdk/intrinsic/logging/proto:log_item_go_proto",
         "@com_github_golang_glog//:go_default_library",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/executive/proto:log_items_go_proto",
         "@org_golang_google_protobuf//types/known/timestamppb",
     ],

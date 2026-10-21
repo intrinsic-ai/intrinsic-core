@@ -77,7 +77,8 @@ absl::Status update_status(absl::Status& status, std::string prepend_message,
   status.ForEachPayload(
       [&](absl::string_view type_url, const absl::Cord& payload) {
         if (absl::StrContains(type_url, "MotionPlanningError")) {
-          motion_planning_error.ParseFromString(payload);
+          static_cast<void>(motion_planning_error.ParseFromString(
+              payload));  // TODO: Handle return value
           motion_planning_error.mutable_collision_error()->set_error_context(
               error_context);
           updated_status.SetPayload(type_url,

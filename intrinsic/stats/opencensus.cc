@@ -268,7 +268,7 @@ OpenCensusPlugin::OpenCensusPlugin(absl::string_view service_name,
 
       std::unique_ptr<opentelemetry::sdk::metrics::View> latency_view =
           opentelemetry::sdk::metrics::ViewFactory::Create(
-              /*name=*/"", /*description=*/"", /*unit=*/"",
+              /*name=*/"", /*description=*/"",
               opentelemetry::sdk::metrics::AggregationType::kHistogram,
               GrpcLatencyBucketsConfig());
 

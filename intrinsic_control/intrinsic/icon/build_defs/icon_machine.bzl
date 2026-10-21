@@ -117,7 +117,7 @@ def icon_machine(
     )
 
     container_image_kwargs = {
-        "base": "//intrinsic/kubernetes:base-image-cc-oci",
+        "base": "//intrinsic/kubernetes:base-image-oci",
         "compatible_with": compatible_with,
         "layers": [
             name + "_tar",

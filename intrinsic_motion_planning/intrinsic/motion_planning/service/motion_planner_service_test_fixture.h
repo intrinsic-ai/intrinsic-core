@@ -15,12 +15,11 @@
 #ifndef INTRINSIC_MOTION_PLANNING_SERVICE_MOTION_PLANNER_SERVICE_TEST_FIXTURE_H_
 #define INTRINSIC_MOTION_PLANNING_SERVICE_MOTION_PLANNER_SERVICE_TEST_FIXTURE_H_
 
-#include <memory>
+#include <string>
 #include <string_view>
 #include <vector>
 
 #include "absl/status/status.h"
-#include "intrinsic/motion_planning/motion_planner/motion_planner_flags.h"
 
 namespace intrinsic {
 
@@ -39,12 +38,7 @@ class MotionPlannerServiceBaseTestHelper {
   MotionPlannerServiceBaseTestHelper();
   virtual ~MotionPlannerServiceBaseTestHelper();
 
-  absl::Status SetUpAndUpdateFlags(bool set_infinite_jerk_limits,
-                                   MotionPlannerFlags& flags);
-
- private:
-  struct ParameterizationService;
-  std::unique_ptr<ParameterizationService> parameterization_service_;
+  absl::Status CheckJerkLimitsSupported(bool set_infinite_jerk_limits);
 };
 
 }  // namespace intrinsic

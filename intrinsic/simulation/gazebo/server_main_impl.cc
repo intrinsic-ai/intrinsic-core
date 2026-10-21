@@ -43,6 +43,11 @@
 #include "gz/math/Rand.hh"
 #include "gz/sim/ServerConfig.hh"
 #include "gz/sim/Util.hh"
+#include "intrinsic/assets/dependencies/utils.h"
+#include "intrinsic/assets/interface_utils.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
+#include "intrinsic/connect/cc/grpc/channel.h"
+#include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
 #include "intrinsic/geometry/storage/geometry_service_storage.h"
 #include "intrinsic/hardware/gripper/eoat/eoat_service.pb.h"
 #include "intrinsic/hardware/gripper/gripper_equipment.pb.h"
@@ -148,9 +153,10 @@ ABSL_FLAG(
     "Address of the simulation service. The simulation server will connect "
     "to this service to initialize a session and obtain the simulator world "
     "id. The world must be available in the World Service before the server is "
-    "run, and it must out-live the server. The WORLD_SERVICE_ADDRESS and "
-    "GEOMETRY_SERVICE_ADDRESS env variables must be set so that Gazebo can "
-    "fetch the world and associated geometry data from the services.");
+    "run, and it must out-live the server. If --runtime_context_file is not "
+    "present, the WORLD_SERVICE_ADDRESS and GEOMETRY_SERVICE_ADDRESS env "
+    "variables must be set so that Gazebo can fetch the world and associated "
+    "geometry data from the services.");
 
 ABSL_FLAG(std::string, sdf_world_template_path,
           "intrinsic/simulation/gazebo/world_templates/default.sdf.tpl",
@@ -448,8 +454,9 @@ GetPluginSpecOverridesFromAssetInstances(
 }
 
 absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
-    std::string_view world_service_address,
-    std::string_view geometry_service_address,
+    std::shared_ptr<ObjectWorldService::StubInterface>
+        object_world_service_stub,
+    std::unique_ptr<GeometryLibrary> geom_service_library,
     std::string_view simulation_service_address,
     std::string_view simulator_name,
     simulation::WorldSdfAdapter::WorldTemplateOverrides
@@ -457,12 +464,6 @@ absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
     GazeboService& gazebo_service, PubSub& pubsub,
     const simulation::SimulatorControlService::GazeboRunnerInitParams&
         init_params) {
-  INTR_ASSIGN_OR_RETURN(
-      std::unique_ptr<ObjectWorldService::Stub> object_world_service_stub,
-      simulation::details::GetObjectWorldServiceStub(world_service_address));
-  auto geom_service_library = GetGeometryServiceGeometryLibrary(
-      geometry_service_address, kGeometryServiceConnectTimeout);
-
   const int num_retries = init_params.is_reset ? kNumRetriesToGetWorldAtReset
                                                : kNumRetriesToGetWorldAtInit;
   INTR_ASSIGN_OR_RETURN(
@@ -521,8 +522,7 @@ absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
         std::shared_ptr<simulation::WorldSyncSystem> world_sync_system,
         simulation::WorldSyncSystem::Create(
             simulator_name, init_params.simulator_world_id,
-            std::move(world_sync_stub), std::move(object_world_service_stub),
-            &pubsub));
+            std::move(world_sync_stub), object_world_service_stub, &pubsub));
     INTR_RET_CHECK_OK(gazebo->AddSystem(world_sync_system))
         << "Failed to add WorldSyncSystem to Gazebo.";
   } else {
@@ -530,22 +530,82 @@ absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
                     "will not be added. Updates will not be published.";
   }
 
-  INTR_ASSIGN_OR_RETURN(auto spawner_manager,
-                        simulation::SpawnerManager::Create(
-                            world_service_address, geometry_service_address,
-                            init_params.simulator_world_id));
+  INTR_ASSIGN_OR_RETURN(
+      auto spawner_manager,
+      simulation::SpawnerManager::Create(object_world_service_stub,
+                                         std::move(geom_service_library),
+                                         init_params.simulator_world_id));
   INTR_RET_CHECK_OK(gazebo->AddSystem(std::move(spawner_manager)))
       << "Failed to add SpawnerManager System to Gazebo.";
 
   INTR_ASSIGN_OR_RETURN(
       auto outfeed_manager,
-      simulation::OutfeedManager::Create(world_service_address,
+      simulation::OutfeedManager::Create(std::move(object_world_service_stub),
                                          init_params.simulator_world_id));
   INTR_RET_CHECK_OK(gazebo->AddSystem(std::move(outfeed_manager)))
       << "Failed to add OutfeedManager System to Gazebo.";
 
   SetupTransportForwarding(gazebo.get());
   return std::move(gazebo);
+}
+
+absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
+    std::string_view world_service_address,
+    std::string_view geometry_service_address,
+    std::string_view simulation_service_address,
+    std::string_view simulator_name,
+    simulation::WorldSdfAdapter::WorldTemplateOverrides
+        world_template_overrides,
+    GazeboService& gazebo_service, PubSub& pubsub,
+    const simulation::SimulatorControlService::GazeboRunnerInitParams&
+        init_params) {
+  INTR_ASSIGN_OR_RETURN(
+      std::shared_ptr<ObjectWorldService::Stub> object_world_service_stub,
+      simulation::details::GetObjectWorldServiceStub(world_service_address));
+  auto geom_service_library = GetGeometryServiceGeometryLibrary(
+      geometry_service_address, kGeometryServiceConnectTimeout);
+
+  return InitGazeboWithWorldService(
+      std::move(object_world_service_stub), std::move(geom_service_library),
+      simulation_service_address, simulator_name,
+      std::move(world_template_overrides), gazebo_service, pubsub, init_params);
+}
+
+std::string GeometryServiceInterfaceUri() {
+  return absl::StrCat(
+      assets::kGrpcUriPrefix,
+      intrinsic_proto::geometry::GeometryService::service_full_name());
+}
+
+absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
+    const intrinsic_proto::assets::v1::ResolvedDependency&
+        intrinsic_runtime_dep,
+    std::string_view simulation_service_address,
+    std::string_view simulator_name,
+    simulation::WorldSdfAdapter::WorldTemplateOverrides
+        world_template_overrides,
+    GazeboService& gazebo_service, PubSub& pubsub,
+    const simulation::SimulatorControlService::GazeboRunnerInitParams&
+        init_params) {
+  INTR_ASSIGN_OR_RETURN(
+      std::shared_ptr<ObjectWorldService::Stub> object_world_service_stub,
+      simulation::details::GetObjectWorldServiceStub(intrinsic_runtime_dep));
+  INTR_ASSIGN_OR_RETURN(
+      std::shared_ptr<grpc::Channel> geometry_service_channel,
+      assets::dependencies::
+          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
+              intrinsic_runtime_dep, GeometryServiceInterfaceUri(),
+              connect::UnlimitedMessageSizeGrpcChannelArgs()));
+  INTR_RETURN_IF_ERROR(connect::WaitForChannelReady(
+      geometry_service_channel, kGeometryServiceConnectTimeout));
+  auto geom_service_library = GetGeometryServiceGeometryLibrary(
+      intrinsic_proto::geometry::GeometryService::NewStub(
+          std::move(geometry_service_channel)));
+
+  return InitGazeboWithWorldService(
+      std::move(object_world_service_stub), std::move(geom_service_library),
+      simulation_service_address, simulator_name,
+      std::move(world_template_overrides), gazebo_service, pubsub, init_params);
 }
 
 void BlockOnSigset(const sigset_t* sig_set) {
@@ -681,17 +741,6 @@ int RunGazeboSimulationServerWithServices(int argc, char* argv[]) {
   }
 
   if (!simulator_world_id.empty()) {
-    const char* world_service_address = getenv("WORLD_SERVICE_ADDRESS");
-    CHECK_NE(world_service_address, nullptr)
-        << "Unable to find world service address from environment variable '"
-        << "WORLD_SERVICE_ADDRESS'";
-
-    const char* geometry_service_address = getenv("GEOMETRY_SERVICE_ADDRESS");
-    CHECK_NE(geometry_service_address, nullptr)
-        << "Unable to find geometry service address from environment "
-           "variable '"
-        << "GEOMETRY_SERVICE_ADDRESS'";
-
     std::string simulator_name = "gazebo";
     simulation::WorldSdfAdapter::WorldTemplateOverrides
         world_template_overrides;
@@ -699,20 +748,49 @@ int RunGazeboSimulationServerWithServices(int argc, char* argv[]) {
       if (!runtime_context->name().empty()) {
         simulator_name = runtime_context->name();
       }
+      intrinsic_proto::simulation::gazebo::v1::GazeboConfig gazebo_config;
       if (runtime_context->has_config()) {
-        intrinsic_proto::simulation::gazebo::v1::GazeboConfig gazebo_config;
         QCHECK(runtime_context->config().UnpackTo(&gazebo_config))
             << "Failed to unpack RuntimeContext config of type "
             << runtime_context->config().type_url() << " to GazeboConfig.";
         ASSIGN_OR_DIE(world_template_overrides,
                       WorldTemplateOverridesFromConfig(gazebo_config));
       }
-    }
+      factory_fn =
+          [intrinsic_runtime = gazebo_config.intrinsic_runtime(),
+           simulation_service_address, simulator_name, world_template_overrides,
+           &gazebo_service, &pubsub](
+              const simulation::SimulatorControlService::GazeboRunnerInitParams&
+                  init_params) {
+            return InitGazeboWithWorldService(
+                intrinsic_runtime, simulation_service_address, simulator_name,
+                world_template_overrides, *gazebo_service, pubsub, init_params);
+          };
+    } else {
+      const char* world_service_address_env = getenv("WORLD_SERVICE_ADDRESS");
+      CHECK_NE(world_service_address_env, nullptr)
+          << "Unable to find world service address from environment variable "
+             "'WORLD_SERVICE_ADDRESS'";
 
-    factory_fn = absl::bind_front(
-        &InitGazeboWithWorldService, world_service_address,
-        geometry_service_address, simulation_service_address, simulator_name,
-        world_template_overrides, std::ref(*gazebo_service), std::ref(pubsub));
+      const char* geometry_service_address_env =
+          getenv("GEOMETRY_SERVICE_ADDRESS");
+      CHECK_NE(geometry_service_address_env, nullptr)
+          << "Unable to find geometry service address from environment "
+             "variable 'GEOMETRY_SERVICE_ADDRESS'";
+
+      factory_fn =
+          [world_service_address = std::string(world_service_address_env),
+           geometry_service_address = std::string(geometry_service_address_env),
+           simulation_service_address, simulator_name, world_template_overrides,
+           &gazebo_service, &pubsub](
+              const simulation::SimulatorControlService::GazeboRunnerInitParams&
+                  init_params) {
+            return InitGazeboWithWorldService(
+                world_service_address, geometry_service_address,
+                simulation_service_address, simulator_name,
+                world_template_overrides, *gazebo_service, pubsub, init_params);
+          };
+    }
   } else {
     // Initialize with path from cmd-line flag.
     factory_fn = absl::bind_front(&InitGazeboWithSdfPath,

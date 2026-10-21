@@ -184,8 +184,10 @@ MakeSuctionGripperOpcuaConfig(const SuctionGripperOpcuaServiceConfig& config) {
   for (const std::string& opcua_node_id : opcua_node_ids) {
     opcua_gpio_config.mutable_opcua_nodes()->add_node_id(opcua_node_id);
   }
-  gripper_config.mutable_gpio_service()->mutable_config()->PackFrom(
-      opcua_gpio_config);
+  if (!gripper_config.mutable_gpio_service()->mutable_config()->PackFrom(
+          opcua_gpio_config)) {
+    return absl::InternalError("Failed to pack opcua gpio config.");
+  }
 
   return gripper_config;
 }
@@ -223,8 +225,10 @@ MakePinchGripperOpcuaConfig(const PinchGripperOpcuaServiceConfig& config) {
   for (const std::string& opcua_node_id : opcua_node_ids) {
     opcua_gpio_config.mutable_opcua_nodes()->add_node_id(opcua_node_id);
   }
-  gripper_config.mutable_gpio_service()->mutable_config()->PackFrom(
-      opcua_gpio_config);
+  if (!gripper_config.mutable_gpio_service()->mutable_config()->PackFrom(
+          opcua_gpio_config)) {
+    return absl::InternalError("Failed to pack opcua gpio config.");
+  }
 
   gripper_config.mutable_pinch()->set_is_default_closed(
       config.is_default_closed());

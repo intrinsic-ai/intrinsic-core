@@ -20,6 +20,7 @@
   (?result-value))
 (deffunction behavior-tree-import-proto (?bt-proto ?parent-tree-id
                                          ?blackboard-scope ?operation-name
+                                         ?element-path-prefix
                                          ?run-metadata-proto ?run-metadata-proto-path))
 
 ; --------------------------------- FUNCTIONS ---------------------------------
@@ -58,7 +59,9 @@
 ;   ?node-id: The node that the behavior-call-instance is in.
 ;   ?operation-name: Name of the operation to associate this tree to.
 ;   ?run-metadata-proto: Associated run metadata proto with the tree for export
-;   ?run-metadata-proto-path: Path to the task node containing the BehaviorCall
+;   ?run-metadata-proto-path: Run metadata path of the node containing the
+;     task with the BehaviorCall. The element path of this node is the element
+;     path prefix for all elements in the imported PBT instance.
 ;
 ; Returns:
 ;   A multifield with the first entry TRUE/FALSE and
@@ -94,11 +97,13 @@
   )
 
   (bind ?s-tree-path "")
+  (bind ?element-path-prefix (create$))
   (if (and (<> ?run-metadata-proto 0) (neq ?run-metadata-proto-path "")) then
     ; Insert the PBT proto in the task node in the state proto.
     ; It is important to do this before importing the PBT, so that the state
     ; proto is prepared with the PBT.
-    (bind ?s-tree-path (proto-path-join ?run-metadata-proto-path "called_tree_state"))
+    (bind ?s-tree-path
+      (proto-path-join ?run-metadata-proto-path "task.called_tree_state"))
     (if (pb-has-field ?run-metadata-proto ?s-tree-path) then
       ; TODO(b/353890789): Make this a warning, but not an error as it is
       ; possible to import this, although maybe not what a user wants.
@@ -107,6 +112,22 @@
       ; not be set for importing.
     )
     (pb-set-field ?run-metadata-proto ?s-tree-path ?pbt-proto)
+
+
+    ; The PBT is a new nested process instance: Its elements are prefixed with
+    ; the element path of the calling node, which must already be written to the
+    ; run metadata.
+    (bind ?element-path-prefix
+      (pb-get-repeated-values ?run-metadata-proto
+        (proto-path-join ?run-metadata-proto-path "element_path.ids")))
+    (if (empty$ ?element-path-prefix) then
+      (pb-remove ?pbt-proto)
+      (return (result-create FALSE
+        (str-cat "Element path of the node calling behavior tree with skill id "
+                 ?skill-id " is not set. It must be set before importing the "
+                 "called behavior tree.")))
+    )
+
   )
 
   (bind ?uid (behavior-call-instance-generate-uid ?tree-id))
@@ -116,6 +137,7 @@
   (bind ?pbt-import-result
     (behavior-tree-import-proto ?pbt-proto ?tree-id
                                 ?pbt-tree-scope ?operation-name
+                                ?element-path-prefix
                                 ?run-metadata-proto ?s-tree-path))
   (pb-remove ?pbt-proto)
   (if (not (result-ok ?pbt-import-result)) then
@@ -196,7 +218,8 @@
 ;   ?node-id: node id of the node containing the behavior call
 ;   ?operation-name: Name of the operation to associate this tree to.
 ;   ?run-metadata-proto: Associated run metadata proto with the tree for export
-;   ?run-metadata-proto-path: Path to the task node containing the BehaviorCall
+;   ?run-metadata-proto-path: Run metadata path of the node containing the
+;     task with the BehaviorCall
 ;
 ; Returns:
 ;   A multifield with the first entry TRUE/FALSE and

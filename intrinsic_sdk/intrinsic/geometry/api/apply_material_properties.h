@@ -25,6 +25,7 @@
 #include "intrinsic/geometry/api/material.h"
 #include "intrinsic/geometry/api/renderable.h"
 #include "intrinsic/geometry/proto/v1/material.pb.h"
+#include "tiny_gltf.h"
 
 namespace intrinsic::geo {
 
@@ -34,6 +35,11 @@ namespace intrinsic::geo {
 // - transmission: in [0.0, 1.0].
 // - roughness: in [0.0, 1.0].
 absl::Status ValidateMaterialProperties(
+    const intrinsic_proto::geometry::v1::MaterialProperties&
+        material_properties);
+
+// Validates `material_properties` and converts it into a `tinygltf::Material`.
+absl::StatusOr<tinygltf::Material> ToGltfMaterial(
     const intrinsic_proto::geometry::v1::MaterialProperties&
         material_properties);
 
@@ -52,6 +58,7 @@ absl::Status ApplyMaterialToAiScene(aiScene& scene, const Material& material);
 }  // namespace intrinsic::geo
 namespace intrinsic {
 using ::intrinsic::geo::ApplyMaterialPropertiesToGlb;
+using ::intrinsic::geo::ToGltfMaterial;
 using ::intrinsic::geo::ValidateMaterialProperties;
 }  // namespace intrinsic
 

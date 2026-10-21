@@ -16,6 +16,7 @@
 #define INTRINSIC_MOTION_PLANNING_TRAJECTORY_PLANNING_TOPP_TOPP_SOLVER_COMMONS_H_
 
 #include <cstddef>
+#include <optional>
 #include <vector>
 
 #include "absl/status/status.h"
@@ -48,11 +49,23 @@ constexpr double kMatrixNumericalValueConsideredZero = 1.0e-13;
 
 // Details about a dynamic limit overshoot at a trajectory index.
 struct Overshoot {
-  // Index of the trajectory sample where the limit is violated.
+  // Index of the trajectory sample where the limit is violated. This is the
+  // first trajectory sample whose timestamp is larger or equal than the time at
+  // which the violation was detected.
   int index = 0;
 
   // Factor by which the limit is exceeded relative to the nominal limit.
   double overshoot_factor = 0.0;
+
+  // Index of the first trajectory sample that influences the violation. Limit
+  // violations are detected via backward finite differences of positions
+  // sampled uniformly in time, i.e. a violation of the k-th derivative detected
+  // at time `t` depends on the positions in the time window
+  // `[t - k * interpolation_step, t]`. This window can span many trajectory
+  // samples when the samples are denser in time than the `interpolation_step`.
+  // All samples in `[window_start_index, index]` contribute to the violation.
+  // If unset, it is assumed to be equal to `index`.
+  std::optional<int> window_start_index = std::nullopt;
 };
 
 // Result of checking trajectory dynamic limit overshoots for velocity,
@@ -70,22 +83,29 @@ struct TrajectoryOvershoot {
 };
 
 // Options controlling the neighborhood window of path sample indices to scale
-// around each overshoot index for each dynamic limit derivative type.
+// around each overshoot index for each dynamic limit derivative type. For an
+// overshoot at index `id`, samples in `[start, id + window]` are scaled, where
+// `start = min(id - window, window_start_index)`. Overshoots are detected via
+// backward finite differences, so the neighborhood is extended backwards to
+// `Overshoot::window_start_index` (if set) when the finite-difference time
+// window spans more than `window` samples.
 struct ScaleOvershootOptions {
   // Neighborhood window (half-width) to scale around velocity limit overshoots.
   // For an overshoot at index `id`, samples in
-  // `[id - vel_neighborhood_window, id + vel_neighborhood_window]` are scaled.
+  // `[min(id - vel_neighborhood_window, window_start_index),
+  //   id + vel_neighborhood_window]` are scaled.
   int vel_neighborhood_window = 1;
 
   // Neighborhood window (half-width) to scale around acceleration limit
   // overshoots. For an overshoot at index `id`, samples in
-  // `[id - acc_neighborhood_window, id + acc_neighborhood_window]` are scaled.
+  // `[min(id - acc_neighborhood_window, window_start_index),
+  //   id + acc_neighborhood_window]` are scaled.
   int acc_neighborhood_window = 2;
 
   // Neighborhood window (half-width) to scale around jerk limit overshoots.
   // For an overshoot at index `id`, samples in
-  // `[id - jerk_neighborhood_window, id + jerk_neighborhood_window]` are
-  // scaled.
+  // `[min(id - jerk_neighborhood_window, window_start_index),
+  //   id + jerk_neighborhood_window]` are scaled.
   int jerk_neighborhood_window = 3;
 
   // If true, also scales acceleration limits when jerk overshoots occur.
@@ -472,7 +492,9 @@ absl::StatusOr<std::vector<int>> ComputeIndicesWhereNumericalJerksViolateLimits(
 // `tolerance_factor` should typically be >= 1.0, a reasonable range is
 // `[1.05, 1.10]`. Returns a `TrajectoryOvershoot` containing unique trajectory
 // indices and maximum violation factors (relative to nominal limits) for
-// velocity, acceleration, and jerk overshoots.
+// velocity, acceleration, and jerk overshoots. Each overshoot also reports the
+// `window_start_index`, i.e. the first trajectory sample whose segment
+// intersects the finite-difference time window of the violation.
 absl::StatusOr<TrajectoryOvershoot> ComputeTrajectoryOvershoot(
     const JointTrajectoryPVA& trajectory,
     absl::Span<const PathSample> path_samples,
@@ -481,9 +503,10 @@ absl::StatusOr<TrajectoryOvershoot> ComputeTrajectoryOvershoot(
 // Scales down in place the joint velocity, acceleration, and jerk limits of the
 // input `path_samples` based on the detected `overshoot`. For each limit type
 // and each overshoot index `id`, scales the limits of the path samples in the
-// neighborhood `[id - neighborhood_window, id + neighborhood_window]`
-// (configured via `options`, clamped to valid sample indices) by dividing by
-// the maximum overshoot factor covering each index.
+// neighborhood `[min(id - neighborhood_window, start), id +
+// neighborhood_window]`, where `start` is the overshoot `window_start_index` if
+// set and `id` otherwise (configured via `options`, clamped to valid sample
+// indices) by dividing by the maximum overshoot factor covering each index.
 absl::Status ScalePathSamplesJointLimitsByOvershoot(
     const TrajectoryOvershoot& overshoot, absl::Span<PathSample> path_samples,
     const ScaleOvershootOptions& options = {});

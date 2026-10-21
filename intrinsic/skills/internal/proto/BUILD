@@ -14,49 +14,16 @@
 
 # Protos for internal skill framework types.
 
-load("@com_github_grpc_grpc//bazel:cc_grpc_library.bzl", "cc_grpc_library")
-load("@com_github_grpc_grpc//bazel:python_rules.bzl", "py_grpc_library")
-load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
-load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("//bazel:go_macros.bzl", "go_proto_library")
-load("//bazel:protos.bzl", "proto_library")
 
 package(default_visibility = [
     "//visibility:public",
 ])
 
-proto_library(
+alias(
     name = "skill_registry_internal_proto",
-    srcs = ["skill_registry_internal.proto"],
-    deps = [
-        "//intrinsic/skills/proto:skill_registry_config_proto",
-        "@com_google_protobuf//:empty_proto",
-        "@intrinsic_apis//intrinsic/skills/proto:skills_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "skill_registry_internal_cc_proto",
-    deps = [":skill_registry_internal_proto"],
-)
-
-cc_grpc_library(
-    name = "skill_registry_internal_cc_grpc_proto",
-    srcs = [":skill_registry_internal_proto"],
-    generate_mocks = True,
-    grpc_only = True,
-    deps = [":skill_registry_internal_cc_proto"],
-)
-
-py_proto_library(
-    name = "skill_registry_internal_py_pb2",
-    deps = [":skill_registry_internal_proto"],
-)
-
-py_grpc_library(
-    name = "skill_registry_internal_py_pb2_grpc",
-    srcs = [":skill_registry_internal_proto"],
-    deps = [":skill_registry_internal_py_pb2"],
+    actual = "//intrinsic_sdk/intrinsic/skills/internal/proto:skill_registry_internal_proto",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 go_proto_library(
@@ -68,42 +35,18 @@ go_proto_library(
     importpath = "intrinsic/skills/internal/proto/skill_registry_internal_go_proto",
     protos = [":skill_registry_internal_proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
-        "//intrinsic/skills/proto:skill_registry_config_go_proto",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_registry_config_go_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/resources/proto:resource_handle_go_proto",
         "@intrinsic_apis//intrinsic/skills/proto:equipment_go_proto",
         "@intrinsic_apis//intrinsic/skills/proto:skills_go_proto",
     ],
 )
 
-proto_library(
+alias(
     name = "behavior_tree_registry_internal_proto",
-    srcs = ["behavior_tree_registry_internal.proto"],
-    deps = ["//intrinsic/executive/proto:behavior_tree_proto"],
-)
-
-cc_proto_library(
-    name = "behavior_tree_registry_internal_cc_proto",
-    deps = [":behavior_tree_registry_internal_proto"],
-)
-
-cc_grpc_library(
-    name = "behavior_tree_registry_internal_cc_grpc_proto",
-    srcs = [":behavior_tree_registry_internal_proto"],
-    generate_mocks = True,
-    grpc_only = True,
-    deps = [":behavior_tree_registry_internal_cc_proto"],
-)
-
-py_proto_library(
-    name = "behavior_tree_registry_internal_py_pb2",
-    deps = [":behavior_tree_registry_internal_proto"],
-)
-
-py_grpc_library(
-    name = "behavior_tree_registry_internal_py_pb2_grpc",
-    srcs = [":behavior_tree_registry_internal_proto"],
-    deps = [":behavior_tree_registry_internal_py_pb2"],
+    actual = "//intrinsic_sdk/intrinsic/skills/internal/proto:behavior_tree_registry_internal_proto",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 go_proto_library(
@@ -115,6 +58,6 @@ go_proto_library(
     importpath = "intrinsic/skills/internal/proto/behavior_tree_registry_internal_go_proto",
     protos = [":behavior_tree_registry_internal_proto"],
     deps = [
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
     ],
 )

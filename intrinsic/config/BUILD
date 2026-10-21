@@ -12,9 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:go_macros.bzl", "go_library")
-load("//bazel:python.bzl", "py_library")
 
 # Application, process and resource set describe all user-accessible configuration of a
 # solution.
@@ -50,34 +48,10 @@ go_library(
     ],
 )
 
-cc_library(
-    name = "environments_cc",
-    srcs = ["environments.cc"],
-    hdrs = ["environments.h"],
-    visibility = [
-        "//visibility:public",
-    ],
-    deps = [
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@abseil-cpp//absl/strings:string_view",
-        "@abseil-cpp//absl/types:span",
-    ],
-)
-
-py_library(
-    name = "environments_py",
-    srcs = ["environments.py"],
-    visibility = [
-        "//visibility:public",
-    ],
-)
-
-go_library(
+alias(
     name = "environments",
-    srcs = ["environments.go"],
-    importpath = "intrinsic/config/environments",
+    actual = "//intrinsic_sdk/intrinsic/config:environments",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = [
         "//visibility:public",
     ],
@@ -94,6 +68,7 @@ go_library(
         "//intrinsic/kubernetes/workcell_spec:__subpackages__",
         "//intrinsic/storage/hot_shared_state:__pkg__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__pkg__",
     ],
     deps = [
         "//intrinsic/config/proto:process_go_proto",
@@ -118,12 +93,13 @@ go_library(
         "//intrinsic/assets/install:__pkg__",
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/tools/inctl:__subpackages__",
+        "//intrinsic_sdk/intrinsic/tools/inctl:__subpackages__",
     ],
     deps = [
-        "//intrinsic/assets:referenceddata",
-        "//intrinsic/assets/data:utils",
         "//intrinsic/config/proto:application_go_proto",
         "//intrinsic/resources/proto:resource_type_runtime_go_proto",
+        "//intrinsic_sdk/intrinsic/assets:referenceddata",
+        "//intrinsic_sdk/intrinsic/assets/data:utils",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:transfer_go_proto",
@@ -148,11 +124,4 @@ go_library(
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
         "@org_golang_google_protobuf//proto",
     ],
-)
-
-go_library(
-    name = "operationmode",
-    srcs = ["operation_mode.go"],
-    importpath = "intrinsic/config/operationmode",
-    deps = ["@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto"],
 )

@@ -21,7 +21,7 @@ load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
 load("//bazel:python.bzl", "py_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "cc_skill", "py_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "cc_skill", "py_skill", "skill_manifest")
 
 # ----------------------------------------------------------------------------
 # Skill definition for 'detach_object'
@@ -65,21 +65,21 @@ cc_library(
     ],
     deps = [
         ":detach_object_cc_proto",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
         "//intrinsic/stats:scoped_span",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic/world/proto:object_world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface_utils",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:object_entity_filter",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
@@ -125,19 +125,20 @@ cc_library(
     ],
     deps = [
         ":attach_object_to_robot_cc_proto",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
         "//intrinsic/stats:scoped_span",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic/world/proto:object_world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface_utils",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_entity_filter",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/time",
         "@com_google_protobuf//:protobuf",
@@ -211,7 +212,7 @@ proto_library(
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
     ],
     deps = [
-        "//intrinsic/world/proto:object_world_updates_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
     ],
 )
 
@@ -234,7 +235,7 @@ go_proto_library(
     importpath = "intrinsic/skills/apps/update_world_go_proto",
     protos = [":update_world_proto"],
     deps = [
-        "//intrinsic/world/proto:object_world_updates_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 
@@ -253,10 +254,10 @@ py_library(
     srcs = ["update_world.py"],
     deps = [
         ":update_world_py_pb2",
-        "//intrinsic/util:decorators",
-        "//intrinsic/world/proto:object_world_service_py_pb2",
-        "//intrinsic/world/proto:object_world_updates_py_pb2",
         "//intrinsic_sdk/intrinsic/skills/python:skill_interface",
+        "//intrinsic_sdk/intrinsic/util:decorators",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_py_pb2",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_py_pb2",
         "//intrinsic_sdk/intrinsic/world/python:object_world_client",
         "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
         "@intrinsic_apis//intrinsic/skills/proto:footprint_py_pb2",

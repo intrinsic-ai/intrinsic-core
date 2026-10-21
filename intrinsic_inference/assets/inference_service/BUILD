@@ -15,18 +15,18 @@
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("//bazel:container.bzl", "container_image")
 load("//bazel:python_oci_image.bzl", "python_oci_image")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 py_library(
     name = "inference_service",
     srcs = ["inference_service.py"],
     deps = [
-        "//intrinsic/util/grpc:error_handling",
         "//intrinsic_inference/assets/inference_service/v1:inference_service_config_py_pb2",
         "//intrinsic_inference/core:inference_runner",
         "//intrinsic_inference/core:model_controller_base",
         "//intrinsic_inference/core/v1:ml_model_py_pb2",
         "//intrinsic_sdk/intrinsic/assets/install:installed_assets_client",
+        "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
         "@ai_intrinsic_sdks_pip_deps//tritonclient",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl:app",
@@ -76,11 +76,11 @@ py_binary(
     deps = [
         ":factory_imports",
         ":inference_service",
-        "//intrinsic/assets/dependencies:utils_py",
         "//intrinsic_inference/assets/inference_service/v1:inference_service_config_py_pb2",
         "//intrinsic_inference/core:model_assets_managers_factory",
         "//intrinsic_inference/core:model_controller_triton",
         "//intrinsic_inference/core:telemetry_otel",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
         "//intrinsic_sdk/intrinsic/assets/install:installed_assets_client",
         "@ai_intrinsic_sdks_pip_deps//tritonclient",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",

@@ -16,21 +16,26 @@ syntax = "proto3";
 
 package intrinsic_proto.solution_versions.v1;
 
+
 import "google/longrunning/operations.proto";
 import "google/protobuf/descriptor.proto";
+
 import "google/protobuf/field_mask.proto";
+
 import "google/rpc/status.proto";
 
 
 import "intrinsic/assets/proto/v1/solution.proto";
+
 import "intrinsic/modified_solution/proto/v1/modified_solution.proto";
+
 import "intrinsic/solution_versions/proto/v1/solution_diff.proto";
-
-
 
 import "intrinsic/solution_versions/proto/v1/branch.proto";
 import "intrinsic/solution_versions/proto/v1/conflict.proto";
+
 import "intrinsic/solution_versions/proto/v1/conflict_resolution.proto";
+
 import "intrinsic/solution_versions/proto/v1/snapshot.proto";
 import "intrinsic/solution_versions/proto/v1/snapshot_source.proto";
 import "intrinsic/solution_versions/proto/v1/warning.proto";
@@ -89,20 +94,21 @@ service SolutionVersionService {
   // - display_name (only for version branches)
   // - upstream_branch_id (only for version branches)
   // - tip_snapshot_id (only for deployment branches)
+  // - unlock (only for deployment branches)
   rpc UpdateBranch(UpdateBranchRequest) returns (Branch) {}
 
-
-  // Commits a snapshot / deployment data to a branch.
+  // Commits a snapshot to a branch.
   //
-  // This RPC currently handles two versions of the commit flow.
-  // - The old flow is deprecated, but still supported. In the old flow, the
-  //   given deployment data is committed to an already existing deployment
-  //   branch.
-  // - The new flow is the default. In the new flow, the given snapshot is
-  //   committed to an already existing version branch. After the commit is
-  //   successful, the history of the deployment branch will be set to the
-  //   version branch history.
+  // The given snapshot is committed to an already existing version branch.
+  // After the commit is successful, the history of the deployment branch will
+  // be set to the version branch history.
+
+  //
+  // Note: This RPC also supports a deprecated flow where the given deployment
+  // data is committed to an already existing deployment branch.
+
   rpc Commit(CommitRequest) returns (CommitResponse) {}
+
 
   // Saves a snapshot to a branch.
   //
@@ -186,7 +192,6 @@ service SolutionVersionService {
   // This RPC will gracefully handle all types of branches.
   rpc ShareBranch(ShareBranchRequest) returns (ShareBranchResponse) {}
 
-
   // Returns the Solution for the given branch and snapshot id.
   // A Solution represents the Assets, Asset instances, and other information
   // that define an automation solution in the Intrinsic platform.
@@ -196,6 +201,7 @@ service SolutionVersionService {
   // Performs a directional, two-way comparison (diff) between two solution
   // versions.
   rpc Diff(DiffRequest) returns (SolutionDiff) {}
+
 
   // Performs a diff between two solution versions, returns an overlaid solution
   // and diff mask with all the changes. During the overlay, only additions and
@@ -208,6 +214,7 @@ service SolutionVersionService {
   rpc BatchGetAssetFileDescriptorSets(BatchGetAssetFileDescriptorSetsRequest)
       returns (BatchGetAssetFileDescriptorSetsResponse) {}
 
+
   // Performs a directional, three-way comparison to generate a pre-merge
   // analysis (preview) of merging a source snapshot into a destination branch.
   //
@@ -219,6 +226,7 @@ service SolutionVersionService {
   // If the two versions don't have a common ancestor, the empty solution state
   // is used as the common ancestor.
   rpc PreviewMerge(PreviewMergeRequest) returns (PreviewMergeResponse) {}
+
 
   // Performs a directional, three-way comparison to generate a pre-merge
   // analysis (preview) of merging a source snapshot into a destination branch.
@@ -443,6 +451,16 @@ message SaveRequest {
 
   // The deployment data to save.
   DeploymentData deployment_data = 2;
+
+  // Lock token held by the cluster (corresponding to the solution deployment
+  // ID). If the branch is locked to another cluster, or if an invalid or
+  // missing token is presented for a locked branch, the request will be
+  // rejected with a FAILED_PRECONDITION error.
+  //
+  // A cluster gets locked automatically when a solution gets deployed in the
+  // cloud. If the cluster is not locked, saving will succeed without providing
+  // a lock token.
+  string lock_token = 3;
 }
 
 message SaveResponse {
@@ -453,7 +471,9 @@ message SaveResponse {
   Branch deployment_branch = 2;
 }
 
+
 // The request for the `Commit` RPC.
+
 //
 // This message supports two versions of the commit flow:
 // - The old flow, which uses `deployment_data`, `branch_id` (as a
@@ -463,12 +483,17 @@ message SaveResponse {
 // Either the `deployment_data` or the `origin_branch_id` needs to be provided.
 // If neither is provided, an error will be returned. If both are provided, an
 // error will be returned.
+
 message CommitRequest {
+
   // The deployment data to commit as a snapshot.
   DeploymentData deployment_data = 1;
 
-  // The version branch to add a commit to. For the old commit flow, this is the
-  // deployment branch.
+
+  // The version branch to add a commit to.
+
+  // For the old commit flow, this is the deployment branch.
+
   string branch_id = 2;
 
   // Commit title and description to be attached to the version.
@@ -493,7 +518,6 @@ message CommitResponse {
   // The deployment branches of the version branch that were updated.
   repeated Branch deployment_branches = 3;
 }
-
 
 message UpdateBranchRequest {
   // The branch update.
@@ -657,7 +681,6 @@ message ShareBranchRequest {
 
 message ShareBranchResponse {}
 
-
 message GetSolutionRequest {
   // The snapshot to be retrieved and normalized.
   SnapshotSource source = 1;
@@ -684,6 +707,7 @@ message DiffRequest {
   // patch to the reference yields the target.
   SnapshotSource target = 2;
 }
+
 
 message DiffAndOverlayRequest {
   // The baseline state of the comparison.
@@ -718,6 +742,7 @@ message BatchGetAssetFileDescriptorSetsResponse {
   // List of the requested asset version IDs and their resolution result.
   repeated FileDescriptorSetResult results = 1;
 }
+
 
 message PreviewMergeRequest {
   // The specific snapshot requested to be merged into the destination branch.
@@ -782,6 +807,7 @@ message PreviewMergeResponse {
   // and there are no blocking conflicts (`conflicts` is empty).
   intrinsic_proto.assets.v1.Solution merged_result = 9;
 }
+
 
 message PreviewMergeWithOverlaidDiffsRequest {
   // The specific snapshot requested to be merged into the destination branch.

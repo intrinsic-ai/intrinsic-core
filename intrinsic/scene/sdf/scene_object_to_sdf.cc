@@ -51,15 +51,23 @@ namespace {
 using ::intrinsic::FullPrecision;
 using ::intrinsic_proto::scene_object::v1::Entity;
 
-// Returns translation and normalized quaternion.
-// For now, no error is returned but this may change in the future.
+// Returns translation and normalized quaternion. An unset orientation maps to
+// identity. Returns InvalidArgumentError if the orientation quaternion is set
+// but cannot be normalized (e.g., all zeros or non-finite components).
 absl::StatusOr<Pose3d> FromPoseProto(const intrinsic_proto::Pose& pose_proto) {
   Pose3d pose;
   if (pose_proto.has_position()) {
     pose.setTranslation(intrinsic_proto::FromProto(pose_proto.position()));
   }
   if (pose_proto.has_orientation()) {
-    auto q = intrinsic_proto::FromProto(pose_proto.orientation());
+    const auto q = intrinsic_proto::FromProto(pose_proto.orientation());
+    const double squared_norm = q.squaredNorm();
+    if (!std::isfinite(squared_norm) || squared_norm <= 1e-12) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Invalid orientation quaternion that cannot be normalized: {x: ",
+          FullPrecision(q.x()), ", y: ", FullPrecision(q.y()),
+          ", z: ", FullPrecision(q.z()), ", w: ", FullPrecision(q.w()), "}"));
+    }
     pose.setQuaternion(q.normalized());
   }
   return pose;
@@ -387,9 +395,9 @@ absl::StatusOr<std::string> SceneObjectToSdf(
   }
 
   std::string sdf = "<?xml version='1.0'?>";
-  sdf += "<sdf version='1.7' xmlns:intrinsic='intrinsic'>";
-  sdf +=
-      absl::Substitute("<model name=\"$0\">", EscapeXml(scene_object.name()));
+  absl::StrAppend(&sdf, "<sdf version='1.7' xmlns:intrinsic='intrinsic'>");
+  absl::SubstituteAndAppend(&sdf, "<model name=\"$0\">",
+                            EscapeXml(scene_object.name()));
 
   // Handles kinematic properties.
   if (scene_object.has_properties() &&
@@ -404,7 +412,7 @@ absl::StatusOr<std::string> SceneObjectToSdf(
   if (scene_object.has_simulation_spec()) {
     INTR_ASSIGN_OR_RETURN(std::string sim_spec_sdf,
                           SimSpecToSdf(scene_object.simulation_spec()));
-    sdf += sim_spec_sdf;
+    absl::StrAppend(&sdf, sim_spec_sdf);
   }
 
   if (options.serialize_user_data && !scene_object.user_data().empty()) {
@@ -413,8 +421,8 @@ absl::StatusOr<std::string> SceneObjectToSdf(
                               scene_object.user_data(), options.user_data_fds));
     // Escapes raw text data in XML.
     // https://en.wikipedia.org/wiki/CDATA
-    sdf += absl::Substitute("<$0><![CDATA[$1]]></$0>", kUserDataCustomElement,
-                            user_data_str);
+    absl::SubstituteAndAppend(&sdf, "<$0><![CDATA[$1]]></$0>",
+                              kUserDataCustomElement, user_data_str);
   }
 
   for (const auto& entity : scene_object.entities()) {
@@ -424,19 +432,19 @@ absl::StatusOr<std::string> SceneObjectToSdf(
             std::string link_sdf,
             LinkToSdf(entity, parent_to_sensors[entity.name()], entity_map,
                       options));
-        sdf += link_sdf;
+        absl::StrAppend(&sdf, link_sdf);
         break;
       }
       case Entity::kJoint: {
         INTR_ASSIGN_OR_RETURN(std::string joint_sdf,
                               JointToSdf(entity, joint_to_child,
                                          parent_to_sensors[entity.name()]));
-        sdf += joint_sdf;
+        absl::StrAppend(&sdf, joint_sdf);
         break;
       }
       case Entity::kFrame: {
         INTR_ASSIGN_OR_RETURN(std::string frame_sdf, FrameToSdf(entity));
-        sdf += frame_sdf;
+        absl::StrAppend(&sdf, frame_sdf);
         break;
       }
       case Entity::kSensor:
@@ -449,8 +457,7 @@ absl::StatusOr<std::string> SceneObjectToSdf(
     }
   }
 
-  sdf += "</model>";
-  sdf += "</sdf>";
+  absl::StrAppend(&sdf, "</model></sdf>");
 
   tinyxml2::XMLDocument doc;
   if (doc.Parse(sdf.c_str()) != tinyxml2::XML_SUCCESS) {

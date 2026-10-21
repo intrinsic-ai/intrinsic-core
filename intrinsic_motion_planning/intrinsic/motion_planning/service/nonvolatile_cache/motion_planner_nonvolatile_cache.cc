@@ -49,7 +49,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_blending_parameter.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planning_limits.pb.h"
 #include "intrinsic/motion_planning/proto/v1/robot_specification.pb.h"
-#include "intrinsic/motion_planning/service/motion_planner_cache_utils.h"
+#include "intrinsic/motion_planning/service/cache/cache_utils.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.pb.h"
 #include "intrinsic/storage/content_addressable_storage/cpp/client_helpers.h"
 #include "intrinsic/util/eigen.h"
@@ -301,6 +301,12 @@ ToProto(const MotionPlannerNonvolatileCacheValue& value) {
     *proto.add_path_segments() = ToProto(path_segment);
   }
   INTR_ASSIGN_OR_RETURN(*proto.mutable_trajectory(), ToProto(value.trajectory));
+
+  for (const intrinsic_proto::motion_planning::v1::MotionEvent& event :
+       value.motion_events) {
+    *proto.add_motion_events() = event;
+  }
+
   return proto;
 }
 
@@ -315,9 +321,18 @@ absl::StatusOr<MotionPlannerNonvolatileCacheValue> FromProto(
   }
   INTR_ASSIGN_OR_RETURN(const JointTrajectoryPVA trajectory,
                         FromProto(value_proto.trajectory()));
+
+  std::vector<intrinsic_proto::motion_planning::v1::MotionEvent> motion_events;
+  for (const auto& motion_event : value_proto.motion_events()) {
+    motion_events.push_back(motion_event);
+  }
+
   return MotionPlannerNonvolatileCacheValue{
       .trajectory = trajectory,
       .path_segments = path_segments,
+
+      .motion_events = motion_events,
+
   };
 }
 
@@ -433,7 +448,9 @@ MotionPlannerNonvolatileCache::SaveToNonvolatileCache(
         intrinsic_proto::motion_planning::MotionPlannerNonvolatileCacheEntry
             proto,
         ToProto(entry));
-    proto.SerializeToString(&proto_contents);
+    if (!proto.SerializeToString(&proto_contents)) {
+      return absl::InternalError("Failed to serialize cache entry proto.");
+    }
     grpc::ClientContext cas_context;
     INTR_ASSIGN_OR_RETURN(
         const std::string uuid,
@@ -463,7 +480,9 @@ MotionPlannerNonvolatileCache::LoadFromNonvolatileCache(
     }
     LOG(INFO) << "Successfully retrieved a CAS entry for " << key.uuid;
     intrinsic_proto::motion_planning::MotionPlannerNonvolatileCacheEntry proto;
-    proto.ParseFromString(status_or_proto_string.value());
+    if (!proto.ParseFromString(status_or_proto_string.value())) {
+      return absl::InternalError("Failed to parse cache entry proto from CAS.");
+    }
     INTR_ASSIGN_OR_RETURN(MotionPlannerNonvolatileCacheEntry entry,
                           FromProto(proto));
     return std::move(entry);

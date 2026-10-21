@@ -162,7 +162,8 @@ std::string RecoveryNodesToString(
       node_identifiers, ", ",
       [&printer](std::string* out, const BehaviorTree::NodeIdentifier& ni) {
         std::string proto_txt;
-        printer.PrintToString(ni, &proto_txt);
+        static_cast<void>(printer.PrintToString(
+            ni, &proto_txt));  // TODO: Handle return value
         absl::StrReplaceAll({{"\n", " "}}, &proto_txt);
         absl::StrAppend(out, proto_txt);
       });

@@ -20,8 +20,7 @@ namespace executive {
 
 // Represents skill actions that can be dispatched by ClipsSkillDispatcher.
 enum class SkillAction {
-  Prediction = 0,
-  Projection,
+  Projection = 0,
   Execution,
   PreviewExecution,
   FootprintChecking,

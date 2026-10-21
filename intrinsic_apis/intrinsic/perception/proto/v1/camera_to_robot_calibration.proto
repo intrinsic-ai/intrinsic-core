@@ -121,4 +121,6 @@ message CameraToRobotValidationResult {
   double rotation_root_mean_square_error_in_degrees = 3;
   // Maximum rotation error in degrees.
   double rotation_maximum_error_in_degrees = 4;
+  // Name of the camera this validation result applies to.
+  string camera_name = 5;
 }

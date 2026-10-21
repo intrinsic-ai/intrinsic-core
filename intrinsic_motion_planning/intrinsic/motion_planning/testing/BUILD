@@ -22,11 +22,11 @@ cc_library(
     srcs = ["constrained_motion_test_utils.cc"],
     hdrs = ["constrained_motion_test_utils.h"],
     deps = [
-        "//intrinsic/util:eigen",
         "//intrinsic_kinematics/intrinsic/kinematics/ik/constrained:constrained_ik_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util:eigen",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/strings:string_view",

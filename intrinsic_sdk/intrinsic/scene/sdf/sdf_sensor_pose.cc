@@ -37,7 +37,7 @@ bool IsOrientedSensorType(::sdf::SensorType sensor_type) {
   }
 }
 
-Pose3d SdfSensorTIntrinsicSenzor(::sdf::SensorType sensor_type) {
+Pose3d SdfSensorTIntrinsicSensor(::sdf::SensorType sensor_type) {
   if (IsOrientedSensorType(sensor_type)) {
     // Convert between the following to conventions:
     // SDF: z up, x forward, y left
@@ -54,13 +54,13 @@ Pose3d SdfSensorTIntrinsicSenzor(::sdf::SensorType sensor_type) {
 
 Pose3d SensorPoseFromSdf(const Pose3d& parent_t_sdf_sensor,
                          ::sdf::SensorType sensor_type) {
-  return parent_t_sdf_sensor * SdfSensorTIntrinsicSenzor(sensor_type);
+  return parent_t_sdf_sensor * SdfSensorTIntrinsicSensor(sensor_type);
 }
 
 Pose3d SensorPoseToSdf(const Pose3d& parent_t_intrinsic_sensor,
                        ::sdf::SensorType sensor_type) {
   return parent_t_intrinsic_sensor *
-         SdfSensorTIntrinsicSenzor(sensor_type).inverse();
+         SdfSensorTIntrinsicSensor(sensor_type).inverse();
 }
 
 }  // namespace sdf

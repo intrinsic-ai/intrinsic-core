@@ -22,6 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/time/time.h"
 #include "intrinsic/conductor/proto/execution_context.pb.h"
 #include "intrinsic/config/proto/operation_mode.pb.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
@@ -29,6 +30,18 @@
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic::conductor {
+namespace {
+
+// Verification options for persisting the execution context. The timeout is
+// generous since we want to make sure this is persisted. Otherwise, we can not
+// differentiate between a deployment and service restart.
+constexpr KeyValueStore::SetWithVerificationOptions kSaveVerificationOptions{
+    .mode = KeyValueStore::SetWithVerificationOptions::VerificationMode::
+        kHighConsistency,
+    .timeout = absl::Minutes(5),
+};
+
+}  // namespace
 
 ExecutionContext::ExecutionContext(Opts opts)
     : kv_store_(opts.kv_store),
@@ -122,10 +135,10 @@ absl::Status ExecutionContext::Save() {
     return absl::InternalError("KVStore is null");
   }
 
-  // Sets with high consistency so that the key is updated immediately.
-  constexpr bool kHighConsistency = true;
+  // Blocks until the exact value is verified in the KV store.
   INTR_RETURN_IF_ERROR(
-      kv_store_->Set(kExecutionContextStorageKey, ToProto(), kHighConsistency))
+      kv_store_->SetWithVerification(kExecutionContextStorageKey, ToProto(),
+                                     kSaveVerificationOptions))
       .LogError();
   LOG(INFO) << "Saved execution context to KV store at ["
             << kExecutionContextStorageKey << "]";

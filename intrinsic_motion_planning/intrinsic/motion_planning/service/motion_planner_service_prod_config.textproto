@@ -24,7 +24,6 @@
     enable_distance_check_statistics: false
     enable_concurrent_collision_checking: true
     concurrent_collision_checking_thread_count: 4
-    parameterization_service_address: "localhost:8081"
     enable_fallback_trajectory: true
     enable_fallback_trajectory_local_adjust: true
     default_collision_check_spacing: 0.01

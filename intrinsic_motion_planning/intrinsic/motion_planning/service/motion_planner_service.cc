@@ -14,6 +14,8 @@
 
 #include "intrinsic/motion_planning/service/motion_planner_service.h"
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <memory>
 #include <optional>
@@ -87,14 +89,15 @@
 #include "intrinsic/motion_planning/proto/v1/motion_planning_error.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
 #include "intrinsic/motion_planning/proto/v1/robot_specification.pb.h"
+#include "intrinsic/motion_planning/service/cache/motion_planner_cache.h"
 #include "intrinsic/motion_planning/service/debug/timing_debug_logger.h"
-#include "intrinsic/motion_planning/service/motion_planner_cache.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_utils.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache_utils.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/skills/internal/world_service_utils.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/grpc/grpc.h"
 #include "intrinsic/util/proto/type_url.h"
@@ -117,10 +120,15 @@
 #include "intrinsic/world/proto/object_world_updates.pb.h"
 #include "intrinsic/world/service/objects/object_world_converter.h"
 #include "intrinsic/world/world.h"
-#include "opencensus/stats/stats.h"
+#include "opentelemetry/common/attribute_value.h"
+#include "opentelemetry/context/runtime_context.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 namespace intrinsic {
 namespace {
+
+constexpr absl::Duration kStopCheckInterval = absl::Milliseconds(100);
+constexpr absl::Duration kContextRetryDelay = absl::Seconds(5);
 static const auto* const kConfigFormatString =
     new absl::ParsedFormat<'s', 's', 'f'>(
         "Cache <%s> and <%s> has a max starting robot configuration "
@@ -229,26 +237,10 @@ absl::Status AddTypeUrlPrefixToPayload(const absl::Status& status) {
 
 absl::StatusOr<std::unique_ptr<object_world::ObjectWorld>> GetObjectWorldView(
     World& world) {
+  const stats::ScopedSpan span("motion_planning/GetObjectWorldView");
   INTR_ASSIGN_OR_RETURN(auto object_world,
                         object_world::ObjectWorld::CreateView(world));
   return object_world;
-}
-
-absl::StatusOr<std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>>
-ComputeSweptVolume(const World& world, const RobotCollectionsEntityId& robot_id,
-                   GeometrySerializer& geolib, const PointPath& path) {
-  INTR_ASSIGN_OR_RETURN(const auto shape_data,
-                        ComputeSweptVolumeFromPath(world, robot_id, path));
-
-  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> result;
-  result.reserve(shape_data.size());
-  for (const TransformedGeometry& shape : shape_data) {
-    INTR_ASSIGN_OR_RETURN(
-        intrinsic_proto::geometry::v1::TransformedGeometry shape_proto,
-        intrinsic::geo::ToProto(shape, &geolib));
-    result.push_back(std::move(shape_proto));
-  }
-  return result;
 }
 
 PointPath PathSegmentsToPath(const std::vector<PathSegment>& path_segments) {
@@ -265,50 +257,14 @@ PointPath PathSegmentsToPath(const std::vector<PathSegment>& path_segments) {
   return path;
 }
 
-absl::StatusOr<std::vector<intrinsic_proto::geometry::v1::TransformedGeometry>>
-ComputeSweptVolume(const World& world, const RobotCollectionsEntityId& robot_id,
-                   GeometrySerializer& geolib,
-                   const JointTrajectoryPVA& trajectory) {
+// Extracts the joint positions of `trajectory` as a path of configurations.
+PointPath TrajectoryToPointPath(const JointTrajectoryPVA& trajectory) {
   PointPath path;
   path.reserve(trajectory.size());
   for (const JointStatePVA& pva : trajectory.data()) {
     path.push_back(pva.position);
   }
-
-  return ComputeSweptVolume(world, robot_id, geolib, path);
-}
-
-absl::Status ComputeSweptVolumeForPathAndAssignToResponse(
-    const World& world, const RobotCollectionsEntityId& robot_id,
-    GeometrySerializer& geolib, const PointPath& path,
-    intrinsic_proto::motion_planning::v1::PathPlanningResponse* response) {
-  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> swept_volumes;
-  {
-    INTR_ASSIGN_OR_RETURN(swept_volumes,
-                          ComputeSweptVolume(world, robot_id, geolib, path));
-  }
-
-  for (auto& swept_volume : swept_volumes) {
-    *response->add_swept_volumes() = std::move(swept_volume);
-  }
-  return absl::OkStatus();
-}
-
-absl::Status ComputeSweptVolumeAndAssignToResponse(
-    const World& world, const RobotCollectionsEntityId& robot_id,
-    GeometrySerializer& geolib, const JointTrajectoryPVA& trajectory,
-    intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse*
-        response) {
-  std::vector<intrinsic_proto::geometry::v1::TransformedGeometry> swept_volumes;
-  {
-    INTR_ASSIGN_OR_RETURN(
-        swept_volumes, ComputeSweptVolume(world, robot_id, geolib, trajectory));
-  }
-
-  for (auto& swept_volume : swept_volumes) {
-    *response->add_swept_volumes() = std::move(swept_volume);
-  }
-  return absl::OkStatus();
+  return path;
 }
 
 // Inserts the given result into the cache if the cache is not null and the
@@ -337,6 +293,19 @@ absl::Status MaybeInsertMotionPlanningRequestCacheHit(
   return absl::OkStatus();
 }
 
+// Sleeps for `duration` in `kStopCheckInterval` increments, returning early if
+// `stop_token.stop_requested()` becomes true.
+void SleepForWithStopCheck(const absl::Duration duration,
+                           const StopToken& stop_token) {
+  const absl::Time deadline = absl::Now() + duration;
+  while (!stop_token.stop_requested()) {
+    const absl::Duration remaining = deadline - absl::Now();
+    if (remaining <= absl::ZeroDuration()) {
+      break;
+    }
+    absl::SleepFor(std::min(remaining, kStopCheckInterval));
+  }
+}
 }  // namespace
 
 void FromProto(
@@ -396,6 +365,7 @@ absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> GetProxyForPathPlanning(
         collision_checker_config,
     const intrinsic_proto::RuleSet& rule_set, bool require_ik_and_fk,
     bool disable_collision_checking) {
+  const stats::ScopedSpan span("motion_planning/GetProxyForPathPlanning");
   const World& world = object_world.GetEntityWorld();
 
   INTR_ASSIGN_OR_RETURN(const bool is_kinematic_chain,
@@ -406,9 +376,13 @@ absl::StatusOr<std::unique_ptr<KinematicsSystemProxy>> GetProxyForPathPlanning(
            << "We currently do not support resolving Cartesian motion targets "
               "for branching kinematic structures.";
   }
-  return CreateKinematicsProxyWithConfig(object_world, robot,
-                                         collision_checker_config, std::nullopt,
-                                         rule_set, disable_collision_checking);
+  return CreateKinematicsProxy(
+      object_world, robot,
+      KinematicsProxyOptions{
+          .collision_checker_config = collision_checker_config,
+          .rule_set = rule_set,
+          .disable_collision_checking = disable_collision_checking,
+      });
 }
 
 /*static*/
@@ -520,16 +494,24 @@ MotionPlannerService::MotionPlannerService(
                         << organization_id_ << ", workcell=" << workcell_name_;
               break;
             }
-            // Instead of a single 5-second sleep, check stop_requested() in
-            // 100ms increments to ensure the thread exits immediately during
-            // service shutdown.
-            for (int i = 0; i < 50 && !stop_token.stop_requested(); ++i) {
-              absl::SleepFor(absl::Milliseconds(100));
-            }
+            // Sleep in `kStopCheckInterval` increments to ensure the thread
+            // exits immediately during service shutdown.
+            SleepForWithStopCheck(kContextRetryDelay, stop_token);
           }
         });
   }
 }
+absl::Status MotionPlannerService::ComputeSweptVolumeAndAssignToResponse(
+    const World& world, const RobotCollectionsEntityId& robot_id,
+    const std::vector<eigenmath::VectorXd>& path,
+    google::protobuf::RepeatedPtrField<
+        intrinsic_proto::geometry::v1::TransformedGeometry>*
+        swept_volumes_out) {
+  return absl::UnimplementedError(
+      "ComputeSweptVolume is "
+      "not implemented.");
+}
+
 absl::Status
 MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     const MotionPlanner::PlanTrajectoryResult& plan_trajectory_result,
@@ -545,6 +527,11 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
       ToProto(plan_trajectory_result.trajectory)
   );
   *response.mutable_discretized() = trajectory_proto;
+
+  *response.mutable_motion_events() = {
+      plan_trajectory_result.motion_events.begin(),
+      plan_trajectory_result.motion_events.end()};
+
   INTR_LOG_IF_ERROR(absl::LogSeverity::kError,
                     planned_trajectory_publisher_.Publish(trajectory_proto));
 
@@ -552,8 +539,8 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
   if (request.compute_swept_volume()) {
     INTR_RETURN_IF_ERROR(ComputeSweptVolumeAndAssignToResponse(
         initial_world, robot.GetRobotEntityId(),
-        geometry_library_->Serializer(), plan_trajectory_result.trajectory,
-        &response));
+        TrajectoryToPointPath(plan_trajectory_result.trajectory),
+        response.mutable_swept_volumes()));
   }
   return absl::OkStatus();
 }
@@ -610,7 +597,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
   INTR_ASSIGN_OR_RETURN_GRPC(
       MotionPlanningRequestCacheKey cache_key,
       MotionPlanningRequestCacheKey::Create(
-          initial_world_and_proto.world_proto, *object_world,
+          *object_world,
           *request
           )
   );
@@ -672,12 +659,11 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
       if (valid_trajectory) {
         // Log the cache hit and increase the cache hit count.
         LOG(INFO) << absl::StrFormat(
-            *return_cache_format_string, lookup_result.cached_entry.key.uuid,
+            *return_cache_format_string, lookup_result.cached_entry.uuid,
             cache_key.uuid, plan_trajectory_cache_->GetNumOfEntries());
         cache_hit = lookup_result.exact_match ? "exact" : "fuzzy";
         logger.Attach("cache_hit_type", cache_hit);
-        logger.Attach("matched_cache_key_id",
-                      lookup_result.cached_entry.key.uuid);
+        logger.Attach("matched_cache_key_id", lookup_result.cached_entry.uuid);
 
         INTR_RETURN_IF_ERROR_GRPC(
             ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
@@ -753,6 +739,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context, const MotionPlanningRequest* request,
     intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse*
         response) {
+  const stats::ScopedSpan span("MotionPlannerService/PlanTrajectory", context);
   return PlanTrajectoryInternal(
       context, request, response,
       /*run_time_flags=*/std::nullopt);
@@ -761,6 +748,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
 ::grpc::Status MotionPlannerService::PlanPath(
     ::grpc::ServerContext* context, const MotionPlanningRequest* request,
     intrinsic_proto::motion_planning::v1::PathPlanningResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/PlanPath", context);
   TimingDebugLogger logger("MotionPlannerService::PlanPath");
   std::string cache_hit = "no";
 
@@ -825,9 +813,9 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     *response->mutable_path() = path_proto;
     // Calculate and fill in the swept volume
     if (request->compute_swept_volume()) {
-      INTR_RETURN_IF_ERROR_GRPC(ComputeSweptVolumeForPathAndAssignToResponse(
-          initial_world_and_proto.world, robot->GetRobotEntityId(),
-          geometry_library_->Serializer(), path, response));
+      INTR_RETURN_IF_ERROR_GRPC(ComputeSweptVolumeAndAssignToResponse(
+          initial_world_and_proto.world, robot->GetRobotEntityId(), path,
+          response->mutable_swept_volumes()));
     }
   }
 
@@ -840,6 +828,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::IkRequest* request,
     intrinsic_proto::motion_planning::v1::IkResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/ComputeIk", context);
   // Return error early for invalid max_num_solutions before doing any further
   // computations.
   if (request->max_num_solutions() < 0) {
@@ -926,6 +915,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::FkRequest* request,
     intrinsic_proto::motion_planning::v1::FkResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/ComputeFk", context);
   // Download the world from the world service.
   INTR_ASSIGN_OR_RETURN_GRPC(
       WorldAndProto initial_world_and_proto,
@@ -968,6 +958,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::CheckCollisionsRequest* request,
     intrinsic_proto::motion_planning::v1::CheckCollisionsResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/CheckCollisions", context);
   // Download the world from the world service.
   INTR_ASSIGN_OR_RETURN_GRPC(
       WorldAndProto initial_world_and_proto,

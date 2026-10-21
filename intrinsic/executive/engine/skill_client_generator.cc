@@ -36,6 +36,7 @@
 #include "intrinsic/assets/proto/installed_assets.pb.h"
 #include "intrinsic/assets/proto/view.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
+#include "intrinsic/executive/clips/cc/id_handling.h"
 #include "intrinsic/executive/clips_cpp/fact.h"
 #include "intrinsic/executive/clips_cpp/function_facade.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
@@ -135,10 +136,13 @@ SkillClientGenerator::GetProcessAsset(intrinsic_proto::assets::Id process_id) {
                         "a behavior tree.",
                         process_id.package(), process_id.name()));
   }
-  const intrinsic_proto::executive::BehaviorTree& bt =
-      asset.deployment_data().process().process().behavior_tree();
-
-  return bt;
+  intrinsic_proto::executive::BehaviorTree& bt =
+      *asset.mutable_deployment_data()
+           ->mutable_process()
+           ->mutable_process()
+           ->mutable_behavior_tree();
+  INTR_RETURN_IF_ERROR(EnsureUniqueElementIds(bt));
+  return std::move(bt);
 }
 
 SkillClientGenerator::SkillRegistrationInternal
@@ -481,7 +485,7 @@ SkillClientGenerator::GetAndCacheBehaviorTree(absl::string_view skill_id) {
     return absl::NotFoundError(absl::StrFormat(
         "Could not find skill entry for behavior tree with id '%s'", skill_id));
   }
-  const SkillRegistrationInternal& skill_registration = skill_entry->second;
+  SkillRegistrationInternal& skill_registration = skill_entry->second;
 
   if (!skill_registration.is_process) {
     return absl::FailedPreconditionError(absl::StrFormat(
@@ -489,6 +493,13 @@ SkillClientGenerator::GetAndCacheBehaviorTree(absl::string_view skill_id) {
   }
 
   if (skill_registration.behavior_tree.has_value()) {
+
+    if (!skill_registration.behavior_tree_element_ids_ensured) {
+      INTR_RETURN_IF_ERROR(
+          EnsureUniqueElementIds(*skill_registration.behavior_tree));
+      skill_registration.behavior_tree_element_ids_ensured = true;
+    }
+
     // Return saved behavior tree from Process asset we have retrieved earlier
     // when listing Process assets.
     return *skill_registration.behavior_tree;
@@ -519,6 +530,9 @@ SkillClientGenerator::GetAndCacheBehaviorTree(absl::string_view skill_id) {
   INTR_ASSIGN_OR_RETURN(intrinsic_proto::executive::BehaviorTree legacy_pbt,
                         skillreg_client_->GetBehaviorTree(skill_id),
                         _.LogError());
+
+
+  INTR_RETURN_IF_ERROR(EnsureUniqueElementIds(legacy_pbt));
 
   skill_id_to_behavior_tree_[skill_id] = legacy_pbt;
   return legacy_pbt;

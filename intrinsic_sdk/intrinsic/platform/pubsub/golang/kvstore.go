@@ -12,10 +12,13 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package kvstore is a wrapper around the C++ kvstore class provided bypubsub.
+// Package kvstore provides the Go interface and primitives for the
+// KeyValueStore, providing an equivalent API to the C++ KeyValueStore class.
+// The concrete implementation is in the pubsub package.
 package kvstore
 
 import (
+	"context"
 	"fmt"
 	"path"
 	"strings"
@@ -37,6 +40,34 @@ func MakeKey(parts ...string) string {
 	return strings.TrimPrefix(path.Join(parts...), "/")
 }
 
+// VerificationMode defines the verification strategy for SetWithVerification.
+type VerificationMode int
+
+const (
+	// HighConsistency blocks until the value is verified by reading it back and
+	// checking if it matches the expected bytes.
+	HighConsistency VerificationMode = iota
+
+	// FirstReply returns as soon as any populated value is read from the key,
+	// without verifying its contents.
+	FirstReply
+)
+
+// SetWithVerificationOptions holds options for SetWithVerification.
+type SetWithVerificationOptions struct {
+	Mode VerificationMode
+}
+
+// SetWithVerificationOption is a functional option for SetWithVerification.
+type SetWithVerificationOption func(*SetWithVerificationOptions)
+
+// WithVerificationMode sets the verification mode.
+func WithVerificationMode(mode VerificationMode) SetWithVerificationOption {
+	return func(o *SetWithVerificationOptions) {
+		o.Mode = mode
+	}
+}
+
 // KVStore represents an instance of a KVStore object. It provides an
 // interface that allows getting and setting key/value pairs.
 type KVStore interface {
@@ -46,7 +77,20 @@ type KVStore interface {
 	// A key can't include any of the
 	// following characters: /, *, ?, #, [ and ]. It will be namespaced according
 	// to the settings provided in the NamespaceConfig.
-	Set(key string, value proto.Message, highConsistency bool) error
+	//
+	// Passing highConsistency is deprecated: use SetWithVerification for verified writes,
+	// or call Set with two arguments for unverified writes.
+	// TODO(methyldragon): Remove the deprecated highConsistency parameter so the two-argument
+	// Set(key, value) signature becomes the canonical unverified write API.
+	Set(key string, value proto.Message, highConsistency ...bool) error
+
+	// SetWithVerification sets the value for the given key and blocks until
+	// verification completes according to the specified options (defaults to [HighConsistency]).
+	// If ctx has no deadline (e.g. context.Background()), a default 30-second
+	// verification timeout is applied.
+	// Returns [ErrDeadlineExceeded] if the timeout expires.
+	// Under HighConsistency mode, returns [ErrAborted] if concurrent modification is detected.
+	SetWithVerification(ctx context.Context, key string, value proto.Message, opts ...SetWithVerificationOption) error
 
 	// SetAny sets the value for the given key. The value is expected to be Any proto,
 	// and it's written to the KV store as is.
@@ -54,7 +98,20 @@ type KVStore interface {
 	// A key can't include any of the
 	// following characters: /, *, ?, #, [ and ]. It will be namespaced according
 	// to the settings provided in the NamespaceConfig.
-	SetAny(key string, valueAny *anypb.Any, highConsistency bool) error
+	//
+	// Passing highConsistency is deprecated: use SetAnyWithVerification for verified writes,
+	// or call SetAny with two arguments for unverified writes.
+	// TODO(methyldragon): Remove the deprecated highConsistency parameter so the two-argument
+	// SetAny(key, valueAny) signature becomes the canonical unverified write API.
+	SetAny(key string, valueAny *anypb.Any, highConsistency ...bool) error
+
+	// SetAnyWithVerification sets the value for the given key and blocks until
+	// verification completes according to the specified options (defaults to [HighConsistency]).
+	// If ctx has no deadline (e.g. context.Background()), a default 30-second
+	// verification timeout is applied.
+	// Returns [ErrDeadlineExceeded] if the timeout expires.
+	// Under HighConsistency mode, returns [ErrAborted] if concurrent modification is detected.
+	SetAnyWithVerification(ctx context.Context, key string, valueAny *anypb.Any, opts ...SetWithVerificationOption) error
 
 	// Get returns the value for the given key. Wildcard queries are not supported
 	// with this method, use the GetAll method instead. If wildcard values are

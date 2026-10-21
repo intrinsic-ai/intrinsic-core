@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("//bazel:xacro.bzl", "xacro_file")
-load("//intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
+load("//intrinsic_sdk/intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
 
 filegroup(
     name = "plugins",
@@ -55,6 +55,7 @@ sdf_scene_object(
         "//intrinsic_control/intrinsic/icon/control/services:__pkg__",
         "//intrinsic_control/intrinsic/icon/hardware_modules:__subpackages__",
         "//intrinsic_kinematics/intrinsic/kinematics:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:__pkg__",
     ],
     deps = [
         "@intrinsic_apis//intrinsic/icon/hal/proto/v1:digital_input_output_proto",

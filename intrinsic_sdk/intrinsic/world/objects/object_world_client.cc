@@ -206,8 +206,65 @@ intrinsic_proto::world::CreateObjectRequest BaseCreateObjectRequest(
 ObjectWorldClient::ObjectWorldClient(
     absl::string_view world_id,
     std::shared_ptr<ObjectWorldService::StubInterface> object_world_service)
+    : ObjectWorldClient(world_id, std::move(object_world_service),
+                        /*owns_world=*/false) {}
+
+ObjectWorldClient::ObjectWorldClient(
+    absl::string_view world_id,
+    std::shared_ptr<ObjectWorldService::StubInterface> object_world_service,
+    bool owns_world)
     : world_id_(world_id),
-      object_world_service_(std::move(object_world_service)) {}
+      object_world_service_(std::move(object_world_service)),
+      owns_world_(owns_world) {}
+
+ObjectWorldClient::~ObjectWorldClient() { DeleteOwnedWorld(); }
+
+ObjectWorldClient::ObjectWorldClient(ObjectWorldClient&& other) noexcept
+    : world_id_(std::move(other.world_id_)),
+      object_world_service_(std::move(other.object_world_service_)),
+      owns_world_(other.owns_world_) {
+  other.owns_world_ = false;
+}
+
+ObjectWorldClient& ObjectWorldClient::operator=(
+    ObjectWorldClient&& other) noexcept {
+  if (this != &other) {
+    DeleteOwnedWorld();
+    world_id_ = std::move(other.world_id_);
+    object_world_service_ = std::move(other.object_world_service_);
+    owns_world_ = other.owns_world_;
+    other.owns_world_ = false;
+  }
+  return *this;
+}
+
+absl::StatusOr<ObjectWorldClient> ObjectWorldClient::Clone() const {
+  grpc::ClientContext ctx;
+  intrinsic_proto::world::CloneWorldRequest request;
+  request.set_world_id(world_id_);
+  intrinsic_proto::world::WorldMetadata response;
+  INTR_RETURN_IF_ERROR(ToAbslStatus(
+      object_world_service_->CloneWorld(&ctx, request, &response)));
+  return ObjectWorldClient(response.id(), object_world_service_,
+                           /*owns_world=*/true);
+}
+
+void ObjectWorldClient::DeleteOwnedWorld() {
+  if (!owns_world_ || object_world_service_ == nullptr || world_id_.empty()) {
+    return;
+  }
+  grpc::ClientContext ctx;
+  intrinsic_proto::world::DeleteWorldRequest request;
+  request.set_world_id(world_id_);
+  google::protobuf::Empty response;
+  if (absl::Status status = ToAbslStatus(
+          object_world_service_->DeleteWorld(&ctx, request, &response));
+      !status.ok()) {
+    LOG(WARNING) << "Failed to delete cloned world '" << world_id_
+                 << "': " << status;
+  }
+  owns_world_ = false;
+}
 
 namespace {
 
@@ -430,6 +487,13 @@ absl::StatusOr<KinematicObject> ObjectWorldClient::GetKinematicObject(
       return absl::NotFoundError(
           absl::StrCat("Resource handle ", resource_handle.name(),
                        " does not have any Icon2PositionPart information."));
+    }
+    if (icon_position_part.object_names().size() == 1) {
+      const auto& object_name =
+          icon_position_part.object_names().begin()->second;
+      LOG(INFO) << "Using kinematic object from position part object_names: "
+                << object_name;
+      return GetKinematicObject(WorldObjectName(object_name));
     }
     if (!icon_position_part.world_robot_collection_name().empty()) {
       LOG(INFO) << "Using kinematic object from world robot collection: "

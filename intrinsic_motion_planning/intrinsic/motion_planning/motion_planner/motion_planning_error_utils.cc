@@ -194,7 +194,8 @@ absl::Status AssignConstraintForIKError(
           if (absl::StrContains(type_url, "MotionPlanningError")) {
             MotionPlanningError motion_planning_error;
             if (absl::StrContains(type_url, "ik_error")) {
-              motion_planning_error.ParseFromString(payload);
+              static_cast<void>(motion_planning_error.ParseFromString(
+                  payload));  // TODO: Handle return value
             }
             *motion_planning_error.mutable_ik_error()->mutable_constraint() =
                 geometric_constraint;
@@ -347,13 +348,15 @@ absl::Status UpdateStatusErrorContext(
     if (absl::StrContains(type_url, "MotionPipelineError")) {
       intrinsic_proto::motion_planning::v1::MotionPipelineError
           motion_pipeline_error;
-      motion_pipeline_error.ParseFromString(payload);
+      static_cast<void>(motion_pipeline_error.ParseFromString(
+          payload));  // TODO: Handle return value
       if (!motion_pipeline_error.motion_planning_error().empty()) {
         motion_planning_error =
             motion_pipeline_error.motion_planning_error().Get(0);
       }
     } else if (absl::StrContains(type_url, "MotionPlanningError")) {
-      motion_planning_error.ParseFromString(payload);
+      static_cast<void>(motion_planning_error.ParseFromString(
+          payload));  // TODO: Handle return value
     };
     switch (motion_planning_error.error_case()) {
       case MotionPlanningError::kCollisionError:

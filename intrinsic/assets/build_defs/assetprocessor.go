@@ -36,11 +36,12 @@ import (
 
 	assetpb "intrinsic/assets/build_defs/asset_go_proto"
 	ipb "intrinsic/assets/proto/id_go_proto"
+	v1assetpb "intrinsic/assets/proto/v1/asset_go_proto"
+	aigrpcpb "intrinsic/assets/proto/v1/asset_instances_go_proto"
 	icpb "intrinsic/assets/proto/v1/instance_config_go_proto"
-	apppb "intrinsic/config/proto/application_go_proto"
-	commonpb "intrinsic/config/proto/common_go_proto"
-	processpb "intrinsic/config/proto/process_go_proto"
-	rspb "intrinsic/config/proto/resource_set_go_proto"
+	rpb "intrinsic/assets/proto/v1/reference_go_proto"
+	solutiondeploymentpb "intrinsic/assets/proto/v1/solution_deployment_go_proto"
+	solutionpb "intrinsic/assets/proto/v1/solution_go_proto"
 )
 
 var (
@@ -51,7 +52,7 @@ var (
 
 type processedAsset struct {
 	id    string
-	asset *apppb.Application_Asset
+	asset *v1assetpb.Asset
 	// fileDescriptorSet is a closure that can return a file descriptor set.  It
 	// should follow the conventions of FileDescriptorSet for processed bundle,
 	// including returning bundle.ErrMissingProvider.
@@ -112,7 +113,11 @@ func processAsset(ctx context.Context, a *assetpb.LocalSolution_Asset, proc *Pro
 		if err != nil {
 			return nil, fmt.Errorf("failed to parse local Asset ID: %w", err)
 		}
-		p, err := proc.PathResolver(localInfo.GetBundleRunfilesPath())
+		resolvePath := proc.PathResolver
+		if resolvePath == nil {
+			resolvePath = func(path string) (string, error) { return path, nil }
+		}
+		p, err := resolvePath(localInfo.GetBundlePath())
 		if err != nil {
 			return nil, fmt.Errorf("failed to resolve path prefix for Asset %s: %w", id, err)
 		}
@@ -123,7 +128,7 @@ func processAsset(ctx context.Context, a *assetpb.LocalSolution_Asset, proc *Pro
 		}
 		return &processedAsset{
 			id:                id,
-			asset:             processedBundle.DeployApp(),
+			asset:             processedBundle.Solution(),
 			fileDescriptorSet: processedBundle.FileDescriptorSet,
 		}, nil
 
@@ -140,9 +145,12 @@ func processAsset(ctx context.Context, a *assetpb.LocalSolution_Asset, proc *Pro
 		}
 		return &processedAsset{
 			id: id,
-			asset: &apppb.Application_Asset{
-				Variant: &apppb.Application_Asset_Catalog{
-					Catalog: idVersion,
+			asset: &v1assetpb.Asset{
+				Source: &v1assetpb.Asset_Catalog{
+					Catalog: &rpb.CatalogAsset{
+						AssetType: catalogInfo.GetAssetType(),
+						IdVersion: idVersion,
+					},
 				},
 			},
 			fileDescriptorSet: func(ctx context.Context, provider bundle.CatalogFileDescriptorProvider) (*descriptorpb.FileDescriptorSet, error) {
@@ -199,8 +207,8 @@ func convertAssets(ctx context.Context, solutionAssets []*assetpb.LocalSolution_
 	return assets, nil
 }
 
-func convertInstances(ctx context.Context, instanceInfos []*assetpb.AssetInstanceInfo, assets map[string]*processedAsset, pathResolver PathResolver, provider bundle.CatalogFileDescriptorProvider) (map[string]*apppb.Application_Instance, error) {
-	instances := map[string]*apppb.Application_Instance{}
+func convertInstances(ctx context.Context, instanceInfos []*assetpb.AssetInstanceInfo, assets map[string]*processedAsset, pathResolver PathResolver, provider bundle.CatalogFileDescriptorProvider) (map[string]*aigrpcpb.AssetInstance, error) {
+	instances := map[string]*aigrpcpb.AssetInstance{}
 	for _, i := range instanceInfos {
 		asset := i.GetAsset()
 		pa, exists := assets[asset]
@@ -211,12 +219,12 @@ func convertInstances(ctx context.Context, instanceInfos []*assetpb.AssetInstanc
 		var config *icpb.InstanceConfig
 		if i.GetParsed() != nil {
 			config = i.GetParsed()
-		} else if i.GetConfigRunfilesPath() != "" {
+		} else if i.GetConfigPath() != "" {
 			resolvePath := pathResolver
 			if resolvePath == nil {
 				resolvePath = func(path string) (string, error) { return path, nil }
 			}
-			p, err := resolvePath(i.GetConfigRunfilesPath())
+			p, err := resolvePath(i.GetConfigPath())
 			if err != nil {
 				return nil, fmt.Errorf("failed to resolve config path for instance %q: %w", i.GetName(), err)
 			}
@@ -239,7 +247,8 @@ func convertInstances(ctx context.Context, instanceInfos []*assetpb.AssetInstanc
 			}
 		}
 
-		instances[i.GetName()] = &apppb.Application_Instance{
+		instances[i.GetName()] = &aigrpcpb.AssetInstance{
+			Name:   i.GetName(),
 			Asset:  asset,
 			Config: config,
 		}
@@ -299,6 +308,7 @@ func RewriteLocalToCatalog(options ...RewriteLocalToCatalogOption) SolutionAsset
 			return &assetpb.LocalSolution_Asset{
 				Variant: &assetpb.LocalSolution_Asset_Catalog{
 					Catalog: &assetpb.AssetCatalogRefInfo{
+						AssetType: a.GetLocal().GetAssetType(),
 						IdVersion: &ipb.IdVersion{
 							Id:      a.GetLocal().GetId(),
 							Version: v,
@@ -325,8 +335,8 @@ type Processor struct {
 }
 
 // Process processes the solution assets and returns the corresponding
-// application assets and instances.
-func (proc *Processor) Process(ctx context.Context, sa *assetpb.LocalSolution) (*apppb.Application, error) {
+// SolutionDeployment.
+func (proc *Processor) Process(ctx context.Context, sa *assetpb.LocalSolution) (*solutiondeploymentpb.SolutionDeployment, error) {
 
 	ctx, span := trace.StartSpan(ctx, "assetprocessor.Process")
 	defer span.End()
@@ -357,26 +367,21 @@ func (proc *Processor) Process(ctx context.Context, sa *assetpb.LocalSolution) (
 		return nil, err
 	}
 
-	var assets map[string]*apppb.Application_Asset
+	var assets map[string]*v1assetpb.Asset
 	if len(processedAssets) > 0 {
-		assets = make(map[string]*apppb.Application_Asset, len(processedAssets))
+		assets = make(map[string]*v1assetpb.Asset, len(processedAssets))
 		for id, pa := range processedAssets {
 			assets[id] = pa.asset
 		}
 	}
 
-	return &apppb.Application{
-		Metadata: &commonpb.Metadata{
-			DisplayName: sa.GetDisplayName(),
-			Category:    commonpb.Metadata_TEMPLATE,
+	return &solutiondeploymentpb.SolutionDeployment{
+		DisplayName:   sa.GetDisplayName(),
+		OperationMode: sa.GetDefaultOperationMode(),
+		Solution: &solutionpb.Solution{
+			Assets:             assets,
+			Instances:          instances,
+			ObjectWorldUpdates: sa.GetObjectWorldUpdates(),
 		},
-		// TODO: b/394317777 - Leave process unspecified if not provided.
-		Process: &processpb.Process{},
-		// TODO: b/394317777 - Leave resources unspecified.
-		Resources:          &rspb.ResourceSet{},
-		Assets:             assets,
-		Instances:          instances,
-		ObjectWorldUpdates: sa.GetObjectWorldUpdates(),
-		OperationMode:      sa.GetDefaultOperationMode(),
 	}, nil
 }

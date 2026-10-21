@@ -349,6 +349,10 @@ class ForceTorqueSensor {
   // mass.
   // TODO(b/160309005): When the Frame Manager is done, change this to a stamped
   // type so we can transform the wrench to different frames.
+  // Uncompensated force torque values from the sensor. The returned wrench is
+  // the raw value from the hardware module, not compensating for quasi-static
+  // gravitational loads, but matching sign convention.
+  virtual Wrench WrenchAtSensorUncompensated() const = 0;
   // Filtered wrench at the sensor compensated for support mass and bias.
   virtual Wrench WrenchAtSensor() const = 0;
   // Filtered wrench at the tip compensated for support_mass and bias.

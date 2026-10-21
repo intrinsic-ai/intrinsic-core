@@ -42,7 +42,7 @@ def cc_oci_image(
     """
 
     if base == None:
-        base = Label("//intrinsic/kubernetes:base-image-cc-oci")  
+        base = Label("//intrinsic/kubernetes:base-image-oci")  
 
     layer_kwargs = {key: value for key, value in kwargs.items() if key in ["compatible_with", "data_path", "directory", "testonly"]}
     container_layer(

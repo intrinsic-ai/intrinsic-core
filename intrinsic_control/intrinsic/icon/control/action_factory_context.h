@@ -76,7 +76,7 @@ class ActionFactoryContext {
 
   // Returns a SlotInfo object for `slot_name`.
   // Returns an error if the Action's signature does not contain a slot with
-  // that name.
+  // that name, or if the slot is marked `is_optional` in the signature.
   //
   // The SlotInfo object contains
   // * Static configuration data for the slot, which a factory can use for
@@ -93,8 +93,9 @@ class ActionFactoryContext {
   absl::StatusOr<SlotInfo> GetSlotInfo(absl::string_view slot_name);
 
   // Returns a SlotInfo object for the optional slot `slot_name`, or nullopt if
-  // the slot is not available. An optional slot is one whose
-  // `required_feature_interfaces` field in the action's signature is empty.
+  // the slot is not available. An optional slot is one whose `is_optional`
+  // field in the action's signature `PartSlotInfo` is true (registered via
+  // `AddOptionalPartSlot`).
   //
   // The SlotInfo object contains
   // * Static configuration data for the slot, which a factory can use for

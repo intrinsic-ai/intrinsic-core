@@ -27,6 +27,9 @@
 #include "intrinsic/kinematics/types/joint_limits.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/trajectory_planning/topp/path_sample.h"
 #include "intrinsic/util/fixed_vector.h"
 
@@ -57,7 +60,10 @@ enum class PathProcessingMode {
   // Collinear points are filtered out, and then blending endpoints are added.
   // (Recommended mode for constructing B-spline control polygons). Note that
   // filtering out a point means that all the information related to that point
-  // is lost.
+
+  // is lost, including its motion events.
+
+
   kFilterCollinearAndAddBlendingEndpoints,
 };
 
@@ -102,6 +108,11 @@ struct PathPolylinePoint {
 
   // Indicates whether the segment the point belongs to is a blending segment.
   bool is_on_blending_segment;
+
+
+  // The list of motion events associated with the point.
+  std::vector<intrinsic_proto::motion_planning::v1::MotionEvent> motion_events;
+
 };
 
 // A joint-space piecewise linear path.
@@ -113,9 +124,10 @@ class PathPolyline {
   // Specifically, it performs the following steps and checks:
   // - Performs sanity checks on each segment and verifies that the segments
   //   are connected.
-  // - Removes duplicated points (at segment connection or within the segment),
-  //   considering the least restrictive blending deviation and the most
-  //   conservative joint/Cartesian limits.
+  // - Removes duplicated points (using `kJointEqualitySegmentMarginRad` at
+  //   segment connections and `kJointEqualityNumericalMarginRad` within a
+  //   segment), considering the least restrictive blending deviation and the
+  //   most conservative joint/Cartesian limits.
   // - Assigns the IDs from both segments to points at the connection between
   //   two segments.
   static absl::StatusOr<std::unique_ptr<PathPolyline>> Create(

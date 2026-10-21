@@ -23,8 +23,8 @@ cc_library(
     hdrs = ["conversions.h"],
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/util:eigen",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util:eigen",
         "@com_google_protobuf//:protobuf_lite",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_cc_proto",
     ],
@@ -37,16 +37,17 @@ cc_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         ":conversions",
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/grpc:channel_interface",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_events_cc_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_cc_grpc_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_cc_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_specification_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/grpc:channel_interface",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:transform_node",
         "@abseil-cpp//absl/status:statusor",
@@ -62,7 +63,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/world/proto:collision_checker_config_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
-    ] + [],
+    ],
 )
 
 py_library(
@@ -70,10 +71,10 @@ py_library(
     srcs = ["motion_planner_client.py"],
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/assets/dependencies:utils_py",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_py_pb2",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_py_pb2_grpc",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_specification_py_pb2",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
         "//intrinsic_sdk/intrinsic/math/python:data_types",
         "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
         "//intrinsic_sdk/intrinsic/world/python:object_world_ids",

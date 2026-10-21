@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/log/die_if_null.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/random/distributions.h"
@@ -33,7 +34,6 @@
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
-#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "intrinsic/executive/clips_cpp/environment.h"
 #include "intrinsic/executive/clips_cpp/value.h"
@@ -70,7 +70,9 @@ constexpr char kSpanCalculateExecutionDuration[] =
 
 }  // namespace
 
-TraceSpanManager::TraceSpanManager(Environment* env) : env_(env) {}
+TraceSpanManager::TraceSpanManager(Environment* env,
+                                   util::Clock* absl_nonnull clock)
+    : env_(env), clock_(*ABSL_DIE_IF_NULL(clock)) {}
 
 TraceSpanManager::~TraceSpanManager() {
   if (env_ != nullptr) {
@@ -98,8 +100,10 @@ TraceSpanManager::~TraceSpanManager() {
 }
 
 absl::StatusOr<std::unique_ptr<TraceSpanManager>> TraceSpanManager::Create(
-    Environment* environment) ABSL_LOCKS_EXCLUDED(environment->mutex()) {
-  auto span_manager = absl::WrapUnique(new TraceSpanManager(environment));
+    Environment* environment, util::Clock* absl_nonnull clock)
+    ABSL_LOCKS_EXCLUDED(environment->mutex()) {
+  auto span_manager =
+      absl::WrapUnique(new TraceSpanManager(environment, clock));
   absl::MutexLock lock(span_manager->env_->mutex());
   INTR_RETURN_IF_ERROR(span_manager->RegisterFunctions());
   return span_manager;
@@ -309,7 +313,7 @@ absl::StatusOr<TraceSpanReferenceId> TraceSpanManager::AddSpan(
       GenerateNextSpanReferenceId();
   spans_[next_span_reference_id] = SpanInfo{
       .span = std::move(span),
-      .start_time = absl::Now(),
+      .start_time = clock_.TimeNow(),
   };
   return next_span_reference_id;
 }
@@ -324,7 +328,7 @@ absl::StatusOr<TraceSpanReferenceId> TraceSpanManager::StartRootSpan(
       GenerateNextSpanReferenceId();
   spans_[next_span_reference_id] = SpanInfo{
       .span = std::move(span),
-      .start_time = absl::Now(),
+      .start_time = clock_.TimeNow(),
   };
   return next_span_reference_id;
 }
@@ -346,7 +350,7 @@ absl::StatusOr<TraceSpanReferenceId> TraceSpanManager::StartSpan(
       GenerateNextSpanReferenceId();
   spans_[next_span_reference_id] = SpanInfo{
       .span = std::move(span),
-      .start_time = absl::Now(),
+      .start_time = clock_.TimeNow(),
   };
   return next_span_reference_id;
 }
@@ -382,7 +386,7 @@ absl::Status TraceSpanManager::AddSpanEventAnnotation(
   }
 
   it->second.span->AddEvent(annotation);
-  it->second.annotations.push_back({absl::Now(), std::string(annotation)});
+  it->second.annotations.push_back({clock_.TimeNow(), std::string(annotation)});
   return absl::OkStatus();
 }
 
@@ -528,7 +532,7 @@ absl::StatusOr<absl::Duration> TraceSpanManager::CalculateExecutionDuration(
     // start event expected, but hasn't happened, yet.
     return absl::ZeroDuration();
   }
-  absl::Time now = absl::Now();
+  absl::Time now = clock_.TimeNow();
   // capture the operation being suspended right now
   if (suspend_start.has_value()) {
     suspended_duration += now - *suspend_start;

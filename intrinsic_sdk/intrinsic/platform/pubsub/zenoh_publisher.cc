@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <algorithm>  
 #include <memory>
 #include <string>
 #include <utility>
@@ -26,12 +27,16 @@
 #include "intrinsic/platform/pubsub/adapters/pubsub.pb.h"
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/publisher_stats.h"
+#include "intrinsic/platform/pubsub/pubsub_metrics.h"  
 #include "intrinsic/platform/pubsub/zenoh_publisher_data.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_handle.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_macros.h"
-#include "opencensus/stats/stats.h"
+
+#include "opentelemetry/context/runtime_context.h"
+#include "opentelemetry/metrics/sync_instruments.h"
+
 
 namespace intrinsic {
 
@@ -68,7 +73,13 @@ Publisher& Publisher::operator=(Publisher&& other) {
 
 Publisher::Publisher(absl::string_view topic_name,
                      std::unique_ptr<PublisherData> publisher_data)
-    : topic_name_(topic_name), publisher_data_(std::move(publisher_data)) {}
+    : topic_name_(topic_name), publisher_data_(std::move(publisher_data)) {
+
+  // Eagerly initialize the histogram view and instrument to avoid hot-path
+  // latency on the first Publish() call.
+  PublishLatencyMetric();
+
+}
 
 Publisher::~Publisher() {
   if (publisher_data_ && !publisher_data_->prefixed_name.empty()) {
@@ -101,6 +112,15 @@ absl::Status Publisher::Publish(google::protobuf::Any message,
   imw_ret_t ret = Zenoh().imw_publish(publisher_data_->prefixed_name.c_str(),
                                       wrapper.SerializeAsString().c_str(),
                                       wrapper.ByteSizeLong());
+
+
+  const std::string truncated_topic = TruncateTopicName(topic_name_);
+  PublishLatencyMetric().Record(
+      absl::ToInt64Microseconds(
+          std::max(absl::ZeroDuration(), absl::Now() - publish_time)),
+      {{kTopicKey, truncated_topic}},
+      opentelemetry::context::RuntimeContext::GetCurrent());
+
 
   intrinsic::internal::PublisherStats::Singleton().Increment(topic_name_);
 

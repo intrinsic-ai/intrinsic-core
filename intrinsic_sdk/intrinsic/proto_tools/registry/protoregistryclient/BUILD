@@ -23,8 +23,8 @@ go_library(
         "//intrinsic_runtime/intrinsic/proto_tools/registry:__subpackages__",
     ],
     deps = [
-        "//intrinsic/util/proto:registryutil",
-        "//intrinsic/util/proto:typeurl",
+        "//intrinsic_sdk/intrinsic/util/proto:registryutil",
+        "//intrinsic_sdk/intrinsic/util/proto:typeurl",
         "@intrinsic_apis//intrinsic/proto_tools/proto:proto_registry_go_proto",
         "@org_golang_google_protobuf//reflect/protoreflect",
         "@org_golang_google_protobuf//reflect/protoregistry",

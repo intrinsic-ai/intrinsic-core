@@ -47,8 +47,11 @@ Intrinsic Core uses [Kubernetes](../glossary/general_terms.md#kubernetes-k8s) to
 
    ```bash
    cd ~
-   gh repo clone intrinsic-ai/intrinsic-core -- --revision=20260922.0
-   gh repo clone intrinsic-ai/intrinsic-omts -- --revision=20260922.0
+   export CORE_TAG=20261012.0
+   export OMTS_TAG=`gh release view --repo intrinsic-ai/intrinsic-omts --json tagName --jq '.tagName'`
+
+   gh repo clone intrinsic-ai/intrinsic-core -- --revision="${CORE_TAG:?}"
+   gh repo clone intrinsic-ai/intrinsic-omts -- --revision="${OMTS_TAG:?}"
    ```
 
 4. Install k3s:
@@ -64,11 +67,17 @@ Intrinsic Core uses [Kubernetes](../glossary/general_terms.md#kubernetes-k8s) to
    sudo apt install -y util-linux-extra
    newgrp containerd
    ```
-
-6. Download and deploy Intrinsic Core:
+   
+6. If you need to run supplied perception packages, it is required to run the following script to configure the K3s setup for GPU support.
 
    ```bash
-   gh release download --repo intrinsic-ai/intrinsic-core 20260922.0 \
+   sudo ~/intrinsic-core/intrinsic_runtime/setup_nvidia.sh
+   ```
+
+7. Download and deploy Intrinsic Core:
+
+   ```bash
+   gh release download --repo intrinsic-ai/intrinsic-core "${CORE_TAG:?}" \
      --pattern intrinsic-base-linux-amd64.tar \
      --output /tmp/intrinsic-base-linux-amd64.tar --clobber
    tar -C /tmp -xvf /tmp/intrinsic-base-linux-amd64.tar
@@ -86,21 +95,16 @@ Intrinsic Core uses [Kubernetes](../glossary/general_terms.md#kubernetes-k8s) to
    Timing: XX.XX seconds to install Workcell Spec.
    ```
 
-7. Install the [inctl](../glossary/intrinsic_terms.md#inctl-intrinsic-control-cli) ("in control") CLI, which you'll use to control Intrinsic Core:
+8. Install the [inctl](../glossary/intrinsic_terms.md#inctl-intrinsic-control-cli) ("in control") CLI, which you'll use to control Intrinsic Core:
 
    ```bash
-   gh release download --repo intrinsic-ai/intrinsic-core 20260922.0 \
+   gh release download --repo intrinsic-ai/intrinsic-core "${CORE_TAG:?}" \
      --pattern inctl-linux-amd64 \
      --output /tmp/inctl-linux-amd64 --clobber
    sudo mv /tmp/inctl-linux-amd64 /usr/local/bin/inctl
    sudo chmod +x /usr/local/bin/inctl
    ```
 
-8. If you need to run supplied perception packages, it is required to run the following script to configure the K3s setup for GPU support.
-
-   ```bash
-   sudo ~/intrinsic-core/intrinsic_runtime/setup_nvidia.sh
-   ```
 
 ## Step 2: Build and deploy OMTS
 

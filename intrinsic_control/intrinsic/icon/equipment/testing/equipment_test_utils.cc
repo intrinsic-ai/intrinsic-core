@@ -18,6 +18,7 @@
 #include <string>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
 #include "absl/strings/string_view.h"
 #include "google/protobuf/any.pb.h"
 #include "intrinsic/icon/equipment/equipment_utils.h"
@@ -108,7 +109,7 @@ intrinsic_proto::resources::ResourceHandle Icon2EquipmentHandleBuilder::Build()
           {position_part.part_name, object_name});
     }
 
-    data.mutable_contents()->PackFrom(part);
+    CHECK(data.mutable_contents()->PackFrom(part));
     handle.mutable_resource_data()->insert({kIcon2PositionPartKey, data});
   }
   if (!gripper_part_.empty()) {
@@ -116,7 +117,7 @@ intrinsic_proto::resources::ResourceHandle Icon2EquipmentHandleBuilder::Build()
     intrinsic_proto::icon::Icon2GripperPart part;
     part.set_part_name(gripper_part_);
     part.add_part_names(gripper_part_);
-    data.mutable_contents()->PackFrom(part);
+    CHECK(data.mutable_contents()->PackFrom(part));
 
     handle.mutable_resource_data()->insert({kIcon2GripperPartKey, data});
   }
@@ -127,13 +128,13 @@ intrinsic_proto::resources::ResourceHandle Icon2EquipmentHandleBuilder::Build()
     for (const auto& adio_part : adio_parts_) {
       part.add_icon_parts(adio_part);
     }
-    data.mutable_contents()->PackFrom(part);
+    CHECK(data.mutable_contents()->PackFrom(part));
 
     handle.mutable_resource_data()->insert({kIcon2AdioPartKey, data});
   }
   if (force_torque_sensor_part_.has_value()) {
     intrinsic_proto::resources::ResourceHandle::ResourceData data;
-    data.mutable_contents()->PackFrom(*force_torque_sensor_part_);
+    CHECK(data.mutable_contents()->PackFrom(*force_torque_sensor_part_));
 
     handle.mutable_resource_data()->insert(
         {kIcon2ForceTorqueSensorPartKey, data});
@@ -143,7 +144,7 @@ intrinsic_proto::resources::ResourceHandle Icon2EquipmentHandleBuilder::Build()
     intrinsic_proto::icon::Icon2RangefinderPart part;
     part.set_part_name(rangefinder_part_);
     part.add_part_names(rangefinder_part_);
-    data.mutable_contents()->PackFrom(part);
+    CHECK(data.mutable_contents()->PackFrom(part));
 
     handle.mutable_resource_data()->insert({kIcon2RangefinderPartKey, data});
   }

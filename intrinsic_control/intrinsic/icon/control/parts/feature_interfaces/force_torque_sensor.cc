@@ -729,13 +729,15 @@ RealtimeStatus ForceTorqueSensorFeature::ReadStatus(
   // This updates wrench_at_ft_unprocessed to the current reading.
   force_sensor_variables_.wrench_at_ft_unprocessed = new_reading;
 
-  wrench_at_ft = -force_sensor_variables_.wrench_at_ft_unprocessed;
+  force_sensor_variables_.wrench_at_ft_uncompensated =
+      -force_sensor_variables_.wrench_at_ft_unprocessed;
 
   // IMPORTANT! This is the key step in this controller. Since taring
   // happens before support mass compensation, the snapshot of the support
   // mass wrench taken at taring time needs to be subtracted here.
-  wrench_at_ft += force_sensor_variables_.wrench_at_ft_support_mass -
-                  force_sensor_variables_.wrench_at_ft_bias;
+  wrench_at_ft = force_sensor_variables_.wrench_at_ft_uncompensated +
+                 force_sensor_variables_.wrench_at_ft_support_mass -
+                 force_sensor_variables_.wrench_at_ft_bias;
 
   // Wrench at the target point compensated for support_mass
   Wrench wrench_at_target = TransformWrench(config_.target_t_ft, wrench_at_ft);

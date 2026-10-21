@@ -143,24 +143,25 @@ absl::StatusOr<Pose3d> ParseSemanticPose(
 absl::StatusOr<intrinsic::shapes::Box> ParseBox(const ::sdf::Box& box_sdf);
 
 // Convert a ::sdf::Cylinder to a intrinsic::shapes::Cylinder based on
-// length and radius Returns an error if the cylinder has negative length or
-// negative radius
+// length and radius. Returns an error if the cylinder has non-positive length
+// or non-positive radius.
 absl::StatusOr<intrinsic::shapes::Cylinder> ParseCylinder(
     const ::sdf::Cylinder& cylinder_sdf);
 
 // Convert a ::sdf::Capsule to a intrinsic::shapes::Capsule based on length
-// and radius
-// Returns an error if the Capsule has negative length or negative radius
+// and radius.
+// Returns an error if the Capsule has non-positive length or non-positive
+// radius.
 absl::StatusOr<intrinsic::shapes::Capsule> ParseCapsule(
     const ::sdf::Capsule& capsule_sdf);
 
 // Convert a ::sdf::Ellipsoid to a intrinsic::shapes::Ellipsoid based on
-// radii Returns an error if the Ellipsoid has negative radii
+// radii. Returns an error if the Ellipsoid has non-positive radii.
 absl::StatusOr<intrinsic::shapes::Ellipsoid> ParseEllipsoid(
     const ::sdf::Ellipsoid& ellipsoid_sdf);
 
-// Convert a ::sdf::Sphere to a intrinsic::shapes::Sphere based on radius
-// Returns an error if the sphere has negative radius
+// Convert a ::sdf::Sphere to a intrinsic::shapes::Sphere based on radius.
+// Returns an error if the sphere has non-positive radius.
 absl::StatusOr<intrinsic::shapes::Sphere> ParseSphere(
     const ::sdf::Sphere& sphere_sdf);
 

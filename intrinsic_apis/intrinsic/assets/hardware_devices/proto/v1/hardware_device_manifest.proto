@@ -111,7 +111,7 @@ message ProcessedHardwareDeviceManifest {
           3;
       intrinsic_proto.data.v1.DataAsset data = 4;
 
-      // LINT.ThenChange(//intrinsic/assets/catalog/assetutils.go:collect_images_hardware_device_asset_types)
+      // LINT.ThenChange(//intrinsic_sdk/intrinsic/assets/catalog/assetutils.go:collect_images_hardware_device_asset_types)
 
     }
   }

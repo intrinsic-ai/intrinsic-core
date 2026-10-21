@@ -57,7 +57,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.grpc.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
-#include "intrinsic/motion_planning/service/motion_planner_cache.h"
+#include "intrinsic/motion_planning/service/cache/motion_planner_cache.h"
 #include "intrinsic/motion_planning/service/motion_planner_service.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_proxy.h"
@@ -498,11 +498,15 @@ absl::StatusOr<bool> MotionPlannerServiceBaseTest::
       const object_world::KinematicObject* robot,
       GetRobot(request.robot_specification().robot_reference(),
                object_world.get()));
-  INTR_ASSIGN_OR_RETURN(std::unique_ptr<KinematicsSystemProxy> proxy,
-                        CreateKinematicsProxy(*object_world, *robot,
-                                              request.motion_specification()
-                                                  .motion_segments(0)
-                                                  .path_constraints()));
+  INTR_ASSIGN_OR_RETURN(
+      std::unique_ptr<KinematicsSystemProxy> proxy,
+      CreateKinematicsProxy(
+          *object_world, *robot,
+          KinematicsProxyOptions{
+              .constraints_proto = request.motion_specification()
+                                       .motion_segments(0)
+                                       .path_constraints(),
+          }));
 
   CollisionCheckingDebug collision_checking_debug;
   // Check that all states in the trajectory satisfies the path constraints.
@@ -528,8 +532,7 @@ void MotionPlannerServiceWithoutLoggerTest::SetUpWithTestParams(
   }
 
   MotionPlannerFlags motion_planner_flags;
-  ASSERT_OK(SetUpAndUpdateFlags(test_params.set_infinite_jerk_limits,
-                                motion_planner_flags));
+  ASSERT_OK(CheckJerkLimitsSupported(test_params.set_infinite_jerk_limits));
   Init(/*use_nonvolatile_cache=*/false, /*extra_flags=*/motion_planner_flags,
        /*worlds_by_name=*/std::move(worlds));
 }

@@ -31,7 +31,6 @@ cc_library(
     srcs = ["loopback_hardware_module.cc"],
     hdrs = ["loopback_hardware_module.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:realtime_clock_interface",
         "//intrinsic_control/intrinsic/icon/control/safety:safety_messages_fbs_cc",
         "//intrinsic_control/intrinsic/icon/control/safety:safety_messages_fbs_utils",
@@ -60,6 +59,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:time",
         "//intrinsic_sdk/intrinsic/math:gaussian_noise",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//intrinsic_sdk/intrinsic/util/thread:thread_options",
         "//intrinsic_sdk/intrinsic/util/thread:thread_utils",

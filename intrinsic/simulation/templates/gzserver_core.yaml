@@ -42,7 +42,7 @@ spec:
           args:
             - /intrinsic/simulation/gazebo/grpc_proxy/proxy_server_main
             - --opencensus_tracing=true
-            - --opencensus_metrics_port=9090
+            - --opencensus_metrics_port=9108
             {{ if not (and .Values.app_deployment_id .Values.simulated) }}
             - --sleep
             {{ end }}
@@ -147,12 +147,15 @@ metadata:
 spec:
   clusterIP: None
   ports:
-    - port: 9090
+    - port: 9108
       name: http-metrics
   selector:
     app: gzserver
   type: ClusterIP
+{{- if .Values.app_deployment_id }}
 ---
+# When app_deployment_id is unset, the container runs in --sleep mode to pre-pull
+# the image and does not open its metrics port, which would cause scrape errors.
 apiVersion: monitoring.coreos.com/v1
 kind: ServiceMonitor
 metadata:
@@ -170,4 +173,5 @@ spec:
   selector:
     matchLabels:
       app: gzserver-metrics
+{{- end }}
 {{ end }}  # if .Values.simulated

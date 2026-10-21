@@ -1,0 +1,60 @@
+diff --git a/3rd_party/llvm-project/21.x/patches/llvm-compression-defines.patch b/3rd_party/llvm-project/21.x/patches/llvm-compression-defines.patch
+--- a/3rd_party/llvm-project/21.x/patches/llvm-compression-defines.patch
++++ b/3rd_party/llvm-project/21.x/patches/llvm-compression-defines.patch
+@@ -1,17 +1,52 @@
+ diff --git a/llvm/BUILD.bazel b/llvm/BUILD.bazel
+ --- a/llvm/BUILD.bazel
+ +++ b/llvm/BUILD.bazel
+-@@ -386,8 +386,12 @@ cc_library(
++@@ -386,8 +386,16 @@ cc_library(
+              "BLAKE3_NO_AVX512",
+              "BLAKE3_NO_SSE2",
+              "BLAKE3_NO_SSE41",
+          ],
+ -    }),
+ +    }) + [
+ +        "LLVM_ENABLE_ZLIB=1",
+-+        "LLVM_ENABLE_ZSTD=1",
+-+        "ZSTD_MULTITHREAD",
+-+    ],
+++    ] + select({
+++        "//third-party:llvm_zstd_enabled": [
+++            "LLVM_ENABLE_ZSTD=1",
+++            "ZSTD_MULTITHREAD",
+++        ],
+++        "//conditions:default": [],
+++    }),
+      includes = ["include"],
+      linkopts = select({
+          ":is_windows_clang_mingw": [
++@@ -441,8 +449,10 @@ cc_library(
++         # We unconditionally depend on the custom LLVM zstd wrapper. This will
++         # be an empty library unless zstd is enabled, in which case it will
++         # both provide the necessary dependencies and configuration defines.
++-        "@llvm_zstd//:zstd",
++-    ],
+++    ] + select({
+++        "//third-party:llvm_zstd_enabled": ["@llvm_zstd//:zstd"],
+++        "//conditions:default": [],
+++    }),
++ )
++ 
++ # Note: although FileCheck (the binary) is a test utility, some non-test
++diff --git a/third-party/BUILD.bazel b/third-party/BUILD.bazel
++new file mode 100644
++--- /dev/null
+++++ b/third-party/BUILD.bazel
++@@ -0,0 +1,13 @@
+++load("@bazel_skylib//rules:common_settings.bzl", "bool_flag")
+++
+++package(default_visibility = ["//visibility:public"])
+++
+++bool_flag(
+++    name = "llvm_enable_zstd",
+++    build_setting_default = True,
+++)
+++
+++config_setting(
+++    name = "llvm_zstd_enabled",
+++    flag_values = {":llvm_enable_zstd": "true"},
+++)

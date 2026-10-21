@@ -19,7 +19,7 @@ cc_library(
     hdrs = ["hashing.h"],
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
-        "//intrinsic/util:string_type",
+        "//intrinsic_sdk/intrinsic/util:string_type",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

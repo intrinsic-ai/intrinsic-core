@@ -64,6 +64,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_planning_error.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planning_limits.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/collision/util/collision_world_util.h"
@@ -115,6 +116,7 @@ absl::StatusOr<std::unique_ptr<const PointPath>> PlanSegmentPath(
     const intrinsic_proto::motion_planning::v1::MotionSegment& motion_segment,
     const KinematicsSystemProxy& proxy,
     const PlannerConfigurationOptions& planner_options) {
+  const stats::ScopedSpan span("MotionPlanner/PlanSegmentPath");
   // Get the path planning pipeline for this segment
   INTR_ASSIGN_OR_RETURN(
       const intrinsic::proto::PipelinePathPlannerConfig planner_pipeline,
@@ -145,6 +147,11 @@ PathSegment CreatePathSegment(
         collision_rule_set,
     const double low_level_joint_blending_desired_tightness,
     const Pose3d& tip_t_tool = Pose3d::Identity()
+
+    ,
+    const absl::Span<const MotionEventAndJointConfigurationIndex>
+        motion_events_and_joint_configuration_indices = {}
+
 ) {
   PathSegment segment;
   segment.joint_configurations.reserve(sampled_waypoints.size());
@@ -161,6 +168,12 @@ PathSegment CreatePathSegment(
   segment.cartesian_limits = cart_limits;
   segment.collision_rule_set = collision_rule_set;
   segment.tip_t_target = tip_t_tool;
+
+  segment.indexed_motion_events =
+      std::vector<MotionEventAndJointConfigurationIndex>(
+          motion_events_and_joint_configuration_indices.begin(),
+          motion_events_and_joint_configuration_indices.end());
+
   segment.type = PathSegment::Type::kUndefined;
 
   return segment;
@@ -266,6 +279,7 @@ absl::StatusOr<std::vector<eigenmath::VectorXd>> ComputeIk(
     const eigenmath::VectorXd& seed_configuration,
     const JointLimitsXd& joint_limits, int max_number_samples,
     bool disable_collision_checking, bool prefer_same_branch_ik = true) {
+  const stats::ScopedSpan span("MotionPlanner/ComputeIk");
   absl::string_view kMotionPlanningErrorSuffix = "ComputeIk";
   std::vector<eigenmath::VectorXd> ik_solutions;
   if (!disable_collision_checking && proxy) {
@@ -397,6 +411,7 @@ absl::Status SampleJointTargets(
     const eigenmath::VectorXd& start_configuration,
     std::vector<TrajectorySegment>& trajectory_segments,
     int max_number_samples) {
+  const stats::ScopedSpan span("MotionPlanner/SampleJointTargets");
   if (!proxy) {
     return absl::InternalError(
         "No kinematic proxy was defined. Kinematic proxy required to evaluate "
@@ -515,6 +530,52 @@ absl::Status SampleJointTargets(
 
   return absl::OkStatus();
 }
+
+
+absl::StatusOr<std::vector<MotionEventAndJointConfigurationIndex>>
+ConvertMotionSegmentEventsToPathMotionEvents(
+    absl::Span<const ::intrinsic_proto::motion_planning::v1::MotionSegmentEvent>
+        motion_segment_events,
+    const PointPath& path) {
+  if (path.size() < 2) {
+    return absl::InternalError("Path must contain at least two points.");
+  }
+  std::vector<MotionEventAndJointConfigurationIndex>
+      motion_events_and_joint_configuration_indices;
+  for (const ::intrinsic_proto::motion_planning::v1::MotionSegmentEvent&
+           motion_segment_event : motion_segment_events) {
+    ::intrinsic_proto::motion_planning::v1::MotionEvent motion_event;
+    // Copy over the event and offset which remain unchanged.
+    *motion_event.mutable_event() = motion_segment_event.event();
+    *motion_event.mutable_keypoint()->mutable_event_offset() =
+        motion_segment_event.event_location().event_offset();
+
+    switch (motion_segment_event.event_location().relative_to()) {
+      case intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_TARGET: {
+        const int joint_configuration_index = path.size() - 1;
+        motion_events_and_joint_configuration_indices.push_back(
+            {.motion_event = motion_event,
+             .joint_configuration_index = joint_configuration_index});
+        break;
+      }
+      case intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_START: {
+        motion_events_and_joint_configuration_indices.push_back(
+            {.motion_event = motion_event, .joint_configuration_index = 0});
+        break;
+      }
+      default: {
+        return absl::InvalidArgumentError(
+            "Either SEGMENT_TARGET or SEGMENT_START must be specified for the "
+            "MotionEventSegmentLocation relative_to field.");
+      }
+    }
+  }
+  return motion_events_and_joint_configuration_indices;
+}
+
+
 absl::StatusOr<std::vector<PathSegment>> PlanPathImpl(
     const object_world::ObjectWorld& object_world,
     const object_world::KinematicObject& robot,
@@ -528,6 +589,7 @@ absl::StatusOr<std::vector<PathSegment>> PlanPathImpl(
         path_segment_to_validation_proxies_id_map,
     std::vector<ProxyCreateInfo>& proxy_set,
     DistanceCheckStatistics* distance_check_statistics) {
+  const stats::ScopedSpan span("MotionPlanner/PlanPathImpl");
   if (!global_proxy) {
     return absl::InternalError(
         "No kinematic proxy was defined. Kinematic proxy required to evaluate "
@@ -701,11 +763,18 @@ absl::StatusOr<std::vector<PathSegment>> PlanPathImpl(
                 object_world, trajectory_segment.motion_segments.front()));
         INTR_ASSIGN_OR_RETURN(
             local_proxy_ptr,
-            CreateKinematicsProxyWithConfig(
-                object_world, robot, GetCollisionCheckerConfig(motion_config),
-                create_info.constraints_proto, create_info.rule_set,
-                create_info.disable_collision_checking,
-                maybe_concurrent_thread_count));
+            CreateKinematicsProxy(
+                object_world, robot,
+                KinematicsProxyOptions{
+                    .collision_checker_config =
+                        GetCollisionCheckerConfig(motion_config),
+                    .constraints_proto = create_info.constraints_proto,
+                    .rule_set = create_info.rule_set,
+                    .disable_collision_checking =
+                        create_info.disable_collision_checking,
+                    .maybe_concurrent_thread_count =
+                        maybe_concurrent_thread_count,
+                }));
 
         proxy_set.push_back(std::move(create_info));
       }
@@ -755,6 +824,22 @@ absl::StatusOr<std::vector<PathSegment>> PlanPathImpl(
                                                motion_segment_numbers_to_report,
                                                motion_segment_failure_message);
         }));
+
+
+    std::vector<::intrinsic_proto::motion_planning::v1::MotionSegmentEvent>
+        motion_segment_events;
+    for (const auto& motion_segment : trajectory_segment.motion_segments) {
+      motion_segment_events.insert(
+          motion_segment_events.end(),
+          motion_segment.motion_segment_events().begin(),
+          motion_segment.motion_segment_events().end());
+    }
+    INTR_ASSIGN_OR_RETURN(std::vector<MotionEventAndJointConfigurationIndex>
+                              motion_events_and_joint_configuration_indices,
+                          ConvertMotionSegmentEventsToPathMotionEvents(
+                              motion_segment_events, *planning_result));
+
+
     std::optional<std::multiset<intrinsic_proto::Rule>> collision_rule_set =
         std::nullopt;
     if (active_proxy->GetCollisionChecker() != nullptr) {
@@ -767,6 +852,10 @@ absl::StatusOr<std::vector<PathSegment>> PlanPathImpl(
         *planning_result, segment_path_limits, trajectory_segment.cart_limits,
         collision_rule_set, low_level_joint_blending_desired_tightness,
         trajectory_segment.tip_t_moving_frame
+
+        ,
+        motion_events_and_joint_configuration_indices
+
         ));
 
     path_segment_to_validation_proxies_id_map[path_segments.back()
@@ -816,6 +905,8 @@ absl::StatusOr<std::vector<PathSegment>> SampleMotionTargetsAndPlanPath(
     std::vector<ProxyCreateInfo>& proxy_set,
     absl::flat_hash_map<std::string, std::vector<int>>&
         path_segment_to_validation_proxies_id_map) {
+  const stats::ScopedSpan span("MotionPlanner/SampleMotionTargetsAndPlanPath");
+
   // Group the motion specs together into trajectory segments and sanity check
   // the input. This is specific to the current capabilities of the underlying
   // trajectory generator. One trajectory segment represents the set of motion
@@ -856,13 +947,17 @@ absl::StatusOr<std::vector<PathSegment>> SampleMotionTargetsAndPlanPath(
         GetConcurrentThreadCount(flags, distance_check_statistics);
     INTR_ASSIGN_OR_RETURN(
         global_proxy,
-        CreateKinematicsProxyWithConfig(
-            object_world, robot, GetCollisionCheckerConfig(motion_config),
-            /*constraints_proto=*/global_proxy_create_info.constraints_proto,
-            global_proxy_create_info.rule_set,
-            /*disable_collision_checking=*/
-            global_proxy_create_info.disable_collision_checking,
-            maybe_concurrent_thread_count));
+        CreateKinematicsProxy(
+            object_world, robot,
+            KinematicsProxyOptions{
+                .collision_checker_config =
+                    GetCollisionCheckerConfig(motion_config),
+                .constraints_proto = global_proxy_create_info.constraints_proto,
+                .rule_set = global_proxy_create_info.rule_set,
+                .disable_collision_checking =
+                    global_proxy_create_info.disable_collision_checking,
+                .maybe_concurrent_thread_count = maybe_concurrent_thread_count,
+            }));
 
     proxy_set.push_back(std::move(global_proxy_create_info));
   }
@@ -892,6 +987,8 @@ absl::StatusOr<MotionPlanner::PlanTrajectoryResult> PlanPathInternal(
     std::vector<ProxyCreateInfo>& proxy_set,
     absl::flat_hash_map<std::string, std::vector<int>>&
         path_segment_to_validation_proxies_id_map) {
+  const stats::ScopedSpan span("MotionPlanner/PlanPathInternal");
+
   // Preparation: Extract collision settings from the world that will be used as
   // a default if nothing is specified in the motion specification.
   INTR_ASSIGN_OR_RETURN(
@@ -930,6 +1027,11 @@ absl::StatusOr<MotionPlanner::PlanTrajectoryResult> PlanPathInternal(
             proxy_set, path_segment_to_validation_proxies_id_map));
   planning_result.motion_planning_statistics.path_planning_statistics
       .path_planning_duration = absl::Now() - planning_start_time;
+  const int num_motion_segments = motion_specification.motion_segments_size();
+  planning_result.motion_planning_statistics.path_planning_statistics
+      .num_motion_segments = num_motion_segments;
+  planning_result.motion_planning_statistics.num_motion_segments =
+      num_motion_segments;
   LOG(INFO) << "Path planning took "
             << absl::ToDoubleSeconds(
                    planning_result.motion_planning_statistics
@@ -961,6 +1063,7 @@ MotionPlanner::PlanTrajectory(
     const intrinsic_proto::motion_planning::v1::MotionPlannerConfiguration&
         motion_config,
     std::optional<RunTimeMotionPlannerFlags> run_time_flags) const {
+  const stats::ScopedSpan span("MotionPlanner/PlanTrajectory");
   const absl::Time motion_planning_start_time = absl::Now();
   if (motion_specification.motion_segments_size() < 1) {
     return absl::InvalidArgumentError(
@@ -1005,6 +1108,12 @@ MotionPlanner::PlanTrajectory(
                     .trajectory);
   planning_result.path_samples =
       std::move(*gen_traj_result.trajectory_with_samples.path_samples);
+
+  planning_result.motion_events =
+      std::move(gen_traj_result.trajectory_with_samples.topp_trajectory_result
+                    .motion_events);
+
+
   planning_result.fallback_stage = gen_traj_result.fallback_stage;
 
   LOG(INFO) << "Planned trajectory with duration "
@@ -1060,6 +1169,7 @@ absl::StatusOr<MotionPlanner::PlanPathResult> MotionPlanner::PlanPath(
     const intrinsic_proto::motion_planning::v1::MotionPlannerConfiguration&
         motion_config,
     std::optional<RunTimeMotionPlannerFlags> run_time_flags) const {
+  const stats::ScopedSpan span("MotionPlanner/PlanPath");
   if (motion_specification.motion_segments_size() < 1) {
     return absl::InvalidArgumentError(
         "Motion Specification does not contain any motion segments. Require at "

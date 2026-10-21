@@ -30,12 +30,12 @@
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "google/protobuf/any.pb.h"
-#include "intrinsic/eigenmath/types.h"
 #include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/scene/constants.h"
 #include "intrinsic/scene/conversion/object_properties_conversion.h"
+#include "intrinsic/scene/conversion/scene_object_model_utils.h"
 #include "intrinsic/scene/proto/v1/collision_rules.pb.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/object_properties.pb.h"
@@ -231,55 +231,22 @@ absl::Status ValidateParentType(const Entity& entity, const Entity& parent) {
   return absl::OkStatus();
 }
 
-absl::Status ValidateJointValue(
-    const intrinsic_proto::world::KinematicsComponent& kinematics,
-    const Pose3d& parent_t_this) {
+absl::Status ValidateJointValue(const Entity& entity,
+                                const Pose3d& parent_t_this) {
   // This is the default when the pose is unset, so if it's roughly identity
   // then ignore it (as some tools may write it out when processing).
   if (parent_t_this.isApprox(Pose3d())) {
     return absl::OkStatus();
   }
 
+  const auto& kinematics = entity.joint().kinematics_component();
   // If no joint value is set then it's valid.
   if (!kinematics.has_raw_value()) {
     return absl::OkStatus();
   }
 
-  Pose3d parent_t_inboard;
-  if (kinematics.has_parent_t_inboard()) {
-    INTR_ASSIGN_OR_RETURN(parent_t_inboard,
-                          FromProtoNormalized(kinematics.parent_t_inboard()));
-  }
-
-  Pose3d outboard_t_child;
-  if (kinematics.has_outboard_t_child()) {
-    INTR_ASSIGN_OR_RETURN(outboard_t_child,
-                          FromProtoNormalized(kinematics.outboard_t_child()));
-  }
-
-  Pose3d inboard_t_outboard;
-  if (kinematics.motion_type() ==
-      intrinsic_proto::world::KinematicsComponent::MOTION_TYPE_REVOLUTE) {
-    eigenmath::Vector3d axis(0.0, 0.0, 1.0);
-    if (kinematics.has_axis()) {
-      axis = FromProto(kinematics.axis());
-    }
-    inboard_t_outboard = CreateAngleAxisPose(kinematics.raw_value(), axis);
-  }
-
-  if (kinematics.motion_type() ==
-      intrinsic_proto::world::KinematicsComponent::MOTION_TYPE_PRISMATIC) {
-    eigenmath::Vector3d axis(0.0, 0.0, 1.0);
-    if (kinematics.has_axis()) {
-      axis = FromProto(kinematics.axis());
-    }
-    axis.normalize();
-    inboard_t_outboard =
-        Pose3d(eigenmath::Vector3d(kinematics.raw_value() * axis));
-  }
-
-  Pose3d computed_parent_t_this =
-      parent_t_inboard * inboard_t_outboard * outboard_t_child;
+  INTR_ASSIGN_OR_RETURN(const Pose3d computed_parent_t_this,
+                        ResolveJointEntityPose(entity));
   if (!parent_t_this.isApprox(computed_parent_t_this, 0.005)) {
     return absl::InvalidArgumentError(absl::Substitute(
         "Joint value '$0' produces invalid parent_t_this from "
@@ -375,7 +342,7 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
           if (e.has_parent_t_this()) {
             INTR_ASSIGN_OR_RETURN(const Pose3d parent_t_this,
                                   FromProtoNormalized(e.parent_t_this()));
-            INTR_RETURN_IF_ERROR(ValidateJointValue(kinematics, parent_t_this))
+            INTR_RETURN_IF_ERROR(ValidateJointValue(e, parent_t_this))
                 << "Invalid joint value on joint " << e.name();
           }
         } else if (kinematics.raw_value() != 0.0) {

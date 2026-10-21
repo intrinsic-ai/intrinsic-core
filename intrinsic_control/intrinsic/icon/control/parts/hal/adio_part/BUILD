@@ -23,7 +23,6 @@ cc_library(
     srcs = ["hal_adio_part.cc"],
     hdrs = ["hal_adio_part.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:context",
         "//intrinsic_control/intrinsic/icon/control/parts:feature_interface_registry",
         "//intrinsic_control/intrinsic/icon/control/parts:feature_interfaces",
@@ -42,6 +41,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

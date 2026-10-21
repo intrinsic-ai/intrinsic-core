@@ -45,8 +45,6 @@ var osStat = os.Stat // Stubbed out for testing.
 
 const (
 	crcRobotNameLabel = "cloudrobotics.com/robot-name"
-	// IntrinsicBaseCALocationAnnotation is the annotation name for the location of the Intrinsic base chart assignment.
-	IntrinsicBaseCALocationAnnotation = "intrinsic.ai/intrinsic-base-ca-location"
 )
 
 var gkeRE = regexp.MustCompile("gke_(.*)_(.*)_(.*)")
@@ -165,57 +163,6 @@ func robot(ctx context.Context, appsClient versioned.Interface) (*registryv1alph
 		return nil, fmt.Errorf("expected exactly one robot Custom Resource (got %d). Please run `inctl diagnose` and report to the Infra team", len(robots.Items))
 	}
 	return &robots.Items[0], nil
-}
-
-// BaseManager indicates who manages the intrinsic-base chartassignment (CA)
-type BaseManager string
-
-const (
-	unspecifiedBaseManager = ""
-	unknownBaseManager     = "unknown"
-	cloudBaseManager       = "cloud"
-	inversionBaseManager   = "inversion"
-	onpremBaseManager      = "onprem"
-)
-
-// BaseInfo holds the information about the intrinsic-base chartassignment (CA) for a cluster
-type BaseInfo struct {
-	Name    string
-	Manager BaseManager
-}
-
-// IsManagedInTheCloud returns whether the intrinsic-base chartassignment (CA) is cloud managed
-func (b *BaseInfo) IsManagedInTheCloud() bool {
-	switch b.Manager {
-	case cloudBaseManager, inversionBaseManager:
-		return true
-	default:
-		return false
-	}
-}
-
-// IntrinsicBaseLocation returns the BaseInfo for |clusters|'s intrinsic-base ChartAssignment (CA)
-func IntrinsicBaseLocation(ctx context.Context, appsClient versioned.Interface, cluster string) (BaseInfo, error) {
-	const intrinsicBaseChartAssignmentName = "intrinsic-base"
-	robot, err := robot(ctx, appsClient)
-	if err != nil {
-		return BaseInfo{}, err
-	}
-	v := robot.GetAnnotations()[IntrinsicBaseCALocationAnnotation]
-	switch v {
-	case "cloud":
-		return BaseInfo{Name: fmt.Sprintf("%s-robot-%s", intrinsicBaseChartAssignmentName, cluster), Manager: cloudBaseManager}, nil
-	case "inversion":
-		return BaseInfo{Name: fmt.Sprintf("%s-robot-%s", intrinsicBaseChartAssignmentName, cluster), Manager: inversionBaseManager}, nil
-	case "onprem":
-		return BaseInfo{Name: intrinsicBaseChartAssignmentName, Manager: onpremBaseManager}, nil
-	case "":
-		// If the annotation is missing, the default is onprem
-		return BaseInfo{Name: intrinsicBaseChartAssignmentName, Manager: unspecifiedBaseManager}, nil
-	default:
-		log.WarningContextf(ctx, "Unknown %q annotation on robot %q: %q", IntrinsicBaseCALocationAnnotation, robot.Name, v)
-		return BaseInfo{Name: intrinsicBaseChartAssignmentName, Manager: unknownBaseManager}, nil
-	}
 }
 
 // GCPProject returns the GCP project name associated with the current context.

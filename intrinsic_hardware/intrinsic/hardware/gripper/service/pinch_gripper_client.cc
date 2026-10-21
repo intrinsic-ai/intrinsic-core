@@ -27,9 +27,9 @@
 #include "absl/time/time.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/status.h"
+#include "grpcpp/support/time.h"  // needed for grpc::Context::set_deadline()
 #include "intrinsic/hardware/gripper/gripper.pb.h"
 #include "intrinsic/hardware/gripper/service/proto/pinch_gripper_server.pb.h"
-#include "intrinsic/icon/release/grpc_time_support.h"  // needed for grpc::Context::set_deadline()
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 

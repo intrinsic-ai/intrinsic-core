@@ -88,6 +88,26 @@ absl::Status GenerateTrajectoryForEachEdgeInPathSegment(
   for (int config_idx = 0;
        config_idx + 1 < path_segment.joint_configurations.size();
        ++config_idx) {
+
+    const bool is_last_edge_in_segment =
+        config_idx + 2 >= path_segment.joint_configurations.size();
+
+    // Add motion events that apply to the start point of this edge. If this is
+    // the last edge, also add any motion events that apply to the end point.
+    sub_segment.indexed_motion_events.clear();
+    for (const MotionEventAndJointConfigurationIndex& event :
+         path_segment.indexed_motion_events) {
+      if (event.joint_configuration_index == config_idx) {
+        sub_segment.indexed_motion_events.push_back(event);
+        sub_segment.indexed_motion_events.back().joint_configuration_index = 0;
+      } else if (event.joint_configuration_index == config_idx + 1 &&
+                 is_last_edge_in_segment) {
+        sub_segment.indexed_motion_events.push_back(event);
+        sub_segment.indexed_motion_events.back().joint_configuration_index = 1;
+      }
+    }
+
+
     const eigenmath::VectorNd& q_start =
         path_segment.joint_configurations.at(config_idx);
     const eigenmath::VectorNd& q_end =
@@ -203,6 +223,10 @@ GenerateTrajectoryWithStrictPathFollowingSegments(
     maybe_accumulated_cartesian_arc_lengths = std::vector<double>();
   }
   std::vector<topp::PathSample> accumulated_path_samples;
+
+  std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>
+      accumulated_motion_events;
+
   double accumulated_cartesian_arc_length = 0.0;
   absl::Duration accumulated_time;
   for (int sub_trajectory_idx = 0; sub_trajectory_idx < sub_trajectories.size();
@@ -275,6 +299,39 @@ GenerateTrajectoryWithStrictPathFollowingSegments(
       accumulated_path_samples.back().s += s_offset;
       accumulated_path_samples.back().s_c += s_c_offset;
     }
+
+
+    // Accumulate motion events
+    accumulated_motion_events.reserve(
+        accumulated_motion_events.size() +
+        sub_trajectory.topp_trajectory_result.motion_events.size());
+    for (const intrinsic_proto::motion_planning::v1::MotionEvent& motion_event :
+         sub_trajectory.topp_trajectory_result.motion_events) {
+      intrinsic_proto::motion_planning::v1::MotionEvent new_event =
+          motion_event;
+      // Accumulate arc length
+      const double new_arc_length =
+          new_event.keypoint()
+              .keypoint_cartesian_arc_length_from_start_meters() +
+          accumulated_cartesian_arc_length;
+      new_event.mutable_keypoint()
+          ->set_keypoint_cartesian_arc_length_from_start_meters(new_arc_length);
+
+      // Accumulate duration
+      INTR_ASSIGN_OR_RETURN(
+          absl::Duration dur,
+          ToAbslDuration(new_event.keypoint().keypoint_time_from_start()));
+      dur += accumulated_time;
+      INTR_ASSIGN_OR_RETURN(
+          *new_event.mutable_keypoint()->mutable_keypoint_time_from_start(),
+          FromAbslDuration(dur));
+      // NOTE: We are not filling out the
+      // keypoint_joint_path_variable_from_start field. We don't have enough
+      // info to populate this and it is not used after trajectory generation.
+      accumulated_motion_events.push_back(new_event);
+    }
+
+
     INTR_RET_CHECK(
         !sub_trajectory.topp_trajectory_result.trajectory.time_stamps()
              .empty());
@@ -299,6 +356,7 @@ GenerateTrajectoryWithStrictPathFollowingSegments(
           std::move(maybe_accumulated_cartesian_arc_lengths)));
 
   // Combine our new trajectory with
+  // the accumulated motion events and 
   // path samples.
   return topp::TrajectoryWithOptionalPathSamples{
       .topp_trajectory_result =
@@ -306,6 +364,9 @@ GenerateTrajectoryWithStrictPathFollowingSegments(
               .trajectory = std::move(combined_traj_pva),
               // Unused after trajectory generation
               //.squared_path_velocity = {},
+
+              .motion_events = std::move(accumulated_motion_events),
+
           },
       .path_samples = std::move(accumulated_path_samples)};
 }
@@ -394,12 +455,19 @@ absl::StatusOr<GenerateTrajectoryResult> GenerateTrajectoryWithFallback(
       INTR_ASSIGN_OR_RETURN(
           std::unique_ptr<KinematicsSystemProxy> proxy,
           CreateProxyWithRelaxedMargins(
-              world, robot, motion_config.collision_checker_config(),
-              create_info.constraints_proto, create_info.rule_set,
-              create_info.disable_collision_checking,
+              world, robot,
+              KinematicsProxyOptions{
+                  .collision_checker_config =
+                      motion_config.collision_checker_config(),
+                  .constraints_proto = create_info.constraints_proto,
+                  .rule_set = create_info.rule_set,
+                  .disable_collision_checking =
+                      create_info.disable_collision_checking,
+                  .maybe_concurrent_thread_count =
+                      maybe_concurrent_thread_count,
+              },
               flags.path_refinement_validation_margin_relative_factor,
-              flags.path_refinement_validation_margin_absolute_factor,
-              maybe_concurrent_thread_count));
+              flags.path_refinement_validation_margin_absolute_factor));
       validation_proxies.push_back(std::move(proxy));
     }
     result.validation_proxy_creation_duration = absl::Now() - before_t;

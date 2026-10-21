@@ -63,22 +63,6 @@ container_image(
 )
 
 container_image(
-    name = "base-image-cc-oci",
-    base = "@distroless_cc",
-    entrypoint = [
-        "/dumb-init",
-        "--",
-    ],
-    files = ["@dumb-init"],
-    visibility = [
-        ":intrinsic_kubernetes_users",
-        "//third_party/abb_hardware_module/abb_hwm:__pkg__",
-        "//third_party/chromium:__pkg__",
-        "//third_party/toybox:__pkg__",
-    ],
-)
-
-container_image(
     name = "python3-image-oci",
     base = "@distroless_python3",
     visibility = [
@@ -140,8 +124,8 @@ go_library(
         "//intrinsic/tools/internal:k8sclientutil",
         "@cat_dario_mergo//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/apis/apps/v1alpha1:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/client/versioned:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/apis/apps/v1alpha1:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/client/versioned:go_default_library",
         "@com_google_cloud_go_storage//:storage",
         "@io_k8s_api//core/v1:go_default_library",
         "@io_k8s_apimachinery//pkg/api/errors:go_default_library",
@@ -196,7 +180,7 @@ go_library(
         "//intrinsic/kubernetes/workcell_spec:workcellspec",
         "//intrinsic/production:imagepublisher",
         "@com_github_golang_glog//:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/apis/apps/v1alpha1:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/apis/apps/v1alpha1:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@io_k8s_sigs_yaml//:go_default_library",
     ],
@@ -224,7 +208,7 @@ go_binary(
         "//intrinsic/tools/internal:k8sclientutil",
         "//intrinsic/util/path_resolver:pathresolver",
         "@com_github_golang_glog//:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/client/versioned:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/client/versioned:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",
         "@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:transfer_go_proto",
@@ -254,7 +238,7 @@ go_library(
         "//intrinsic/production:imagepublisher",
         "@cat_dario_mergo//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/apis/apps/v1alpha1:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/apis/apps/v1alpha1:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@io_k8s_sigs_yaml//:go_default_library",
         "@sh_helm_helm_v3//pkg/chart:go_default_library",

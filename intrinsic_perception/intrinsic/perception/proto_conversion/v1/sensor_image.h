@@ -25,6 +25,9 @@ namespace intrinsic_proto::perception::v1 {
 absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
     const SensorImage& sensor_image);
 
+absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
+    SensorImage&& sensor_image);
+
 absl::StatusOr<SensorImage> ToProto(
     const intrinsic::perception::SensorImage& sensor_image,
     intrinsic::perception::Encoding encoding =

@@ -21,6 +21,12 @@
 
 namespace intrinsic {
 
+// Compares two `ObjectOrEntityReference` references `a` and `b`
+// lexicographically, returning `true` if `a` is shall come before `b`.
+bool CompareReferences(
+    const intrinsic_proto::world::ObjectOrEntityReference& a,
+    const intrinsic_proto::world::ObjectOrEntityReference& b);
+
 // Compares two CollisionRule messages using a strict weak ordering.
 // Orders primarily by 'left' references, secondarily by 'right' references,
 // and finally by the collision action (exclusion vs. margin).

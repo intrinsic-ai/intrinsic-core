@@ -23,7 +23,6 @@ cc_library(
     srcs = ["hal_arm_part.cc"],
     hdrs = ["hal_arm_part.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:context",
         "//intrinsic_control/intrinsic/icon/control:realtime_collision_world_from_world",
         "//intrinsic_control/intrinsic/icon/control/collision:robotcollision",
@@ -81,6 +80,7 @@ cc_library(
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits_xd",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",

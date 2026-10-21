@@ -18,22 +18,12 @@ Module extension for non-module dependencies
 
 load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file", "http_jar")
 
+# TODO(b/572956581): Remove NVIDIA Pose Estimator out of insrc
+load("//bazel:nvidia_pose_estimator_models.bzl", "nvidia_pose_estimator_models")  
+
 # Module extension function signatures include a ctx variable, which should not be removed.
 def _non_module_deps_impl(
         ctx):  # @unused
-    # To update this, see https://github.com/intrinsic-ai/intrinsic-core/blob/main/bazel/sysroot/README.md.  
-    http_archive(
-        name = "intrinsic_llvm_sysroot",
-        sha256 = "24d7e61ceb0a26a2002bd0a3e87dfbc8e12ec95456bd1cced7fc5ccd79c47ed8",
-        build_file_content = """
-filegroup(
-    name = "all_files",
-    srcs = glob(["**"]),
-    visibility = ["//visibility:public"]
-)""",
-        urls = ["https://storage.googleapis.com/intrinsic-mirror/bazel/sysroot-2025-07-22-845e86b8.tar.zst"],
-    )
-
 
 
 
@@ -67,6 +57,68 @@ filegroup(
         sha256 = "4a0713351882989dda8b6bbfa942d5013b994f297fbebe1096ce664a92aff1a0",
         strip_prefix = "cgal-6.2.1",
         url = "https://github.com/CGAL/cgal/archive/refs/tags/v6.2.1.tar.gz",
+    )
+
+    http_archive(
+        name = "foundation_pose_inference_library",
+        build_file = Label("//intrinsic/production/external:foundation_pose_inference_library.BUILD.bazel"),
+        sha256 = "de217d2c4e1f2526f3d156c69c20bcc11afaca961a11b844703a86f4f79b21ae",
+        strip_prefix = "foundation-pose-inference-library-32d1122bf819b4db5b6d823aaa4092e27a562091",
+        urls = ["https://github.com/intrinsic-opensource/foundation-pose-inference-library/archive/32d1122bf819b4db5b6d823aaa4092e27a562091.tar.gz"],
+    )
+
+    http_archive(
+        name = "foundationpose_perception_pipeline",
+        build_file = Label("//intrinsic/production/external:foundationpose_perception_pipeline.BUILD.bazel"),
+        sha256 = "bfac90173ecd7578117043b6883398cc7ce24610924b35231ee7bb025c8d201a",
+        strip_prefix = "foundationpose_perception_pipeline-4d79cf040a981d9375f1e8c8b0d71306b968ed67",
+        urls = ["https://github.com/intrinsic-opensource/foundationpose_perception_pipeline/archive/4d79cf040a981d9375f1e8c8b0d71306b968ed67.tar.gz"],
+    )
+
+    # foundationpose_refine_onnx, foundationpose_score_onnx, and
+    # foundationstereo_onnx are gated behind
+    # --//intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator:download_weights=True
+    # so CI does not fetch them unnecessarily.
+
+    http_file(
+        name = "foundationpose_refine_onnx",
+        downloaded_file_path = "refiner_net.onnx",
+        sha256 = "4a4445d2506b1bfc0a8d62fa80f8780a7e37bb0df13bb09aa5dd04a03bf0c954",
+        urls = [
+            "https://api.ngc.nvidia.com/v2/models/nvidia/tao/foundationpose/versions/deployable_v1.0/files/refiner_net.onnx",
+            "https://huggingface.co/nvidia/foundationpose/resolve/18d8309afc9790cddc03a1d50bc69954dc058693/refiner_net.onnx",
+        ],
+    )
+
+    http_file(
+        name = "foundationpose_score_onnx",
+        downloaded_file_path = "score_net.onnx",
+        sha256 = "bb7208919557560ecb0e10a30612821f0025a2578190b17677bdf3653514a48d",
+        urls = [
+            "https://api.ngc.nvidia.com/v2/models/nvidia/tao/foundationpose/versions/deployable_v1.0/files/score_net.onnx",
+            "https://huggingface.co/nvidia/foundationpose/resolve/18d8309afc9790cddc03a1d50bc69954dc058693/score_net.onnx",
+        ],
+    )
+
+    http_file(
+        name = "foundationstereo_onnx",
+        downloaded_file_path = "deployable_foundation_stereo_s_dynamic_v2.0.onnx",
+        sha256 = "a001a7bc0512a0bc3b3218194e924784e58b20656c6f1ea2c151024e555cfd64",
+        urls = ["https://api.ngc.nvidia.com/v2/models/nvidia/tao/foundationstereo/versions/deployable_foundation_stereo_s_dynamic_v2.0/files/deployable_foundation_stereo_s_dynamic_v2.0.onnx"],
+    )
+
+    # Locally staged model files. These files need to be fetched manually to the
+    # $NVIDIA_POSE_ESTIMATOR_MODELS_DIR directory. Defaults to:
+    # intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/models/
+    #
+    #   - SAM 3 ONNX graphs and BPE vocabulary, exported from the gated SAM 3
+    #     checkpoint via:
+    #     intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/scripts/prepare_sam3_models.sh
+    #   - [Optional] Precompiled TensorRT plans.
+
+    # Tracked for removal from insrc in http://b/572956581
+    nvidia_pose_estimator_models(
+        name = "nvidia_pose_estimator_models",
     )
 
     # For ur_calibration.[cc/h]
@@ -103,9 +155,9 @@ filegroup(
     visibility = ["//visibility:public"],
 )
 """,
-        sha256 = "2a9792cb5f1403f524543ce94c3115e3c4a4229f0e86af55fd26c078da448164",
+        sha256 = "5716719def14a3fec3ed285e5e8c4280e6268854039b5073a96e8c0adafb1c02",
         type = "tar.gz",
-        urls = ["https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.30.0/envtest-v1.30.0-linux-amd64.tar.gz"],
+        urls = ["https://github.com/kubernetes-sigs/controller-tools/releases/download/envtest-v1.35.0/envtest-v1.35.0-linux-amd64.tar.gz"],
         strip_prefix = "controller-tools/envtest",
     )
 
@@ -124,14 +176,6 @@ filegroup(
         sha256 = "7df8fe4a1739b56b03bb3794f64a77bcf978d9de11548ed920526e090864b9ed",
         downloaded_file_path = "schemas.tar.gz",
         urls = ["https://storage.googleapis.com/intrinsic-mirror/bazel/helmlint/schemas-b3d60bb6a5c10815dcfb1ee592b4e5b6f10cef29.tar.gz"],
-    )
-
-    PERFKITBENCHMARKER_COMMIT = "def24810d209eaa38abb802547edb1e144d515da"  # 2024-22-10
-    http_file(
-        name = "com_googlecloudplatform_perfkitbenchmarker_tests_matchers_py",
-        downloaded_file_path = "matchers.py",
-        urls = ["https://raw.githubusercontent.com/GoogleCloudPlatform/PerfKitBenchmarker/%s/tests/matchers.py" % PERFKITBENCHMARKER_COMMIT],
-        sha256 = "1e5045af622e088d711ceb3dbda96b7c4ce19356b5335860862b82357eb35eec",
     )
 
     S2GEOMETRY_COMMIT = "418c55893f6123b90f2768ed2ec9f5f47fa512de"  # 2024-05-12
@@ -156,6 +200,20 @@ filegroup(
         sha256 = "ee770ce4721fe37dd3ef6a80e4f646082d835bf4923d235c29484641b0129782",
     )
 
+    OPENXLA_COMMIT = "35fbc9a3be7d43ffaedecb96e3fa1b0e7cf5a077"  # 2026-10-12
+    http_file(
+        name = "com_github_openxla_xla_tsl_net_h",
+        downloaded_file_path = "net.h",
+        urls = ["https://raw.githubusercontent.com/openxla/xla/%s/third_party/tsl/tsl/platform/net.h" % OPENXLA_COMMIT],
+        sha256 = "67042c2c2d2014d1e4d446eae02a436d8993162d2c92e75fcd729784c26c1854",
+    )
+    http_file(
+        name = "com_github_openxla_xla_tsl_net_cc",
+        downloaded_file_path = "net.cc",
+        urls = ["https://raw.githubusercontent.com/openxla/xla/%s/xla/tsl/platform/default/net.cc" % OPENXLA_COMMIT],
+        sha256 = "a3c6a4f331255dedbb77e349bbdf34ac4971fa60115bb33e7d72c33ce8ef4e87",
+    )
+
     http_file(
         name = "oss_licenses",
         downloaded_file_path = "oss_licenses.json",
@@ -172,5 +230,9 @@ filegroup(
     )
 
 
+
+    # The pass below ensures that if copybara strips everything out of this function
+    # it still produces a valid function (functions without content are invalid).
+    pass
 
 non_module_deps_ext = module_extension(implementation = _non_module_deps_impl)

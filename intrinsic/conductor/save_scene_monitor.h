@@ -26,8 +26,8 @@
 #include "absl/status/statusor.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "intrinsic/assets/proto/v1alpha1/asset_info_internal.grpc.pb.h"
 #include "intrinsic/conductor/proto/save_status.pb.h"
-#include "intrinsic/conductor/resource_world_interface.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/storage/hot_shared_state/proto/v1/resource_set_service.grpc.pb.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
@@ -35,9 +35,10 @@
 namespace intrinsic::conductor {
 
 struct SaveSceneMonitorOptions {
-  ResourceWorldInterface* resource_world = nullptr;
+  intrinsic_proto::assets::v1alpha1::AssetInfoInternal::StubInterface*
+      asset_info_internal = nullptr;
+  intrinsic_proto::world::ObjectWorldService::Service* world_service = nullptr;
   std::string hss_address;
-  std::string ows_address;
 };
 
 class SaveSceneMonitor {
@@ -61,12 +62,13 @@ class SaveSceneMonitor {
 
  private:
   SaveSceneMonitor(
-      const std::string& world_id, ResourceWorldInterface* resource_world,
+      const std::string& world_id,
+      intrinsic_proto::assets::v1alpha1::AssetInfoInternal::StubInterface&
+          asset_info_internal,
+      intrinsic_proto::world::ObjectWorldService::Service& world_service,
       std::unique_ptr<intrinsic_proto::hot_shared_state::v1::
                           HotSharedStateResourceSetService::Stub>
           rss_stub,
-      std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>
-          ows_stub,
       PubSub pubsub);
 
   void StartPolling();
@@ -85,12 +87,12 @@ class SaveSceneMonitor {
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   const std::string world_id_;
-  ResourceWorldInterface* const resource_world_;
+  intrinsic_proto::assets::v1alpha1::AssetInfoInternal::StubInterface&
+      asset_info_internal_;
+  intrinsic_proto::world::ObjectWorldService::Service& world_service_;
   const std::unique_ptr<intrinsic_proto::hot_shared_state::v1::
                             HotSharedStateResourceSetService::Stub>
       rss_stub_;
-  const std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>
-      ows_stub_;
   const PubSub pubsub_;
 
   absl::Mutex mu_;

@@ -91,7 +91,6 @@
 #include "intrinsic/util/unique_id.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/service/updater/world_updater.grpc.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
 #include "intrinsic/world/service/world_service.grpc.pb.h"
 #include "opentelemetry/proto/trace/v1/trace.pb.h"
 #include "opentelemetry/trace/span.h"
@@ -320,7 +319,8 @@ ClipsExecutiveService::CreateService(
     std::unique_ptr<intrinsic::executive::ClipsExecutor> executor) {
   std::unique_ptr<ClipsExecutiveService> service =
       absl::WrapUnique(new ClipsExecutiveService(std::move(executor)));
-  service->InitLogging(absl::GetFlag(FLAGS_grpc_client_connection_timeout));
+  INTR_RETURN_IF_ERROR(service->InitLogging(
+      absl::GetFlag(FLAGS_grpc_client_connection_timeout)));
   return std::move(service);
 }
 
@@ -359,21 +359,20 @@ void ClipsExecutiveService::Shutdown() {
 // Important: This must continue to be called even if the logger is not used
 // directly in this file. Downstream components (e.g. skill service client)
 // depend on the logger being initialized by the executive.
-void ClipsExecutiveService::InitLogging(absl::Duration grpc_connect_timeout) {
+absl::Status ClipsExecutiveService::InitLogging(
+    absl::Duration grpc_connect_timeout) {
   if (logging_initialized_) {
-    return;  // StartUpIntrinsicLoggerViaGrpc should only be called once at
-             // startup.
+    return absl::OkStatus();  // StartUpIntrinsicLoggerViaGrpc should only be
+                              // called once at startup.
   }
   if (std::string data_logger_address =
           absl::GetFlag(FLAGS_data_logger_grpc_service_address);
       !data_logger_address.empty()) {
-    auto s = intrinsic::data_logger::StartUpIntrinsicLoggerViaGrpc(
-        data_logger_address, grpc_connect_timeout);
-    if (!s.ok()) {
-      LOG(ERROR) << "Failed to connect to data logger: " << s;
-    }
+    INTR_RETURN_IF_ERROR(intrinsic::data_logger::StartUpIntrinsicLoggerViaGrpc(
+        data_logger_address, grpc_connect_timeout));
   }
   logging_initialized_ = true;
+  return absl::OkStatus();
 }
 
 absl::Status ClipsExecutiveService::InitExecutor() {
@@ -381,7 +380,7 @@ absl::Status ClipsExecutiveService::InitExecutor() {
                         BuildExecutiveConfig());
   absl::Duration grpc_connect_timeout =
       ToAbslDurationNoValidation(config.grpc_client_connection_timeout());
-  InitLogging(grpc_connect_timeout);
+  INTR_RETURN_IF_ERROR(InitLogging(grpc_connect_timeout));
 
   INTR_ASSIGN_OR_RETURN(
       std::unique_ptr<intrinsic::skills::SkillRegistryClientInterface>
@@ -447,8 +446,6 @@ absl::Status ClipsExecutiveService::InitExecutor() {
       world_service_stub;
   std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>
       object_world_service_stub;
-  std::unique_ptr<intrinsic_proto::world::WorldCompatibilityService::Stub>
-      world_compatibility_service_stub;
 
   if (!config.world_service_address().empty()) {
     INTR_ASSIGN_OR_RETURN(
@@ -459,9 +456,6 @@ absl::Status ClipsExecutiveService::InitExecutor() {
         intrinsic_proto::world::internal::WorldService::NewStub(world_channel);
     object_world_service_stub =
         intrinsic_proto::world::ObjectWorldService::NewStub(world_channel);
-    world_compatibility_service_stub =
-        intrinsic_proto::world::WorldCompatibilityService::NewStub(
-            world_channel);
   }
 
   std::unique_ptr<intrinsic_proto::world::WorldUpdater::Stub>
@@ -533,8 +527,6 @@ absl::Status ClipsExecutiveService::InitExecutor() {
              .world_service_stub = std::move(world_service_stub),
              .object_world_service_stub = std::move(object_world_service_stub),
              .world_updater_stub = std::move(world_updater_stub),
-             .world_compatibility_service_stub =
-                 std::move(world_compatibility_service_stub),
              .simulation_service_stub = std::move(simulation_service_stub),
              .solution_service_stub = std::move(solution_service_stub),
              .conductor_service_stub = std::move(conductor_service_stub)}));
@@ -688,14 +680,16 @@ grpc::Status ClipsExecutiveService::GetOperationView(
       intrinsic_proto::executive::RunMetadata metadata = operation->metadata;
       google::protobuf::util::FieldMaskUtil::TrimMessage(
           request->metadata_fieldmask(), &metadata);
-      response->mutable_metadata()->PackFrom(std::move(metadata));
+      static_cast<void>(response->mutable_metadata()->PackFrom(
+          std::move(metadata)));  // TODO: Handle return value
     }
   } else if (request->has_view()) {
     if (request->view() ==
         intrinsic_proto::executive::GetOperationViewRequest::VIEW_STATE_ONLY) {
       intrinsic_proto::executive::RunMetadata metadata = operation->metadata;
       metadata.clear_behavior_tree();
-      response->mutable_metadata()->PackFrom(std::move(metadata));
+      static_cast<void>(response->mutable_metadata()->PackFrom(
+          std::move(metadata)));  // TODO: Handle return value
     }
   }
   return grpc::Status::OK;
@@ -1310,8 +1304,8 @@ void ClipsExecutiveService::UpdateOperationData(
 
   *operation_data->metadata.mutable_log_context() =
       executor_->GetStateLogContext(operation_data->operation.name());
-  operation_data->operation.mutable_metadata()->PackFrom(
-      operation_data->metadata);
+  static_cast<void>(operation_data->operation.mutable_metadata()->PackFrom(
+      operation_data->metadata));  // TODO: Handle return value
 
   // No more metadata changes beyond this point (because it has already been
   // packed).
@@ -1326,7 +1320,9 @@ void ClipsExecutiveService::UpdateOperationData(
       if (operation_return_value.ok()) {
         intrinsic_proto::executive::RunResponse response;
         *response.mutable_result() = *operation_return_value;
-        operation_data->operation.mutable_response()->PackFrom(response);
+        static_cast<void>(
+            operation_data->operation.mutable_response()->PackFrom(
+                response));  // TODO: Handle return value
       }
     } else if (operation_data->metadata.operation_state() ==
                intrinsic_proto::executive::RunMetadata::FAILED) {
@@ -1356,7 +1352,8 @@ void ClipsExecutiveService::UpdateOperationData(
 
       if (extended_status.ok()) {
         google::protobuf::Any es_detail;
-        es_detail.PackFrom(*extended_status);
+        static_cast<void>(
+            es_detail.PackFrom(*extended_status));  // TODO: Handle return value
         *operation_data->operation.mutable_error()->add_details() =
             std::move(es_detail);
       }

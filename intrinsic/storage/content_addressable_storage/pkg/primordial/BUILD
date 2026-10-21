@@ -22,5 +22,6 @@ go_library(
         "//intrinsic/assets/build_defs:__pkg__",
         "//intrinsic/config:__pkg__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__pkg__",
     ],
 )

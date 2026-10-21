@@ -19,6 +19,7 @@ py_library(
     srcs = ["client_helpers.py"],
     visibility = ["//intrinsic:public_api_users"],
     deps = [
+        "@ai_intrinsic_sdks_pip_deps//tenacity",
         "@com_google_absl_py//absl/logging",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_py_pb2",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_py_pb2_grpc",

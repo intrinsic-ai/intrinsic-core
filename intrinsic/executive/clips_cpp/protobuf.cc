@@ -269,7 +269,8 @@ std::string MessageToString(
   }
 
   std::string debug_string;
-  printer.PrintToString(msg, &debug_string);
+  static_cast<void>(
+      printer.PrintToString(msg, &debug_string));  // TODO: Handle return value
   if (max_lines > 0) {
     std::vector<absl::string_view> debug_lines =
         absl::StrSplit(debug_string, '\n');
@@ -608,7 +609,8 @@ absl::Status ProtobufManager::RegisterFunctions() {
             google::protobuf::StringValue::GetDescriptor()->full_name()));
         if (symbol) {
           google::protobuf::StringValue sym_name;
-          sym_name.ParseFromString(*symbol);
+          static_cast<void>(
+              sym_name.ParseFromString(*symbol));  // TODO: Handle return value
           return Symbol(sym_name.value());
         }
       }
@@ -1897,7 +1899,8 @@ absl::Status ProtobufManager::InternalSetRepeatedFieldValue(
           refl->MutableRepeatedMessage(msg, field, index);
       if (mutable_msg->GetDescriptor()->full_name() ==
           msg_value->GetDescriptor()->full_name()) {
-        mutable_msg->ParseFromString(msg_value->SerializeAsString());
+        static_cast<void>(mutable_msg->ParseFromString(
+            msg_value->SerializeAsString()));  // TODO: Handle return value
       } else {
         return absl::InvalidArgumentError(absl::StrFormat(
             "Trying to set message %s::%s from invalid type %s instead of %s",
@@ -2238,7 +2241,8 @@ absl::Status ProtobufManager::InternalSetRepeatedFieldValues(
         google::protobuf::Message* mutable_msg = refl->AddMessage(msg, field);
         if (mutable_msg->GetDescriptor()->full_name() ==
             msg_value->GetDescriptor()->full_name()) {
-          mutable_msg->ParseFromString(msg_value->SerializeAsString());
+          static_cast<void>(mutable_msg->ParseFromString(
+              msg_value->SerializeAsString()));  // TODO: Handle return value
         } else {
           return absl::InvalidArgumentError(
               absl::StrFormat("Trying to set message %s::%s from invalid "
@@ -2901,7 +2905,9 @@ absl::StatusOr<ProtoMessageId> ProtobufManager::UnpackFromAnyField(
                         CreateProtoInstanceFromDescriptorPool(
                             any_type_name, pool_info->descriptor_pool,
                             pool_info->message_factory));
-  casted->ParseFromString(any_refl->GetString(any_msg, value_field));
+  if (!casted->ParseFromString(any_refl->GetString(any_msg, value_field))) {
+    return absl::InvalidArgumentError("Failed to parse proto from Any value");
+  }
 
   absl::MutexLock lock(protos_mutex_);
   return AddProto(std::move(casted), std::move(pool_info));
@@ -2919,7 +2925,9 @@ absl::StatusOr<google::protobuf::Any> ProtobufManager::CastToAny(
           "Proto message to cast had no pool information attached. Message: %s",
           proto->DebugString()));
     }
-    any_proto.PackFrom(*proto, proto.pool_info->type_url_prefix);
+    if (!any_proto.PackFrom(*proto, proto.pool_info->type_url_prefix)) {
+      return absl::InternalError("Failed to pack proto into Any.");
+    }
   }
   return any_proto;
 }
@@ -3392,7 +3400,8 @@ absl::Status ProtobufManager::InternalSetFieldValue(
       google::protobuf::Message* mutable_msg = refl->MutableMessage(msg, field);
       if (mutable_msg->GetDescriptor()->full_name() ==
           msg_value->GetDescriptor()->full_name()) {
-        mutable_msg->ParseFromString(msg_value->SerializeAsString());
+        static_cast<void>(mutable_msg->ParseFromString(
+            msg_value->SerializeAsString()));  // TODO: Handle return value
       } else {
         return absl::InvalidArgumentError(absl::StrFormat(
             "Trying to set message %s::%s from invalid type %s instead of %s",
@@ -3745,7 +3754,8 @@ void ProtobufManager::DebugPrintPools(
           if (typed_proto == nullptr) {
             std::string serialized_proto;
             if (to_print->SerializeToString(&serialized_proto)) {
-              typed_proto_ptr->ParseFromString(serialized_proto);
+              static_cast<void>(typed_proto_ptr->ParseFromString(
+                  serialized_proto));  // TODO: Handle return value
             }
             typed_proto = typed_proto_ptr.get();
           }
@@ -3804,10 +3814,10 @@ void ProtobufManager::RemoveOperationProtosAndPools(
 
 absl::Status ProtobufManager::AddStandardMessageTypes(
     google::protobuf::FileDescriptorSet& file_descriptor_set) {
-  // Generate a lookup_db from a copy of the FDS as file_descriptor_set will be
-  // modified as part of this function, which would invalidate a database when
-  // constructed from file_descriptor_set.
-  // Thus lookup_db will always represent the original file_descriptor_set.
+  // Generate a lookup_db from a copy of the FDS as file_descriptor_set will
+  // be modified as part of this function, which would invalidate a database
+  // when constructed from file_descriptor_set. Thus lookup_db will always
+  // represent the original file_descriptor_set.
   google::protobuf::FileDescriptorSet lookup_fds = file_descriptor_set;
   auto lookup_db =
       std::make_unique<google::protobuf::SimpleDescriptorDatabase>();
@@ -3819,15 +3829,15 @@ absl::Status ProtobufManager::AddStandardMessageTypes(
       google::api::expr::runtime::GetStandardMessageTypesFileDescriptorSet();
   google::protobuf::FileDescriptorProto* any_list_file_descriptor =
       standard_messages_fds.add_file();
-  // AnyList is an internal type required to store arbitrary lists as protos. No
-  // user should have a different version of this.
+  // AnyList is an internal type required to store arbitrary lists as protos.
+  // No user should have a different version of this.
   intrinsic_proto::executive::AnyList::descriptor()->file()->CopyTo(
       any_list_file_descriptor);
 
-  // Special case for Any as AnyList imports an Any and AnyList is required for
-  // CEL expression handling: The Any must be compatible and come from the same
-  // file path. This is usually the case (in "google/protobuf/any.proto") and
-  // thus should never happen.
+  // Special case for Any as AnyList imports an Any and AnyList is required
+  // for CEL expression handling: The Any must be compatible and come from the
+  // same file path. This is usually the case (in "google/protobuf/any.proto")
+  // and thus should never happen.
   google::protobuf::FileDescriptorProto any_file_descriptor;
   if (lookup_db->FindFileContainingSymbol(
           std::string(google::protobuf::Any::descriptor()->full_name()),
@@ -3854,32 +3864,33 @@ absl::Status ProtobufManager::AddStandardMessageTypes(
 
   // Final invariant for this function to succeed:
   // The original file_descriptor_set represented by lookup_db must contain
-  // either the same set of messages as the standard messages for each matching
-  // file descriptor or not contain a matching file descriptor.
+  // either the same set of messages as the standard messages for each
+  // matching file descriptor or not contain a matching file descriptor.
   //
   // A matching file descriptor is found when it contains the same symbol (not
   // just the same file name). This is done to be resilient for file path
-  // changes with regard to g3 vs. insrc builds. Once it is guaranteed that all
-  // file paths between the executive build and the 3P SDK (in particular also
-  // the AnyList), file descriptors can be matched by name and the matching just
-  // needs to ensure that the same messages are contained if a file descriptors
-  // with a name in standard_messages_fds is already in the lookup_db.
+  // changes with regard to g3 vs. insrc builds. Once it is guaranteed that
+  // all file paths between the executive build and the 3P SDK (in particular
+  // also the AnyList), file descriptors can be matched by name and the
+  // matching just needs to ensure that the same messages are contained if a
+  // file descriptors with a name in standard_messages_fds is already in the
+  // lookup_db.
   //
-  // Given that standard_messages_fds only contains standard messages there are
-  // the following assumptions
-  // * If a symbol is defined in standard_messages_fds and lookup_db then it is
-  // compatible
+  // Given that standard_messages_fds only contains standard messages there
+  // are the following assumptions
+  // * If a symbol is defined in standard_messages_fds and lookup_db then it
+  // is compatible
   // * If lookup_db contains a symbol from standard_messages_fds then the
   // matching file descriptors must contain the same symbols.
   // * File paths of a file descriptor in standard_messages_fds vs. lookup_db
   // containing the same symbols can be different
   //
   // Here: Conservatively fail if the lookup_db is inconsistent with the well
-  // known file descriptors in standard_messages_fds. These are well established
-  // protos that should never change.
+  // known file descriptors in standard_messages_fds. These are well
+  // established protos that should never change.
 
-  // Record, which file descriptors will be removed by checking if they contain
-  // a symbol from standard_messages_fds.
+  // Record, which file descriptors will be removed by checking if they
+  // contain a symbol from standard_messages_fds.
   absl::flat_hash_map<std::string, google::protobuf::FileDescriptorProto>
       fds_to_remove;
   for (const google::protobuf::FileDescriptorProto& file :
@@ -3910,16 +3921,17 @@ absl::Status ProtobufManager::AddStandardMessageTypes(
         !fds_to_remove.contains(file.name())) {
       return absl::InvalidArgumentError(absl::StrFormat(
           "File descriptor %s is not to be removed, as it doesn't share any "
-          "symbols with the standard messages, but a file descriptor exists in "
+          "symbols with the standard messages, but a file descriptor exists "
+          "in "
           "the standard messages descriptor set under the same name.",
           file.name()));
     }
   }
 
-  // Verify that if a fd is to be removed due to having *a* symbol in lookup_db,
-  // then all of its symbols must be in standard_messages_fds. Otherwise a file
-  // descriptor in lookup_db provides extra descriptors not in
-  // standard_messages_fds, which would be removed.
+  // Verify that if a fd is to be removed due to having *a* symbol in
+  // lookup_db, then all of its symbols must be in standard_messages_fds.
+  // Otherwise a file descriptor in lookup_db provides extra descriptors not
+  // in standard_messages_fds, which would be removed.
   for (const auto& [file_name, file] : fds_to_remove) {
     for (const google::protobuf::DescriptorProto& message :
          file.message_type()) {

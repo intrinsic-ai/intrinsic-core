@@ -57,11 +57,6 @@ class WorldServiceImpl final
   WorldServiceImpl(const WorldServiceImpl&) = delete;
   const WorldServiceImpl& operator=(const WorldServiceImpl&) = delete;
 
-  grpc::Status GetWorld(
-      grpc::ServerContext* context,
-      const intrinsic_proto::world::internal::GetWorldRequest* request,
-      intrinsic_proto::world::internal::WorldWithMetadata* response) override;
-
   grpc::Status GetIkSolution(
       grpc::ServerContext* context,
       const intrinsic_proto::world::internal::GetIkSolutionRequest* request,
@@ -80,12 +75,6 @@ class WorldServiceImpl final
       : world_storage_future_(std::move(world_storage)),
         compat_func_(compat_func),
         geo_lib_future_(std::move(geo_lib)) {}
-
-  // Converts the given world and world id into a WorldWithMetadata proto.
-  absl::StatusOr<intrinsic_proto::world::internal::WorldWithMetadata>
-  WorldToProto(absl::string_view world_id,
-               absl::string_view world_structure_hash,
-               absl::string_view user_tag, const World& world);
 
   // Converts the given world id, entity id, and entity into a
   // EntityWithMetadata proto.

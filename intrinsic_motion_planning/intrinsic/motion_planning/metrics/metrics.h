@@ -15,18 +15,19 @@
 #ifndef INTRINSIC_MOTION_PLANNING_METRICS_METRICS_H_
 #define INTRINSIC_MOTION_PLANNING_METRICS_METRICS_H_
 
-#include "opencensus/stats/stats.h"
-#include "opencensus/tags/tag_key.h"
+#include "absl/strings/string_view.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 namespace intrinsic {
 namespace motion_planning {
 
-// Measures the time spent in PlanTrajectory.
-opencensus::stats::MeasureDouble MPSPlanTrajectoryTimeSum();
-opencensus::stats::MeasureDouble MPSPlanTrajectoryTimeDist();
+inline constexpr absl::string_view kCacheHitResultKey = "cache_hit_result";
+inline constexpr absl::string_view kCallerIdKey = "caller_id";
 
-opencensus::tags::TagKey CacheHitResultKey();
-opencensus::tags::TagKey CallerIDKey();
+// Distribution of time spent in PlanTrajectory (ms). The first call registers
+// the histogram view, so it must happen after intrinsic::OpenCensusPlugin is
+// constructed.
+opentelemetry::metrics::Histogram<double>& MPSPlanTrajectoryTimeDist();
 
 }  // namespace motion_planning
 }  // namespace intrinsic

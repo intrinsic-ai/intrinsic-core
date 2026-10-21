@@ -23,7 +23,6 @@ cc_library(
     srcs = ["hal_imu_part.cc"],
     hdrs = ["hal_imu_part.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control/parts:hal_realtime_part_base",
         "//intrinsic_control/intrinsic/icon/control/parts:realtime_part_factory_common",
         "//intrinsic_control/intrinsic/icon/control/parts/feature_interfaces:imu_state",
@@ -33,6 +32,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/hal/interfaces:imu_fbs_cc",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:string_view",

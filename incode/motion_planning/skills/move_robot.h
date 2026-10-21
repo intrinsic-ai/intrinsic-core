@@ -72,6 +72,28 @@ class MoveRobot final : public SkillInterface {
       eigenmath::VectorXd const& start_configuration,
       JointLimitsXd const& application_limits, TimingDebugLogger& logger);
 
+  // Computes a fresh motion plan and stores it in `SkillData` under
+  // `(context_id, "plan")` so that a subsequent `Execute()` or `Preview()` for
+  // the same action can run it without replanning.
+  //
+  // Never reuses a plan from a previous call. Re-projection under the same
+  // `context_id` may happen in a changed world (e.g., conflicting actions
+  // started or finished), so a previously computed plan must not be trusted.
+  // Cheap reuse for unchanged worlds is provided by the MPS cache instead.
+  //
+  // Any previously stored entry for `context_id` is removed before planning,
+  // so a failed computation never leaves a stale plan behind for `Execute()` or
+  // `Preview()`.
+  absl::StatusOr<intrinsic_proto::skills::MoveRobotInternalData>
+  ComputeAndStorePlan(absl::string_view context_id,
+                      const intrinsic_proto::skills::MoveRobotParams& params,
+                      world::ObjectWorldClient& world,
+                      motion_planning::MotionPlannerClient& planner,
+                      std::optional<world::KinematicObject> robot_object) const;
+
+  // Returns the plan stored in `SkillData` for `context_id` if present, or
+  // computes and stores a new plan. Used by `Preview()` to reuse the plan
+  // cached by `GetFootprint()`.
   absl::StatusOr<intrinsic_proto::skills::MoveRobotInternalData>
   GetOrComputePlan(absl::string_view context_id,
                    const intrinsic_proto::skills::MoveRobotParams& params,

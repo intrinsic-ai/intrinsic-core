@@ -194,7 +194,7 @@ def run_pose_estimation_request_from_capture_data(
     run_config.pose_priors.region_of_interest.CopyFrom(roi)
   request = pose_estimation_service_pb2.RunPoseEstimationRequest(
       asset_id=asset_id,
-      capture_data_list=pose_estimation_service_pb2.CaptureDataList(
+      capture_data_list=capture_data_pb2.CaptureDataList(
           capture_data=capture_data,
       ),
       pose_estimation_run_config=run_config,

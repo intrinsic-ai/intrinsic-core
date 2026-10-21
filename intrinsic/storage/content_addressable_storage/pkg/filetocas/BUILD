@@ -23,6 +23,10 @@ go_library(
         "//intrinsic/config:__pkg__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
         "//intrinsic/tools/inctl/util:__pkg__",
+        "//intrinsic_sdk/intrinsic/assets/catalog:__pkg__",
+        "//intrinsic_sdk/intrinsic/assets/inctl:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:__pkg__",
     ],
     deps = [
         "//intrinsic/kubernetes/workcell_spec:author",

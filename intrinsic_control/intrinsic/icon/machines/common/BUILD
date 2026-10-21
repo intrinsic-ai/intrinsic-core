@@ -12,9 +12,9 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
-load("//intrinsic/httpjson:intrinsic_http_image.bzl", "intrinsic_http_image")
-load("//intrinsic/httpjson/openapi:protoc_gen_openapi.bzl", "protoc_gen_openapi")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/httpjson:intrinsic_http_image.bzl", "intrinsic_http_image")
+load("//intrinsic_sdk/intrinsic/httpjson/openapi:protoc_gen_openapi.bzl", "protoc_gen_openapi")
 
 package(default_visibility = ["//visibility:public"])
 

@@ -25,8 +25,11 @@ import grpc
 import numpy as np
 
 from intrinsic_perception.intrinsic.perception.service.ioc_train_service.proto import ioc_pose_estimator_params_pb2
+from intrinsic_perception.intrinsic.perception.service.ioc_train_service.proto import ioc_train_service_config_pb2
+from intrinsic.assets import interface_utils
 from intrinsic.assets.data.proto.v1 import data_asset_pb2
 from intrinsic.assets.data.proto.v1 import referenced_data_pb2
+from intrinsic.assets.dependencies import utils as asset_utils
 from intrinsic.assets.proto import installed_assets_pb2
 from intrinsic.assets.proto import installed_assets_pb2_grpc
 from intrinsic.assets.proto import metadata_pb2
@@ -37,12 +40,18 @@ from intrinsic.perception.proto.v1 import train_service_pb2_grpc
 from intrinsic.scene.proto.v1 import scene_object_pb2
 from intrinsic.util.proto import descriptors
 
-INGRESS_ADDRESS = "istio-ingressgateway.app-ingress.svc.cluster.local:80"
 _GRPC_OPTIONS = [
     ("grpc.max_receive_message_length", -1),
     ("grpc.max_send_message_length", -1),
     ("grpc.max_message_length", -1),
 ]
+
+
+def _installed_assets_interface_uri() -> str:
+  return (
+      f"{interface_utils.GRPC_URI_PREFIX}"
+      f"{installed_assets_pb2.DESCRIPTOR.services_by_name['InstalledAssets'].full_name}"
+  )
 
 
 def _extract_cas_and_transform_from_scene_object(
@@ -119,16 +128,21 @@ class IocTrainService(train_service_pb2_grpc.TrainServiceServicer):
 
   def __init__(
       self,
+      config: ioc_train_service_config_pb2.IocTrainServiceConfig | None = None,
       assets_stub: installed_assets_pb2_grpc.InstalledAssetsStub | None = None,
       max_pending_jobs: int = 100,
   ) -> None:
     """
     Args:
+      config: Optional IocTrainServiceConfig containing resolved dependencies.
       assets_stub: Optional gRPC stub for InstalledAssets service. If not
-        provided, connects to the default cluster ingress address.
+        provided, connects via `config.intrinsic_runtime`.
       max_pending_jobs: Maximum number of pending jobs to retain in the LRU cache.
     """
     logging.info("Initializing IocTrainService...")
+    self._config = (
+        config or ioc_train_service_config_pb2.IocTrainServiceConfig()
+    )
     self._max_pending_jobs = max_pending_jobs
     self._pending_jobs: collections.OrderedDict[
         str, perception_model_pb2.PerceptionModel
@@ -136,7 +150,11 @@ class IocTrainService(train_service_pb2_grpc.TrainServiceServicer):
     if assets_stub is not None:
       self.assets_stub = assets_stub
     else:
-      channel = grpc.insecure_channel(INGRESS_ADDRESS, options=_GRPC_OPTIONS)
+      channel = asset_utils.connect_with_runtime_asset_fallback_for_asset_migration_only(
+          self._config.intrinsic_runtime,
+          _installed_assets_interface_uri(),
+          grpc_options=_GRPC_OPTIONS,
+      )
       self.assets_stub = installed_assets_pb2_grpc.InstalledAssetsStub(channel)
 
   def _validate_request(

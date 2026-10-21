@@ -15,14 +15,12 @@
 #include "intrinsic/geometry/api/apply_material_properties.h"
 
 #include <memory>
-#include <sstream>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "assimp/color4.h"
@@ -32,6 +30,7 @@
 #include "google/type/color.pb.h"
 #include "intrinsic/geometry/api/material.h"
 #include "intrinsic/geometry/api/renderable.h"
+#include "intrinsic/geometry/internal/util/gltf_helpers.h"
 #include "intrinsic/geometry/proto/v1/material.pb.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "tiny_gltf.h"
@@ -88,34 +87,10 @@ absl::Status ValidateMaterialProperties(
   return absl::OkStatus();
 }
 
-absl::StatusOr<std::shared_ptr<const Renderable>> ApplyMaterialProperties(
-    std::shared_ptr<const Renderable> geo,
-    const MaterialProperties& material_properties) {
-  std::string glb_bytes = geo->GetGLBString();
-  INTR_ASSIGN_OR_RETURN(
-      glb_bytes, ApplyMaterialPropertiesToGlb(glb_bytes, material_properties));
-  return std::make_shared<Renderable>(std::move(glb_bytes));
-}
-
-absl::StatusOr<std::string> ApplyMaterialPropertiesToGlb(
-    absl::string_view glb_bytes,
+absl::StatusOr<tinygltf::Material> ToGltfMaterial(
     const MaterialProperties& material_properties) {
   INTR_RETURN_IF_ERROR(ValidateMaterialProperties(material_properties));
 
-  // Parse the original glTF model.
-  tinygltf::TinyGLTF gltf_parser;
-  tinygltf::Model model;
-  std::string err;
-  std::string warn;
-  if (!gltf_parser.LoadBinaryFromMemory(
-          &model, &err, &warn,
-          reinterpret_cast<const unsigned char*>(glb_bytes.data()),
-          glb_bytes.size())) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "Failed to load glTF bytes to glTF model. Error(s): ", err));
-  }
-
-  // Initialize material properties with default values.
   std::vector<double> base_color_factor;
   if (material_properties.has_base_color()) {
     const auto& base_color = material_properties.base_color();
@@ -134,17 +109,37 @@ absl::StatusOr<std::string> ApplyMaterialPropertiesToGlb(
                                ? material_properties.roughness()
                                : kDefaultRoughness;
 
-  // Clears existing materials and creates a new material. Replace all mesh
-  // primitives to use this new material.
   tinygltf::Material material;
   material.name = "user_specified_material";
   material.pbrMetallicRoughness.baseColorFactor = std::move(base_color_factor);
   material.pbrMetallicRoughness.metallicFactor = metalness;
   material.pbrMetallicRoughness.roughnessFactor = roughness;
-  material.extensions["KHR_materials_transmission"] =
-      tinygltf::Value(tinygltf::Value::Object{
-          {"transmissionFactor", tinygltf::Value(transmission)}});
-  model.materials = {material};
+  material.extensions[std::string(kKhrMaterialsTransmission)] = tinygltf::Value(
+      tinygltf::Value::Object{{std::string(kTransmissionFactorKey),
+                               tinygltf::Value(transmission)}});
+  return material;
+}
+
+absl::StatusOr<std::shared_ptr<const Renderable>> ApplyMaterialProperties(
+    std::shared_ptr<const Renderable> geo,
+    const MaterialProperties& material_properties) {
+  std::string glb_bytes = geo->GetGLBString();
+  INTR_ASSIGN_OR_RETURN(
+      glb_bytes, ApplyMaterialPropertiesToGlb(glb_bytes, material_properties));
+  return std::make_shared<Renderable>(std::move(glb_bytes));
+}
+
+absl::StatusOr<std::string> ApplyMaterialPropertiesToGlb(
+    absl::string_view glb_bytes,
+    const MaterialProperties& material_properties) {
+  INTR_ASSIGN_OR_RETURN(tinygltf::Material material,
+                        ToGltfMaterial(material_properties));
+
+  INTR_ASSIGN_OR_RETURN(tinygltf::Model model, ParseGlb(glb_bytes));
+
+  // Clears existing materials and creates a new material. Replace all mesh
+  // primitives to use this new material.
+  model.materials = {std::move(material)};
 
   for (auto& mesh : model.meshes) {
     for (auto& primitive : mesh.primitives) {
@@ -152,11 +147,7 @@ absl::StatusOr<std::string> ApplyMaterialPropertiesToGlb(
     }
   }
 
-  // Write the updated glTF model to a string and return it.
-  std::ostringstream ss;
-  gltf_parser.WriteGltfSceneToStream(&model, ss, /*prettyPrint=*/false,
-                                     /*writeBinary=*/true);
-  return ss.str();
+  return SerializeGltfToGlb(model);
 }
 
 absl::Status ApplyMaterialToAiScene(aiScene& scene, const Material& material) {

@@ -39,13 +39,23 @@ var (
 	anyFullName                = (&anypb.Any{}).ProtoReflect().Descriptor().FullName()
 )
 
+// FieldContext describes a field within a config message.
+type FieldContext struct {
+	// Path is the location of the field within the config message, using dots
+	// between fields, [i] for list indices, and [key] for map keys (string keys are wrapped in single
+	// quotes), e.g. `tools[1].extension.pump_dep` or `deps['left']`.
+	Path string
+	// Optional reports whether the field is declared with the `optional` keyword.
+	Optional bool
+}
+
 // ResolvedDependencyFunc is a function that returns a processed ResolvedDependency message
 // based on the provided dependency annotation. The input ResolvedDependency
 // is the existing value of the field, which will be nil if the
 // field is not present in the config.
 //
 // Implementations may modify the input ResolvedDependency message.
-type ResolvedDependencyFunc func(dep *deppb.Dependency, msg *rdpb.ResolvedDependency) (*rdpb.ResolvedDependency, error)
+type ResolvedDependencyFunc func(dep *deppb.Dependency, msg *rdpb.ResolvedDependency, field FieldContext) (*rdpb.ResolvedDependency, error)
 
 // ForEachResolvedDependency walks through the message descriptor and finds
 // ResolvedDependency fields with dependency annotations. For each such field,
@@ -73,7 +83,7 @@ func ForEachResolvedDependency(config *anypb.Any, fds *descriptorpb.FileDescript
 	if err != nil {
 		return fmt.Errorf("failed to create types from file descriptor set: %w", err)
 	}
-	if _, err := processAny(config.ProtoReflect(), types, make(map[protoreflect.MessageDescriptor]struct{}), fn); err != nil {
+	if _, err := processAny(config.ProtoReflect(), types, make(map[protoreflect.MessageDescriptor]struct{}), fn, FieldContext{}); err != nil {
 		return err
 	}
 	return nil
@@ -83,8 +93,8 @@ func ForEachResolvedDependency(config *anypb.Any, fds *descriptorpb.FileDescript
 // ResolvedDependency fields with dependency annotations and executes the
 // provided function. The boolean return value indicates whether any
 // ResolvedDependency fields within this message (or its sub-messages) were
-// updated.
-func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Types, stack map[protoreflect.MessageDescriptor]struct{}, fn ResolvedDependencyFunc) (bool, error) {
+// updated. parent describes the field m within the root config message.
+func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Types, stack map[protoreflect.MessageDescriptor]struct{}, fn ResolvedDependencyFunc, parent FieldContext) (bool, error) {
 	md := m.Descriptor()
 	if _, ok := stack[md]; ok {
 		return false, nil
@@ -113,16 +123,17 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 
 		// 2. Determine the action to perform on the message.
 		//    The boolean input parameter indicates whether the message is already
-		// 		present in the parent message. The boolean return value indicates
+		// 		present in the parent message. The FieldContext input parameter
+		// 		provides additional context to the message. The boolean return value indicates
 		// 		whether the message (or any of its sub-messages) was updated.
-		var action func(protoreflect.Message, bool) (bool, error)
+		var action func(protoreflect.Message, bool, FieldContext) (bool, error)
 
 		// Default to creating ResolvedDependency fields if missing.
 		createIfMissing := true
 
 		if msgDesc.FullName() == resolvedDependencyFullName {
 			if dep := getDependencyAnnotation(field); dep != nil {
-				action = func(m protoreflect.Message, present bool) (bool, error) {
+				action = func(m protoreflect.Message, present bool, info FieldContext) (bool, error) {
 					var resolvedDep *rdpb.ResolvedDependency
 					if present {
 						// The message is likely a dynamic proto, so we need to marshal and unmarshal.
@@ -136,7 +147,7 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 						}
 					}
 
-					res, err := fn(dep, resolvedDep)
+					res, err := fn(dep, resolvedDep, info)
 					if err != nil {
 						return false, err
 					}
@@ -160,13 +171,13 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 				// Only process Any fields if they are already present.
 				createIfMissing = false
 
-				action = func(m protoreflect.Message, present bool) (bool, error) {
-					return processAny(m, types, stack, fn)
+				action = func(m protoreflect.Message, present bool, info FieldContext) (bool, error) {
+					return processAny(m, types, stack, fn, info)
 				}
 			}
 		} else if utils.HasResolvedDependency(msgDesc, utils.WithDependencyAnnotation()) {
-			action = func(m protoreflect.Message, present bool) (bool, error) {
-				return forEachResolvedDependency(m, types, stack, fn)
+			action = func(m protoreflect.Message, present bool, info FieldContext) (bool, error) {
+				return forEachResolvedDependency(m, types, stack, fn, info)
 			}
 		}
 
@@ -183,6 +194,12 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 			}
 		}
 
+		// Built only for fields that are actually visited.
+		fieldInfo := FieldContext{
+			Path:     joinField(parent.Path, field),
+			Optional: field.HasOptionalKeyword(),
+		}
+
 		if field.IsMap() {
 			if !m.Has(field) {
 				continue
@@ -190,7 +207,9 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 			mapVal := m.Get(field).Map()
 			var rangeErr error
 			mapVal.Range(func(k protoreflect.MapKey, v protoreflect.Value) bool {
-				u, err := action(v.Message(), true)
+				elemInfo := fieldInfo
+				elemInfo.Path = fieldInfo.Path + "[" + formatMapKey(k) + "]"
+				u, err := action(v.Message(), true, elemInfo)
 				if err != nil {
 					rangeErr = err
 					return false
@@ -209,7 +228,9 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 			}
 			list := m.Mutable(field).List()
 			for i := 0; i < list.Len(); i++ {
-				u, err := action(list.Get(i).Message(), true)
+				elemInfo := fieldInfo
+				elemInfo.Path = fmt.Sprintf("%s[%d]", fieldInfo.Path, i)
+				u, err := action(list.Get(i).Message(), true, elemInfo)
 				if err != nil {
 					return false, err
 				}
@@ -231,7 +252,7 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 				childMsg = m.NewField(field).Message()
 			}
 
-			u, err := action(childMsg, initiallyPresent)
+			u, err := action(childMsg, initiallyPresent, fieldInfo)
 			if err != nil {
 				return false, err
 			}
@@ -246,7 +267,7 @@ func forEachResolvedDependency(m protoreflect.Message, types *protoregistry.Type
 	return updated, nil
 }
 
-func processAny(m protoreflect.Message, types *protoregistry.Types, stack map[protoreflect.MessageDescriptor]struct{}, fn ResolvedDependencyFunc) (bool, error) {
+func processAny(m protoreflect.Message, types *protoregistry.Types, stack map[protoreflect.MessageDescriptor]struct{}, fn ResolvedDependencyFunc, parent FieldContext) (bool, error) {
 	// The message is likely a dynamic proto, so we need to marshal and unmarshal.
 	b, err := proto.Marshal(m.Interface())
 	if err != nil {
@@ -266,7 +287,7 @@ func processAny(m protoreflect.Message, types *protoregistry.Types, stack map[pr
 		return false, nil
 	}
 
-	updated, err := forEachResolvedDependency(msg.ProtoReflect(), types, stack, fn)
+	updated, err := forEachResolvedDependency(msg.ProtoReflect(), types, stack, fn, parent)
 	if err != nil {
 		return false, err
 	}
@@ -299,4 +320,19 @@ func getDependencyAnnotation(field protoreflect.FieldDescriptor) *deppb.Dependen
 	}
 	fieldMetadata := proto.GetExtension(options, fieldmetadatapb.E_FieldMetadata).(*fieldmetadatapb.FieldMetadata)
 	return fieldMetadata.GetDependency()
+}
+
+func joinField(path string, fd protoreflect.FieldDescriptor) string {
+	if path == "" {
+		return fd.TextName()
+	}
+	return path + "." + fd.TextName()
+}
+
+func formatMapKey(k protoreflect.MapKey) string {
+	if s, ok := k.Interface().(string); ok {
+		// Keys are assumed not to contain single quotes or backslashes, so no escaping is done.
+		return "'" + s + "'"
+	}
+	return fmt.Sprint(k.Interface())
 }

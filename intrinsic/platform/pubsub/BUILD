@@ -15,6 +15,8 @@
 # Home of pubsub, a non-real-time Publish-Subscribe messaging
 # for robotics systems.
 
+load("//bazel:cc_macros.bzl", "cc_library")
+
 package(default_visibility = ["//visibility:public"])
 
 filegroup(
@@ -38,14 +40,6 @@ alias(
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
-# PubSub API library. The user-facing API providing access to
-# publish-subscribe system.
-alias(
-    name = "kvstore",
-    actual = "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 alias(
     name = "publisher",
     actual = "//intrinsic_sdk/intrinsic/platform/pubsub:publisher",
@@ -64,8 +58,13 @@ alias(
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
-alias(
-    name = "topic_config",
-    actual = "//intrinsic_sdk/intrinsic/platform/pubsub:topic_config",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
+cc_library(
+    name = "pubsub_metrics",
+    srcs = ["pubsub_metrics.cc"],
+    hdrs = ["pubsub_metrics.h"],
+    deps = [
+        "//intrinsic/stats:metrics_utils",
+        "@abseil-cpp//absl/strings:string_view",
+        "@io_opentelemetry_cpp//api",
+    ],
 )

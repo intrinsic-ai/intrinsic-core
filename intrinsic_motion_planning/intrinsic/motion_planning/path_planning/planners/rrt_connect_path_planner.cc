@@ -40,6 +40,7 @@
 #include "intrinsic/motion_planning/path_planning/planners/validation.h"
 #include "intrinsic/motion_planning/path_planning/robot_chain.h"
 #include "intrinsic/motion_planning/path_planning/validators.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/proto/parse_text_proto.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -142,6 +143,7 @@ RrtConnectPathPlanner::RrtConnectPathPlanner(
 absl::StatusOr<std::vector<PointPath>> RrtConnectPathPlanner::Plan(
     const PointPath& path, const KinematicsSystemProxy& proxy,
     PathPlannerGraph* graph) const {
+  const stats::ScopedSpan span("RrtConnectPathPlanner/Plan");
   VLOG(1) << "Planning with RrtConnectPathPlanner with config:\n" << config_;
   INTR_RETURN_IF_ERROR(ValidateWithinLimitsAndValidStartAndEnd(path, proxy));
 

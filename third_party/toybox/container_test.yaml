@@ -1,0 +1,12 @@
+schemaVersion: "2.0.0"
+
+fileExistenceTests:
+- name: 'Test dumb init existence'
+  path: '/dumb-init'
+  shouldExist: true
+- name: 'Test toybox existence'
+  path: '/toybox'
+  shouldExist: true
+- name: 'Test echo symlink existence'
+  path: '/bin/echo'
+  shouldExist: true

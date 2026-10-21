@@ -24,11 +24,11 @@ cc_library(
     srcs = ["fake_channel_factory.cc"],
     hdrs = ["fake_channel_factory.h"],
     deps = [
-        "//intrinsic/util/grpc:channel_interface",
-        "//intrinsic/util/grpc:connection_params",
         "//intrinsic_control/intrinsic/icon/cc_client/testing:channel_fake",
         "//intrinsic_control/intrinsic/icon/cc_client/testing:rtcl_controller_channel_fake",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
+        "//intrinsic_sdk/intrinsic/util/grpc:channel_interface",
+        "//intrinsic_sdk/intrinsic/util/grpc:connection_params",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

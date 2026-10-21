@@ -129,7 +129,6 @@ cc_library(
     srcs = ["object_world_service.cc"],
     hdrs = ["object_world_service.h"],
     deps = [
-        ":world_compatibility_service_cc_grpc_proto",
         ":world_compatibility_service_cc_proto",
         ":world_mutex",
         ":world_storage",
@@ -138,6 +137,7 @@ cc_library(
         "//intrinsic/resources/proto:geometric_resource_data_cc_proto",
         "//intrinsic/resources/proto:resource_instance_cc_proto",
         "//intrinsic/skills:footprint_util",
+        "//intrinsic/stats:metrics_utils",
         "//intrinsic/stats:scoped_span",
         "//intrinsic/util:aggregate_type",
         "//intrinsic/util:eigen",
@@ -207,7 +207,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:footprint_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
-        "@io_opencensus_cpp//opencensus/stats",
+        "@io_opentelemetry_cpp//api",
         "@or_tools//ortools/base:strong_int",
     ],
 )
@@ -218,7 +218,6 @@ proto_library(
     deps = [
         "//intrinsic/world/proto:object_world_service_proto",
         "//intrinsic/world/proto:world_entity_proto",
-        "@intrinsic_apis//intrinsic/logging/proto:context_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_proto",
     ],
@@ -231,30 +230,13 @@ py_proto_library(
     ],
 )
 
-py_grpc_library(
-    name = "world_compatibility_service_py_pb2_grpc",
-    srcs = [":world_compatibility_service_proto"],
-    visibility = [
-        "//intrinsic:intrinsic_internal",
-        "//intrinsic_sdk/intrinsic/solutions:__pkg__",
-    ],
-    deps = [
-        ":world_compatibility_service_py_pb2",
-    ],
-)
-
 go_proto_library(
     name = "world_compatibility_service_go_proto",
-    compilers = [
-        "@io_bazel_rules_go//proto:go_grpc_v2",
-        "@io_bazel_rules_go//proto:go_proto",
-    ],
     importpath = "intrinsic/world/service/world_compatibility_service_go_proto",
     protos = [":world_compatibility_service_proto"],
     deps = [
         "//intrinsic/world/proto:object_world_service_go_proto",
         "//intrinsic/world/proto:world_entity_go_proto",
-        "@intrinsic_apis//intrinsic/logging/proto:context_go_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_go_proto",
     ],
@@ -264,16 +246,6 @@ cc_proto_library(
     name = "world_compatibility_service_cc_proto",
     deps = [
         ":world_compatibility_service_proto",
-    ],
-)
-
-cc_grpc_library(
-    name = "world_compatibility_service_cc_grpc_proto",
-    srcs = [":world_compatibility_service_proto"],
-    generate_mocks = True,
-    grpc_only = True,
-    deps = [
-        ":world_compatibility_service_cc_proto",
     ],
 )
 

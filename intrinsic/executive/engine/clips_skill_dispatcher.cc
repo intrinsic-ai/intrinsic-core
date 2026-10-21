@@ -93,9 +93,6 @@ namespace {
 std::string SkillActionNameNoun(SkillAction skill_action) {
   std::string action_name = "unknown";
   switch (skill_action) {
-    case SkillAction::Prediction:
-      action_name = "prediction";
-      break;
     case SkillAction::Projection:
       action_name = "projection";
       break;
@@ -115,9 +112,6 @@ std::string SkillActionNameNoun(SkillAction skill_action) {
 std::string SkillActionNameVerb(SkillAction skill_action) {
   std::string action_name = "unknown";
   switch (skill_action) {
-    case SkillAction::Prediction:
-      action_name = "Predicting";
-      break;
     case SkillAction::Projection:
       action_name = "Projecting";
       break;

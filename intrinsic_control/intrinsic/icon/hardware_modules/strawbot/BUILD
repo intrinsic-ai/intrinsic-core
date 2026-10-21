@@ -20,7 +20,6 @@ cc_library(
     name = "strawbot_hal_module",
     srcs = ["strawbot_hal_module.cc"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/hal:default_hardware_interfaces",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_handle",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_registry",
@@ -32,6 +31,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/hal/interfaces:joint_state_fbs_cc",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@com_google_protobuf//:protobuf",

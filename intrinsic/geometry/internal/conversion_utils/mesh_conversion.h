@@ -15,6 +15,7 @@
 #ifndef INTRINSIC_GEOMETRY_INTERNAL_CONVERSION_UTILS_MESH_CONVERSION_H_
 #define INTRINSIC_GEOMETRY_INTERNAL_CONVERSION_UTILS_MESH_CONVERSION_H_
 
+#include <cstdint>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -159,6 +160,21 @@ absl::StatusOr<coacd::Mesh> ToCoacdMesh(
 // EpicIndexedTriangleSet3 elements.
 std::vector<EpicIndexedTriangleSet3> FromCoacdMeshes(
     const std::vector<coacd::Mesh>& decomposed_meshes);
+
+// Flat single-precision vertex and 32-bit triangle index buffers used by
+// meshoptimizer.
+struct MeshoptBuffers {
+  std::vector<float> vertex_positions;
+  std::vector<uint32_t> indices;
+};
+
+// Converts a Mesh to flat float vertex coordinates [x0, y0, z0, ...] and
+// uint32_t triangle indices for meshoptimizer.
+MeshoptBuffers ToMeshoptBuffers(const Mesh& mesh);
+
+// Converts flat float vertex coordinates and uint32_t triangle indices from
+// meshoptimizer back to a double-precision Mesh.
+Mesh FromMeshoptBuffers(const MeshoptBuffers& buffers);
 
 }  // namespace intrinsic::geo
 #endif  // INTRINSIC_GEOMETRY_INTERNAL_CONVERSION_UTILS_MESH_CONVERSION_H_

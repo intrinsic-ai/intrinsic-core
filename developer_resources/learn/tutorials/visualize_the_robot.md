@@ -33,8 +33,8 @@ RViz is part of the ROS project, so we'll begin by installing that. Note that RV
    source /opt/ros/lyrical/setup.sh
    # Tell RViz to use the Zenoh communication middleware to talk to the ROS Bridge.
    export RMW_IMPLEMENTATION=rmw_zenoh_cpp
-   # Tell Zenoh to connect to the Zenoh Router exposed on port 7447.
-   export ZENOH_CONFIG_OVERRIDE='mode="client";connect/endpoints=["tcp/127.0.0.1:7447"]'
+   # Tell Zenoh to connect to the Zenoh Router exposed on port 17447.
+   export ZENOH_CONFIG_OVERRIDE='mode="client";connect/endpoints=["tcp/127.0.0.1:17447"]'
    # Start RViz.
    choom -n 1000 ros2 run rviz2 rviz2
    ```
@@ -42,7 +42,7 @@ RViz is part of the ROS project, so we'll begin by installing that. Note that RV
    _This uses `choom` to ensure that if RViz uses too much RAM, the kernel stops it before interfering with other processes. It's necessary because of how Kubernetes handles "best effort" processes._
 
 > [!NOTE]
-> If you see "could not connect to display", make sure you're running this command from a graphical environment where the DISPLAY environment variable is set. If you're using the Server edition of Ubuntu, you'll either need to install a graphical environment, or use an SSH tunnel or similar to run these components in a graphical environment and tunnel ports 7447 and 17080 to the PC running Intrinsic Core.
+> If you see "could not connect to display", make sure you're running this command from a graphical environment where the DISPLAY environment variable is set. If you're using the Server edition of Ubuntu, you'll either need to install a graphical environment, or use an SSH tunnel or similar to run these components in a graphical environment and tunnel ports 17447 and 17080 to the PC running Intrinsic Core.
 
 4. You should see an empty 3D view:
 

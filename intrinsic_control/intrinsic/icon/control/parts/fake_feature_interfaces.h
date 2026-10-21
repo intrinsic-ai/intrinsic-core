@@ -553,6 +553,9 @@ class MockDynamics final : public Dynamics {
 
 class FakeForceTorqueSensor final : public ForceTorqueSensor {
  public:
+  Wrench WrenchAtSensorUncompensated() const override {
+    return wrench_at_ft_uncompensated_;
+  }
   Wrench WrenchAtSensor() const override { return wrench_at_ft_; }
   Wrench WrenchAtTip() const override { return wrench_at_tip_; }
   double WrenchStabilityIndex() const override {
@@ -563,6 +566,9 @@ class FakeForceTorqueSensor final : public ForceTorqueSensor {
   RealtimeStatus Tare(int num_taring_cycles) override;
   RealtimeStatusOr<bool> TareIsDone() const override { return tare_is_done_; }
 
+  void SetWrenchAtSensorUncompensated(const Wrench& w) {
+    wrench_at_ft_uncompensated_ = w;
+  }
   void SetWrenchAtSensor(const Wrench& w) { wrench_at_ft_ = w; }
   void SetWrenchAtTip(const Wrench& w) { wrench_at_tip_ = w; }
   void SetWrenchStabilityIndex(const double wrench_stability_index) {
@@ -578,6 +584,7 @@ class FakeForceTorqueSensor final : public ForceTorqueSensor {
   void SetReturnStatus(RealtimeStatus s);
 
  private:
+  Wrench wrench_at_ft_uncompensated_;
   Wrench wrench_at_ft_;
   Wrench wrench_at_tip_;
   Wrench post_sensor_dynamic_load_at_ft_;

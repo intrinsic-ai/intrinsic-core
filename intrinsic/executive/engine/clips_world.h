@@ -30,7 +30,6 @@
 #include "intrinsic/util/thread/thread_pool.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/service/updater/world_updater.grpc.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
 
 namespace intrinsic {
 namespace executive {
@@ -85,9 +84,7 @@ class ClipsWorld {
       clips::ProtobufManager* proto_manager,
       clips::TraceSpanManager* span_manager,
       intrinsic_proto::world::ObjectWorldService::StubInterface* object_stub,
-      intrinsic_proto::world::WorldUpdater::StubInterface* world_updater_stub,
-      intrinsic_proto::world::WorldCompatibilityService::StubInterface*
-          compatibility_stub);
+      intrinsic_proto::world::WorldUpdater::StubInterface* world_updater_stub);
 
   // Must be called after construction.
   // Register the world functions with the CLIPS environment and creates the
@@ -139,8 +136,6 @@ class ClipsWorld {
       object_world_service_stub_;  // externally owned
   intrinsic_proto::world::WorldUpdater::StubInterface*
       world_updater_stub_;  // externally owned
-  intrinsic_proto::world::WorldCompatibilityService::StubInterface*
-      world_compatibility_service_stub_;  // externally owned
   std::optional<intrinsic::ThreadPool> bundle_;
 };
 

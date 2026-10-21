@@ -259,6 +259,17 @@ class ActionWill {
       const std::function<absl::Status(const google::protobuf::Any& parameter)>>
   GetOrderedStreamingInputParameterMatchers();
 
+  // Registers a callback to be invoked when the Action becomes active.
+  //
+  // Note: `on_start` is called while the fake session mutex is held. It is safe
+  // to use for notifications (e.g. `absl::Notification`) and setting flags, but
+  // must not call back into session methods or modify session behaviors, as
+  // doing so may deadlock.
+  ActionWill& OnStart(std::function<void()> on_start);
+
+  // Returns the callback set by `OnStart(...)`, or nullptr if there isn't one.
+  std::function<void()> GetOnStart() const;
+
  private:
   std::function<absl::Status(const google::protobuf::Any& parameter)>
       parameter_matcher_ = nullptr;
@@ -272,6 +283,7 @@ class ActionWill {
       std::nullopt;
   std::optional<intrinsic_proto::icon::v1::GetOperationalStatusResponse>
       operational_status_ = std::nullopt;
+  std::function<void()> on_start_ = nullptr;
 };
 
 // Stores default behaviors for a single session.

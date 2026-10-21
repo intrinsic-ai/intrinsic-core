@@ -147,6 +147,7 @@ bool IMWZenoh::introspection_init() {
       if (!introspection_transmit_process_args_)
         break;  // always transmit the process name, but args only on request
     }
+    fclose(cmdline_fd);
   }
 #endif
 

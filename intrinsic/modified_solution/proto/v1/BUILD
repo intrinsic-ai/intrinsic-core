@@ -26,10 +26,10 @@ proto_library(
     deps = [
         "//intrinsic/config/proto:application_proto",
         "//intrinsic/config/proto:process_proto",
-        "//intrinsic/executive/proto:behavior_tree_proto",
         "//intrinsic/resources/proto:resource_type_runtime_proto",
         "//intrinsic/skills/catalog/proto:skill_deployment_data_proto",
         "@intrinsic_apis//intrinsic/config/proto:data_files_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_proto",
     ],
 )
 
@@ -51,16 +51,16 @@ go_proto_library(
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/modified_solution:__subpackages__",
         "//intrinsic/solution_versions:__subpackages__",
-        "//intrinsic/tools/inctl/cmd/solution/create:__pkg__",
-        "//intrinsic/tools/inctl/cmd/solution_version:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/create:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution_version:__pkg__",
     ],
     deps = [
         "//intrinsic/config/proto:application_go_proto",
         "//intrinsic/config/proto:process_go_proto",
-        "//intrinsic/executive/proto:behavior_tree_go_proto",
         "//intrinsic/resources/proto:resource_type_runtime_go_proto",
         "//intrinsic/skills/catalog/proto:skill_deployment_data_go_proto",
         "@intrinsic_apis//intrinsic/config/proto:data_files_go_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_go_proto",
     ],
 )
@@ -107,6 +107,7 @@ go_proto_library(
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/modified_solution:__subpackages__",
         "//intrinsic/tools/inctl/cmd:__subpackages__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__subpackages__",
     ],
     deps = [
         ":modified_solution_metadata_go_proto",

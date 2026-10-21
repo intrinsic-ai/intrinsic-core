@@ -15,12 +15,12 @@
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library", "cc_test")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
-load("//intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load("//intrinsic/util/proto/build_defs/testing:text_proto_test.bzl", "text_proto_test_suite")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:hardware_module_image.bzl", "hardware_module_image")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:resources.bzl", "hardware_module_manifest")
+load("//intrinsic_sdk/intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
+load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -68,9 +68,6 @@ cc_library(
     ],
     deps = [
         ":kuka_rsi_cc_proto",
-        "//intrinsic/util:fixed_vector",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
         "//intrinsic_control/intrinsic/icon/utils:bitmask_enums",
         "//intrinsic_control/intrinsic/icon/utils:fixed_string",
@@ -84,6 +81,9 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:inertia_utils",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:units",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "//intrinsic_sdk/intrinsic/world/robot_payload:robot_payload_base",
         "@abseil-cpp//absl/log",
@@ -109,10 +109,6 @@ cc_library(
     deps = [
         ":kuka_rsi_inspection_cc_proto",
         ":kuka_rsi_util",
-        "//intrinsic/util:fixed_vector",
-        "//intrinsic/util:invalid_until_set",
-        "//intrinsic/util:proto_time",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:realtime_clock_interface",
         "//intrinsic_control/intrinsic/icon/hal:hardware_module_inspection_cc_proto",
         "//intrinsic_control/intrinsic/icon/hardware_modules/kuka_rsi/kuka_system_control:kuka_system_control_factory",
@@ -133,6 +129,10 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:udp_server_client",
         "//intrinsic_control/intrinsic/icon/utils/xml:realtime_xml_parser_generator_util",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
+        "//intrinsic_sdk/intrinsic/util:invalid_until_set",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//intrinsic_sdk/intrinsic/util/thread:thread_options",
         "//intrinsic_sdk/intrinsic/util/thread:thread_utils",
@@ -159,8 +159,6 @@ cc_library(
     hdrs = ["kuka_rsi_loopback.h"],
     deps = [
         ":kuka_rsi_util",
-        "//intrinsic/util:fixed_vector",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:fixed_string",
         "//intrinsic_control/intrinsic/icon/utils:log",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
@@ -169,6 +167,8 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils/xml:realtime_xml_generator",
         "//intrinsic_control/intrinsic/icon/utils/xml:realtime_xml_parser",
         "//intrinsic_sdk/intrinsic/math:units",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/cleanup",
         "@abseil-cpp//absl/log",
@@ -193,8 +193,6 @@ cc_library(
         ":kuka_rsi",
         ":kuka_rsi_cc_proto",
         ":kuka_rsi_util",
-        "//intrinsic/util:fixed_vector",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/hal:default_hardware_interfaces",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_handle",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_registry",
@@ -215,6 +213,8 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math/signals:butter_filter2",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/robot_payload:robot_payload_base",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -545,9 +545,9 @@ cc_test(
     deps = [
         ":kuka_rsi_cc_proto",
         ":kuka_rsi_util",
-        "//intrinsic/util/proto:parse_text_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/status",
@@ -570,7 +570,6 @@ cc_test(
         ":kuka_rsi_hardware_module",
         ":kuka_rsi_util",
         ":mock_kuka_rsi_client",
-        "//intrinsic/util/path_resolver",
         "//intrinsic_control/intrinsic/icon/hal:default_hardware_interfaces",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_handle",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_registry",
@@ -594,6 +593,7 @@ cc_test(
         "//intrinsic_control/intrinsic/icon/utils:current_cycle",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
+        "//intrinsic_sdk/intrinsic/util/path_resolver",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
@@ -628,10 +628,10 @@ cc_binary(
     deps = [
         ":kuka_rsi_loopback_lib",
         ":kuka_rsi_util",
-        "//intrinsic/util:fixed_vector",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
         "//intrinsic_control/intrinsic/icon/utils:log",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log:check",

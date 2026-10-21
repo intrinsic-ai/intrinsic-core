@@ -49,7 +49,6 @@ cc_library(
         ":egm_server",
         ":rws_client",
         ":rws_egm_utils",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:realtime_clock_interface",
         "//intrinsic_control/intrinsic/icon/control/algorithms:joint_position_pid_velocity_controller",
         "//intrinsic_control/intrinsic/icon/control/safety:safety_messages_fbs_cc",
@@ -74,6 +73,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//third_party/abb_hardware_module/utils:rate_monitor",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
@@ -121,11 +121,11 @@ cc_library(
     deps = [
         "udp_server",
         ":egm_serialization",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/utils:async_buffer",
         "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//intrinsic_sdk/intrinsic/util/thread:thread_options",
         "//intrinsic_sdk/intrinsic/util/thread:thread_utils",
@@ -156,8 +156,8 @@ cc_library(
     srcs = ["abb_elog.cc"],
     hdrs = ["abb_elog.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@com_github_nlohmann_json//:json",
@@ -180,8 +180,8 @@ cc_library(
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
     deps = [
         ":abb_elog",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//intrinsic_sdk/intrinsic/util/thread:thread_options",
         "//intrinsic_sdk/intrinsic/util/thread:thread_utils",
@@ -205,8 +205,8 @@ cc_library(
     features = ["-use_header_modules"],  # Incompatible with -fexceptions.
     deps = [
         ":abb_config_cc_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

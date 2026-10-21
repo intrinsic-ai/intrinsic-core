@@ -19,7 +19,9 @@ Python.
 """
 
 from collections.abc import Iterable
+from collections.abc import Iterator
 from collections.abc import Mapping
+import contextlib
 from typing import cast
 from typing import Optional
 from typing import Union
@@ -1498,3 +1500,26 @@ class ObjectWorldClient:
             allow_overwrite=True,
         )
     )
+
+  @error_handling.retry_on_grpc_unavailable
+  def _clone_world(self) -> str:
+    return self._stub.CloneWorld(
+        object_world_service_pb2.CloneWorldRequest(world_id=self._world_id)
+    ).id
+
+  @error_handling.retry_on_grpc_unavailable
+  def _delete_world(self, world_id: str) -> None:
+    self._stub.DeleteWorld(
+        object_world_service_pb2.DeleteWorldRequest(world_id=world_id)
+    )
+
+  @contextlib.contextmanager
+  def clone(self) -> Iterator['ObjectWorldClient']:
+    """Clones the world and deletes the clone when exiting the context."""
+    cloned_world_id = self._clone_world()
+    try:
+      yield ObjectWorldClient(
+          cloned_world_id, self._stub, self._geometry_service_stub
+      )
+    finally:
+      self._delete_world(cloned_world_id)

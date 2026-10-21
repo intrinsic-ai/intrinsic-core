@@ -22,6 +22,9 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "google/protobuf/text_format.h"
+#include "gz/math/Pose3.hh"
+#include "gz/math/eigen3/Conversions.hh"
+#include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/core/camera_params.h"
 #include "intrinsic/perception/core/dimensions.h"
@@ -31,8 +34,7 @@
 #include "sdf/Camera.hh"
 #include "sdf/Element.hh"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 namespace {
 using CameraSdf = ::sdf::Camera;
 
@@ -45,6 +47,17 @@ IntrinsicParams GetIntrinsicParamsFromSdf(const CameraSdf& camera_sdf) {
           cx, cy};
 }
 }  // namespace
+
+Pose3d GzToIntrinsicSensorPose(const gz::math::Pose3d& gz_pose) {
+  // Convert Gazebo camera sensor pose to intrinsic convention.
+  // This should match intrinsic/scene/sdf/sdf_sensor_pose.cc. That class
+  // is not used directly so that the sdf namespace can be used without an
+  // absolute path (::sdf).
+  gz::math::Pose3d pose =
+      gz_pose * gz::math::Pose3d(0, 0, 0, 0.5, -0.5, 0.5, -0.5);
+  return Pose3d(gz::math::eigen3::convert(pose.Rot()),
+                gz::math::eigen3::convert(pose.Pos()));
+}
 
 CameraParams GetCameraParamsFromSdf(const CameraSdf& camera_sdf) {
   return CameraParams(GetIntrinsicParamsFromSdf(camera_sdf));
@@ -86,5 +99,4 @@ absl::StatusOr<PixelType> PixelTypeFromSdfPluginImageType(
       absl::StrCat("Unknown image_type '", plugin_image_type, "'"));
 }
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception

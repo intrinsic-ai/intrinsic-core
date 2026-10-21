@@ -158,6 +158,7 @@ proto_library(
     deps = [
         ":camera_setup_proto",
         ":camera_to_robot_calibration",
+        ":capture_data_proto",
         ":distortion_params_proto",
         ":intrinsic_params_proto",
         ":pattern_detection_config_proto",
@@ -194,6 +195,7 @@ go_proto_library(
     deps = [
         ":camera_setup_go_proto",
         ":camera_to_robot_calibration_go_proto",
+        ":capture_data_go_proto",
         ":distortion_params_go_proto",
         ":intrinsic_params_go_proto",
         ":pattern_detection_config_go_proto",
@@ -442,6 +444,8 @@ proto_library(
         ":camera_identifier_proto",
         ":camera_settings_proto",
         ":sensor_config_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
     ],
 )
 
@@ -458,6 +462,8 @@ go_proto_library(
         ":camera_identifier_go_proto",
         ":camera_settings_go_proto",
         ":sensor_config_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
     ],
 )
 

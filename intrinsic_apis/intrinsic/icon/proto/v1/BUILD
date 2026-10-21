@@ -43,6 +43,30 @@ py_proto_library(
 )
 
 proto_library(
+    name = "field_metadata_proto",
+    srcs = ["field_metadata.proto"],
+    deps = [
+        "@com_google_protobuf//:descriptor_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "field_metadata_cc_proto",
+    deps = [":field_metadata_proto"],
+)
+
+go_proto_library(
+    name = "field_metadata_go_proto",
+    importpath = "intrinsic/icon/proto/v1/field_metadata_go_proto",
+    protos = [":field_metadata_proto"],
+)
+
+py_proto_library(
+    name = "field_metadata_py_pb2",
+    deps = [":field_metadata_proto"],
+)
+
+proto_library(
     name = "jogging_service_proto",
     srcs = ["jogging_service.proto"],
     deps = [

@@ -15,7 +15,7 @@
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
 
 package(default_visibility = [
     "//visibility:public",
@@ -27,11 +27,11 @@ cc_library(
     hdrs = ["adder_skill.h"],
     deps = [
         ":adder_skill_cc_proto",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status:statusor",
         "@com_github_grpc_grpc//:grpc++",

@@ -60,31 +60,113 @@ ComputeHdrMertensWeightMap(const CudaImage<Rgb32f>& image,
 absl::Status NormalizeWeightMaps(
     std::vector<CudaImage<Generic32f>>& weight_maps);
 
-// Computes accumulator = accumulator + weight_map * image
+// Computes accumulator = accumulator + weight_map * image (if accumulate is
+// true), or accumulator = weight_map * image (if accumulate is false).
 // `weight_map` has 1 channel only.
 // `image` can be 1 or more channels.
-// `accumulator` must have the same number of channels as `image`.
-template <typename ImageTraits>
-absl::Status BlendWeightMapAndImage(
-    const CudaImage<Generic32f>& weight_map,
-    const CudaImage<ImageTraits>& image,
-    CudaImage<GenericTrait<float, ImageTraits::kNumChannels>>& accumulator);
+// `accumulator` must have float scalar type and the same number of channels as
+// `image`.
+template <typename ImageTraits, typename AccumulatorTrait = GenericTrait<
+                                    float, ImageTraits::kNumChannels>>
+absl::Status BlendWeightMapAndImage(const CudaImage<Generic32f>& weight_map,
+                                    const CudaImage<ImageTraits>& image,
+                                    bool accumulate,
+                                    CudaImage<AccumulatorTrait>& accumulator);
+
+template <typename ImageTraits, typename AccumulatorTrait = GenericTrait<
+                                    float, ImageTraits::kNumChannels>>
+absl::Status BlendWeightMapAndImage(const CudaImage<Generic32f>& weight_map,
+                                    const CudaImage<ImageTraits>& image,
+                                    CudaImage<AccumulatorTrait>& accumulator) {
+  return BlendWeightMapAndImage(weight_map, image, /*accumulate=*/true,
+                                accumulator);
+}
 
 extern template absl::Status BlendWeightMapAndImage(
     const CudaImage<Generic32f>& weight_map, const CudaImage<Generic16i>& image,
-    CudaImage<Generic32f>& accumulator);
+    bool accumulate, CudaImage<Generic32f>& accumulator);
 
 extern template absl::Status BlendWeightMapAndImage(
     const CudaImage<Generic32f>& weight_map,
-    const CudaImage<Generic16i3>& image, CudaImage<Generic32f3>& accumulator);
+    const CudaImage<Generic16i3>& image, bool accumulate,
+    CudaImage<Generic32f3>& accumulator);
 
 extern template absl::Status BlendWeightMapAndImage(
     const CudaImage<Generic32f>& weight_map, const CudaImage<Generic32f>& image,
-    CudaImage<Generic32f>& accumulator);
+    bool accumulate, CudaImage<Generic32f>& accumulator);
 
 extern template absl::Status BlendWeightMapAndImage(
     const CudaImage<Generic32f>& weight_map,
-    const CudaImage<Generic32f3>& image, CudaImage<Generic32f3>& accumulator);
+    const CudaImage<Generic32f3>& image, bool accumulate,
+    CudaImage<Generic32f3>& accumulator);
+
+extern template absl::Status BlendWeightMapAndImage(
+    const CudaImage<Generic32f>& weight_map, const CudaImage<Gray8u>& image,
+    bool accumulate, CudaImage<Generic32f>& accumulator);
+
+extern template absl::Status BlendWeightMapAndImage(
+    const CudaImage<Generic32f>& weight_map, const CudaImage<Rgb8u>& image,
+    bool accumulate, CudaImage<Generic32f3>& accumulator);
+
+extern template absl::Status BlendWeightMapAndImage(
+    const CudaImage<Generic32f>& weight_map, const CudaImage<Gray32f>& image,
+    bool accumulate, CudaImage<Generic32f>& accumulator);
+
+extern template absl::Status BlendWeightMapAndImage(
+    const CudaImage<Generic32f>& weight_map, const CudaImage<Gray32f>& image,
+    bool accumulate, CudaImage<Gray32f>& accumulator);
+
+extern template absl::Status BlendWeightMapAndImage(
+    const CudaImage<Generic32f>& weight_map, const CudaImage<Rgb32f>& image,
+    bool accumulate, CudaImage<Generic32f3>& accumulator);
+
+extern template absl::Status BlendWeightMapAndImage(
+    const CudaImage<Generic32f>& weight_map, const CudaImage<Rgb32f>& image,
+    bool accumulate, CudaImage<Rgb32f>& accumulator);
+
+// Fuses `PyrUp(image_down)`, `Subtract(image_curr, image_up)`, and
+// `BlendWeightMapAndImage(weight_map, laplacian, accumulator)` into a single
+// kernel pass without allocating intermediate `image_up` or `laplacian`
+// buffers.
+template <typename ImageTraits, typename AccumulatorTrait>
+absl::Status PyrUpAndBlendLaplacian(const CudaImage<Generic32f>& weight_map,
+                                    const CudaImage<ImageTraits>& image_curr,
+                                    const CudaImage<ImageTraits>& image_down,
+                                    BorderType border_type, bool accumulate,
+                                    CudaImage<AccumulatorTrait>& accumulator);
+
+extern template absl::Status PyrUpAndBlendLaplacian(
+    const CudaImage<Generic32f>& weight_map,
+    const CudaImage<Gray8u>& image_curr, const CudaImage<Gray8u>& image_down,
+    BorderType border_type, bool accumulate,
+    CudaImage<Generic32f>& accumulator);
+
+extern template absl::Status PyrUpAndBlendLaplacian(
+    const CudaImage<Generic32f>& weight_map, const CudaImage<Rgb8u>& image_curr,
+    const CudaImage<Rgb8u>& image_down, BorderType border_type, bool accumulate,
+    CudaImage<Generic32f3>& accumulator);
+
+extern template absl::Status PyrUpAndBlendLaplacian(
+    const CudaImage<Generic32f>& weight_map,
+    const CudaImage<Gray32f>& image_curr, const CudaImage<Gray32f>& image_down,
+    BorderType border_type, bool accumulate,
+    CudaImage<Generic32f>& accumulator);
+
+extern template absl::Status PyrUpAndBlendLaplacian(
+    const CudaImage<Generic32f>& weight_map,
+    const CudaImage<Gray32f>& image_curr, const CudaImage<Gray32f>& image_down,
+    BorderType border_type, bool accumulate, CudaImage<Gray32f>& accumulator);
+
+extern template absl::Status PyrUpAndBlendLaplacian(
+    const CudaImage<Generic32f>& weight_map,
+    const CudaImage<Rgb32f>& image_curr, const CudaImage<Rgb32f>& image_down,
+    BorderType border_type, bool accumulate,
+    CudaImage<Generic32f3>& accumulator);
+
+extern template absl::Status PyrUpAndBlendLaplacian(
+    const CudaImage<Generic32f>& weight_map,
+    const CudaImage<Rgb32f>& image_curr, const CudaImage<Rgb32f>& image_down,
+    BorderType border_type, bool accumulate, CudaImage<Rgb32f>& accumulator);
 
 }  // namespace perception
 }  // namespace intrinsic

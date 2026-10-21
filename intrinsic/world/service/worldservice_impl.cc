@@ -45,7 +45,6 @@
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_macros_grpc.h"
 #include "intrinsic/world/cartesian_kinematic_view.h"
-#include "intrinsic/world/component/ppr_component.h"
 #include "intrinsic/world/dof_kinematic_view.h"
 #include "intrinsic/world/entity.h"
 #include "intrinsic/world/entity_id.h"
@@ -58,12 +57,9 @@
 namespace intrinsic {
 
 using ::intrinsic_proto::world::EntitySearchCriteria;
-using PPRComponentProto = ::intrinsic_proto::world::PPRComponent;
 using ::intrinsic_proto::world::internal::EntityWithMetadata;
 using ::intrinsic_proto::world::internal::GetIkSolutionRequest;
-using ::intrinsic_proto::world::internal::GetWorldRequest;
 using ::intrinsic_proto::world::internal::SingleIKSolution;
-using ::intrinsic_proto::world::internal::WorldWithMetadata;
 
 absl::StatusOr<std::unique_ptr<WorldServiceImpl>>
 WorldServiceImpl::CreateService(
@@ -106,90 +102,6 @@ GeometryLibrary* WorldServiceImpl::GeoLib() {
   return geo_lib_;
 }
 
-grpc::Status WorldServiceImpl::GetWorld(
-    grpc::ServerContext* context,
-    const intrinsic_proto::world::internal::GetWorldRequest* request,
-    intrinsic_proto::world::internal::WorldWithMetadata* response) {
-  const stats::ScopedSpan span("WorldService/GetWorld", context);
-
-  INTR_ASSIGN_OR_RETURN_GRPC(std::shared_ptr<WorldAndMutex> world_ptr,
-                             WorldStore()->GetWorld(request->world_id()));
-
-  absl::MutexLock lock(*world_ptr->mtx);
-  World world = (*world_ptr)->Clone();
-
-  // TODO: b/325289138 -- Remove this. :( By default we need to remove the
-  // coordinate frames from the collections members entity lists since this
-  // creates a world that is incompatible with older versions of the object
-  // world APIs.
-  if (!request->keep_frame_entity_collection_members_hack()) {
-    for (const CollectionsEntityId collections_id :
-         world.GetTypedEntityIds<CollectionsComponentType>()) {
-      INTR_ASSIGN_OR_RETURN_GRPC(
-          CollectionsComponent * collections_component,
-          world.GetComponentByEntityId<CollectionsComponent>(collections_id));
-
-      for (const CollectionsMemberEntityId frame_member_id :
-           collections_component->GetCollectionMembers(
-               CollectionsComponent::kCoordinateFrames)) {
-        INTR_ASSIGN_OR_RETURN_GRPC(
-            CollectionsMemberComponent * collections_member_component,
-            world.GetComponentByEntityId<CollectionsMemberComponent>(
-                frame_member_id));
-
-        INTR_RETURN_IF_ERROR_GRPC(
-            collections_member_component->DeleteParentCollection(
-                collections_id, CollectionsComponent::kCoordinateFrames));
-
-        if (collections_member_component->GetParentCollectionsIdToTypesMap()
-                .empty()) {
-          INTR_ASSIGN_OR_RETURN_GRPC(WorldEntity * entity,
-                                     world.GetEntityById(frame_member_id));
-          INTR_RETURN_IF_ERROR_GRPC(
-              entity->RemoveComponent<CollectionsMemberComponent>());
-        }
-      }
-
-      INTR_RETURN_IF_ERROR_GRPC(collections_component->SetCollectionMembers(
-          CollectionsComponent::kCoordinateFrames, {}));
-
-      if (collections_component->GetAllCollectionMembers().empty()) {
-        INTR_ASSIGN_OR_RETURN_GRPC(WorldEntity * entity,
-                                   world.GetEntityById(collections_id));
-        INTR_RETURN_IF_ERROR_GRPC(
-            entity->RemoveComponent<CollectionsComponent>());
-      }
-    }
-
-    // TODO: b/340091582 -- Remove this. :( Old ICON sim bus hardware modules
-    // used the presence of `ResourceName` on entities to determine which
-    // objects matched that which was passed to the resource. That's no longer
-    // the case after cl/664909949, but old ICON resources may still be deployed
-    // that have this behavior. Keep this here until we've verified that we've
-    // released a breaking change that includes the aforementioned cl.
-    for (const PPREntityId ppr_id :
-         world.GetTypedEntityIds<PPRComponentType>()) {
-      if (world.ValidateEntity<CollectionsEntityId>(ppr_id).ok()) {
-        continue;
-      }
-
-      INTR_ASSIGN_OR_RETURN_GRPC(
-          PPRComponent * ppr_component,
-          world.GetComponentByEntityId<PPRComponent>(ppr_id));
-      INTR_ASSIGN_OR_RETURN_GRPC(PPRComponentProto ppr_proto,
-                                 ppr_component->ToProto());
-      ppr_proto.clear_resource_name();
-      INTR_RETURN_IF_ERROR_GRPC(ppr_component->UpdateFromProto(ppr_proto));
-    }
-  }
-
-  INTR_ASSIGN_OR_RETURN_GRPC(
-      *response,
-      WorldToProto(request->world_id(), world_ptr->world_structure_hash,
-                   world_ptr->user_tag, world));
-  return grpc::Status::OK;
-}
-
 absl::StatusOr<EntityWithMetadata> WorldServiceImpl::GetEntity(
     absl::string_view world_id, const EntitySearchCriteria& entity) {
   INTR_ASSIGN_OR_RETURN(std::shared_ptr<WorldAndMutex> world_ptr,
@@ -201,18 +113,6 @@ absl::StatusOr<EntityWithMetadata> WorldServiceImpl::GetEntity(
   INTR_ASSIGN_OR_RETURN(const WorldEntity* world_entity,
                         world.GetEntityById(entity_id));
   return EntityToProto(world_id, entity_id, *world_entity);
-}
-
-absl::StatusOr<WorldWithMetadata> WorldServiceImpl::WorldToProto(
-    absl::string_view world_id, absl::string_view world_structure_hash,
-    absl::string_view user_tag, const World& world) {
-  WorldWithMetadata response;
-  response.set_world_id(world_id);
-  response.set_world_structure_hash(world_structure_hash);
-  response.set_user_tag(user_tag);
-
-  INTR_ASSIGN_OR_RETURN(*response.mutable_world_data(), world.Serialize());
-  return response;
 }
 
 absl::StatusOr<EntityWithMetadata> WorldServiceImpl::EntityToProto(

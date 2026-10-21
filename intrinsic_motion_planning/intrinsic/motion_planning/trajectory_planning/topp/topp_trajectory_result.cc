@@ -32,6 +32,11 @@ absl::StatusOr<intrinsic_proto::topp::ToppTrajectoryResult> ToProto(
     INTR_RETURN_IF_ERROR(
         topp_trajectory_result.squared_path_velocity->PopulateProto(&proto));
   }
+
+  *proto.mutable_motion_events() = {
+      topp_trajectory_result.motion_events.begin(),
+      topp_trajectory_result.motion_events.end()};
+
   return proto;
 }
 
@@ -62,6 +67,10 @@ absl::StatusOr<ToppTrajectoryResult> FromProto(
       result.squared_path_velocity = nullptr;
       break;
   }
+
+  result.motion_events = {topp_trajectory_result_proto.motion_events().begin(),
+                          topp_trajectory_result_proto.motion_events().end()};
+
   return result;
 }
 

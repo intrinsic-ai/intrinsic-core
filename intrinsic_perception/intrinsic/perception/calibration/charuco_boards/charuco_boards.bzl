@@ -15,9 +15,9 @@
 """ChArUco board macro for 3D models, scene objects, and estimators."""
 
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
-load("//intrinsic/assets/data/build_defs:data.bzl", "intrinsic_data")
-load("//intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
-load("//intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
+load("//intrinsic_sdk/intrinsic/assets/data/build_defs:data.bzl", "intrinsic_data")
+load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
+load("//intrinsic_sdk/intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
 
 def charuco_board(
         name,

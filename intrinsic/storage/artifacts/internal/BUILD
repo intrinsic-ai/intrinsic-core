@@ -56,17 +56,8 @@ go_library(
     ],
 )
 
-go_library(
+alias(
     name = "utils",
-    srcs = ["utils.go"],
-    importpath = "intrinsic/storage/artifacts/internal/utils",
-    deps = [
-        "@com_github_containerd_containerd//content:go_default_library",
-        "@com_github_containerd_containerd//platforms:go_default_library",
-        "@com_github_opencontainers_go_digest//:go_default_library",
-        "@com_github_opencontainers_image_spec//specs-go/v1:go_default_library",
-        "@com_github_pkg_errors//:go_default_library",
-        "@intrinsic_apis//intrinsic/storage/artifacts/proto/v1:artifact_go_proto",
-        "@org_golang_google_protobuf//types/known/timestamppb",
-    ],
+    actual = "//intrinsic_sdk/intrinsic/storage/artifacts/internal:utils",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )

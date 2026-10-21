@@ -12,48 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:python.bzl", "py_library")
-
 package(default_visibility = ["//visibility:public"])
 
-py_library(
-    name = "resource_registry_client",
-    srcs = ["resource_registry_client.py"],
-    deps = [
-        "//intrinsic/util/grpc:error_handling",
-        "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
-        "@intrinsic_apis//intrinsic/resources/proto:resource_handle_py_pb2",
-        "@intrinsic_apis//intrinsic/resources/proto:resource_registry_py_pb2",
-        "@intrinsic_apis//intrinsic/resources/proto:resource_registry_py_pb2_grpc",
-    ],
-)
-
-cc_library(
+alias(
     name = "resource_registry_client_interface",
-    hdrs = ["resource_registry_client_interface.h"],
-    deps = [
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings:string_view",
-        "@intrinsic_apis//intrinsic/resources/proto:resource_registry_cc_proto",
-    ],
+    actual = "//intrinsic_sdk/intrinsic/resources/client:resource_registry_client_interface",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
-cc_library(
+alias(
     name = "resource_registry_client_cc",
-    srcs = ["resource_registry_client.cc"],
-    hdrs = ["resource_registry_client.h"],
-    deps = [
-        ":resource_registry_client_interface",
-        "//intrinsic/util/grpc",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings:string_view",
-        "@abseil-cpp//absl/time",
-        "@com_github_grpc_grpc//:grpc++",
-        "@intrinsic_apis//intrinsic/resources/proto:resource_registry_cc_grpc",
-        "@intrinsic_apis//intrinsic/resources/proto:resource_registry_cc_proto",
-    ],
+    actual = "//intrinsic_sdk/intrinsic/resources/client:resource_registry_client_cc",
+    tags = ["go/intrinsic-ioc-transition-tdd"],
 )

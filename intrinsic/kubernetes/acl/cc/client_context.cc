@@ -27,7 +27,7 @@
 #include "grpcpp/client_context.h"
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/string_ref.h"
-#include "intrinsic/icon/release/grpc_time_support.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/kubernetes/acl/cc/cookies.h"
 #include "intrinsic/util/grpc/grpc.h"
 

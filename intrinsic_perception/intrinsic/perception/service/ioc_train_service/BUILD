@@ -14,7 +14,7 @@
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("//bazel:python_oci_image.bzl", "python_oci_image")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 package(default_visibility = [
     "//intrinsic_perception/intrinsic/perception/service/ioc_train_service:__subpackages__",
@@ -25,11 +25,14 @@ py_library(
     name = "ioc_train_service_lib",
     srcs = ["service/ioc_train_service.py"],
     deps = [
-        "//intrinsic/assets/proto:installed_assets_pb2_grpc",
-        "//intrinsic/assets/proto:installed_assets_py_pb2",
-        "//intrinsic/util/proto:descriptors_py",
         "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_pose_estimator_params_py_pb2",
+        "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_train_service_config_py_pb2",
+        "//intrinsic_sdk/intrinsic/assets:interface_utils_py",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
+        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_pb2_grpc",
+        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_py_pb2",
         "//intrinsic_sdk/intrinsic/math/python:ros_proto_conversion",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors_py",
         "@ai_intrinsic_sdks_pip_deps//numpy",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_googleapis//google/longrunning:operations_py_proto",
@@ -49,6 +52,7 @@ py_binary(
     srcs = ["service/ioc_train_service_main.py"],
     deps = [
         ":ioc_train_service_lib",
+        "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_train_service_config_py_pb2",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl:app",
         "@com_google_absl_py//absl/flags",
@@ -64,10 +68,13 @@ python_oci_image(
 
 intrinsic_service(
     name = "ioc_train_service_asset",
+    default_config = "configs/default_config.textproto",
     images = [":ioc_train_service_image.tar"],
     manifest = "service_manifest.textproto",
     deps = [
         "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_pose_estimator_params_proto",
+        "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_train_service_config_proto",
+        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_proto",
         "@com_google_protobuf//:empty_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",

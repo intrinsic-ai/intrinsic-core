@@ -22,10 +22,10 @@ cc_library(
     hdrs = ["nlopt_constrained_ik.h"],
     deps = [
         "//intrinsic/math/numopt:nlopt_nonlinear_program",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_kinematics/intrinsic/kinematics:group",
         "//intrinsic_kinematics/intrinsic/kinematics/ik/constrained:constrained_ik_util",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",

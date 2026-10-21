@@ -47,6 +47,7 @@
 #include "gz/sim/components/Name.hh"
 #include "gz/sim/components/RgbdCamera.hh"
 #include "intrinsic/math/proto/header.pb.h"
+#include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
@@ -285,6 +286,8 @@ absl::Status CameraPlugin::LoadSensorSdf(const sdf::Sensor& sensor_sdf) {
            << "sdf::CameraSensor is null for camera:" << model_name_;
   }
   camera_params_ = intrinsic::perception::GetCameraParamsFromSdf(*camera_sdf);
+  camera_t_sensor_ =
+      intrinsic::perception::GzToIntrinsicSensorPose(sensor_sdf.RawPose());
 
   if (sensor_sdf.Topic().empty()) {
     return ::intrinsic::InvalidArgumentErrorBuilder()
@@ -349,9 +352,9 @@ void CameraPlugin::InitCameraConnection() {
           perception::PixelType::kIntensity));
       sensors.push_back(perception::SensorInformation(
           sensor_ids_by_pixel_type_[perception::PixelType::kIntensity],
-          /*display_name=*/"color", camera_params_,
-          /*camera_t_sensor=*/std::nullopt, {perception::PixelType::kIntensity},
-          camera_params_->Dimensions(), /*disabled=*/false));
+          /*display_name=*/"color", camera_params_, camera_t_sensor_,
+          {perception::PixelType::kIntensity}, camera_params_->Dimensions(),
+          /*disabled=*/false));
       break;
     case sdf::SensorType::RGBD_CAMERA:
       for (const auto& [pixel_type, sensor_id] : sensor_ids_by_pixel_type_) {
@@ -359,8 +362,7 @@ void CameraPlugin::InitCameraConnection() {
             sensor_id,
             /*display_name=*/
             perception::SensorDisplayNameByPixelType(pixel_type),
-            camera_params_,
-            /*camera_t_sensor=*/std::nullopt, {pixel_type},
+            camera_params_, camera_t_sensor_, {pixel_type},
             camera_params_->Dimensions(), /*disabled=*/false));
       }
       break;
@@ -373,6 +375,8 @@ void CameraPlugin::InitCameraConnection() {
     sensor_config->set_id(sensor.id());
     *sensor_config->mutable_camera_params() =
         intrinsic_proto::perception::v1::ToProto(*camera_params_);
+    *sensor_config->mutable_camera_t_sensor() =
+        ::intrinsic::ToProto(camera_t_sensor_);
   }
 
   intrinsic_proto::perception::v1::DescribeCameraResponse camera_description;
@@ -494,7 +498,7 @@ void CameraPlugin::OnImage(const gz::msgs::Image& image) {
     if (pending_sensor_ids_.contains(intensity_sensor_id)) {
       intrinsic::perception::SensorImage image(
           intensity_sensor_id, acquisition_time, camera_params_,
-          /*camera_t_sensor=*/{}, std::move(img));
+          camera_t_sensor_, std::move(img));
       sensor_images_.push_back(image);
       pending_sensor_ids_.erase(intensity_sensor_id);
     }
@@ -513,8 +517,8 @@ void CameraPlugin::OnImage(const gz::msgs::Image& image) {
             camera_params_->intrinsic_params, dim, depth);
 
         intrinsic::perception::SensorImage points_sensor_image(
-            point_sensor_id, acquisition_time, camera_params_,
-            /*camera_t_sensor=*/{}, std::move(points_image));
+            point_sensor_id, acquisition_time, camera_params_, camera_t_sensor_,
+            std::move(points_image));
         sensor_images_.push_back(points_sensor_image);
         pending_sensor_ids_.erase(point_sensor_id);
       }
@@ -527,8 +531,8 @@ void CameraPlugin::OnImage(const gz::msgs::Image& image) {
       if (pending_sensor_ids_.contains(depth_sensor_id)) {
         Image<Depth32f> depth_image(dim, depth);
         intrinsic::perception::SensorImage depth_sensor_image(
-            depth_sensor_id, acquisition_time, camera_params_,
-            /*camera_t_sensor=*/{}, std::move(depth_image));
+            depth_sensor_id, acquisition_time, camera_params_, camera_t_sensor_,
+            std::move(depth_image));
         sensor_images_.push_back(depth_sensor_image);
         pending_sensor_ids_.erase(depth_sensor_id);
       }
@@ -546,7 +550,7 @@ void CameraPlugin::OnImage(const gz::msgs::Image& image) {
             [](Depth32f::PixelType*) {});
         intrinsic::perception::SensorImage normals_sensor_image(
             normal_sensor_id, acquisition_time, camera_params_,
-            /*camera_t_sensor=*/{},
+            camera_t_sensor_,
             perception::ComputeNormalsLeastSqr(
                 camera_params_->intrinsic_params, depth_image_view,
                 kNormalThreshold, kNormalRadius, kNormalStep));

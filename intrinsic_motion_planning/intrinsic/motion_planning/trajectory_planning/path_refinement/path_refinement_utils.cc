@@ -45,6 +45,9 @@
 #include "intrinsic/math/spline/bspline_utils.h"
 #include "intrinsic/math/time_series_utils.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/trajectory_planning/topp/path_sample.h"
 #include "intrinsic/motion_planning/trajectory_planning/topp/topp_trajectory_result.h"
 #include "intrinsic/util/proto_time.h"
@@ -75,6 +78,9 @@ absl::StatusOr<std::vector<double>> ComputeUniformlyDiscretizedPathVariables(
   // If `force_odd_number_of_samples` is true, the number
   // of samples is forced to be odd. This is achieved by increasing the number
   // of samples by 1 if the original number is even.
+
+  // This is for example a requirement for the support of `MotionEvents`.
+
   if (force_odd_number_of_samples && num_samples % 2 == 0) num_samples++;
 
   return Linspace(0.0, path_length, num_samples);
@@ -159,6 +165,64 @@ absl::Status AddTranslationalCartesianArcLengthsToPathAndTrajectory(
           trajectory.interpolation_type(), std::move(cartesian_path_lengths)));
   return absl::OkStatus();
 }
+
+
+absl::Status AddEventKeypointTime(
+    const ToppTrajectoryResult& topp_trajectory_result,
+    absl::Span<intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events) {
+  for (intrinsic_proto::motion_planning::v1::MotionEvent& motion_event :
+       motion_events) {
+    INTR_ASSIGN_OR_RETURN(
+        const double t_event_seconds,
+        topp_trajectory_result.squared_path_velocity->GetTimeForPathVariable(
+            motion_event.keypoint().keypoint_joint_path_variable_from_start()));
+    INTR_ASSIGN_OR_RETURN(
+        *motion_event.mutable_keypoint()->mutable_keypoint_time_from_start(),
+        FromAbslDuration(absl::Seconds(t_event_seconds)));
+  }
+  return absl::OkStatus();
+}
+
+absl::Status AddEventKeypointCartesianArcLength(
+    absl::Span<const PathSample> path_samples,
+    absl::Span<intrinsic_proto::motion_planning::v1::MotionEvent>
+        motion_events) {
+  if (path_samples.size() < 2) {
+    return absl::InvalidArgumentError("There must be at least 2 path samples.");
+  }
+
+  for (intrinsic_proto::motion_planning::v1::MotionEvent& motion_event :
+       motion_events) {
+    const int lower_index = GetLowerIndexForValue(
+        absl::MakeConstSpan(path_samples),
+        motion_event.keypoint().keypoint_joint_path_variable_from_start(),
+        [](double a, const PathSample& b) -> bool { return a < b.s; });
+
+    if (lower_index == path_samples.size() - 1) {
+      motion_event.mutable_keypoint()
+          ->set_keypoint_cartesian_arc_length_from_start_meters(
+              path_samples[lower_index].s_c);
+      continue;
+    }
+
+    // Assume a linear interpolation of s_c between two samples according to the
+    // path variable. Alternatively we could use cubic spline constructed for
+    // the points surrounding the s_e.
+    const double s_c_event = eigenmath::InterpolateLinear(
+        eigenmath::Percentage(
+            motion_event.keypoint().keypoint_joint_path_variable_from_start(),
+            path_samples[lower_index].s, path_samples[lower_index + 1].s),
+        path_samples[lower_index].s_c, path_samples[lower_index + 1].s_c);
+
+    motion_event.mutable_keypoint()
+        ->set_keypoint_cartesian_arc_length_from_start_meters(s_c_event);
+  }
+
+  return absl::OkStatus();
+}
+
+
 absl::StatusOr<double> ComputePathLength(
     absl::Span<const PathSegment> path_segments) {
   if (path_segments.empty()) {

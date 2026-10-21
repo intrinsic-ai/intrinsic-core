@@ -14,7 +14,7 @@
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("//bazel:python_oci_image.bzl", "python_oci_image")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 
 package(default_visibility = [
     "//intrinsic_perception/intrinsic/perception/service/ioc_pose_estimator:__subpackages__",
@@ -26,9 +26,9 @@ py_library(
     srcs = ["service/segmentation_model.py"],
     data = ["model_files/segmentation/config.pbtxt"],
     deps = [
-        "//intrinsic/assets:id_utils_py",
         "//intrinsic_inference/core/utils:oip_mappings",
         "//intrinsic_inference/core/utils:oip_utils",
+        "//intrinsic_sdk/intrinsic/assets:id_utils_py",
         "//incode/util/runfiles",
         "@ai_intrinsic_sdks_pip_deps//numpy",
         "@ai_intrinsic_sdks_pip_deps//opencv_python_headless",
@@ -47,9 +47,9 @@ py_library(
     srcs = ["service/pose_estimator_model.py"],
     data = ["model_files/pose/config.pbtxt"],
     deps = [
-        "//intrinsic/assets:id_utils_py",
         "//intrinsic_inference/core/utils:oip_mappings",
         "//intrinsic_inference/core/utils:oip_utils",
+        "//intrinsic_sdk/intrinsic/assets:id_utils_py",
         "//incode/util/runfiles",
         "@ai_intrinsic_sdks_pip_deps//numpy",
         "@ai_intrinsic_sdks_pip_deps//opencv_python_headless",
@@ -71,21 +71,26 @@ py_library(
         ":pose_estimator_model",
         ":segmentation_model",
         "//intrinsic/storage/content_addressable_storage/python:client_helpers",
-        "//intrinsic/util/grpc:interceptor",
         "//intrinsic_perception/intrinsic/perception/client/v1/python:image_utils",
         "//intrinsic_perception/intrinsic/perception/client/v1/python/camera:data_classes",
         "//intrinsic_perception/intrinsic/perception/service/ioc_pose_estimator/proto:ioc_service_config_py_pb2",
         "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_pose_estimator_params_py_pb2",
         "//intrinsic_perception/intrinsic/perception/skills/multi_view:multi_view_pose_utils",
+        "//intrinsic_sdk/intrinsic/assets:interface_utils_py",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
         "//intrinsic_sdk/intrinsic/assets/install:installed_assets_client",
+        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_pb2_grpc",
+        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_py_pb2",
         "//intrinsic_sdk/intrinsic/math/python:pose3",
         "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
         "//intrinsic_sdk/intrinsic/math/python:rotation3",
         "//intrinsic_sdk/intrinsic/platform/pubsub/python:pubsub",
+        "//intrinsic_sdk/intrinsic/util/grpc:interceptor",
         "@ai_intrinsic_sdks_pip_deps//numpy",
         "@ai_intrinsic_sdks_pip_deps//opencv_python_headless",
         "@ai_intrinsic_sdks_pip_deps//trimesh",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
+        "@com_google_googleapis//google/longrunning:operations_py_proto",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/assets/proto:id_py_pb2",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_py_pb2",
@@ -127,6 +132,8 @@ intrinsic_service(
     deps = [
         "//intrinsic_inference/assets/inference_service/v1:ml_model_asset_proto",
         "//intrinsic_perception/intrinsic/perception/service/ioc_pose_estimator/proto:ioc_service_config_proto",
+        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_proto",
+        "@com_google_googleapis//google/longrunning:operations_proto",
         "@com_google_protobuf//:wrappers_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
@@ -138,8 +145,8 @@ py_binary(
     name = "run_pose_estimation",
     srcs = ["run_pose_estimation.py"],
     deps = [
-        "//intrinsic/assets:id_utils_py",
         "//intrinsic_perception/intrinsic/perception/skills/multi_view:estimate_pose_multi_view_py_pb2",
+        "//intrinsic_sdk/intrinsic/assets:id_utils_py",
         "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
         "//intrinsic_sdk/intrinsic/solutions:deployments",
         "//intrinsic_sdk/intrinsic/solutions:execution",

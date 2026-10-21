@@ -22,10 +22,10 @@ cc_binary(
     name = "proto_converter",
     srcs = ["proto_converter.cc"],
     deps = [
-        "//intrinsic/util/proto:dynamic_message_parser",
-        "//intrinsic/util/status:return",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
+        "//intrinsic_sdk/intrinsic/util/proto:dynamic_message_parser",
+        "//intrinsic_sdk/intrinsic/util/status:return",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",

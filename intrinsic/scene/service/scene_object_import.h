@@ -17,9 +17,7 @@
 
 #include <memory>
 
-#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "google/longrunning/operations.pb.h"
 #include "google/protobuf/any.pb.h"
 #include "grpcpp/server_context.h"
@@ -36,7 +34,6 @@
 #include "intrinsic/scene/proto/v1/scene_object_import.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object_internal.grpc.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object_internal.pb.h"
-#include "intrinsic/world/proto/world_fragment.pb.h"
 
 namespace intrinsic {
 
@@ -123,75 +120,6 @@ class SceneObjectExport
   std::shared_ptr<SceneObjectImportImpl> pimpl_;
 };
 
-namespace internal {
-/**
- * Namespace for internal helper functions that we would like to expose for
- * testing.
- */
-
-/**
- * The different high-level file types that we support for import
- */
-enum class SceneFileTypes {
-  SDF,
-  USD,
-  CAD,
-  MESH,
-};
-
-// Returns all files in the directory that have the given extension.
-// Does not look into subdirectories.
-absl::StatusOr<std::vector<std::string>> FindFilesWithExtensionInDirectory(
-    absl::string_view directory, absl::string_view ext);
-
-// Returns all files in the directory that have any of the given extensions.
-// Does not look into subdirectories.
-absl::StatusOr<std::vector<std::string>> FindFilesWithExtensionsInDirectory(
-    absl::string_view directory, const absl::flat_hash_set<std::string>& exts);
-
-// Finds a scene file to import within the given directory. If we find a
-// suitable scene file to import, returns {filepath, filetype}. Otherwise,
-// returns an error. If there are multiple different file-types in the
-// directory, attempts to select a "best" file / most-expected file
-// to import, or fails with an error telling the user to resolve the ambiguity.
-absl::StatusOr<std::pair<std::string, SceneFileTypes>>
-FindSceneFileToImportInDirectory(absl::string_view scene_file_directory);
-
-// Finds the topmost directory within the given directory that contains at least
-// one relevant file (excluding metadata files and directories like __MACOSX
-// and .DS_Store). This is used to skip redundant parent directories often found
-// in zip files.
-//
-// Examples:
-//
-// Handles simple nesting:
-// mydir/
-//   mydir/
-//     robot.sdf
-// ==> mydir/mydir/
-//
-// Skips junk files:
-// mydir/
-//   .DS_Store
-//   mydir/
-//     robot.sdf
-// ==> mydir/mydir/
-//
-// If it is ambigous which folder to traverse into, we return the parent:
-// mydir/
-//   folderA/
-//      robot.sdf
-//   folderB/
-//      robot.sdf
-// ==> mydir/
-absl::StatusOr<std::string> FindTopmostDirectoryWithContent(
-    absl::string_view directory_path);
-
-// Returns a list of all supported file extensions for scene object import,
-// in sorted order.
-std::vector<std::string> GetAllSupportedExtensions();
-
-};  // namespace internal
-
 }  // namespace intrinsic
+
 #endif  // INTRINSIC_SCENE_SERVICE_SCENE_OBJECT_IMPORT_H_

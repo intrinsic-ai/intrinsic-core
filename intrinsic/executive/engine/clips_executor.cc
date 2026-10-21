@@ -329,17 +329,13 @@ ClipsExecutor::ClipsExecutor(ClipsExecutorCreateOptions create_options)
       object_world_service_stub_(
           std::move(create_options.object_world_service_stub)),
       world_updater_stub_(std::move(create_options.world_updater_stub)),
-      world_compatibility_service_stub_(
-          std::move(create_options.world_compatibility_service_stub)),
       simulation_service_stub_(
           std::move(create_options.simulation_service_stub)),
       clips_logger_(std::make_unique<ClipsLogger>(
-          proto_mgr_.get(), object_world_service_stub_.get(),
-          world_compatibility_service_stub_.get(), span_mgr_.get())),
+          proto_mgr_.get(), object_world_service_stub_.get(), span_mgr_.get())),
       clips_world_(std::make_unique<ClipsWorld>(
           clips_->GetAssertFacade(), proto_mgr_.get(), span_mgr_.get(),
-          object_world_service_stub_.get(), world_updater_stub_.get(),
-          world_compatibility_service_stub_.get())),
+          object_world_service_stub_.get(), world_updater_stub_.get())),
       clips_pub_sub_(std::make_unique<ClipsPubSub>(proto_mgr_.get())),
       solution_service_stub_(std::move(create_options.solution_service_stub)),
       conductor_service_stub_(std::move(create_options.conductor_service_stub)),
@@ -370,12 +366,12 @@ ClipsExecutor::ClipsExecutor()
           clips::CelManager::Create(clips_.get(), proto_mgr_.get()).value()),
       span_mgr_(clips::TraceSpanManager::Create(clips_.get()).value()),
       blackboard_(*clips_, *proto_mgr_),
-      clips_logger_(std::make_unique<ClipsLogger>(proto_mgr_.get(), nullptr,
-                                                  nullptr, span_mgr_.get())),
+      clips_logger_(std::make_unique<ClipsLogger>(
+          proto_mgr_.get(), /*world_stub=*/nullptr, span_mgr_.get())),
       clips_world_(std::make_unique<ClipsWorld>(
           clips_->GetAssertFacade(), proto_mgr_.get(), span_mgr_.get(),
           /*object_stub=*/nullptr,
-          /*world_updater_stub=*/nullptr, /*compatibility_stub=*/nullptr)),
+          /*world_updater_stub=*/nullptr)),
       clips_pub_sub_(std::make_unique<ClipsPubSub>(proto_mgr_.get())) {
   skill_client_generator_ = std::make_unique<SkillClientGenerator>(
       nullptr, nullptr, std::nullopt, nullptr, nullptr, clips_.get(),

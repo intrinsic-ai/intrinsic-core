@@ -19,7 +19,7 @@ py_library(
     srcs = ["proto_registry_client.py"],
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/util/proto:descriptors_py",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors_py",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/proto_tools/proto:proto_registry_py_pb2",

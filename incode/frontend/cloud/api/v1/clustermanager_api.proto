@@ -354,6 +354,10 @@ message CreateClusterRequest {
   CreateClusterInfo cluster_info = 3 [(google.api.field_behavior) = REQUIRED];
   bool preserve_versions = 4 [(google.api.field_behavior) = OPTIONAL];
   string copy_cluster = 5 [(google.api.field_behavior) = OPTIONAL];
+  // Only used for automated testing, and contains the ID of the test that is
+  // registering this device. It is used to label the resources (in particular
+  // the Robot CR) so they can be cleaned up.
+  string created_by_test = 6 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message CreateClusterResponse {}
@@ -644,6 +648,10 @@ message DeleteClusterRequest {
   // is fully reset. We cannot do this on every deletion, because unreachable
   // (broken/previously reset) devices will fail as well.
   bool require_reachable = 4 [(google.api.field_behavior) = OPTIONAL];
+  // If set, skips sending a factory reset + reboot to the on-prem device
+  // before deleting cloud resources (used during project migration after a
+  // solution reset and reboot have already been triggered).
+  bool skip_device_reset = 5 [(google.api.field_behavior) = OPTIONAL];
 }
 
 message DeleteOperationMetadata {}
@@ -926,6 +934,7 @@ service ClustersService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       operation_id: "GetCurrentReleaseVersions"
     };
+    option (aclType) = "none";
   }
 
   // CreateCluster allows to add a new cluster.
@@ -1158,6 +1167,7 @@ service ClustersService {
     option (google.api.http) = {
       get: "/v1/project/*/org/*/clusterOperations/{name=*}"
     };
+    option (aclType) = "has_access";
   }
 
   // Deletes a long-running operation. This method indicates that the client is
@@ -1166,7 +1176,9 @@ service ClustersService {
   // `google.rpc.Code.UNIMPLEMENTED`.
   // At this point, this is unimplemented for ClustersService.
   rpc DeleteOperation(google.longrunning.DeleteOperationRequest)
-      returns (google.protobuf.Empty) {}
+      returns (google.protobuf.Empty) {
+    option (aclType) = "can_configure";
+  }
 
   // Starts asynchronous cancellation on a long-running operation.  The server
   // makes a best effort to cancel the operation, but success is not
@@ -1174,9 +1186,13 @@ service ClustersService {
   // * CreateCluster does not implement this
   // * NetworkConfiguration will
   rpc CancelOperation(google.longrunning.CancelOperationRequest)
-      returns (google.protobuf.Empty) {}
+      returns (google.protobuf.Empty) {
+    option (aclType) = "can_configure";
+  }
 
   // At this point, this is unimplemented for ClustersService.
   rpc WaitOperation(google.longrunning.WaitOperationRequest)
-      returns (google.longrunning.Operation);
+      returns (google.longrunning.Operation) {
+    option (aclType) = "has_access";
+  }
 }

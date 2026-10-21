@@ -61,7 +61,7 @@ void LogRtErrorStackTrace(int skip_count) {
   // sometimes doesn't show the full trace.
   void* buffer[kMaxFrames];
   const int num_frames = absl::GetStackTrace(buffer, kMaxFrames, skip_count);
-  auto frames = std::span(buffer, num_frames);
+  auto frames = absl::MakeSpan(buffer, num_frames);
 
   for (int index = 0; index < frames.size(); index++) {
     const uint64_t pc = reinterpret_cast<uintptr_t>(frames[index]);
@@ -81,11 +81,11 @@ FixedString<kRtErrorStacktraceStringSize> GenerateRtErrorStackTrace(
   void* buffer[kMaxFrames];
   const int num_frames = absl::GetStackTrace(buffer, kMaxFrames, skip_count);
 
-  return GenerateRtErrorStackTrace(std::span(buffer, num_frames));
+  return GenerateRtErrorStackTrace(absl::MakeSpan(buffer, num_frames));
 }
 
 FixedString<kRtErrorStacktraceStringSize> GenerateRtErrorStackTrace(
-    std::span<const void* const> frames) {
+    absl::Span<const void* const> frames) {
   if (!rt_stacktrace_initialized) {
     INTRINSIC_RT_LOG(WARNING)
         << "Call to GenerateRtErrorStackTrace() without prior "
@@ -104,11 +104,10 @@ FixedString<kRtErrorStacktraceStringSize> GenerateRtErrorStackTrace(
 }
 
 FixedString<kRtErrorStacktraceStringSize> GenerateRtErrorStackTrace(
-    std::span<void*> frames) {
+    absl::Span<void*> frames) {
   // Needs some explicit casting to make it const.
   const void* const* buf = static_cast<const void* const*>(frames.data());
-  std::span<const void* const> span =
-      std::span<const void* const>(buf, frames.size());
+  absl::Span<const void* const> span = absl::MakeConstSpan(buf, frames.size());
   return GenerateRtErrorStackTrace(span);
 }
 

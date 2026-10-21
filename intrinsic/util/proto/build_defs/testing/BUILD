@@ -23,7 +23,7 @@ cc_library(
     name = "text_proto_test",
     srcs = ["text_proto_test.cc"],
     deps = [
-        "//intrinsic/util/proto:dynamic_message_parser",
+        "//intrinsic_sdk/intrinsic/util/proto:dynamic_message_parser",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status:status_matchers",

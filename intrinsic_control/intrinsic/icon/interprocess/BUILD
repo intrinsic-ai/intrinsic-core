@@ -18,6 +18,7 @@ package(default_visibility = [
     "//intrinsic/util/thread:__subpackages__",
     "//intrinsic_control/intrinsic/icon:__subpackages__",
     "//intrinsic_hardware/intrinsic/hardware:__subpackages__",
+    "//intrinsic_sdk/intrinsic/util/thread:__subpackages__",
 ])
 
 cc_library(

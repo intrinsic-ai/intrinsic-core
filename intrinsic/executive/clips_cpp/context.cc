@@ -32,14 +32,15 @@
 
 namespace intrinsic::executive::clips {
 
-absl::StatusOr<std::unique_ptr<ClipsContext>> ClipsContext::Create() {
+absl::StatusOr<std::unique_ptr<ClipsContext>> ClipsContext::Create(
+    util::Clock* absl_nonnull clock) {
   auto env = std::make_unique<Environment>();
   INTR_ASSIGN_OR_RETURN(std::unique_ptr<ProtobufManager> proto_mgr,
                         ProtobufManager::Create(env.get()));
   INTR_ASSIGN_OR_RETURN(std::unique_ptr<CelManager> cel_mgr,
                         CelManager::Create(env.get(), proto_mgr.get()));
   INTR_ASSIGN_OR_RETURN(std::unique_ptr<TraceSpanManager> span_mgr,
-                        TraceSpanManager::Create(env.get()));
+                        TraceSpanManager::Create(env.get(), clock));
   return absl::WrapUnique(new ClipsContext(std::move(env), std::move(proto_mgr),
                                            std::move(cel_mgr),
                                            std::move(span_mgr)));

@@ -13,10 +13,10 @@
 # limitations under the License.
 
 load("//bazel:python.bzl", "py_binary")
-load("//intrinsic/assets/data/build_defs:data.bzl", "intrinsic_data")
-load("//intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
-load("//intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
-load("//intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
+load("//intrinsic_sdk/intrinsic/assets/data/build_defs:data.bzl", "intrinsic_data")
+load("//intrinsic_sdk/intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
+load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
+load("//intrinsic_sdk/intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
 load(":basler.bzl", "basler_hardware_device")
 
 package(default_visibility = [

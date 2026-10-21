@@ -65,7 +65,7 @@ void RegisterHistogramView(absl::string_view instrument_name,
 
   std::unique_ptr<metrics_sdk::View> view = metrics_sdk::ViewFactory::Create(
       /*name=*/std::string(view_name), /*description=*/"",
-      /*unit=*/"", metrics_sdk::AggregationType::kHistogram, config);
+      metrics_sdk::AggregationType::kHistogram, config);
 
   sdk_provider->AddView(std::move(selector), std::move(meter_selector),
                         std::move(view));

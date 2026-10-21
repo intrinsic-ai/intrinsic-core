@@ -19,6 +19,7 @@ PYTHONPATH root imports for Python targets so that references across google3/
 and incode/ remain backwards-compatible during the migration.
 """
 
+# LINT.IfChange(proto_includes)
 GOOGLE3_OR_IOC_LOCATIONS = [
     "google3",
     "intrinsic_apis",
@@ -32,3 +33,4 @@ GOOGLE3_OR_IOC_LOCATIONS = [
     "incode/intrinsic_simulation",
     "intrinsic_hardware",
 ]
+# LINT.ThenChange(//.vscode/settings.json:proto_includes)

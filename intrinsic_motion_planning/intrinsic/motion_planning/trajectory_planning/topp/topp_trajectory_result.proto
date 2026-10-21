@@ -17,6 +17,7 @@ syntax = "proto3";
 package intrinsic_proto.topp;
 
 import "intrinsic/icon/proto/joint_space.proto";
+import "intrinsic/motion_planning/proto/v1/motion_events.proto"; 
 import "intrinsic/motion_planning/trajectory_planning/topp/bspline_squared_path_velocity.proto";
 import "intrinsic/motion_planning/trajectory_planning/topp/piecewise_linear_squared_path_velocity.proto";
 
@@ -33,4 +34,9 @@ message ToppTrajectoryResult {
 
   // The discrete version of the trajectory.
   intrinsic_proto.icon.JointTrajectoryPVA trajectory = 2;
+
+
+  // The motion events associated with the trajectory.
+  repeated intrinsic_proto.motion_planning.v1.MotionEvent motion_events = 3;
+
 }

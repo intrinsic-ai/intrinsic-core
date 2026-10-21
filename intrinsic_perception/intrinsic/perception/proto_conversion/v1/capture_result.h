@@ -28,6 +28,9 @@ namespace intrinsic_proto::perception::v1 {
 absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
     const CaptureResult& capture_result);
 
+absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
+    CaptureResult&& capture_result);
+
 absl::StatusOr<CaptureResult> ToProto(
     const intrinsic::perception::CaptureResult& capture_result,
     const absl::flat_hash_map<int64_t, intrinsic::perception::Encoding>&

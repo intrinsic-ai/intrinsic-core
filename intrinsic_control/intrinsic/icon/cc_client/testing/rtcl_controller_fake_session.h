@@ -243,8 +243,11 @@ class RtclControllerFakeSession : public SessionInterface {
   void StopAllActiveActions() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Checks if the current behavior is finished and activates the next behavior
-  // of the sequence.
-  absl::Status ActivateNextBehavior() ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  // of the sequence. If `target_action_id` is provided in nice validation mode,
+  // advances to the next behavior for `target_action_id`.
+  absl::Status ActivateNextBehavior(
+      std::optional<ActionInstanceId> target_action_id = std::nullopt)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Resets the current behavior. In strict mode, also checks if the current
   // behavior is done (i.e. we've used all of its state variable maps), and

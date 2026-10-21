@@ -15,9 +15,7 @@
 #ifndef INTRINSIC_ICON_CONTROL_ACTIONS_TRAJECTORY_TRACKING_ACTION_H_
 #define INTRINSIC_ICON_CONTROL_ACTIONS_TRAJECTORY_TRACKING_ACTION_H_
 
-#include <limits>
 #include <memory>
-#include <optional>
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -25,17 +23,11 @@
 #include "intrinsic/icon/actions/trajectory_tracking_action_info.h"
 #include "intrinsic/icon/cc_client/condition.h"
 #include "intrinsic/icon/control/action_factory_context.h"
-#include "intrinsic/icon/control/algorithms/is_settled_criterion.h"
-#include "intrinsic/icon/control/algorithms/trajectory_player.h"
-#include "intrinsic/icon/control/algorithms/trajectory_residual_controller.h"
+#include "intrinsic/icon/control/actions/trajectory_tracker.h"
 #include "intrinsic/icon/control/realtime_signal_types.h"
 #include "intrinsic/icon/control/rtcl_action.h"
-#include "intrinsic/icon/control/slot_types.h"
-#include "intrinsic/icon/proto/v1/types.pb.h"
 #include "intrinsic/icon/utils/realtime_status.h"
 #include "intrinsic/icon/utils/realtime_status_or.h"
-#include "intrinsic/kinematics/types/joint_limits.h"
-#include "intrinsic/kinematics/types/joint_state.h"
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 
 namespace intrinsic::icon {
@@ -66,12 +58,8 @@ class TrajectoryTrackingAction final : public RtclActionInterface {
   // and a `trajectory_residual_controller`.
   TrajectoryTrackingAction(
       RealtimeSlotId slot_id,
-      std::unique_ptr<TrajectoryPlayer> trajectory_player,
-      std::unique_ptr<TrajectoryResidualController>
-          trajectory_residual_controller,
-      std::unique_ptr<IsSettledCriterion> is_settled_criterion,
-      RealtimeSignalId path_accurate_stop_signal_id,
-      const JointLimits& planning_limits, const JointLimits& system_limits);
+      std::unique_ptr<TrajectoryTracker> trajectory_tracker,
+      RealtimeSignalId path_accurate_stop_signal_id);
 
   static absl::StatusOr<std::unique_ptr<TrajectoryTrackingAction>> Create(
       const TrajectoryTrackingActionInfo::FixedParams& params_proto,
@@ -87,33 +75,8 @@ class TrajectoryTrackingAction final : public RtclActionInterface {
       absl::string_view name) const override;
 
  private:
-  // IsDone reports `true` if the trajectory has been fully played back
-  // (trajectory phase is 1.0) or if a path-accurate stop has been triggered and
-  // the speed override state internal to the TrajectoryPlayer has reached zero.
-  bool IsDone() const;
-
   const RealtimeSlotId slot_id_;
-
-  std::unique_ptr<TrajectoryPlayer> trajectory_player_;
-  std::unique_ptr<TrajectoryResidualController> residual_controller_;
-  JointStatePVA initial_state_residual_;
-  std::optional<JointStatePVA> final_state_residual_;
-  JointLimits planning_limits_;
-  JointLimits system_limits_;
-
-  double distance_to_final_setpoint_ = std::numeric_limits<double>::max();
-  double trajectory_done_for_seconds_ = 0.0;
-  // The wall time passed since the trajectory was started. This is does not
-  // correspond to the time parametrization of the trajectory.
-  // wall_time_passed_since_trajectory_start_ increases by the time_step every
-  // Sense cycle and is not affected by speed override which mean the
-  // trajectory's time parametrization is advancing more slowly than the wall
-  // time.
-  double wall_time_passed_since_trajectory_start_ = 0.0;
-
-  // Internal variables corresponding to the evaluation of the settled state.
-  bool is_settled_ = false;
-  std::unique_ptr<IsSettledCriterion> is_settled_criterion_;
+  std::unique_ptr<TrajectoryTracker> trajectory_tracker_;
 
   RealtimeSignalId path_accurate_stop_signal_id_;
   SignalValue path_accurate_stop_signal_value_;

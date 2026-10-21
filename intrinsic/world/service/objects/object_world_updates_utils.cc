@@ -15,6 +15,7 @@
 #include "intrinsic/world/service/objects/object_world_updates_utils.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -42,6 +43,7 @@
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
+#include "intrinsic/stats/metrics_utils.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/collision/collision_context.pb.h"
@@ -67,8 +69,7 @@
 #include "intrinsic/world/robot_payload/robot_payload.h"
 #include "intrinsic/world/service/objects/object_world_converter.h"
 #include "intrinsic/world/world.h"
-#include "opencensus/stats/stats.h"
-#include "opencensus/tags/tag_key.h"
+#include "opentelemetry/metrics/sync_instruments.h"
 
 ABSL_DECLARE_FLAG(bool, always_deserialize_geometries);
 
@@ -96,22 +97,19 @@ using ::intrinsic_proto::world::UpdateTransformRequest;
 
 namespace {
 
-constexpr absl::string_view kNameIsGlobalAliasFalseMeasureName =
-    "intrinsic/object_world/name_is_global_alias_false";
-
-opencensus::stats::MeasureInt64 NameIsGlobalAliasFalseMeasure() {
-  static const auto measure = opencensus::stats::MeasureInt64::Register(
-      kNameIsGlobalAliasFalseMeasureName,
-      "Counts occurrences where name_is_global_alias is false during object "
-      "creation or rename.",
-      "1");
-  return measure;
-}
-
-opencensus::tags::TagKey UpdateTypeKey() {
-  static const auto key =
-      opencensus::tags::TagKey::Register("object_world_update_type");
-  return key;
+// Instruments in this file are intentionally released so they remain alive
+// for the program's lifetime, avoiding global destructor ordering errors on
+// service destruction. Each is a one-time allocation, so this doesn't leak.
+opentelemetry::metrics::Counter<uint64_t>& NameIsGlobalAliasFalseCounter() {
+  static opentelemetry::metrics::Counter<uint64_t>* counter =
+      stats::GetMeter()
+          ->CreateUInt64Counter(
+              kNameIsGlobalAliasFalseMeasureName,
+              "Counts occurrences where name_is_global_alias is false during "
+              "object creation or rename.",
+              "1")
+          .release();
+  return *counter;
 }
 
 // TODO(b/475826463): We should make this shared with world_object.cc
@@ -482,8 +480,7 @@ absl::StatusOr<const WorldObject*> HandleCreateObjectRequest(
   }
 
   if (!request.name_is_global_alias()) {
-    opencensus::stats::Record({{NameIsGlobalAliasFalseMeasure(), 1}},
-                              {{UpdateTypeKey(), "create_object"}});
+    NameIsGlobalAliasFalseCounter().Add(1, {{kUpdateTypeKey, "create_object"}});
   }
 
   return new_object;
@@ -571,8 +568,8 @@ absl::StatusOr<const WorldObject*> HandleUpdateObjectNameRequest(
                                        request.name_is_global_alias()));
 
   if (!request.name_is_global_alias()) {
-    opencensus::stats::Record({{NameIsGlobalAliasFalseMeasure(), 1}},
-                              {{UpdateTypeKey(), "update_object_name"}});
+    NameIsGlobalAliasFalseCounter().Add(
+        1, {{kUpdateTypeKey, "update_object_name"}});
   }
 
   return object;
@@ -1272,21 +1269,11 @@ bool IsOnlyStateChange(
   return false;
 }
 
-opencensus::stats::ViewDescriptor NameIsGlobalAliasFalseViewDescriptor() {
-  NameIsGlobalAliasFalseMeasure();
-  static const auto descriptor =
-      opencensus::stats::ViewDescriptor()
-          .set_name(kNameIsGlobalAliasFalseMeasureName)
-          .set_measure(kNameIsGlobalAliasFalseMeasureName)
-          .set_aggregation(opencensus::stats::Aggregation::Sum())
-          .add_column(UpdateTypeKey());
-  return descriptor;
-}
-
-void RegisterObjectWorldUpdatesMetricsViews() {
+void RegisterObjectWorldUpdatesMetrics() {
   static absl::once_flag called;
   absl::call_once(called, []() {
-    NameIsGlobalAliasFalseViewDescriptor().RegisterForExport();
+    // Eagerly initialize the instruments to register them.
+    NameIsGlobalAliasFalseCounter();
   });
 }
 

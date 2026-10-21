@@ -1,0 +1,85 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.skills;
+
+import "google/protobuf/empty.proto";
+import "intrinsic/kubernetes/generator/proto/auth_options.proto";
+import "intrinsic/skills/proto/skill_registry_config.proto";
+import "intrinsic/skills/proto/skills.proto";
+
+option go_package = "intrinsic/skills/proto/behavior_tree_registry_go_proto";
+
+message RegisterOrUpdateBehaviorTreeRequest {
+  // The registration information for the BehaviorTree
+  intrinsic_proto.skills.BehaviorTreeRegistration registration = 1;
+}
+
+message RegisterOrUpdateBehaviorTreeResponse {}
+
+message UnregisterBehaviorTreeRequest {
+  // The id of the behavior tree's skill representation to remove.
+  string id = 1;
+}
+
+message ListBehaviorTreeSkillsRequest {}
+
+message ListBehaviorTreeSkillsResponse {
+  // The skill descriptions of all registered legacy processes.
+  repeated intrinsic_proto.skills.Skill skills = 1;
+}
+
+// Manages legacy reusable processes (parameterizable behavior trees) in the
+// skill registry.
+//
+// Deprecated: Only supports legacy processes. Install Process Assets with the
+// Subprocess tag through the `InstalledAssets` service instead.
+service BehaviorTreeRegistry {
+  option deprecated = true;
+
+  // Auth annotations for consumption by the following helm_chart:
+  //   cs/symbol://intrinsic/kubernetes/api_relay/cloud:api-relay
+  option (intrinsic_proto.auth.service_options).auth_methods =
+      AUTH_METHOD_API_KEY;
+
+  // Registers a BehaviorTree skill in the skill registry.
+  //
+  // Deprecated: Install the behavior tree as a Process Asset with the
+  // Subprocess tag through the `InstalledAssets` service instead.
+  rpc RegisterOrUpdateBehaviorTree(RegisterOrUpdateBehaviorTreeRequest)
+      returns (RegisterOrUpdateBehaviorTreeResponse) {
+    option deprecated = true;
+  }
+
+  // Unregisters a BehaviorTree skill from the skill registry.
+  //
+  // Deprecated: Uninstall the Process Asset through the `InstalledAssets`
+  // service instead.
+  rpc UnregisterBehaviorTree(UnregisterBehaviorTreeRequest)
+      returns (google.protobuf.Empty) {
+    option deprecated = true;
+  }
+
+  // Lists the skill descriptions of all legacy processes currently registered
+  // in the skill registry.
+  //
+  // Deprecated: List installed Process Assets through the `InstalledAssets`
+  // service instead.
+  rpc ListBehaviorTreeSkills(ListBehaviorTreeSkillsRequest)
+      returns (ListBehaviorTreeSkillsResponse) {
+    option deprecated = true;
+  }
+}

@@ -52,7 +52,7 @@
 #include "intrinsic/util/thread/thread.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/proto/object_world_service.pb.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
+#include "intrinsic/world/proto/object_world_updates.pb.h"
 #include "intrinsic/world/service/world_compatibility_service.pb.h"
 #include "opentelemetry/trace/span.h"
 #include "opentelemetry/trace/span_context.h"
@@ -139,23 +139,14 @@ std::unique_ptr<ClipsLogger::LogRequest> ClipsLogger::LogRequest::Create(
 ClipsLogger::ClipsLogger(
     clips::ProtobufManager* proto_manager,
     intrinsic_proto::world::ObjectWorldService::StubInterface* world_stub,
-    intrinsic_proto::world::WorldCompatibilityService::StubInterface*
-        world_compat_stub,
     clips::TraceSpanManager* span_manager)
     : proto_manager_(proto_manager),
       span_manager_(span_manager),
-      world_stub_(world_stub),
-      world_compat_stub_(world_compat_stub) {}
+      world_stub_(world_stub) {}
 
 ClipsLogger::~ClipsLogger() { TearDown().IgnoreError(); }
 
 absl::Status ClipsLogger::InitAsyncLogging() {
-  if ((world_stub_ == nullptr) != (world_compat_stub_ == nullptr)) {
-    return absl::InvalidArgumentError(
-        "Either both, object world and world compatibility stub must be "
-        "provided, or neither.");
-  }
-
   log_req_channel_.emplace(kAsyncLogQueueSize);
 
   // Setup reader thread that performs actual logging from queue
@@ -362,24 +353,32 @@ void ClipsLogger::LogQueueReader(StopToken stop_token,
     }
 
     // Get world proto from world service (gRPC)
-    if (world_compat_stub_ != nullptr && !request->log_world_id.empty() &&
+    if (world_stub_ != nullptr && !request->log_world_id.empty() &&
         request->log_item.payload().has_executive_operation()) {
       grpc::ClientContext world_context;
       intrinsic::ConfigureClientContext(&world_context);
 
-      intrinsic_proto::world::GetWorldWithEntitiesRequest get_world_request;
-      get_world_request.set_world_id(request->log_world_id);
-      intrinsic_proto::world::WorldWithEntities world_with_entities;
-      grpc::Status get_world_status = world_compat_stub_->GetWorldWithEntities(
-          &world_context, get_world_request, &world_with_entities);
-      if (!get_world_status.ok()) {
-        LOG(WARNING) << "Failed to get world " << request->log_world_id << ": "
-                     << get_world_status.error_message();
+      intrinsic_proto::world::ListObjectsRequest list_request;
+      list_request.set_world_id(request->log_world_id);
+      // GetWorldWithEntities always returned objects in the FULL view. Keep
+      // that level of detail (object and frame poses) for log consumers.
+      list_request.set_view(intrinsic_proto::world::ObjectView::FULL);
+      intrinsic_proto::world::ListObjectsResponse list_response;
+      grpc::Status list_status = world_stub_->ListObjects(
+          &world_context, list_request, &list_response);
+      if (!list_status.ok()) {
+        LOG(WARNING) << "Failed to list objects in world "
+                     << request->log_world_id << ": "
+                     << list_status.error_message();
       } else {
+        intrinsic_proto::world::WorldWithEntities world_with_entities;
+        *world_with_entities.mutable_objects() =
+            std::move(*list_response.mutable_objects());
         data_logger::LogAsync(
                 // clang-format off
                 Builder::PackAnyFrom(world_with_entities)
                 // clang-format on
+                .WithEventSource("executive.world_state")
                 .WithContext(request->log_item.context())
                 .Item(),
             [](absl::Status status) {

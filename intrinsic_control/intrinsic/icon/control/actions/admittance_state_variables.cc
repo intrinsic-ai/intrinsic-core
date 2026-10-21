@@ -62,6 +62,11 @@ absl::Status AdmittanceStateVariables::RegisterVariables(
           ComplianceInfo::kReferenceOrientationErrorDescription));
   INTR_RETURN_IF_ERROR(
       builder.AddStateVariable<intrinsic_proto::icon::v1::ActionSignature::
+                                   StateVariableInfo::TYPE_INT64>(
+          ComplianceInfo::kStreamingInputMessageCount,
+          ComplianceInfo::kStreamingInputMessageCountDescription));
+  INTR_RETURN_IF_ERROR(
+      builder.AddStateVariable<intrinsic_proto::icon::v1::ActionSignature::
                                    StateVariableInfo::TYPE_DOUBLE>(
           ComplianceInfo::kSettledForSeconds,
           ComplianceInfo::kSettledForSecondsDescription));
@@ -159,6 +164,9 @@ RealtimeStatusOr<StateVariableValue> AdmittanceStateVariables::GetStateVariable(
           "least once?");
     }
     return StateVariableValue(reference_orientation_error_.value());
+  }
+  if (name == ComplianceInfo::kStreamingInputMessageCount) {
+    return StateVariableValue(streaming_input_message_count_);
   }
   if (name == ComplianceInfo::kSettledForSeconds) {
     if (!settled_for_seconds_.has_value()) {
@@ -263,6 +271,7 @@ void AdmittanceStateVariables::Reset() {
   reference_pose_reached_ = std::nullopt;
   reference_position_error_ = std::nullopt;
   reference_orientation_error_ = std::nullopt;
+  streaming_input_message_count_ = 0;
   settled_for_seconds_ = std::nullopt;
   sensed_force_ = std::nullopt;
   sensed_torque_ = std::nullopt;
@@ -291,6 +300,7 @@ void AdmittanceStateVariables::Update(const UpdateParams& values) {
   reference_orientation_error_ =
       std::abs(values.current_task_t_tool.quaternion().angularDistance(
           values.reference_task_t_tool.quaternion()));
+  streaming_input_message_count_ = values.streaming_input_message_count;
   sensed_force_ = values.sensed_wrench.head<3>().norm();
   sensed_torque_ = values.sensed_wrench.tail<3>().norm();
   sensed_torque_about_axis_1_ = values.sensed_wrench.tail<3>().dot(

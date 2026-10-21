@@ -1,0 +1,28 @@
+diff --git a/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel b/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel
+--- a/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel
++++ b/3rd_party/llvm-project/x.x/compiler-rt/compiler-rt.BUILD.bazel
+@@ -1614,7 +1614,6 @@ UBSAN_CFLAGS = SANITIZER_COMMON_CFLAGS + [
+     "-Wno-format",
+ ]
+ 
+-# buildifier: disable=unused-variable
+ UBSAN_STANDALONE_CFLAGS = SANITIZER_COMMON_CFLAGS + [
+     "-fno-rtti",
+ ]
+@@ -1683,6 +1682,7 @@ cc_library(
+         ":ubsan_sources",
+         ":ubsan_standalone_sources",
+     ],
++    copts = UBSAN_STANDALONE_CFLAGS,
+     implementation_deps = [
+         ":interception_impl_headers",
+         ":libcxx_headers",
+@@ -3420,7 +3420,7 @@ cc_library(
+         ":asan_sources",
+         ":ubsan_headers",
+     ],
+-    copts = [
++    copts = ASAN_CFLAGS + [
+         # The AddressSanitizer run-time should not be instrumented by AddressSanitizer.
+         "-fno-sanitize=address",
+     ] + select({

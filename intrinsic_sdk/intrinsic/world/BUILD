@@ -21,7 +21,7 @@ cc_library(
     srcs = ["entity_id.cc"],
     hdrs = ["entity_id.h"],
     deps = [
-        "//intrinsic/util:aggregate_type",
+        "//intrinsic_sdk/intrinsic/util:aggregate_type",
         "@or_tools//ortools/base:strong_int",
     ],
 )
@@ -30,7 +30,7 @@ cc_library(
     name = "labels",
     hdrs = ["labels.h"],
     deps = [
-        "//intrinsic/util:string_type",
+        "//intrinsic_sdk/intrinsic/util:string_type",
         "@abseil-cpp//absl/strings",
     ],
 )

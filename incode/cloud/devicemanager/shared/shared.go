@@ -96,7 +96,7 @@ type Interface struct {
 	// Addresses specifies the IP addresses. It is required if DHCP4 is
 	// disabled. If DHCP4 is enabled it can be optionally used for additional
 	// addresses.
-	Addresses []string `json:"addresses" validate:"required_without=DHCP4,omitempty,min=1" jsonschema:"format=ipv4"`
+	Addresses []string `json:"addresses" validate:"required_without=DHCP4,excluded_without=DHCP4|min=1" jsonschema:"format=ipv4"`
 
 	// Realtime identifies this interface to be used for realtime communication
 	// with the robot.

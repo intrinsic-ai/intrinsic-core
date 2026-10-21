@@ -53,6 +53,7 @@
 #include "intrinsic/motion_planning/path_planning/planners/validation.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planning_error.pb.h"
 #include "intrinsic/motion_planning/trajectory_planning/validation.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -116,6 +117,7 @@ absl::StatusOr<std::vector<PointPath>> PlanImpl(
     const LinearCartesianMotionPathPlannerConfig& config, const PointPath& path,
     const icon::ManipulatorKinematics* manipulator_kinematics,
     PathPlannerGraph* graph) {
+  const stats::ScopedSpan span("LinearCartesianMotionPathPlanner/PlanImpl");
   absl::string_view kMotionPlanningErrorSuffix = "PlanImpl";
   if (manipulator_kinematics == nullptr) {
     return absl::InvalidArgumentError(
@@ -248,6 +250,7 @@ absl::StatusOr<std::vector<PointPath>> LinearCartesianMotionPathPlanner::Plan(
 absl::StatusOr<std::vector<PointPath>> LinearCartesianMotionPathPlanner::Plan(
     const PointPath& path, const KinematicsSystemProxy& proxy,
     PathPlannerGraph* graph) const {
+  const stats::ScopedSpan span("LinearCartesianMotionPathPlanner/Plan");
   if (path.size() < 2) {
     return absl::InvalidArgumentError(
         "The input path must contain at least two joint configurations.");

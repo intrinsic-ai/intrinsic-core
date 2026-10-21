@@ -162,7 +162,8 @@ PreplanMotionSkill::Execute(ExecuteRequest const& request,
                             ExecuteContext& context) {
   const stats::ScopedSpan span("skills.PreplanMotionSkill/Execute");
 
-  auto& world = context.object_world();
+  INTR_ASSIGN_OR_RETURN(world::ObjectWorldClient world,
+                        context.object_world().Clone());
   INTR_ASSIGN_OR_RETURN(
       auto params,
       request.params<intrinsic_proto::skills::PreplanMotionParams>());
@@ -172,10 +173,10 @@ PreplanMotionSkill::Execute(ExecuteRequest const& request,
       GetMotionPlannerServiceAssetClient(world.GetWorldID(),
                                          params.motion_planner_service()));
   // TODO(b/524634328): Remove the Fallback Logic from the Skills.
-  motion_planning::MotionPlannerClient& motion_planner =
+  motion_planning::MotionPlannerClient motion_planner =
       (motion_planner_service_asset_client != nullptr)
-          ? *motion_planner_service_asset_client
-          : context.motion_planner();
+          ? std::move(*motion_planner_service_asset_client)
+          : context.motion_planner().ForWorld(world.GetWorldID());
 
   INTR_ASSIGN_OR_RETURN(const world::KinematicObject fallback_robot_object,
                         KinematicObjectForPositionPart(
@@ -193,7 +194,8 @@ PreplanMotionSkill::Preview(PreviewRequest const& request,
                             PreviewContext& context) {
   const stats::ScopedSpan span("skills.PreplanMotionSkill/Preview");
 
-  auto& world = context.object_world();
+  INTR_ASSIGN_OR_RETURN(world::ObjectWorldClient world,
+                        context.object_world().Clone());
   INTR_ASSIGN_OR_RETURN(
       auto params,
       request.params<intrinsic_proto::skills::PreplanMotionParams>());
@@ -203,10 +205,10 @@ PreplanMotionSkill::Preview(PreviewRequest const& request,
       GetMotionPlannerServiceAssetClient(world.GetWorldID(),
                                          params.motion_planner_service()));
   // TODO(b/524634328): Remove the Fallback Logic from the Skills.
-  motion_planning::MotionPlannerClient& motion_planner =
+  motion_planning::MotionPlannerClient motion_planner =
       (motion_planner_service_asset_client != nullptr)
-          ? *motion_planner_service_asset_client
-          : context.motion_planner();
+          ? std::move(*motion_planner_service_asset_client)
+          : context.motion_planner().ForWorld(world.GetWorldID());
 
   INTR_ASSIGN_OR_RETURN(const world::KinematicObject fallback_robot_object,
                         context.GetKinematicObjectForEquipment(kEquipmentSlot));

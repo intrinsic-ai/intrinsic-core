@@ -120,6 +120,11 @@ struct MotionPlannerNonvolatileCacheValue {
   const JointTrajectoryPVA trajectory;
   // The path segments used to generate the planned trajectory.
   const std::vector<PathSegment> path_segments;
+
+  // The motion events.
+  const std::vector<intrinsic_proto::motion_planning::v1::MotionEvent>
+      motion_events = {};
+
 };
 
 absl::StatusOr<

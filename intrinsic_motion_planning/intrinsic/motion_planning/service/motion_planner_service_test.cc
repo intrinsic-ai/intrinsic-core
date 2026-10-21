@@ -72,7 +72,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.grpc.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
-#include "intrinsic/motion_planning/service/motion_planner_cache.h"
+#include "intrinsic/motion_planning/service/cache/motion_planner_cache.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_base_test_fixture.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_proxy.h"
@@ -94,6 +94,7 @@
 #include "intrinsic/world/component/robot_component.h"
 #include "intrinsic/world/entity.h"
 #include "intrinsic/world/entity_id.h"
+#include "intrinsic/world/geometry_types.h"
 #include "intrinsic/world/gzfile/gzfile.h"
 #include "intrinsic/world/hashing/hashing.h"
 #include "intrinsic/world/objects/kinematic_object_internal.h"
@@ -799,6 +800,71 @@ TEST_P(MotionPlannerServiceWithoutLoggerTest, CheckCollisionsDisabled) {
   ASSERT_OK_AND_ASSIGN(auto result, CheckCollisions(request));
   EXPECT_FALSE(result.has_collision());
 }
+
+
+TEST_P(MotionPlannerServiceWithoutLoggerTest, MotionEventCalculated) {
+  intrinsic_proto::motion_planning::v1::MotionPlanningRequest request =
+      ParseTextProtoOrDie(R"pb(
+        world_id: "world"
+        motion_specification {
+          motion_segments {
+            target {
+              joint_position {
+                joints: [ -0.9, 0.4, -0.1194, -0.705302, 0.673298, -1.554707 ]
+              }
+            }
+            motion_segment_events {
+              event_location {
+                relative_to: SEGMENT_TARGET
+                event_offset { time { seconds: 1 nanos: 0 } }
+              }
+              event {
+                [type.googleapis.com/google.protobuf.DoubleValue] { value: 1.0 }
+              }
+            }
+          }
+        }
+        robot_specification {
+          robot_reference { object_id { by_name { object_name: "agilus_04" } } }
+        }
+      )pb");
+  ASSERT_OK_AND_ASSIGN(auto result, PlanTrajectory(request));
+
+  intrinsic_proto::motion_planning::v1::MotionEvent expected_motion_event;
+  *expected_motion_event.mutable_event() = request.motion_specification()
+                                               .motion_segments()
+                                               .at(0)
+                                               .motion_segment_events()
+                                               .at(0)
+                                               .event();
+  intrinsic_proto::motion_planning::v1::Keypoint expected_event_keypoint;
+  *expected_event_keypoint.mutable_event_offset() =
+      request.motion_specification()
+          .motion_segments()
+          .at(0)
+          .motion_segment_events()
+          .at(0)
+          .event_location()
+          .event_offset();
+  // Keypoint is the last point in the trajectory since relative to target.
+  expected_event_keypoint.set_keypoint_cartesian_arc_length_from_start_meters(
+      result.discretized().cartesian_arc_length_meters().at(
+          result.discretized().cartesian_arc_length_meters_size() - 1));
+  *expected_event_keypoint.mutable_keypoint_time_from_start() =
+      result.discretized().time_since_start().at(
+          result.discretized().time_since_start_size() - 1);
+  *expected_motion_event.mutable_keypoint() = expected_event_keypoint;
+  // We don't care about checking the joint path variable of the keypoint so we
+  // just clear it in the result.
+  result.mutable_motion_events()
+      ->at(0)
+      .mutable_keypoint()
+      ->clear_keypoint_joint_path_variable_from_start();
+
+  EXPECT_THAT(result.motion_events().at(0), EqualsProto(expected_motion_event));
+}
+
+
 TEST_P(MotionPlannerServiceWithoutLoggerTest,
        ValidTrajectoryPlanForSingleMotionTarget) {
   intrinsic_proto::motion_planning::v1::MotionPlanningRequest request =
@@ -1524,19 +1590,19 @@ TEST_P(MotionPlannerServiceWithoutLoggerTest,
       const Pose3d root_to_reference_object_pose,
       object_world_client.GetTransform(root, reference_object));
 
-  // Move the reference object by 0.5 mm (within exact-match cache tolerance)
-  // and perturb the start configuration by 0.0005 rad (also within exact-match
+  // Move the reference object by 0.2 mm (within exact-match cache tolerance)
+  // and perturb the start configuration by 0.0002 rad (also within exact-match
   // tolerance) so a cache hit returns `original_request`'s start and end
   // states.
   ASSERT_OK(object_world_client.UpdateTransform(
       root, reference_object, reference_object,
-      root_to_reference_object_pose * toPose3d("0.0005 0 0 1 0 0 0")));
+      root_to_reference_object_pose * toPose3d("0.0002 0 0 1 0 0 0")));
 
   intrinsic_proto::motion_planning::v1::MotionPlanningRequest
       follow_up_request = original_request;
   *follow_up_request.mutable_robot_specification()
        ->mutable_start_configuration() = ParseTextProtoOrDie(R"pb(
-    joints: [ 0.0005, -2.0, 2.0, 0.0, 0.0, 0.0 ]
+    joints: [ 0.0002, -2.0, 2.0, 0.0, 0.0, 0.0 ]
   )pb");
   ASSERT_OK_AND_ASSIGN(
       const intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse
@@ -1834,4 +1900,5 @@ INSTANTIATE_TEST_SUITE_P(
     });
 
 }  // namespace
+
 }  // namespace intrinsic

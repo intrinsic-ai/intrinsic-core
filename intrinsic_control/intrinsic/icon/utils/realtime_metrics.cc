@@ -24,11 +24,11 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/attributes.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
-#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "google/protobuf/struct.pb.h"
@@ -38,6 +38,8 @@
 #include "intrinsic/icon/utils/realtime_status_macro.h"
 #include "intrinsic/performance/analysis/proto/performance_metrics.pb.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/util/time/clock_steady_interface.h"
+#include "intrinsic/util/time/time.h"
 
 namespace intrinsic::icon {
 
@@ -66,13 +68,16 @@ void CycleTimeMetrics::Reset() {
   execution_duration.Reset();
 }
 
-CycleTimeMetricsHelper::CycleTimeMetricsHelper(bool log_cycle_time_warnings)
-    : log_cycle_time_warnings_(log_cycle_time_warnings) {}
+CycleTimeMetricsHelper::CycleTimeMetricsHelper(
+    bool log_cycle_time_warnings,
+    const ClockSteadyInterface& clock ABSL_ATTRIBUTE_LIFETIME_BOUND)
+    : log_cycle_time_warnings_(log_cycle_time_warnings), clock_(clock) {}
 
 // static
 absl::StatusOr<CycleTimeMetricsHelper> CycleTimeMetricsHelper::Create(
-    const absl::Duration cycle_duration, bool log_cycle_time_warnings) {
-  CycleTimeMetricsHelper helper(log_cycle_time_warnings);
+    const absl::Duration cycle_duration, bool log_cycle_time_warnings,
+    const ClockSteadyInterface& clock ABSL_ATTRIBUTE_LIFETIME_BOUND) {
+  CycleTimeMetricsHelper helper(log_cycle_time_warnings, clock);
   INTR_ASSIGN_OR_RETURN(helper.metrics_,
                         CycleTimeMetrics::Create(cycle_duration));
   return helper;
@@ -80,10 +85,10 @@ absl::StatusOr<CycleTimeMetricsHelper> CycleTimeMetricsHelper::Create(
 
 void CycleTimeMetricsHelper::Reset() {
   metrics_.Reset();
-  apply_command_start_ = absl::InfinitePast();
-  apply_command_end_ = absl::InfinitePast();
-  read_status_start_ = absl::InfinitePast();
-  read_status_end_ = absl::InfinitePast();
+  apply_command_start_ = TimeSteady::InfinitePast();
+  apply_command_end_ = TimeSteady::InfinitePast();
+  read_status_start_ = TimeSteady::InfinitePast();
+  read_status_end_ = TimeSteady::InfinitePast();
 
   previous_read_status_duration_ = absl::InfiniteDuration();
   previous_apply_command_duration_ = absl::InfiniteDuration();
@@ -92,13 +97,14 @@ void CycleTimeMetricsHelper::Reset() {
 }
 
 void CycleTimeMetricsHelper::ResetReadStatusStart() {
-  read_status_start_ = absl::InfinitePast();
+  read_status_start_ = TimeSteady::InfinitePast();
 }
 
 RealtimeStatus CycleTimeMetricsHelper::ReadStatusStart() {
-  const absl::Time now = absl::Now();
+  const TimeSteady now = clock_.Now();
+  const TimeSteady previous_read_status_start = read_status_start_;
   const absl::Duration duration_between_read_status_calls =
-      now - read_status_start_;
+      now - previous_read_status_start;
   const absl::Duration& cycle_duration =
       metrics_.read_status_duration.CycleDuration();
 
@@ -108,13 +114,18 @@ RealtimeStatus CycleTimeMetricsHelper::ReadStatusStart() {
     INTRINSIC_RT_LOG(INFO) << "Metrics reset due to overflow.";
   }
 
-  if (apply_command_end_ != absl::InfinitePast()) [[likely]] {
+  // Record `read_status_start_` before returning any error from prior-phase
+  // histograms. This ensures the matching `ReadStatusEnd()` call measures the
+  // current cycle instead of a stale start timestamp.
+  read_status_start_ = now;
+
+  if (apply_command_end_ != TimeSteady::InfinitePast()) [[likely]] {
     previous_execution_duration_ = now - apply_command_end_;
     INTRINSIC_RT_RETURN_IF_ERROR(
         metrics_.execution_duration.Add(previous_execution_duration_));
   }
 
-  if (read_status_start_ != absl::InfinitePast()) [[likely]] {
+  if (previous_read_status_start != TimeSteady::InfinitePast()) [[likely]] {
     INTRINSIC_RT_RETURN_IF_ERROR(
         metrics_.duration_between_read_status_calls.Add(
             duration_between_read_status_calls));
@@ -148,19 +159,18 @@ RealtimeStatus CycleTimeMetricsHelper::ReadStatusStart() {
     }
   }
 
-  read_status_start_ = now;
   return OkStatus();
 }
 
 RealtimeStatus CycleTimeMetricsHelper::ReadStatusEnd() {
-  read_status_end_ = absl::Now();
+  read_status_end_ = clock_.Now();
   const absl::Duration& cycle_duration =
       metrics_.read_status_duration.CycleDuration();
   const absl::Duration max_op_duration =
       cycle_duration * kSingleOpWarningFactor;
   const absl::Duration duration = read_status_end_ - read_status_start_;
 
-  if (read_status_start_ == absl::InfinitePast()) [[unlikely]] {
+  if (read_status_start_ == TimeSteady::InfinitePast()) [[unlikely]] {
     return FailedPreconditionError(
         "ReadStatusStart() was not called before ReadStatusEnd().");
   }
@@ -183,22 +193,26 @@ RealtimeStatus CycleTimeMetricsHelper::ReadStatusEnd() {
 };
 
 RealtimeStatus CycleTimeMetricsHelper::ApplyCommandStart() {
-  const absl::Time now = absl::Now();
+  const TimeSteady now = clock_.Now();
 
-  if (read_status_end_ != absl::InfinitePast()) [[likely]] {
+  // Record `apply_command_start_` before returning any error from
+  // `process_duration.Add()` so `ApplyCommandEnd()` always sees the current
+  // start timestamp.
+  apply_command_start_ = now;
+
+  if (read_status_end_ != TimeSteady::InfinitePast()) [[likely]] {
     previous_process_duration_ = now - read_status_end_;
     INTRINSIC_RT_RETURN_IF_ERROR(
         metrics_.process_duration.Add(previous_process_duration_));
   }
 
-  apply_command_start_ = now;
   return OkStatus();
 }
 
 RealtimeStatus CycleTimeMetricsHelper::ApplyCommandEnd() {
-  apply_command_end_ = absl::Now();
+  apply_command_end_ = clock_.Now();
 
-  if (apply_command_start_ == absl::InfinitePast()) [[unlikely]] {
+  if (apply_command_start_ == TimeSteady::InfinitePast()) [[unlikely]] {
     return FailedPreconditionError(
         "ApplyCommandStart() was not called before ApplyCommandEnd().");
   }

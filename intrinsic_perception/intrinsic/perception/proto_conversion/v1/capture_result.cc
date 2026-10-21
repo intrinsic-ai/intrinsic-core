@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <optional>
+#include <type_traits>
 #include <utility>
 #include <vector>
 
@@ -33,17 +34,27 @@
 
 namespace intrinsic_proto::perception::v1 {
 
-absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
-    const CaptureResult& capture_result) {
+namespace {
+
+template <typename CaptureResultRef>
+absl::StatusOr<intrinsic::perception::CaptureResult> FromProtoImpl(
+    CaptureResultRef&& capture_result) {
   INTR_ASSIGN_OR_RETURN(const absl::Time capture_at,
                         intrinsic::ToAbslTime(capture_result.capture_at()));
 
   std::vector<intrinsic::perception::SensorImage> sensor_images;
   sensor_images.reserve(capture_result.sensor_images().size());
-  for (const SensorImage& sensor_image : capture_result.sensor_images()) {
-    INTR_ASSIGN_OR_RETURN(intrinsic::perception::SensorImage img,
-                          FromProto(sensor_image));
-    sensor_images.push_back(std::move(img));
+  for (int i = 0; i < capture_result.sensor_images_size(); ++i) {
+    if constexpr (std::is_rvalue_reference_v<CaptureResultRef&&>) {
+      INTR_ASSIGN_OR_RETURN(
+          intrinsic::perception::SensorImage img,
+          FromProto(std::move(*capture_result.mutable_sensor_images(i))));
+      sensor_images.push_back(std::move(img));
+    } else {
+      INTR_ASSIGN_OR_RETURN(intrinsic::perception::SensorImage img,
+                            FromProto(capture_result.sensor_images(i)));
+      sensor_images.push_back(std::move(img));
+    }
   }
   std::optional<absl::Duration> capture_duration = std::nullopt;
   if (capture_result.has_capture_duration()) {
@@ -56,6 +67,18 @@ absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
       .capture_at = capture_at,
       .sensor_images = std::move(sensor_images),
       .capture_duration = capture_duration};
+}
+
+}  // namespace
+
+absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
+    const CaptureResult& capture_result) {
+  return FromProtoImpl(capture_result);
+}
+
+absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
+    CaptureResult&& capture_result) {
+  return FromProtoImpl(std::move(capture_result));
 }
 
 absl::StatusOr<CaptureResult> ToProto(

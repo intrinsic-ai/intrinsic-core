@@ -20,7 +20,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/base/casts.h"
 #include "absl/flags/declare.h"
 #include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
@@ -46,7 +45,6 @@
 #include "intrinsic/world/hashing/hashing.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/service/object_world_service.h"
-#include "intrinsic/world/service/world_compatibility_service.grpc.pb.h"
 #include "intrinsic/world/service/world_mutex.h"
 #include "intrinsic/world/service/world_service.grpc.pb.h"
 #include "intrinsic/world/service/world_storage.h"
@@ -103,13 +101,7 @@ absl::StatusOr<std::unique_ptr<FakeWorldService>> FakeWorldService::Create(
   grpc::ServerBuilder server_builder;
 
   server_builder.RegisterService(world_service.get())
-      .RegisterService(absl::implicit_cast<
-                       intrinsic_proto::world::ObjectWorldService::Service*>(
-          object_world_service.get()))
-      .RegisterService(
-          absl::implicit_cast<
-              intrinsic_proto::world::WorldCompatibilityService::Service*>(
-              object_world_service.get()));
+      .RegisterService(object_world_service.get());
 
   std::string address;
   int auto_selected_port = 0;  // wildcard selector triggers auto-selection

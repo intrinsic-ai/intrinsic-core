@@ -18,6 +18,7 @@ package assetinfointernal
 
 import (
 	"context"
+	"fmt"
 
 	"intrinsic/assets/dependencies/graph"
 	"intrinsic/assets/dependencies/runtimegraph"
@@ -60,7 +61,7 @@ func (s *Server) GetGeometricResourceSetData(ctx context.Context, _ *aiipb.GetGe
 
 	rids, updates, err := s.rr.GetGeometricResourceSetData(ctx)
 	if err != nil {
-		return nil, grpcstatus.Errorf(codes.Internal, "could not get world data from resource set: %v", err)
+		return nil, fmt.Errorf("could not get world data from resource set: %w", err)
 	}
 
 	return &gridpb.GeometricResourceSetData{
@@ -163,7 +164,7 @@ func (s *Server) CheckSolutionValidity(ctx context.Context, request *aiipb.Check
 
 	sc, err := runtimegraph.NewSolutionContext(
 		ctx,
-		appRes.GetApplication(),
+		appRes.GetApplication().GetResources().GetResourceInstances(),
 		rtrs,
 		runtimegraph.WithPlatformRuntime(),
 	)

@@ -51,7 +51,6 @@ cc_library(
     ],
     deps = [
         ":force_sensor_controller_migration_utils",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control:context",
         "//intrinsic_control/intrinsic/icon/control/parts:feature_interface_registry",
         "//intrinsic_control/intrinsic/icon/control/parts:hal_realtime_part_base",
@@ -77,6 +76,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
         "//intrinsic_sdk/intrinsic/world/robot_payload",

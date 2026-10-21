@@ -121,23 +121,23 @@ func CatalogResourceToRuntime(rt *rtpb.ResourceType) *rtrpb.ResourceTypeRuntime 
 
 // LocalInstalledAssetToRuntime converts a local installed asset (from a request) to a
 // ResourceTypeRuntime.
-func LocalInstalledAssetToRuntime(ctx context.Context, asset *iapb.CreateInstalledAssetsRequest_Asset, options ...runtime.ToRuntimeOption) (*rtrpb.ResourceTypeRuntime, error) {
+func LocalInstalledAssetToRuntime(ctx context.Context, asset *iapb.CreateInstalledAssetRequest_Asset, options ...runtime.ToRuntimeOption) (*rtrpb.ResourceTypeRuntime, error) {
 	options = append(options,
 		runtime.WithInstallationOrigin(iopb.InstallationOrigin_INSTALLATION_ORIGIN_SIDELOADED),
 	)
 
 	switch v := asset.GetVariant().(type) {
-	case *iapb.CreateInstalledAssetsRequest_Asset_Data:
+	case *iapb.CreateInstalledAssetRequest_Asset_Data:
 		return runtime.DataToRuntime(ctx, v.Data, options...)
-	case *iapb.CreateInstalledAssetsRequest_Asset_HardwareDevice:
+	case *iapb.CreateInstalledAssetRequest_Asset_HardwareDevice:
 		return runtime.HardwareDeviceToRuntime(ctx, v.HardwareDevice, options...)
-	case *iapb.CreateInstalledAssetsRequest_Asset_Process:
+	case *iapb.CreateInstalledAssetRequest_Asset_Process:
 		return runtime.ProcessToRuntime(ctx, v.Process, options...)
-	case *iapb.CreateInstalledAssetsRequest_Asset_Service:
+	case *iapb.CreateInstalledAssetRequest_Asset_Service:
 		return runtime.ServiceToRuntime(ctx, v.Service, options...)
-	case *iapb.CreateInstalledAssetsRequest_Asset_SceneObject:
+	case *iapb.CreateInstalledAssetRequest_Asset_SceneObject:
 		return runtime.SceneObjectToRuntime(ctx, v.SceneObject, options...)
-	case *iapb.CreateInstalledAssetsRequest_Asset_Skill:
+	case *iapb.CreateInstalledAssetRequest_Asset_Skill:
 		return runtime.SkillToRuntime(ctx, v.Skill, options...)
 	case nil:
 		return nil, status.Errorf(codes.InvalidArgument, "unspecified variant type")

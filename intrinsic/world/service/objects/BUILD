@@ -85,6 +85,7 @@ cc_library(
     deps = [
         ":object_world_converter",
         "//intrinsic/geometry/proto:geometry_service_cc_proto",
+        "//intrinsic/stats:metrics_utils",
         "//intrinsic/util:eigen",
         "//intrinsic/util/status:status_macros",
         "//intrinsic/world",
@@ -109,6 +110,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "@abseil-cpp//absl/algorithm:container",
+        "@abseil-cpp//absl/base",
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/status",
@@ -119,8 +121,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_action_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
-        "@io_opencensus_cpp//opencensus/stats",
-        "@io_opencensus_cpp//opencensus/tags",
+        "@io_opentelemetry_cpp//api",
     ],
 )
 

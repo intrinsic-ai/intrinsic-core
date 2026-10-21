@@ -37,27 +37,18 @@
 #include "grpcpp/channel.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/eigenmath/types.h"
-#include "intrinsic/geometry/api/affine_transform_of_geometry.h"
-#include "intrinsic/geometry/api/apply_transform.h"
-#include "intrinsic/geometry/api/axis_aligned_bounding_box_3d.h"
-#include "intrinsic/geometry/api/fuse_geometries.h"
-#include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 #include "intrinsic/logging/structured_logging_client.h"
-#include "intrinsic/math/pose3.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planner.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planner_flags.h"
-#include "intrinsic/motion_planning/path_planning/interpolation.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
 #include "intrinsic/skills/internal/world_service_utils.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/collision/util/collision_world_util.h"
-#include "intrinsic/world/component/geometry_component.h"
-#include "intrinsic/world/dof_kinematic_view.h"
 #include "intrinsic/world/entity_id.h"
 #include "intrinsic/world/geometry_types.h"
 #include "intrinsic/world/objects/object_world.h"
@@ -67,6 +58,7 @@
 #include "intrinsic/world/world.h"
 
 namespace intrinsic {
+
 absl::StatusOr<MotionPlanner::PlanTrajectoryResult>
 PlanTrajectoryImplMotionPlannerResponse(
     const World& initial_world,
@@ -93,15 +85,6 @@ absl::StatusOr<JointTrajectoryPVA> PlanTrajectoryImpl(
       const MotionPlanner::PlanTrajectoryResult planning_result,
       PlanTrajectoryImplMotionPlannerResponse(initial_world, request, flags));
   return planning_result.trajectory;
-}
-
-absl::StatusOr<std::vector<TransformedGeometry>> ComputeSweptVolumeFromPath(
-    const World& world, RobotCollectionsEntityId robot_id,
-    const std::vector<eigenmath::VectorXd>& path,
-    const double max_joint_travel_per_step) {
-  return absl::UnimplementedError(
-      "ComputeSweptVolumeFromPath is "
-      "not implemented.");
 }
 
 absl::StatusOr<intrinsic_proto::motion_planning::v1::MotionPlanningRequest>
@@ -274,10 +257,6 @@ void FromProto(
     flags.concurrent_collision_checking_thread_count =
         proto_flags.concurrent_collision_checking_thread_count();
   }
-  if (proto_flags.has_parameterization_service_address()) {
-    flags.parameterization_service_address =
-        proto_flags.parameterization_service_address();
-  }
   if (proto_flags.has_enable_fallback_trajectory()) {
     flags.enable_fallback_trajectory = proto_flags.enable_fallback_trajectory();
   }
@@ -306,8 +285,6 @@ intrinsic_proto::motion_planning::v1::MotionPlannerFlags ToProto(
       flags.enable_concurrent_collision_checking);
   proto_flags.set_concurrent_collision_checking_thread_count(
       flags.concurrent_collision_checking_thread_count);
-  proto_flags.set_parameterization_service_address(
-      flags.parameterization_service_address);
   proto_flags.set_enable_fallback_trajectory(flags.enable_fallback_trajectory);
   proto_flags.set_enable_fallback_trajectory_local_adjust(
       flags.enable_fallback_trajectory_local_adjust);

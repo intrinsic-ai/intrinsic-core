@@ -219,6 +219,13 @@ ActionWill::GetOrderedStreamingInputParameterMatchers() {
   return streaming_input_parameter_matchers_;
 }
 
+ActionWill& ActionWill::OnStart(std::function<void()> on_start) {
+  on_start_ = std::move(on_start);
+  return *this;
+}
+
+std::function<void()> ActionWill::GetOnStart() const { return on_start_; }
+
 SessionWill& SessionWill::OnAction(ActionInstanceId action_id,
                                    const ActionWill& action_behaviors) {
   in_order_action_behaviors_.push_back(ActionAndBehaviors{

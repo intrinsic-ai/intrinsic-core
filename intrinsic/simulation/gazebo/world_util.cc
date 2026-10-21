@@ -25,6 +25,9 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "intrinsic/assets/dependencies/utils.h"
+#include "intrinsic/assets/interface_utils.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/simulation/world/world_to_sdf.h"
@@ -52,6 +55,11 @@ namespace {
 
 const absl::Duration kGrpcClientConnectTimeout = absl::Seconds(300);
 const absl::Duration kWorldUnavailableRetryBackoff = absl::Seconds(5);
+
+std::string ObjectWorldServiceInterfaceUri() {
+  return absl::StrCat(assets::kGrpcUriPrefix,
+                      ObjectWorldService::service_full_name());
+}
 
 // We check for both unavailable and unimplemented because the world service
 // address could either be set to the cluster address or to ingress. If it is
@@ -118,6 +126,20 @@ GetObjectWorldServiceStub(absl::string_view object_world_service_address) {
       connect::CreateClientChannel(
           object_world_service_address,
           /*deadline=*/absl::Now() + kGrpcClientConnectTimeout));
+  return ObjectWorldService::NewStub(channel);
+}
+
+absl::StatusOr<std::unique_ptr<ObjectWorldService::Stub>>
+GetObjectWorldServiceStub(const intrinsic_proto::assets::v1::ResolvedDependency&
+                              intrinsic_runtime_dep) {
+  INTR_ASSIGN_OR_RETURN(
+      std::shared_ptr<grpc::Channel> channel,
+      assets::dependencies::
+          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
+              intrinsic_runtime_dep, ObjectWorldServiceInterfaceUri(),
+              connect::DefaultGrpcChannelArgs()));
+  INTR_RETURN_IF_ERROR(
+      connect::WaitForChannelReady(channel, kGrpcClientConnectTimeout));
   return ObjectWorldService::NewStub(channel);
 }
 

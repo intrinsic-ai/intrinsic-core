@@ -66,7 +66,8 @@ class Builder {
   template <typename T>
   static Builder PackAnyFrom(const T& proto_message) {
     google::protobuf::Any any_proto;
-    any_proto.PackFrom(proto_message);
+    static_cast<void>(
+        any_proto.PackFrom(proto_message));  // TODO: Handle return value
     return From(any_proto);
   }
   static Builder From(
@@ -168,12 +169,13 @@ class ErrorBuilder : public data_logger::Builder {
   template <typename T, typename = std::enable_if_t<
                             std::is_base_of_v<google::protobuf::Message, T>>>
   ErrorBuilder& WithData(const T& proto_message) {
-    item_.mutable_payload()
-        ->mutable_error_report()
-        ->mutable_data()
-        ->add_items()
-        ->mutable_data()
-        ->PackFrom(proto_message);
+    static_cast<void>(
+        item_.mutable_payload()
+            ->mutable_error_report()
+            ->mutable_data()
+            ->add_items()
+            ->mutable_data()
+            ->PackFrom(proto_message));  // TODO: Handle return value
     return *this;
   }
 
@@ -184,12 +186,14 @@ class ErrorBuilder : public data_logger::Builder {
                             std::is_base_of_v<google::protobuf::Message, T>>>
   ErrorBuilder& WithOptionalData(const std::optional<T>& opt_proto_message) {
     if (opt_proto_message.has_value()) {
-      item_.mutable_payload()
-          ->mutable_error_report()
-          ->mutable_data()
-          ->add_items()
-          ->mutable_data()
-          ->PackFrom(opt_proto_message.value());
+      static_cast<void>(
+          item_.mutable_payload()
+              ->mutable_error_report()
+              ->mutable_data()
+              ->add_items()
+              ->mutable_data()
+              ->PackFrom(
+                  opt_proto_message.value()));  // TODO: Handle return value
     }
     return *this;
   }
@@ -210,12 +214,14 @@ class ErrorBuilder : public data_logger::Builder {
                             std::is_base_of_v<google::protobuf::Message, T>>>
   ErrorBuilder& WithData(const absl::StatusOr<T>& status_or_proto) {
     if (status_or_proto.ok()) {
-      item_.mutable_payload()
-          ->mutable_error_report()
-          ->mutable_data()
-          ->add_items()
-          ->mutable_data()
-          ->PackFrom(status_or_proto.value());
+      static_cast<void>(
+          item_.mutable_payload()
+              ->mutable_error_report()
+              ->mutable_data()
+              ->add_items()
+              ->mutable_data()
+              ->PackFrom(
+                  status_or_proto.value()));  // TODO: Handle return value
     } else {
       *item_.mutable_payload()
            ->mutable_error_report()

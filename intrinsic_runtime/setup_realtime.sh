@@ -40,7 +40,8 @@ EOF
 function check_root() {
     if [[ "${EUID}" -ne 0 ]]; then
         if [[ -n "${BASH_SOURCE[0]:-}" && -f "${BASH_SOURCE[0]}" ]]; then
-            exec sudo -E bash "${BASH_SOURCE[0]}" "$@"
+            # sudo-rs (default since Ubuntu 25.10) ignores -E, so list the variables.
+            exec sudo --preserve-env=IOC_RT_CORES,IOC_RT_NIC,IOC_ETHERCAT_NIC bash "${BASH_SOURCE[0]}" "$@"
         else
             echo "Error: This script requires root privileges. Please run with sudo (e.g. curl ... | sudo -E bash)" >&2
             exit 1
@@ -111,12 +112,15 @@ function run_silent() {
 function install_dependencies() {
     echo "Installing real-time kernel and dependencies..."
     local packages=("ubuntu-realtime" "tuned")
-    if [[ -n "${IOC_RT_NIC}" ]]; then
-        packages+=("tuna")
-    fi
     if [[ -n "${IOC_ETHERCAT_NIC}" ]]; then
         packages+=("ethtool")
     fi
+
+    # uninstall_realtime.sh makes GRUB prefer the generic kernel until the
+    # real-time kernel packages are purged. Remove that before apt-get install
+    # (and configure_kernel_cmdline) runs update-grub, otherwise the real-time
+    # kernel would never be booted.
+    rm -f /etc/default/grub.d/zz-intrinsic-uninstall-realtime.cfg
 
     run_silent apt-get install -y "${packages[@]}"
 }
@@ -220,6 +224,7 @@ include=realtime
 [variables]
 isolate_managed_irq=Y
 isolated_cores=${IOC_RT_CORES}
+rt_nic=${IOC_RT_NIC}
 
 [bootloader]
 # The kernel command line is owned by /etc/default/grub.d/99-intrinsic-realtime.cfg
@@ -231,6 +236,71 @@ skip_grub_config=1
 cmdline_realtime=
 cmdline_network_latency=
 EOF
+
+    if [[ -n "${IOC_RT_NIC}" ]]; then
+        echo "Configuring network interrupt affinity (realtime NIC: ${IOC_RT_NIC})..."
+        cat << 'EOF' >> "${profile_dir}/tuned.conf"
+
+[rt_nic_irq_affinity]
+# The scheduler plugin moves all IRQs off the isolated cores whenever the profile
+# is applied, so this needs to run after it (default priority 0).
+type=script
+priority=10
+script=rt_nic_irq_affinity.sh
+EOF
+    fi
+
+    # Installed even without IOC_RT_NIC, so that TuneD can still run it with
+    # "stop" when switching away from a previous profile that used it.
+    cat << 'EOF' > "${profile_dir}/rt_nic_irq_affinity.sh"
+#!/bin/bash
+# Managed by setup_realtime.sh. Do not edit.
+#
+# Pins the interrupts of the real-time NIC (TuneD variable rt_nic) to the
+# isolated cores. Since Linux 6.19, IRQ threads are marked PF_NO_SETAFFINITY, so
+# moving the threads directly (e.g. with tuna or taskset) fails. Instead, set
+# the affinity of the interrupts, and the kernel moves their threads with them.
+ACTION="$1"
+NIC="${TUNED_rt_nic:-}"
+RT_CORES="${TUNED_isolated_cores:-}"
+
+if [[ -z "${NIC}" ]]; then
+    exit 0
+fi
+
+# Only interrupts that the driver has requested, which happens when the
+# interface is brought up, have an entry in /proc/irq.
+IRQS=()
+for msi_irq in "/sys/class/net/${NIC}/device/msi_irqs/"*; do
+    irq="${msi_irq##*/}"
+    if [[ -f "/proc/irq/${irq}/smp_affinity_list" ]]; then
+        IRQS+=("${irq}")
+    fi
+done
+
+case "${ACTION}" in
+    start)
+        if [[ ${#IRQS[@]} -eq 0 || -z "${RT_CORES}" ]]; then
+            echo "No active interrupts found for ${NIC} (is it up?) or isolated_cores unset." >&2
+            exit 1
+        fi
+        status=0
+        for irq in "${IRQS[@]}"; do
+            echo "${RT_CORES}" > "/proc/irq/${irq}/smp_affinity_list" || status=1
+        done
+        exit "${status}"
+        ;;
+    stop)
+        # Return the interrupts to the default affinity (the housekeeping cores).
+        default_affinity=$(< /proc/irq/default_smp_affinity)
+        for irq in "${IRQS[@]}"; do
+            echo "${default_affinity}" > "/proc/irq/${irq}/smp_affinity" 2> /dev/null || true
+        done
+        ;;
+esac
+EOF
+    chmod +x "${profile_dir}/rt_nic_irq_affinity.sh"
+
     # Some tooling, documentation, and upstream TuneD defaults look in /etc/tuned/<name>
     # while Debian/Ubuntu packages configure profile_dirs to search /etc/tuned/profiles/<name>.
     # Symlink to /etc/tuned/<name> so both paths resolve.
@@ -309,29 +379,16 @@ function activate_profile() {
     run_silent tuned-adm profile "${target_profile}"
 }
 
-function configure_tuna() {
-    if [[ -z "${IOC_RT_NIC}" ]]; then
-        return
+function remove_tuna_service() {
+    # Older versions of this script installed a service that used tuna to move the
+    # NIC's IRQ threads, which has no effect since Linux 6.19. The interrupts are
+    # now pinned by rt_nic_irq_affinity.sh in the TuneD profile instead.
+    if [[ -f /etc/systemd/system/tuna-realtime.service ]]; then
+        echo "Removing obsolete tuna-realtime service..."
+        systemctl disable --now tuna-realtime.service > /dev/null 2>&1 || true
+        rm -f /etc/systemd/system/tuna-realtime.service
+        run_silent systemctl daemon-reload
     fi
-
-    echo "Configuring network interrupt affinity (realtime NIC: ${IOC_RT_NIC})..."
-
-    cat << EOF > /etc/systemd/system/tuna-realtime.service
-[Unit]
-Description=Tuna real-time NIC thread affinity
-After=network.target tuned.service
-
-[Service]
-Type=oneshot
-ExecStart=/usr/bin/tuna move -t "*${IOC_RT_NIC}*" -c ${IOC_RT_CORES}
-RemainAfterExit=yes
-
-[Install]
-WantedBy=multi-user.target
-EOF
-
-    run_silent systemctl daemon-reload
-    run_silent systemctl enable --now tuna-realtime.service
 }
 
 function label_k3s_node() {
@@ -396,12 +453,8 @@ function main() {
         configure_ethercat_profile
     fi
 
+    remove_tuna_service
     activate_profile
-
-    if [[ -n "${IOC_RT_NIC}" ]]; then
-        configure_tuna
-    fi
-
     label_k3s_node
 
     echo "Real-time setup complete!"

@@ -29,6 +29,7 @@
 #include "intrinsic/motion_planning/path_planning/path_planner_definitions.h"
 #include "intrinsic/motion_planning/path_planning/planners/pipeline.h"
 #include "intrinsic/motion_planning/path_planning/planners/pipeline_configs.pb.h"
+#include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic {
@@ -47,6 +48,7 @@ PipelinePathPlanner::PipelinePathPlanner(
 absl::StatusOr<std::vector<PointPath>> PipelinePathPlanner::Plan(
     const PointPath& path, const KinematicsSystemProxy& proxy,
     PathPlannerGraph* graph) const {
+  const stats::ScopedSpan span("PipelinePathPlanner/Plan");
   std::vector<PointPath> current_paths = {path};
   for (const auto& planner : planners_) {
     std::vector<PointPath> next_paths;

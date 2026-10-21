@@ -383,7 +383,7 @@ TEST(FakeModule, RegistersHandGuidingInterfacesWhenNameNotSet) {
                            config.module_config()));
   // "control_mode_state" is the fallback name for the interfaces.
   fake_config.mutable_arm_interfaces()->clear_hand_guiding_command_name();
-  config.mutable_module_config()->PackFrom(fake_config);
+  ASSERT_TRUE(config.mutable_module_config()->PackFrom(fake_config));
 
   ModuleConfig module_config(config, memory_namespace,
                              /*realtime_clock=*/nullptr);
@@ -422,7 +422,7 @@ TEST(FakeModule, RegistersControlModeInterfacesWhenNameNotSet) {
                            config.module_config()));
   // "control_mode_state" is the fallback name for the interfaces.
   fake_config.mutable_arm_interfaces()->clear_control_mode_state_name();
-  config.mutable_module_config()->PackFrom(fake_config);
+  ASSERT_TRUE(config.mutable_module_config()->PackFrom(fake_config));
 
   ModuleConfig module_config(config, memory_namespace,
                              /*realtime_clock=*/nullptr);
@@ -1005,7 +1005,7 @@ TEST(FakeModule, PublishesInspectionData) {
                                      ->full_name()));
             intrinsic_proto::icon::v1::HardwareModuleInspectionData
                 inspection_data;
-            message.data().UnpackTo(&inspection_data);
+            EXPECT_TRUE(message.data().UnpackTo(&inspection_data));
             EXPECT_EQ(inspection_data.event_history().events().size(), 1);
             EXPECT_EQ(inspection_data.event_history().events(0).message(),
                       "This is a demo event");

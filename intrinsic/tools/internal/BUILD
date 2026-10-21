@@ -23,8 +23,8 @@ go_library(
     deps = [
         "//intrinsic/kubernetes/config:crcconfig",
         "@com_github_golang_glog//:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/apis/registry/v1alpha1:go_default_library",
-        "@com_github_googlecloudrobotics_core_src//go/pkg/client/versioned:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/apis/registry/v1alpha1:go_default_library",
+        "@com_github_googlecloudrobotics_core//src/go/pkg/client/versioned:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@io_k8s_apimachinery//pkg/apis/meta/v1:go_default_library",
         "@io_k8s_client_go//discovery:go_default_library",

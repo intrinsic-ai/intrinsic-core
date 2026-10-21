@@ -37,8 +37,6 @@ cc_library(
     hdrs = ["motion_specification_proto_utils.h"],
     deps = [
         "//intrinsic/math/numopt:constraint_interface",
-        "//intrinsic/util:eigen",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic/world/objects:object_world",
         "//intrinsic/world/objects:object_world_proto_utils",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
@@ -57,6 +55,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",

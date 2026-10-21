@@ -501,8 +501,8 @@ void RtclControllerSession::PublishOutputStreams() {
               << "Failed to add skill id label to context: " << status;
         }
 
-        log_item.mutable_payload()->mutable_any()->PackFrom(
-            output_with_metadata);
+        static_cast<void>(log_item.mutable_payload()->mutable_any()->PackFrom(
+            output_with_metadata));  // TODO: Handle return value
 
         if (absl::Status status = pub.Publish(log_item); !status.ok()) {
           LOG_EVERY_N_SEC(ERROR, 10) << "Failed to publish output for topic '"

@@ -27,10 +27,10 @@ cc_library(
     deps = [
         "//intrinsic/resources/health:health_state_machine",
         "//intrinsic/resources/health:operational_status",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_hardware/intrinsic/hardware/gripper/service/proto:pinch_gripper_server_cc_grpc_proto",
         "//intrinsic_hardware/intrinsic/hardware/gripper/service/proto:pinch_gripper_server_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -46,9 +46,9 @@ cc_library(
     hdrs = ["pinch_gripper_service.h"],
     deps = [
         ":sim_pinch_gripper_impl",
-        "//intrinsic/util/status:status_conversion_grpc",
         "//intrinsic_hardware/intrinsic/hardware/gripper/service/proto:pinch_gripper_server_cc_grpc_proto",
         "//intrinsic_hardware/intrinsic/hardware/gripper/service/proto:pinch_gripper_server_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
         "@com_github_grpc_grpc//:grpc++",
     ],
 )
@@ -61,7 +61,7 @@ cc_library(
         ":sim_pinch_gripper_impl",
         "//intrinsic/resources/proto:resource_health_cc_grpc_proto",
         "//intrinsic/resources/proto:resource_health_cc_proto",
-        "//intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
         "@abseil-cpp//absl/strings",
         "@com_github_grpc_grpc//:grpc++",
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_state_cc_grpc_proto",

@@ -132,7 +132,7 @@ func (c *Client) resourceTypeRuntimesFromResourceSet(ctx context.Context, resour
 	for chunk := range slices.Chunk(uniqueIDVersions, 10) {
 		chunkRtrs, err := c.RTRClient.BatchGet(ctx, chunk)
 		if err != nil {
-			return nil, fmt.Errorf("could not get resource runtime data: %v", err)
+			return nil, fmt.Errorf("could not get resource runtime data: %w", err)
 		}
 		for _, rtr := range chunkRtrs {
 			rtrs[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
@@ -144,7 +144,7 @@ func (c *Client) resourceTypeRuntimesFromResourceSet(ctx context.Context, resour
 func (c *Client) resourceTypeRuntimes(ctx context.Context) (map[string]*rtrpb.ResourceTypeRuntime, error) {
 	installed, err := resourcetyperuntime.GetAll(ctx, c.RTRClient)
 	if err != nil {
-		return nil, fmt.Errorf("could not retrieve resource runtime data: %v", err)
+		return nil, fmt.Errorf("could not retrieve resource runtime data: %w", err)
 	}
 	rtrs := make(map[string]*rtrpb.ResourceTypeRuntime, len(installed))
 	for _, rtr := range installed {
@@ -273,7 +273,7 @@ func ExtractGeometricResourceInstanceData(rs *rspb.ResourceSet, rtrs map[string]
 func (c *Client) GeometricResourceInstanceData(ctx context.Context, rs *rspb.ResourceSet) ([]*gridpb.GeometricResourceInstanceData, error) {
 	rtrs, err := c.resourceTypeRuntimesFromResourceSet(ctx, rs)
 	if err != nil {
-		return nil, fmt.Errorf("could not retrieve resource runtime data: %v", err)
+		return nil, fmt.Errorf("could not retrieve resource runtime data: %w", err)
 	}
 
 	return ExtractGeometricResourceInstanceData(rs, rtrs)
@@ -289,7 +289,7 @@ func (c *Client) GetGeometricResourceSetData(ctx context.Context) ([]*gridpb.Geo
 	resourceSet := response.GetResourceSet()
 	rtrs, err := c.resourceTypeRuntimesFromResourceSet(ctx, resourceSet)
 	if err != nil {
-		return nil, nil, fmt.Errorf("could not retrieve resource runtime data: %v", err)
+		return nil, nil, fmt.Errorf("could not retrieve resource runtime data: %w", err)
 	}
 
 	rids, err := ExtractGeometricResourceInstanceData(resourceSet, rtrs)

@@ -1,0 +1,46 @@
+<!--
+Copyright 2026 Intrinsic Innovation LLC
+
+Licensed under the Apache License, Version 2.0 (the "License");
+you may not use this file except in compliance with the License.
+You may obtain a copy of the License at
+
+    https://www.apache.org/licenses/LICENSE-2.0
+
+Unless required by applicable law or agreed to in writing, software
+distributed under the License is distributed on an "AS IS" BASIS,
+WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+See the License for the specific language governing permissions and
+limitations under the License.
+-->
+<sdf version='1.6' xmlns:xacro='http://www.ros.org/wiki/xacro'>
+
+  <xacro:macro name="simulation_plugins">
+
+    <!-- HAL Digital IO Block simulation -->
+    <plugin filename="static://intrinsic::simulation::DigitalInputOutput" name="DigitalInputOutput">
+      <input_block  name="input_block_1"  num_bits="16" />
+      <input_block  name="input_block_2"  num_bits="16" />
+      <input_block  name="input_block_3"  num_bits="16" />
+      <input_block  name="input_block_4"  num_bits="16" />
+      <input_block  name="input_block_5"  num_bits="16" />
+      <input_block  name="input_block_6"  num_bits="16" />
+      <input_block  name="input_block_7"  num_bits="16" />
+      <input_block  name="input_block_8"  num_bits="16" />
+      <input_block  name="input_block_9"  num_bits="16" />
+      <input_block  name="input_block_10" num_bits="16" />
+      
+      <output_block name="output_block_1"  num_bits="16" />
+      <output_block name="output_block_2"  num_bits="16" />
+      <output_block name="output_block_3"  num_bits="16" />
+      <output_block name="output_block_4"  num_bits="16" />
+      <output_block name="output_block_5"  num_bits="16" />
+      <output_block name="output_block_6"  num_bits="16" />
+      <output_block name="output_block_7"  num_bits="16" />
+      <output_block name="output_block_8"  num_bits="16" />
+      <output_block name="output_block_9"  num_bits="16" />
+      <output_block name="output_block_10" num_bits="16" />
+    </plugin>
+  </xacro:macro>
+
+</sdf>

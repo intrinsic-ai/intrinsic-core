@@ -18,32 +18,27 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "intrinsic/conductor/proto/wrapper_bridge.pb.h"
 #include "intrinsic/conductor/resource_reader_interface.h"
-#include "intrinsic/conductor/resource_world_interface.h"
 
 namespace intrinsic::conductor {
 
-class ResourceWorld : public ResourceWorldInterface {
+class ResourceWorld {
  public:
   static absl::StatusOr<std::unique_ptr<ResourceWorld>> Create(
       const std::string& hss_address, const std::string& ows_address,
       std::unique_ptr<const ResourceReaderInterface> reader);
-  ~ResourceWorld() override;
+  ~ResourceWorld();
 
   ResourceWorld(const ResourceWorld&) = delete;
   ResourceWorld& operator=(const ResourceWorld&) = delete;
 
   absl::Status UpdateResourceSetWorldRelations(
       const std::string& local_world_id) const;
-
-  absl::StatusOr<
-      ::intrinsic::conductor::internal::UpdateWorldFromResourceSetResult>
-  UpdateWorldFromResourceSet(const std::string& world_id,
-                             bool skip_invalid_updates) const override;
 
   const ResourceReaderInterface* GetResourceReader() const {
     return resource_reader_.get();

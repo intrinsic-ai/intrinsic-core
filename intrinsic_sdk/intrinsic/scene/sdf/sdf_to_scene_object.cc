@@ -187,7 +187,7 @@ absl::Status MainImpl() {
 
   QCHECK(!output_scene_object_pbtxt_file.empty())
       << "--output_scene_object_pbtxt_file must be set.";
-  QCHECK(!input_sdf_file.empty()) << "--world_sdf_file must be set.";
+  QCHECK(!input_sdf_file.empty()) << "--input_sdf_file must be set.";
 
   std::unique_ptr<GZFile> output_gzfile;
 

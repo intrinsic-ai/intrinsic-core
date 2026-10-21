@@ -101,6 +101,12 @@ absl::StatusOr<std::unique_ptr<OutfeedManager>> OutfeedManager::Create(
   INTR_ASSIGN_OR_RETURN(
       auto object_world_service_stub,
       details::GetObjectWorldServiceStub(world_service_address));
+  return Create(std::move(object_world_service_stub), simulator_world_id);
+}
+
+absl::StatusOr<std::unique_ptr<OutfeedManager>> OutfeedManager::Create(
+    std::shared_ptr<ObjectWorldServiceStub> object_world_service_stub,
+    std::string_view simulator_world_id) {
   return absl::WrapUnique(new OutfeedManager(
       std::move(object_world_service_stub), simulator_world_id));
 }

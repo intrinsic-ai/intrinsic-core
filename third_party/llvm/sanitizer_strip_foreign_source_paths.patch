@@ -1,0 +1,124 @@
+diff --git a/config/defs.bzl b/config/defs.bzl
+--- a/config/defs.bzl
++++ b/config/defs.bzl
+@@ -144,6 +144,33 @@
+         build_setting_default = True,
+     )
+ 
++    # This flag strips directory components from the source paths that ASan and
++    # UBSan embed in compiled objects, but only for compile command lines that
++    # carry no `source_file` variable.
++    #
++    # Bazel's own C/C++ actions always set `source_file` and pass workspace
++    # relative paths, so their sanitizer metadata is already reproducible and is
++    # left untouched. Command lines without a `source_file` are the ones other
++    # rule sets extract from this toolchain to drive a foreign build system
++    # (rules_foreign_cc for CMake/autotools, rules_rust's cargo_build_script via
++    # cc-rs, the $(CC_FLAGS) make variable). Those build systems typically
++    # compile with absolute paths, and neither -ffile-prefix-map nor
++    # -fdebug-prefix-map rewrites UBSan source locations or ASan global
++    # metadata, so the absolute execroot ends up in the artifact. rules_rust
++    # rejects such artifacts ("rlib embeds the absolute working directory").
++    #
++    # When enabled:
++    #   * UBSan: -fsanitize-undefined-strip-path-components=-1 (reports from
++    #     foreign code show the basename only).
++    #   * ASan: -mllvm -asan-globals=0 (foreign code loses global-buffer-overflow
++    #     detection; its globals are no longer described with file:line:col).
++    #
++    # Off by default because both are observable behavior changes.
++    bool_flag(
++        name = "sanitizer_strip_foreign_source_paths",
++        build_setting_default = False,
++    )
++
+     for sanitizer in SANITIZERS:
+         bool_flag(
+             name = sanitizer,
+diff --git a/toolchain/args/BUILD.bazel b/toolchain/args/BUILD.bazel
+--- a/toolchain/args/BUILD.bazel
++++ b/toolchain/args/BUILD.bazel
+@@ -335,6 +335,23 @@
+     },
+ )
+ 
++# See //config:sanitizer_strip_foreign_source_paths. Only applies to compile
++# command lines without a `source_file`, i.e. the flags exported to foreign
++# build systems, which compile with absolute paths.
++cc_args(
++    name = "ubsan_strip_foreign_source_paths_flags",
++    actions = [
++        "@rules_cc//cc/toolchains/actions:compile_actions",
++    ],
++    args = select({
++        ":sanitizer_strip_foreign_source_paths": [
++            "-fsanitize-undefined-strip-path-components=-1",
++        ],
++        "//conditions:default": [],
++    }),
++    requires_none = "@rules_cc//cc/toolchains/variables:source_file",
++)
++
+ # Note that sanitizers must use `cc_unsanitized_library` on third-party deps
+ # if they end up depending on an exec-configure binary, as linking that binary can fail
+ # since it was compiled with sanitizer support but linked without it.
+@@ -353,6 +370,7 @@
+     args = select({
+         "//config:ubsan_enabled": [
+             ":ubsan_compiler_flags",
++            ":ubsan_strip_foreign_source_paths_flags",
+             ":ubsan_linker_flags",
+         ],
+         "//conditions:default": [],
+@@ -723,6 +741,24 @@
+     ],
+ )
+ 
++# See //config:sanitizer_strip_foreign_source_paths. ASan has no equivalent of
++# -fsanitize-undefined-strip-path-components; the only way to keep the source
++# path out of the __asan_global metadata is to not instrument globals at all.
++cc_args(
++    name = "asan_strip_foreign_source_paths_flags",
++    actions = [
++        "@rules_cc//cc/toolchains/actions:compile_actions",
++    ],
++    args = select({
++        ":sanitizer_strip_foreign_source_paths": [
++            "-mllvm",
++            "-asan-globals=0",
++        ],
++        "//conditions:default": [],
++    }),
++    requires_none = "@rules_cc//cc/toolchains/variables:source_file",
++)
++
+ # Note that sanitizers must use `cc_unsanitized_library` on third-party deps
+ # if they end up depending on an exec-configure binary, as linking that binary can fail
+ # since it was compiled with sanitizer support but linked without it.
+@@ -741,10 +777,12 @@
+     args = select({
+         "//config:asan_enabled": [
+             ":asan_compiler_flags",
++            ":asan_strip_foreign_source_paths_flags",
+             ":asan_linker_flags",
+         ],
+         "//config:host_asan_enabled": [
+             ":asan_compiler_flags",
++            ":asan_strip_foreign_source_paths_flags",
+             ":asan_linker_flags",
+         ],
+         "//conditions:default": [],
+@@ -968,6 +1006,13 @@
+     },
+ )
+ 
++config_setting(
++    name = "sanitizer_strip_foreign_source_paths",
++    flag_values = {
++        "//config:sanitizer_strip_foreign_source_paths": "True",
++    },
++)
++
+ # Passing a sysroot to /dev/null has the side effect of removing all default
+ # library search paths that clang passes like -L/usr/lib.
+ cc_args(

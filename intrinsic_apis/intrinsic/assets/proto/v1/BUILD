@@ -372,3 +372,14 @@ py_proto_library(
     name = "search_py_pb2",
     deps = [":search_proto"],
 )
+
+proto_library(
+    name = "solution_validation_policy_proto",
+    srcs = ["solution_validation_policy.proto"],
+)
+
+go_proto_library(
+    name = "solution_validation_policy_go_proto",
+    importpath = "intrinsic/assets/proto/v1/solution_validation_policy_go_proto",
+    protos = [":solution_validation_policy_proto"],
+)

@@ -70,7 +70,10 @@ class InspectionPublisher {
   absl::Status Publish(const google::protobuf::Message& message,
                        absl::Time timestamp = absl::Now()) const {
     intrinsic_proto::services::v1::ServiceInspectionData inspection_data;
-    inspection_data.mutable_data()->PackFrom(message);
+    if (!inspection_data.mutable_data()->PackFrom(message)) {
+      return absl::InternalError(
+          "Failed to pack message into ServiceInspectionData.");
+    }
     INTR_RETURN_IF_ERROR(intrinsic::FromAbslTime(
         timestamp, inspection_data.mutable_timestamp()));
     return inspection_publisher_.Publish(inspection_data);

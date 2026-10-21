@@ -28,7 +28,7 @@
 #include "absl/time/time.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/security/credentials.h"
-#include "intrinsic/conductor/resource_world_interface.h"
+#include "intrinsic/conductor/world.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
@@ -45,7 +45,6 @@ using ::intrinsic_proto::world::CompareWorldsRequest;
 using ::intrinsic_proto::world::CompareWorldsResponse;
 using ::intrinsic_proto::world::GetWorldRequest;
 using ::intrinsic_proto::world::ObjectView;
-using ::intrinsic_proto::world::ObjectWorldService;
 using ::intrinsic_proto::world::World;
 
 namespace {
@@ -66,38 +65,40 @@ std::unique_ptr<grpc::ClientContext> CreateClientContext(
 
 absl::StatusOr<std::unique_ptr<SaveSceneMonitor>> SaveSceneMonitor::Create(
     const std::string& world_id, const SaveSceneMonitorOptions& options) {
-  if (options.resource_world == nullptr) {
+  if (options.asset_info_internal == nullptr) {
     return absl::InvalidArgumentError(
-        "options.resource_world must not be null");
+        "options.asset_info_internal must not be null");
+  }
+  if (options.world_service == nullptr) {
+    return absl::InvalidArgumentError("options.world_service must not be null");
   }
 
   auto rss_channel = grpc::CreateChannel(options.hss_address,
                                          grpc::InsecureChannelCredentials());
   auto rss_stub = HotSharedStateResourceSetService::NewStub(rss_channel);
 
-  auto ows_channel = grpc::CreateChannel(options.ows_address,
-                                         grpc::InsecureChannelCredentials());
-  auto ows_stub = ObjectWorldService::NewStub(ows_channel);
-
   PubSub pubsub;
 
   // Using `new` because constructor is private.
   auto monitor = absl::WrapUnique(new SaveSceneMonitor(
-      world_id, options.resource_world, std::move(rss_stub),
-      std::move(ows_stub), std::move(pubsub)));
+      world_id, *options.asset_info_internal, *options.world_service,
+      std::move(rss_stub), std::move(pubsub)));
 
   monitor->StartPolling();
   return monitor;
 }
 
 SaveSceneMonitor::SaveSceneMonitor(
-    const std::string& world_id, ResourceWorldInterface* resource_world,
+    const std::string& world_id,
+    intrinsic_proto::assets::v1alpha1::AssetInfoInternal::StubInterface&
+        asset_info_internal,
+    intrinsic_proto::world::ObjectWorldService::Service& world_service,
     std::unique_ptr<HotSharedStateResourceSetService::Stub> rss_stub,
-    std::unique_ptr<ObjectWorldService::Stub> ows_stub, PubSub pubsub)
+    PubSub pubsub)
     : world_id_(world_id),
-      resource_world_(resource_world),
+      asset_info_internal_(asset_info_internal),
+      world_service_(world_service),
       rss_stub_(std::move(rss_stub)),
-      ows_stub_(std::move(ows_stub)),
       pubsub_(std::move(pubsub)),
       last_save_time_(absl::UnixEpoch()) {}
 
@@ -211,12 +212,12 @@ SaveSceneMonitor::ScanSaveStatusLocked(const std::string& world_id) {
   // the geos. This may slow down the world creation (and the deployment).
   // See: cl/816846818 for more details.
   if (!op_world_exists_) {
-    auto context = CreateClientContext();
+    grpc::ServerContext context;
     GetWorldRequest request;
     request.set_world_id(world_id);
     World response;
     grpc::Status status =
-        ows_stub_->GetWorld(context.get(), request, &response);
+        world_service_.GetWorld(&context, &request, &response);
     if (!status.ok()) {
       LOG(INFO) << "World " << world_id
                 << " does not exist yet, continuing to wait: "
@@ -244,12 +245,12 @@ SaveSceneMonitor::ScanSaveStatusLocked(const std::string& world_id) {
   // revision token.
   bool world_not_found = false;
   {
-    auto context = CreateClientContext();
+    grpc::ServerContext context;
     GetWorldRequest request;
     request.set_world_id(kComposedWorldId);
     World response;
     grpc::Status status =
-        ows_stub_->GetWorld(context.get(), request, &response);
+        world_service_.GetWorld(&context, &request, &response);
     if (status.error_code() == grpc::StatusCode::NOT_FOUND) {
       world_not_found = true;
     } else if (!status.ok()) {
@@ -258,13 +259,10 @@ SaveSceneMonitor::ScanSaveStatusLocked(const std::string& world_id) {
   }
 
   if (world_not_found || revision_token != last_application_revision_token_) {
-    // Note: resource_world_->UpdateWorldFromResourceSet returns
-    // absl::StatusOr<UpdateWorldFromResourceSetResult>. We don't need the
-    // result, just want to make sure it succeeds.
     INTR_RETURN_IF_ERROR(
-        resource_world_
-            ->UpdateWorldFromResourceSet(kComposedWorldId,
-                                         /*skip_invalid_updates=*/false)
+        CreateOrUpdateWorld(kComposedWorldId, asset_info_internal_,
+                            world_service_,
+                            /*skip_invalid_world_updates=*/false)
             .status());
     last_save_time_ = absl::Now();
     last_application_revision_token_ = revision_token;
@@ -273,14 +271,14 @@ SaveSceneMonitor::ScanSaveStatusLocked(const std::string& world_id) {
   // Compare this world against the one requested.
   CompareWorldsResponse compare_response;
   {
-    auto context = CreateClientContext();
+    grpc::ServerContext context;
     CompareWorldsRequest request;
     request.set_base_world_id(kComposedWorldId);
     request.set_changed_world_id(world_id);
     request.set_unique_id_mode(CompareWorldsRequest::BY_NAME);
     request.set_view(ObjectView::FULL);
     INTR_RETURN_IF_ERROR(intrinsic::ToAbslStatus(
-        ows_stub_->CompareWorlds(context.get(), request, &compare_response)));
+        world_service_.CompareWorlds(&context, &request, &compare_response)));
   }
 
   ScanResult result;

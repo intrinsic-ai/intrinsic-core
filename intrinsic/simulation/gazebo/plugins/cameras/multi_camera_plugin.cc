@@ -32,8 +32,6 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "gz/math/Pose3.hh"
-#include "gz/math/eigen3/Conversions.hh"
 #include "gz/msgs/MessageTypes.hh"
 #include "gz/msgs/convert/PixelFormatType.hh"
 #include "gz/sim/Entity.hh"
@@ -48,6 +46,7 @@
 #include "gz/transport/MessageInfo.hh"
 #include "gz/transport/Node.hh"
 #include "intrinsic/math/pose3.h"
+#include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
 #include "intrinsic/perception/core/camera_params.h"
@@ -84,17 +83,6 @@ using ::intrinsic::perception::Point32f;
 using ::intrinsic::perception::Rgb8u;
 
 namespace {
-
-Pose3d GzToIntrinsicSensorPose(const gz::math::Pose3d& gz_pose) {
-  // Convert Gazebo camera sensor pose to intrinsic convention.
-  // This should match intrinsic/scene/sdf/sdf_sensor_pose.cc. That class
-  // is not used directly so that the sdf namespace can be used without an
-  // absolute path (::sdf).
-  gz::math::Pose3d pose =
-      gz_pose * gz::math::Pose3d(0, 0, 0, 0.5, -0.5, 0.5, -0.5);
-  return Pose3d(gz::math::eigen3::convert(pose.Rot()),
-                gz::math::eigen3::convert(pose.Pos()));
-}
 
 std::string FormatTopic(const std::string& topic) {
   if (topic.empty()) return topic;
@@ -372,7 +360,7 @@ void MultiCameraPlugin::InitCameraConnection() {
   CHECK(!sensor_properties_.empty());
   for (const auto& [id, sensor_prop] : sensor_properties_) {
     const Pose3d camera_t_sensor =
-        GzToIntrinsicSensorPose(sensor_prop.sdf.RawPose());
+        perception::GzToIntrinsicSensorPose(sensor_prop.sdf.RawPose());
 
     intrinsic::perception::CameraParams sensor_params =
         intrinsic::perception::GetCameraParamsFromSdf(
@@ -393,6 +381,8 @@ void MultiCameraPlugin::InitCameraConnection() {
     sensor_config->set_id(id);
     *sensor_config->mutable_camera_params() =
         intrinsic_proto::perception::v1::ToProto(sensor_params);
+    *sensor_config->mutable_camera_t_sensor() =
+        ::intrinsic::ToProto(camera_t_sensor);
   }
 
   // To activate a sensor, we publish a message on its trigger topic.
@@ -539,7 +529,7 @@ void MultiCameraPlugin::OnImage(const gz::msgs::Image& msg,
   for (int64_t sensor_id : sensor_ids_to_process) {
     const CameraSensorProperty& sensor_prop = sensor_properties_[sensor_id];
     const Pose3d camera_t_sensor =
-        GzToIntrinsicSensorPose(sensor_prop.sdf.RawPose());
+        perception::GzToIntrinsicSensorPose(sensor_prop.sdf.RawPose());
     intrinsic::perception::CameraParams camera_params =
         intrinsic::perception::GetCameraParamsFromSdf(
             *sensor_prop.sdf.CameraSensor());

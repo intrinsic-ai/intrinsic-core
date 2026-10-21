@@ -53,6 +53,9 @@
 #include "intrinsic/motion_planning/proto/motion_specification_proto_utils.h"
 #include "intrinsic/motion_planning/proto/v1/geometric_constraints.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_blending_parameter.pb.h"
+
+#include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
+
 #include "intrinsic/motion_planning/proto/v1/motion_planner_config.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
 #include "intrinsic/motion_planning/testing/constrained_motion_test_utils.h"
@@ -97,6 +100,11 @@ using intrinsic_proto::motion_planning::v1::MotionPlannerConfiguration;
 using intrinsic_proto::motion_planning::v1::MotionSpecification;
 
 constexpr double kTargetJointConfigErrorTolerance = 1e-8;
+
+constexpr double kMotionEventTimeToleranceSeconds = 1e-3;
+constexpr double kSmallErrorTolerance = 1e-6;
+
+
 struct MotionPlannerParams {
   std::string test_name;
 };
@@ -247,6 +255,10 @@ void ValidateMotionPlanningStatisticsFromPlanTrajectoryResult(
                     .path_refinement_and_trajectory_generation_duration),
             absl::ToDoubleSeconds(
                 motion_planning_statistics.motion_planning_duration));
+  EXPECT_GT(motion_planning_statistics.num_motion_segments, 0);
+  EXPECT_EQ(
+      motion_planning_statistics.path_planning_statistics.num_motion_segments,
+      motion_planning_statistics.num_motion_segments);
 }
 
 // Combines the validation logic of
@@ -435,6 +447,121 @@ TEST_P(MotionPlannerTest, WorksForLinearMoveSegmentWithJointTarget) {
   ValidatePathSamplesAndMotionPlanningStatisticsFromPlanTrajectoryResult(
       planning_result);
 }
+
+
+TEST_P(MotionPlannerTest,
+       WorksForLinearMoveSegmentWithSingleJointTargetAndStartMotionEvent) {
+  ASSERT_OK_AND_ASSIGN(auto motion_planner,
+                       MotionPlanner::Create(motion_planner_flags_));
+  eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
+                                             -1.78568, -1.57508, -0.28733};
+  ASSERT_OK(InitializeWorld(kUrTestParams,
+                            topp_test_params_.set_infinite_jerk_limits,
+                            joint_configuration));
+
+  auto* motion_segment = motion_spec_.add_motion_segments();
+  motion_segment->set_motion_type(
+      intrinsic_proto::motion_planning::v1::MotionSegment::LINEAR);
+  eigenmath::VectorNd goal_configuration = eigenmath::VectorNd{
+      {1.19161, -1.47558, 1.94577, -1.78063, -1.02406, -0.45048}};
+
+  // Add a motion event to the motion segment.
+  auto* motion_segment_event = motion_segment->add_motion_segment_events();
+  motion_segment_event->mutable_event_location()->set_relative_to(
+      intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_START);
+  motion_segment_event->mutable_event_location()
+      ->mutable_event_offset()
+      ->mutable_time()
+      ->set_seconds(1);
+
+  VectorNdToRepeatedDouble(goal_configuration, motion_segment->mutable_target()
+                                                   ->mutable_joint_position()
+                                                   ->mutable_joints());
+  MotionPlannerConfiguration motion_planner_config;
+  ASSERT_OK_AND_ASSIGN(MotionPlanner::PlanTrajectoryResult planning_result,
+                       motion_planner->PlanTrajectory(
+                           *object_world_, robot_specification_, motion_spec_,
+                           motion_planner_config, run_time_flags_));
+  ASSERT_GE(planning_result.trajectory.size(), 2);
+  ASSERT_EQ(planning_result.motion_events.size(), 1);
+  EXPECT_THAT(
+      planning_result.motion_events[0].keypoint().event_offset(),
+      EqualsProto(planning_result.motion_events[0].keypoint().event_offset()));
+  ASSERT_OK_AND_ASSIGN(absl::Duration keypoint_time_from_start,
+                       ToAbslDuration(planning_result.motion_events[0]
+                                          .keypoint()
+                                          .keypoint_time_from_start()));
+  EXPECT_EQ(keypoint_time_from_start, absl::ZeroDuration());
+  EXPECT_EQ(planning_result.motion_events[0]
+                .keypoint()
+                .keypoint_cartesian_arc_length_from_start_meters(),
+            0.0);
+  EXPECT_EQ(planning_result.motion_events[0]
+                .keypoint()
+                .keypoint_joint_path_variable_from_start(),
+            0.0);
+}
+
+TEST_P(MotionPlannerTest,
+       WorksForLinearMoveSegmentWithSingleJointTargetAndTargetMotionEvent) {
+  ASSERT_OK_AND_ASSIGN(auto motion_planner,
+                       MotionPlanner::Create(motion_planner_flags_));
+  eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
+                                             -1.78568, -1.57508, -0.28733};
+  ASSERT_OK(InitializeWorld(kUrTestParams,
+                            topp_test_params_.set_infinite_jerk_limits,
+                            joint_configuration));
+
+  auto* motion_segment = motion_spec_.add_motion_segments();
+  motion_segment->set_motion_type(
+      intrinsic_proto::motion_planning::v1::MotionSegment::LINEAR);
+  eigenmath::VectorNd goal_configuration = eigenmath::VectorNd{
+      {1.19161, -1.47558, 1.94577, -1.78063, -1.02406, -0.45048}};
+
+  // Add a motion event to the motion segment.
+  auto* motion_segment_event = motion_segment->add_motion_segment_events();
+  motion_segment_event->mutable_event_location()->set_relative_to(
+      intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+          SEGMENT_TARGET);
+  motion_segment_event->mutable_event_location()
+      ->mutable_event_offset()
+      ->mutable_time()
+      ->set_seconds(1);
+
+  VectorNdToRepeatedDouble(goal_configuration, motion_segment->mutable_target()
+                                                   ->mutable_joint_position()
+                                                   ->mutable_joints());
+  MotionPlannerConfiguration motion_planner_config;
+  ASSERT_OK_AND_ASSIGN(MotionPlanner::PlanTrajectoryResult planning_result,
+                       motion_planner->PlanTrajectory(
+                           *object_world_, robot_specification_, motion_spec_,
+                           motion_planner_config, run_time_flags_));
+  ASSERT_GE(planning_result.trajectory.size(), 2);
+  ASSERT_EQ(planning_result.motion_events.size(), 1);
+  EXPECT_THAT(
+      planning_result.motion_events[0].keypoint().event_offset(),
+      EqualsProto(planning_result.motion_events[0].keypoint().event_offset()));
+  ASSERT_OK_AND_ASSIGN(absl::Duration keypoint_time_from_start,
+                       ToAbslDuration(planning_result.motion_events[0]
+                                          .keypoint()
+                                          .keypoint_time_from_start()));
+  // Since we have a single motion segment, the time from start should be at the
+  // end of the entire trajectory.
+  EXPECT_THAT(absl::ToDoubleSeconds(keypoint_time_from_start),
+              DoubleNear(absl::ToDoubleSeconds(
+                             planning_result.trajectory.time_stamps().back()),
+                         kMotionEventTimeToleranceSeconds));
+  // Likewise, the Cartesian arc length from start should be the same as the end
+  // of the entire trajectory.
+  ASSERT_TRUE(planning_result.trajectory.HasCartesianArcLength());
+  EXPECT_EQ(planning_result.motion_events[0]
+                .keypoint()
+                .keypoint_cartesian_arc_length_from_start_meters(),
+            planning_result.trajectory.cartesian_arc_lengths()->back());
+}
+
+
 TEST_P(MotionPlannerTest, LinearMoveWorksForSinglePoseTarget) {
   ASSERT_OK_AND_ASSIGN(auto motion_planner,
                        MotionPlanner::Create(motion_planner_flags_));
@@ -525,6 +652,280 @@ TEST_P(MotionPlannerTest, LinearMoveWorksForMultiplePoseTarget) {
   ValidatePathSamplesAndMotionPlanningStatisticsFromPlanTrajectoryResult(
       planning_result);
 }
+
+
+TEST_P(MotionPlannerTest, FailsWithMotionEventsIfMidSegment) {
+  ASSERT_OK_AND_ASSIGN(auto motion_planner,
+                       MotionPlanner::Create(motion_planner_flags_));
+  eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
+                                             -1.78568, -1.57508, -0.28733};
+  ASSERT_OK(InitializeWorld(kUrTestParams,
+                            topp_test_params_.set_infinite_jerk_limits,
+                            joint_configuration));
+
+  std::vector<Pose3d> waypoints;
+  waypoints.push_back(
+      toPose3d("0, 0.5, 0.3, -0.2954, 0.0010, 0.9554, -0.0065"));
+  waypoints.push_back(
+      toPose3d("0.1, 0.6, 0.4, -0.2746, 0.1088, 0.8870, -0.3549"));
+  waypoints.push_back(
+      toPose3d("0, 0.5, 0.3, -0.2954, 0.0010, 0.9554, -0.0065"));
+
+  for (int i = 0; i < waypoints.size(); ++i) {
+    auto* motion_segment = motion_spec_.add_motion_segments();
+    motion_segment->set_motion_type(
+        intrinsic_proto::motion_planning::v1::MotionSegment::LINEAR);
+    *motion_segment->mutable_target()->mutable_cartesian_pose() =
+        CreatePoseEqualityGeometricConstraint(
+            robot_->GetName(), tip_frame_->GetName(), waypoints[i]);
+    *motion_segment->mutable_cartesian_limits() =
+        CreateDynamicCartesianLimitsProto(
+            /*max_rot_vel*/ 1.0, /*max_rot_accel*/ 5.0,
+            /*max_trans_vel*/ 0.6, /*max_trans_accel*/ 2.0);
+    if (i == 1) {
+      auto* motion_segment_event = motion_segment->add_motion_segment_events();
+      motion_segment_event->mutable_event_location()->set_relative_to(
+          intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+              SEGMENT_START);
+      motion_segment_event->mutable_event_location()
+          ->mutable_event_offset()
+          ->mutable_time()
+          ->set_seconds(1);
+      motion_segment_event->mutable_event_location()
+          ->mutable_event_offset()
+          ->mutable_time()
+          ->set_nanos(10000);
+    }
+  }
+
+  MotionPlannerConfiguration motion_planner_config;
+  EXPECT_THAT(
+      motion_planner->PlanTrajectory(*object_world_, robot_specification_,
+                                     motion_spec_, motion_planner_config,
+                                     run_time_flags_),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Motion events are currently only supported in the first "
+                    "and last segment.")));
+}
+
+TEST_P(MotionPlannerTest, FailsWithMotionEventsRelativeToTargetFirstSegment) {
+  ASSERT_OK_AND_ASSIGN(auto motion_planner,
+                       MotionPlanner::Create(motion_planner_flags_));
+  eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
+                                             -1.78568, -1.57508, -0.28733};
+  ASSERT_OK(InitializeWorld(kUrTestParams,
+                            topp_test_params_.set_infinite_jerk_limits,
+                            joint_configuration));
+
+  std::vector<Pose3d> waypoints;
+  waypoints.push_back(
+      toPose3d("0, 0.5, 0.3, -0.2954, 0.0010, 0.9554, -0.0065"));
+  waypoints.push_back(
+      toPose3d("0.1, 0.6, 0.4, -0.2746, 0.1088, 0.8870, -0.3549"));
+
+  for (int i = 0; i < waypoints.size(); ++i) {
+    auto* motion_segment = motion_spec_.add_motion_segments();
+    motion_segment->set_motion_type(
+        intrinsic_proto::motion_planning::v1::MotionSegment::LINEAR);
+    *motion_segment->mutable_target()->mutable_cartesian_pose() =
+        CreatePoseEqualityGeometricConstraint(
+            robot_->GetName(), tip_frame_->GetName(), waypoints[i]);
+    *motion_segment->mutable_cartesian_limits() =
+        CreateDynamicCartesianLimitsProto(
+            /*max_rot_vel*/ 1.0, /*max_rot_accel*/ 5.0,
+            /*max_trans_vel*/ 0.6, /*max_trans_accel*/ 2.0);
+    if (i == 0) {
+      auto* motion_segment_event = motion_segment->add_motion_segment_events();
+      motion_segment_event->mutable_event_location()->set_relative_to(
+          intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+              SEGMENT_TARGET);
+      motion_segment_event->mutable_event_location()
+          ->mutable_event_offset()
+          ->mutable_time()
+          ->set_seconds(1);
+      motion_segment_event->mutable_event_location()
+          ->mutable_event_offset()
+          ->mutable_time()
+          ->set_nanos(10000);
+    }
+  }
+
+  MotionPlannerConfiguration motion_planner_config;
+  EXPECT_THAT(
+      motion_planner->PlanTrajectory(*object_world_, robot_specification_,
+                                     motion_spec_, motion_planner_config,
+                                     run_time_flags_),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr(
+                   "Motion events in the first segment must be relative to the "
+                   "segment start.")));
+}
+
+TEST_P(MotionPlannerTest, FailsWithMotionEventsRelativeToStartLastSegment) {
+  ASSERT_OK_AND_ASSIGN(auto motion_planner,
+                       MotionPlanner::Create(motion_planner_flags_));
+  eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
+                                             -1.78568, -1.57508, -0.28733};
+  ASSERT_OK(InitializeWorld(kUrTestParams,
+                            topp_test_params_.set_infinite_jerk_limits,
+                            joint_configuration));
+
+  std::vector<Pose3d> waypoints;
+  waypoints.push_back(
+      toPose3d("0, 0.5, 0.3, -0.2954, 0.0010, 0.9554, -0.0065"));
+  waypoints.push_back(
+      toPose3d("0.1, 0.6, 0.4, -0.2746, 0.1088, 0.8870, -0.3549"));
+
+  for (int i = 0; i < waypoints.size(); ++i) {
+    auto* motion_segment = motion_spec_.add_motion_segments();
+    motion_segment->set_motion_type(
+        intrinsic_proto::motion_planning::v1::MotionSegment::LINEAR);
+    *motion_segment->mutable_target()->mutable_cartesian_pose() =
+        CreatePoseEqualityGeometricConstraint(
+            robot_->GetName(), tip_frame_->GetName(), waypoints[i]);
+    *motion_segment->mutable_cartesian_limits() =
+        CreateDynamicCartesianLimitsProto(
+            /*max_rot_vel*/ 1.0, /*max_rot_accel*/ 5.0,
+            /*max_trans_vel*/ 0.6, /*max_trans_accel*/ 2.0);
+    if (i == 1) {
+      auto* motion_segment_event = motion_segment->add_motion_segment_events();
+      motion_segment_event->mutable_event_location()->set_relative_to(
+          intrinsic_proto::motion_planning::v1::MotionEventSegmentLocation::
+              SEGMENT_START);
+      motion_segment_event->mutable_event_location()
+          ->mutable_event_offset()
+          ->mutable_time()
+          ->set_seconds(1);
+      motion_segment_event->mutable_event_location()
+          ->mutable_event_offset()
+          ->mutable_time()
+          ->set_nanos(10000);
+    }
+  }
+
+  MotionPlannerConfiguration motion_planner_config;
+  EXPECT_THAT(
+      motion_planner->PlanTrajectory(*object_world_, robot_specification_,
+                                     motion_spec_, motion_planner_config,
+                                     run_time_flags_),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Motion events in the last segment must be relative to the "
+                    "segment target.")));
+}
+
+TEST_P(MotionPlannerTest,
+       WorksWithMotionEventsWithMultipleSegmentsRelativeToStartAndEnd) {
+  ASSERT_OK_AND_ASSIGN(auto motion_planner,
+                       MotionPlanner::Create(motion_planner_flags_));
+  eigenmath::Vector6d joint_configuration = {1.27778,  -1.58980, 1.81571,
+                                             -1.78568, -1.57508, -0.28733};
+  ASSERT_OK(InitializeWorld(kUrTestParams,
+                            topp_test_params_.set_infinite_jerk_limits,
+                            joint_configuration));
+
+  std::vector<Pose3d> waypoints;
+  waypoints.push_back(
+      toPose3d("0, 0.5, 0.3, -0.2954, 0.0010, 0.9554, -0.0065"));
+  waypoints.push_back(
+      toPose3d("0.1, 0.6, 0.4, -0.2746, 0.1088, 0.8870, -0.3549"));
+
+  intrinsic_proto::motion_planning::v1::MotionSegmentEvent
+      motion_segment_start_event = ParseTextProtoOrDie(R"pb(
+        event_location {
+          relative_to: SEGMENT_START
+          event_offset { time { seconds: 1 nanos: 10000 } }
+        }
+        event {
+          [type.googleapis.com/google.protobuf.DoubleValue] { value: 1.0 }
+        }
+      )pb");
+  intrinsic_proto::motion_planning::v1::MotionSegmentEvent
+      motion_segment_target_event = ParseTextProtoOrDie(R"pb(
+        event_location {
+          relative_to: SEGMENT_TARGET
+          event_offset { time { seconds: 1 nanos: 10000 } }
+        }
+        event {
+          [type.googleapis.com/google.protobuf.DoubleValue] { value: 2.0 }
+        }
+      )pb");
+
+  for (int i = 0; i < waypoints.size(); ++i) {
+    auto* motion_segment = motion_spec_.add_motion_segments();
+    motion_segment->set_motion_type(
+        intrinsic_proto::motion_planning::v1::MotionSegment::LINEAR);
+    *motion_segment->mutable_target()->mutable_cartesian_pose() =
+        CreatePoseEqualityGeometricConstraint(
+            robot_->GetName(), tip_frame_->GetName(), waypoints[i]);
+    *motion_segment->mutable_cartesian_limits() =
+        CreateDynamicCartesianLimitsProto(
+            /*max_rot_vel*/ 1.0, /*max_rot_accel*/ 5.0,
+            /*max_trans_vel*/ 0.6, /*max_trans_accel*/ 2.0);
+    if (i == 0) {
+      *motion_segment->add_motion_segment_events() = motion_segment_start_event;
+    }
+    if (i == 1) {
+      *motion_segment->add_motion_segment_events() =
+          motion_segment_target_event;
+    }
+  }
+
+  MotionPlannerConfiguration motion_planner_config;
+  ASSERT_OK_AND_ASSIGN(MotionPlanner::PlanTrajectoryResult planning_result,
+                       motion_planner->PlanTrajectory(
+                           *object_world_, robot_specification_, motion_spec_,
+                           motion_planner_config, run_time_flags_));
+
+  // We expect the following distributions of motion events across the
+  // segments.
+  ASSERT_EQ(planning_result.motion_events.size(), 2);
+
+  // The first motion event should be at the very start of the trajectory.
+  EXPECT_THAT(planning_result.motion_events.front().event(),
+              EqualsProto(motion_segment_start_event.event()));
+  EXPECT_THAT(
+      planning_result.motion_events[0].keypoint().event_offset(),
+      EqualsProto(motion_segment_start_event.event_location().event_offset()));
+  EXPECT_THAT(planning_result.motion_events[0]
+                  .keypoint()
+                  .keypoint_joint_path_variable_from_start(),
+              DoubleNear(0.0, kSmallErrorTolerance));
+  EXPECT_THAT(planning_result.motion_events[0]
+                  .keypoint()
+                  .keypoint_cartesian_arc_length_from_start_meters(),
+              DoubleNear(0.0, kSmallErrorTolerance));
+  ASSERT_OK_AND_ASSIGN(absl::Duration keypoint_time_from_start,
+                       ToAbslDuration(planning_result.motion_events[0]
+                                          .keypoint()
+                                          .keypoint_time_from_start()));
+  EXPECT_EQ(keypoint_time_from_start, absl::ZeroDuration());
+
+  // The last motion event should be at the end of the trajectory.
+  EXPECT_THAT(planning_result.motion_events[1].event(),
+              EqualsProto(motion_segment_target_event.event()));
+  EXPECT_THAT(
+      planning_result.motion_events[1].keypoint().event_offset(),
+      EqualsProto(motion_segment_target_event.event_location().event_offset()));
+  ASSERT_TRUE(planning_result.trajectory.HasCartesianArcLength());
+  EXPECT_THAT(
+      planning_result.motion_events[1]
+          .keypoint()
+          .keypoint_cartesian_arc_length_from_start_meters(),
+      DoubleNear(planning_result.trajectory.cartesian_arc_lengths()->back(),
+                 kSmallErrorTolerance));
+  ASSERT_OK_AND_ASSIGN(keypoint_time_from_start,
+                       ToAbslDuration(planning_result.motion_events[1]
+                                          .keypoint()
+                                          .keypoint_time_from_start()));
+  EXPECT_THAT(absl::ToDoubleSeconds(keypoint_time_from_start),
+              DoubleNear(absl::ToDoubleSeconds(
+                             planning_result.trajectory.time_stamps().back()),
+                         kSmallErrorTolerance));
+}
+
+
 TEST_P(MotionPlannerTest, LinearMoveFailsForDifferentDynamicLimitSettings) {
   ASSERT_OK_AND_ASSIGN(auto motion_planner,
                        MotionPlanner::Create(motion_planner_flags_));
@@ -4507,7 +4908,7 @@ TEST_P(MotionPlannerTest, StatusWithErrorProtoForSegmentId) {
                                      const absl::Cord& payload) {
     intrinsic_proto::motion_planning::v1::MotionPipelineError
         motion_pipeline_error;
-    motion_pipeline_error.ParseFromString(payload);
+    ASSERT_TRUE(motion_pipeline_error.ParseFromString(payload));
     ASSERT_TRUE(!motion_pipeline_error.motion_planning_error().empty());
     ASSERT_EQ(
         motion_pipeline_error.motion_planning_error().at(0).segment_id().size(),
@@ -5133,8 +5534,6 @@ class MotionPlannerPathTest : public MotionPlannerBaseTest,
  public:
   void SetUp() override {
     ASSERT_OK_AND_ASSIGN(world_, testing::LoadTestWorld(kUr5eTestWorldGzfPath));
-
-    motion_planner_flags_.parameterization_service_address = "";
   }
 
  protected:

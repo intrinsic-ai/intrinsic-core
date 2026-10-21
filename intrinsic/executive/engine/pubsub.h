@@ -149,7 +149,9 @@ template <typename T>
 absl::Status ClipsPubSub::PublishProto(absl::string_view topic_name,
                                        const T& message) {
   google::protobuf::Any packed_message;
-  packed_message.PackFrom(message);
+  if (!packed_message.PackFrom(message)) {
+    return absl::InternalError("Failed to pack proto message.");
+  }
   return PublishProto(topic_name, std::move(packed_message));
 }
 

@@ -56,10 +56,13 @@ class GZ_SIM_VISIBLE OutfeedManager
       public xfa::simulation::OutfeedService::Service {
  public:
   using ObjectWorldServiceStub =
-      intrinsic_proto::world::ObjectWorldService::Stub;
+      intrinsic_proto::world::ObjectWorldService::StubInterface;
 
   static absl::StatusOr<std::unique_ptr<OutfeedManager>> Create(
       std::string_view world_service_address,
+      std::string_view simulator_world_id);
+  static absl::StatusOr<std::unique_ptr<OutfeedManager>> Create(
+      std::shared_ptr<ObjectWorldServiceStub> object_world_service_stub,
       std::string_view simulator_world_id);
 
   ~OutfeedManager() override;

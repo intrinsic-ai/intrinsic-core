@@ -23,7 +23,6 @@ cc_library(
     srcs = ["hal_laser_tracker_part.cc"],
     hdrs = ["hal_laser_tracker_part.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
         "//intrinsic_control/intrinsic/icon/control/parts:hal_realtime_part_base",
         "//intrinsic_control/intrinsic/icon/control/parts:realtime_part_factory_common",
         "//intrinsic_control/intrinsic/icon/control/parts/feature_interfaces:laser_tracker_position_state",
@@ -31,6 +30,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_handle",
         "//intrinsic_control/intrinsic/icon/hal:hardware_module_manager",
         "//intrinsic_control/intrinsic/icon/hal/interfaces:laser_tracker_state_cc_fbs",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:string_view",

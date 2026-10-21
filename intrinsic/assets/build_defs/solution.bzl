@@ -14,20 +14,20 @@
 
 """Bazel rules for solutions."""
 
-load("//intrinsic/assets/build_defs:asset.bzl", "AssetCatalogRefInfo", "AssetInfo", "AssetInstanceInfo", "AssetLocalInfo")
 load("//intrinsic/util/path_resolver:paths.bzl", "WRAPPER_HEADER", "to_rlocation_path")
+load("//intrinsic_sdk/intrinsic/assets/build_defs:asset.bzl", "AssetCatalogRefInfo", "AssetInfo", "AssetInstanceInfo", "AssetLocalInfo")
 
 SolutionInfo = provider(
     "provided by the intrinsic_solution() rule",
     fields = {
         "asset_bundles": "asset bundle files used in the solution",
         "instance_configs": "instance config files used in the solution",
-        "solution": "binary proto file containing a LocalSolution message",
+        "solution": "textproto file containing a LocalSolution message",
     },
 )
 
 def _intrinsic_solution_impl(ctx):
-    out = ctx.actions.declare_file(ctx.label.name + ".local_solution.binpb")
+    out = ctx.actions.declare_file(ctx.label.name + ".dir/solution_manifest.txtpb")
     assets = [
         a[AssetInfo].asset_info
         for a in ctx.attr.assets
@@ -38,13 +38,7 @@ def _intrinsic_solution_impl(ctx):
         for a in ctx.attr.assets
         if AssetCatalogRefInfo in a
     ]
-    instance_configs = [
-        i[AssetInstanceInfo].config
-        for i in ctx.attr.instances
-        if AssetInstanceInfo in i and i[AssetInstanceInfo].config
-    ]
 
-    inputs = assets + catalog_assets + instance_configs + ctx.files.object_world_updates
     args = ctx.actions.args().add(
         "--output",
         out,
@@ -64,19 +58,37 @@ def _intrinsic_solution_impl(ctx):
         "--display_name",
         ctx.attr.display_name or ctx.label.name,
     )
+    asset_bundles = []
     for a in ctx.attr.assets:
         if AssetLocalInfo in a:
+            bundle_file = ctx.actions.declare_file(
+                "%s.dir/assets/%s/%s/bundle.tar" % (ctx.label.name, a.label.package, a.label.name),
+            )
+            ctx.actions.symlink(
+                output = bundle_file,
+                target_file = a[AssetLocalInfo].bundle_path,
+            )
+            asset_bundles.append(bundle_file)
             args.add(
                 "--local_assets",
-                "%s=%s" % (a[AssetInfo].asset_info.path, to_rlocation_path(ctx, a[AssetLocalInfo].bundle_path)),
+                "%s=assets/%s/%s/bundle.tar" % (a[AssetInfo].asset_info.path, a.label.package, a.label.name),
             )
+    instance_configs = []
     for i in ctx.attr.instances:
         if AssetInstanceInfo in i:
             inst = i[AssetInstanceInfo]
             if inst.config:
+                config_file = ctx.actions.declare_file(
+                    "%s.dir/instances/%s/config.txtpb" % (ctx.label.name, inst.name),
+                )
+                ctx.actions.symlink(
+                    output = config_file,
+                    target_file = inst.config,
+                )
+                instance_configs.append(config_file)
                 args.add(
                     "--instances",
-                    "%s=%s=%s=%s" % (inst.name, inst.asset, inst.config.path, to_rlocation_path(ctx, inst.config)),
+                    "%s=%s=%s=instances/%s/config.txtpb" % (inst.name, inst.asset, config_file.path, inst.name),
                 )
             else:
                 args.add(
@@ -84,6 +96,7 @@ def _intrinsic_solution_impl(ctx):
                     "%s=%s" % (inst.name, inst.asset),
                 )
 
+    inputs = assets + catalog_assets + instance_configs + ctx.files.object_world_updates
     ctx.actions.run(
         inputs = inputs,
         outputs = [out],
@@ -93,11 +106,6 @@ def _intrinsic_solution_impl(ctx):
         progress_message = "Writing solution proto %{output} for %{label}",
     )
 
-    asset_bundles = [
-        a[AssetLocalInfo].bundle_path
-        for a in ctx.attr.assets
-        if AssetLocalInfo in a
-    ]
     transitive_default_infos = [
         # file references from resource/asset instances need this, as well as
         # geometries from resource instances.
@@ -105,10 +113,12 @@ def _intrinsic_solution_impl(ctx):
         for i in ctx.attr.instances
     ]
 
+    solution_files = [out] + asset_bundles + instance_configs
+
     # We want the runfiles tree of the resources output to contain the
     # transitive runfiles of the upstream helm_chart and file_reference rules.
     transitive_runfiles = depset(
-        asset_bundles + [out],
+        solution_files,
         transitive = [
             p.default_runfiles.files
             for p in transitive_default_infos
@@ -139,7 +149,7 @@ exec "$(rlocation "{target}")" "$(rlocation "{app}")" "$@"
 
     return [
         DefaultInfo(
-            files = depset([out]),
+            files = depset(solution_files),
             executable = out_executable,
             runfiles = runfiles,
         ),

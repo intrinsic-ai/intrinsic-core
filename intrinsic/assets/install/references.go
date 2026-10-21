@@ -284,7 +284,7 @@ func referencedInAssetDefinition(referencedBy *rtrpb.ResourceTypeRuntime, refere
 		allRefs[idutils.IDFromProtoUnchecked(asset.GetMetadata().GetIdVersion().GetId())] = asset
 	}
 
-	if err := traversal.ForEachResolvedDependency(defaultConfig, fds, func(annotations *dependencypb.Dependency, msg *rdpb.ResolvedDependency) (*rdpb.ResolvedDependency, error) {
+	if err := traversal.ForEachResolvedDependency(defaultConfig, fds, func(annotations *dependencypb.Dependency, msg *rdpb.ResolvedDependency, _ traversal.FieldContext) (*rdpb.ResolvedDependency, error) {
 		if msg == nil {
 			return nil, nil
 		}
