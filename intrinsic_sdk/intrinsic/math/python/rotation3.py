@@ -40,6 +40,9 @@ INVALID_ROTATION_QUATERNION_MESSAGE = (
 )
 MATRIX_NOT_ORTHOGONAL_MESSAGE = 'Rotation matrix should be orthogonal'
 MATRIX_WRONG_SHAPE_MESSAGE = 'Matrix should be 3x3 or 4x4'
+MATRIX_NOT_PROPER_ROTATION_MESSAGE = (
+    'Rotation matrix should not be a reflection, determinant must be 1'
+)
 
 # ----------------------------------------------------------------------------
 # Default values.
@@ -59,7 +62,8 @@ def check_rotation_matrix(
 
   Raises a ValueError if the upper 3x3 submatrix of the matrix is not a valid
   rotation matrix.  The matrix must have two dimensions and contain a 3x3
-  submatrix.  The 3x3 submatrix must be orthogonal.
+  submatrix.  The 3x3 submatrix must be orthogonal and have determinant +1
+  (a proper rotation, not a reflection).
 
   This function does not check any values outside of the 3x3 submatrix.
 
@@ -70,8 +74,8 @@ def check_rotation_matrix(
     err_msg: Error message string added to exception in case of invalid input.
 
   Raises:
-    ValueError: If the matrix has the wrong shape or does not have an orthogonal
-    upper 3x3 submatrix.
+    ValueError: If the matrix has the wrong shape, does not have an orthogonal
+    upper 3x3 submatrix, or the submatrix has determinant -1 (a reflection).
   """
   if len(matrix.shape) != 2 or matrix.shape[0] < 3 or matrix.shape[1] < 3:
     raise ValueError(
@@ -86,6 +90,20 @@ def check_rotation_matrix(
     raise ValueError(
         "%s: shape=%s\n%s\nr * r' = %s\n%s"
         % (MATRIX_NOT_ORTHOGONAL_MESSAGE, matrix.shape, matrix, eye, err_msg)
+    )
+  # An orthogonal matrix has determinant +1 (rotation) or -1 (reflection).
+  # A quaternion can only represent a rotation.
+  determinant = np.linalg.det(matrix3x3)
+  if not np.isclose(determinant, 1.0, rtol=rtol, atol=atol):
+    raise ValueError(
+        '%s: shape=%s\n%s\ndet(r) = %s\n%s'
+        % (
+            MATRIX_NOT_PROPER_ROTATION_MESSAGE,
+            matrix.shape,
+            matrix,
+            determinant,
+            err_msg,
+        )
     )
 
 
