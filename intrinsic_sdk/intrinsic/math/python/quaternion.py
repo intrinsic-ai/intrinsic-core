@@ -19,9 +19,7 @@ rotation.
 """
 
 import math
-from typing import Optional
-from typing import Text
-from typing import Union
+from typing import Optional, Text, Union
 
 import numpy as np
 
@@ -377,11 +375,18 @@ class Quaternion(object):
   # Checks
   # --------------------------------------------------------------------------
 
-  def _zero_magnitude_message(self, norm_epsilon: float, err_msg: Text = ''):
+  def _zero_magnitude_message(
+      self,
+      norm_epsilon: float,
+      err_msg: Text = '',
+      norm: Optional[float] = None,
+  ):
+    if norm is None:
+      norm = np.linalg.norm(self._xyzw)
     return '%s: |%r| = %g <= %g  %s' % (
         QUATERNION_ZERO_MESSAGE,
         self,
-        np.linalg.norm(self._xyzw),
+        norm,
         norm_epsilon,
         err_msg,
     )
@@ -394,19 +399,23 @@ class Quaternion(object):
     """Raises a ValueError exception if the quaternion is close to zero.
 
     Args:
-      norm_epsilon: Error tolerance on magnitude.
+      norm_epsilon: Finite, non-negative error tolerance on magnitude.
       err_msg: Message to be added to error in case of failure.
 
     Raises:
-      ValueError: If |q| <= norm_epsilon.
+      ValueError: If norm_epsilon is negative or non-finite, or if
+        |q| <= norm_epsilon.
     """
-    if (
-        np.linalg.norm(self._xyzw)
-        <= math_types.DEFAULT_ATOL_VALUE_FOR_NP_IS_CLOSE
-    ):
+    if not math.isfinite(norm_epsilon) or norm_epsilon < 0:
+      raise ValueError(
+          'norm_epsilon must be finite and non-negative: %r. %s'
+          % (norm_epsilon, err_msg)
+      )
+    norm = math.hypot(*self._xyzw)
+    if norm <= norm_epsilon:
       raise ValueError(
           self._zero_magnitude_message(
-              norm_epsilon=norm_epsilon, err_msg=err_msg
+              norm_epsilon=norm_epsilon, err_msg=err_msg, norm=norm
           )
       )
 
