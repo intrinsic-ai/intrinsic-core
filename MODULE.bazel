@@ -531,7 +531,7 @@ bazel_dep(name = "curl", version = "8.22.0.bcr.1", repo_name = "com_github_curl_
 bazel_dep(name = "daqp", version = "0.10.3")  
 bazel_dep(name = "dumb-init", version = "1.2.5")
 bazel_dep(name = "egl-registry", version = "0.0.0-20250527", repo_name = "egl_registry")  
-bazel_dep(name = "eigen", version = "5.0.1.bcr.2", repo_name = "com_gitlab_libeigen_eigen")
+bazel_dep(name = "eigen", version = "5.0.1.bcr.3", repo_name = "com_gitlab_libeigen_eigen")
 
 # TODO(b/489481888): Remove once grpc upgrades its transitive envoy_api
 # dependency past 0.0.0-20251216-6ef568c (pulled in by grpc 1.81.1 in #58249),
