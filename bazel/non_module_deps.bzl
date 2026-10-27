@@ -178,20 +178,6 @@ filegroup(
         urls = ["https://storage.googleapis.com/intrinsic-mirror/bazel/helmlint/schemas-b3d60bb6a5c10815dcfb1ee592b4e5b6f10cef29.tar.gz"],
     )
 
-    S2GEOMETRY_COMMIT = "418c55893f6123b90f2768ed2ec9f5f47fa512de"  # 2024-05-12
-    http_file(
-        name = "com_google_s2geometry_bit_interleave_h",
-        downloaded_file_path = "bit-interleave.h",
-        urls = ["https://raw.githubusercontent.com/google/s2geometry/%s/src/s2/util/bits/bit-interleave.h" % S2GEOMETRY_COMMIT],
-        sha256 = "9090fb46e735b396cbda71546d7fdd2d66fb06bc224233ac05db2c8d58c9bf0a",
-    )
-    http_file(
-        name = "com_google_s2geometry_bit_interleave_cc",
-        downloaded_file_path = "bit-interleave.cc",
-        urls = ["https://raw.githubusercontent.com/google/s2geometry/%s/src/s2/util/bits/bit-interleave.cc" % S2GEOMETRY_COMMIT],
-        sha256 = "44fa1fb4f8db3f305f08ddf46367f93e1c3b1364779e4bf888771de11447d8c0",
-    )
-
     GLOG_COMMIT = "7b134a5c82c0c0b5698bb6bf7a835b230c5638e4"  # v0.7.1
     http_file(
         name = "com_google_glog_googleinit_h",

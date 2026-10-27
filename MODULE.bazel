@@ -933,8 +933,6 @@ use_repo(
     "com_github_openxla_xla_tsl_net_cc",  
     "com_github_openxla_xla_tsl_net_h",  
     "com_google_glog_googleinit_h",  
-    "com_google_s2geometry_bit_interleave_cc",  
-    "com_google_s2geometry_bit_interleave_h",  
     "libkmsp11",  
     "oss_licenses",  
 )
