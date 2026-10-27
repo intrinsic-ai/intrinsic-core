@@ -28,4 +28,4 @@ https://github.com/intrinsic-ai/intrinsic-core/blob/b6962e49811f366faa8ea815bfa8
 # head and not on release branches themselves.
 # TODO(b/424923989): when this is updated nightly remove the warning not to
 # rely on it being update to date.
-PLATFORM_RELEASE_NIGHTLY = "0.20261023.0-RC00"
+PLATFORM_RELEASE_NIGHTLY = "0.20261027.0-RC00"
