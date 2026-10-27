@@ -144,18 +144,6 @@ cc_proto_library(
     deps = [":executive_flags_proto"],
 )
 
-alias(
-    name = "executive_service_proto",
-    actual = "//intrinsic_sdk/intrinsic/executive/proto:executive_service_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "executive_service_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/executive/proto:executive_service_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 proto_library(
     name = "process_tree_proto",
     srcs = ["process_tree.proto"],

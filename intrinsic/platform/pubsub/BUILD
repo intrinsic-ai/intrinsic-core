@@ -47,12 +47,6 @@ alias(
 )
 
 alias(
-    name = "queryable",
-    actual = "//intrinsic_sdk/intrinsic/platform/pubsub:queryable",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "subscription",
     actual = "//intrinsic_sdk/intrinsic/platform/pubsub:subscription",
     tags = ["go/intrinsic-ioc-transition-tdd"],

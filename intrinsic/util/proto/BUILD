@@ -49,18 +49,6 @@ go_library(
     ],
 )
 
-alias(
-    name = "descriptors",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:descriptors",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "descriptor_pools",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:descriptor_pools",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 cc_library(
     name = "pb_hash",
     hdrs = ["pb_hash.h"],
@@ -69,18 +57,6 @@ cc_library(
         "@com_google_protobuf//:protobuf",
         "@com_google_protobuf//src/google/protobuf/io",
     ],
-)
-
-alias(
-    name = "type_url",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:type_url",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "parsed_type_url",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:parsed_type_url",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 alias(

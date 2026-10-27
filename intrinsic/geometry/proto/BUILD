@@ -15,12 +15,6 @@
 package(default_visibility = ["//visibility:public"])
 
 alias(
-    name = "geometry_service_proto",
-    actual = "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "geometry_service_cc_proto",
     actual = "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_proto",
     tags = ["go/intrinsic-ioc-transition-tdd"],
@@ -29,11 +23,5 @@ alias(
 alias(
     name = "geometry_service_cc_grpc_proto",
     actual = "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_grpc_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "geometry_service_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_go_proto",
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )

@@ -23,9 +23,9 @@ cc_library(
     srcs = ["proto_compat.cc"],
     hdrs = ["proto_compat.h"],
     deps = [
-        "//intrinsic/util/proto:descriptor_pools",
-        "//intrinsic/util/proto:descriptors",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptor_pools",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/base:nullability",

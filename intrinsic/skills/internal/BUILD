@@ -147,35 +147,6 @@ cc_library(
     ],
 )
 
-alias(
-    name = "skill_registry_client",
-    actual = "//intrinsic_sdk/intrinsic/skills/internal:skill_registry_client",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "skill_registry_client_interface",
-    actual = "//intrinsic_sdk/intrinsic/skills/internal:skill_registry_client_interface",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = [
-        "//intrinsic/apps:__subpackages__",
-        "//intrinsic/assets/services:__subpackages__",
-        "//intrinsic/executive:__subpackages__",
-        "//intrinsic/frontend:__subpackages__",
-        "//intrinsic/manipulation:__subpackages__",
-        "//intrinsic/resources:__subpackages__",
-        "//intrinsic/skills:__subpackages__",
-        "//intrinsic/testing:__subpackages__",
-        "//intrinsic_control/intrinsic/icon/skills:__subpackages__",
-        "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
-        "//intrinsic_runtime/intrinsic/proto_tools/registry:__subpackages__",
-        "//intrinsic_sdk/intrinsic/skills:__subpackages__",
-        "//intrinsic_sdk/intrinsic/skills/cc:__pkg__",
-        "//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__",
-        "//incode/motion_planning/skills:__subpackages__",
-    ],
-)
-
 cc_library(
     name = "world_service_utils",
     srcs = ["world_service_utils.cc"],

@@ -123,12 +123,6 @@ cc_library(
 )
 
 alias(
-    name = "log_lines",
-    actual = "//intrinsic_sdk/intrinsic/util:log_lines",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
     name = "flag",
     actual = "//intrinsic_sdk/intrinsic/util:flag",
     tags = ["go/intrinsic-ioc-transition-tdd"],

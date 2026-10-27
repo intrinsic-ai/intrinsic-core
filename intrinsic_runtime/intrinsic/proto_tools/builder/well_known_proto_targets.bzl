@@ -38,7 +38,7 @@ WELL_KNOWN_PROTO_TARGETS = [
     "@intrinsic_apis//intrinsic/perception/proto/v1:pose_estimator_id_proto",
     "@intrinsic_apis//intrinsic/skills/proto:skill_parameter_metadata_proto",
     "@intrinsic_apis//intrinsic/world/proto:object_world_refs_proto",
-    "//intrinsic/world/proto:object_world_updates_proto",
+    "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
     "@com_google_protobuf//:any_proto",
     "@com_google_protobuf//:duration_proto",
     "@com_google_protobuf//:empty_proto",

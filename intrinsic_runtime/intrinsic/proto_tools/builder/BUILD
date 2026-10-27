@@ -15,7 +15,7 @@
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
 load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 load(
-    "//intrinsic/util/proto/build_defs:descriptor_set.bzl",
+    "//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl",
     "proto_source_code_info_transitive_descriptor_set",
 )
 load(":well_known_proto_targets.bzl", "WELL_KNOWN_PROTO_TARGETS")
@@ -31,12 +31,12 @@ cc_library(
     hdrs = ["proto_builder_service.h"],
     data = [":well_known_types"],
     deps = [
-        "//intrinsic/util:log_lines",
         "//intrinsic/util/proto:compile_utils",
-        "//intrinsic/util/status:status_conversion_grpc",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic/util/status:status_macros_grpc",
         "//intrinsic_runtime/intrinsic/proto_tools/util:descriptor_pool_loader",
+        "//intrinsic_sdk/intrinsic/util:log_lines",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",

@@ -21,9 +21,9 @@ cc_library(
     srcs = ["descriptor_pool_loader.cc"],
     hdrs = ["descriptor_pool_loader.h"],
     deps = [
-        "//intrinsic/util/path_resolver",
-        "//intrinsic/util/proto:descriptors",
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/path_resolver",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:string_view",

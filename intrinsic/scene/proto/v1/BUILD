@@ -85,24 +85,12 @@ py_proto_library(
     deps = [":imported_scene_updates_proto"],
 )
 
-alias(
-    name = "scene_object_import_proto",
-    actual = "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "scene_object_import_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 proto_library(
     name = "scene_object_internal_proto",
     srcs = ["scene_object_internal.proto"],
     deps = [
         ":imported_scene_proto",
-        ":scene_object_import_proto",
+        "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_proto",
         "@com_google_googleapis//google/longrunning:operations_proto",
         "@com_google_protobuf//:any_proto",
         "@com_google_protobuf//:timestamp_proto",
@@ -128,7 +116,7 @@ go_proto_library(
     protos = [":scene_object_internal_proto"],
     deps = [
         ":imported_scene_go_proto",
-        ":scene_object_import_go_proto",
+        "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_go_proto",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/assets/proto:asset_deployment_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
