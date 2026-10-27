@@ -33,6 +33,10 @@ import (
 
 	log "github.com/golang/glog"
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/codes"
+	"google.golang.org/grpc/status"
+
+	clustermanagerpb "github.com/intrinsic-ai/insrc/incode/frontend/cloud/api/v1/clustermanager_api_go_proto"
 )
 
 const (
@@ -130,22 +134,26 @@ func waitForStatusAvailable(ctx context.Context, client authedClient, clusterNam
 			if errors.Is(err, context.DeadlineExceeded) {
 				return fmt.Errorf("the IPC failed to initialize.\nPlease make sure the IPC has as stable internet connection")
 			}
+			if errors.Is(err, context.Canceled) {
+				return err
+			}
 
 			// This could be a transient network error.
 			log.WarningContextf(ctx, "Unexpected error while getting status, retrying: %v", err)
-		}
-		resp.Body.Close()
+		} else {
+			resp.Body.Close()
 
-		if resp.StatusCode == http.StatusOK {
-			fmt.Printf("\n")
-			return nil
-		}
+			if resp.StatusCode == http.StatusOK {
+				fmt.Printf("\n")
+				return nil
+			}
 
-		// StatusBadGateway is expected when the control plane isn't up yet.
-		// StatusNotFound is expected when a worker node isn't up yet.
-		if resp.StatusCode != http.StatusBadGateway && resp.StatusCode != http.StatusNotFound {
-			// This could be a transient nginx 5xx error.
-			log.WarningContextf(ctx, "Unexpected error while getting status, retrying: %d", resp.StatusCode)
+			// StatusBadGateway is expected when the control plane isn't up yet.
+			// StatusNotFound is expected when a worker node isn't up yet.
+			if resp.StatusCode != http.StatusBadGateway && resp.StatusCode != http.StatusNotFound {
+				// This could be a transient nginx 5xx error.
+				log.WarningContextf(ctx, "Unexpected error while getting status, retrying: %d", resp.StatusCode)
+			}
 		}
 
 		fmt.Printf(".")
@@ -171,6 +179,126 @@ func waitForCluster(ctx context.Context, client authedClient, clusterName, devic
 	return nil
 }
 
+func registerControlPlane(ctx context.Context, client authedClient, projectName, orgName string) error {
+	updateMode := clustermanagerpb.PlatformUpdateMode_PLATFORM_UPDATE_MODE_AUTOMATIC
+	if noUpdate {
+		updateMode = clustermanagerpb.PlatformUpdateMode_PLATFORM_UPDATE_MODE_ON
+	}
+	req := &clustermanagerpb.CreateClusterRequest{
+		ClusterInfo: &clustermanagerpb.CreateClusterInfo{
+			Pending: &clustermanagerpb.PendingDeviceDescription{
+				DeviceId: deviceID,
+			},
+			ClusterId:     hostname,
+			DisplayName:   hostname,
+			Region:        deviceRegion,
+			Replace:       replaceDevice,
+			PrivateDevice: privateDevice,
+			UpdateMode:    updateMode,
+		},
+		CreatedByTest: os.Getenv("INCTL_CREATED_BY_TEST"),
+	}
+
+	op, err := client.grpcClient.CreateCluster(ctx, req)
+	if err != nil {
+		switch status.Code(err) {
+		case codes.AlreadyExists:
+			return fmt.Errorf("cluster %q already exists. Please use a unique value for --hostname if this is a new cluster.\nTo replace the old cluster, call with --%s", hostname, replaceKey)
+		case codes.NotFound:
+			return fmt.Errorf("device %q does not exist. Please make sure you have the exact id from the device you are trying to register", deviceID)
+		case codes.Unauthenticated:
+			return fmt.Errorf("your login key has expired or been replaced.\nRun 'inctl auth login' to update it")
+		case codes.PermissionDenied:
+			return fmt.Errorf("you do not have the necessary permissions to add a cluster on organization %q.\nOpen a support request to get the 'clusterProvisioner' role", orgutil.QualifiedOrg(projectName, orgName))
+		default:
+			return fmt.Errorf("request failed: %w", err)
+		}
+	}
+
+	var c clustermanagerpb.Cluster
+	if err := op.GetResponse().UnmarshalTo(&c); err == nil && c.GetClusterName() != "" {
+		if hostname == deviceID {
+			deviceID = c.GetClusterName()
+		}
+		hostname = c.GetClusterName()
+	}
+
+	fmt.Printf("Sent configuration to server. The device will reboot and apply the configuration within a minute.\n")
+	return nil
+}
+
+func registerWorker(ctx context.Context, client authedClient, projectName, orgName string) error {
+	// This map represents a json mapping of a config struct.
+
+	// https://github.com/intrinsic-ai/xfa-tools/blob/main/pkg/devicemanager/config/config.go#L291
+
+	config := map[string]any{
+		"hostname": hostname,
+		"cloudConnection": map[string]any{
+			"project": projectName,
+			"token":   "not-a-valid-token",
+			"name":    clusterName,
+		},
+		"cluster": map[string]any{
+			"role":            deviceRole,
+			"controlPlaneURI": fmt.Sprintf("%s:6443", clusterName),
+			"token":           shared.TokenPlaceholder,
+		},
+		"proxyConfig": map[string]any{
+			"aqualine": 2,
+		},
+		"version": "v1alphav1",
+	}
+	marshalled, err := json.Marshal(config)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+	data := shared.ConfigureData{
+		Hostname:   hostname,
+		Config:     marshalled,
+		Role:       deviceRole,
+		Cluster:    clusterName,
+		Private:    privateDevice,
+		Region:     deviceRegion,
+		Replace:    replaceDevice,
+		AutoUpdate: !noUpdate,
+	}
+	if testID := os.Getenv("INCTL_CREATED_BY_TEST"); testID != "" {
+		// This is an automated test.
+		data.CreatedByTest = testID
+	}
+	body, err := json.Marshal(data)
+	if err != nil {
+		return fmt.Errorf("failed to marshal config: %w", err)
+	}
+
+	resp, err := client.postDevice(ctx, clusterName, deviceID, "configure", bytes.NewBuffer(body))
+	if err != nil {
+		return err
+	}
+	defer resp.Body.Close()
+
+	switch resp.StatusCode {
+	case http.StatusOK:
+		fmt.Printf("Sent configuration to server. The device will reboot and apply the configuration within a minute.\n")
+	case http.StatusConflict:
+		return fmt.Errorf("cluster %q already exists. Please use a unique value for --hostname if this is a new cluster.\nTo replace the old cluster, call with --%s", hostname, replaceKey)
+	case http.StatusPreconditionFailed:
+		return fmt.Errorf("cluster %q does not exist. Please make sure that --cluster_name matches the --hostname from a previously registered cluster.\nIf you want to create a new cluster, do not use --device_role", clusterName)
+	case http.StatusNotFound:
+		return fmt.Errorf("device %q does not exist. Please make sure you have the exact id from the device you are trying to register", deviceID)
+	case http.StatusUnauthorized:
+		return fmt.Errorf("your login key has expired or been replaced.\nRun 'inctl auth login' to update it")
+	case http.StatusForbidden:
+		return fmt.Errorf("you do not have the necessary permissions to add a cluster on organization %q.\nOpen a support request to get the 'clusterProvisioner' role", orgutil.QualifiedOrg(projectName, orgName))
+	default:
+		io.Copy(os.Stderr, resp.Body)
+
+		return fmt.Errorf("request failed. http code: %v", resp.StatusCode)
+	}
+	return nil
+}
+
 var registerCmd = &cobra.Command{
 	Use:   "register",
 	Short: "Tool to register hardware in setup flow",
@@ -183,6 +311,9 @@ var registerCmd = &cobra.Command{
 		if deviceRole != "control-plane" && clusterName == "" {
 			fmt.Printf("--cluster_name needs to be provided for role %q\n", deviceRole)
 			return fmt.Errorf("invalid arguments")
+		}
+		if deviceRole == "control-plane" && clusterName != "" && clusterName != hostname {
+			return fmt.Errorf("--%s must be empty or equal to --hostname for role %q", keyClusterName, deviceRole)
 		}
 
 		if offender, ok := validHostname(hostname); !ok {
@@ -197,74 +328,14 @@ var registerCmd = &cobra.Command{
 		}
 		defer client.close()
 
-		// This map represents a json mapping of a config struct.
-
-		// https://github.com/intrinsic-ai/xfa-tools/blob/main/pkg/devicemanager/config/config.go#L291
-
-		config := map[string]any{
-			"hostname": hostname,
-			"cloudConnection": map[string]any{
-				"project": projectName,
-				"token":   "not-a-valid-token",
-				"name":    clusterName,
-			},
-			"cluster": map[string]any{
-				"role": deviceRole,
-				// Only relevant for worker, but this doesn't hurt the control-plane nodes.
-				"controlPlaneURI": fmt.Sprintf("%s:6443", clusterName),
-				"token":           shared.TokenPlaceholder,
-			},
-			"proxyConfig": map[string]any{
-				"aqualine": 2,
-			},
-			"version": "v1alphav1",
-		}
-		marshalled, err := json.Marshal(config)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %w", err)
-		}
-		data := shared.ConfigureData{
-			Hostname:   hostname,
-			Config:     marshalled,
-			Role:       deviceRole,
-			Cluster:    clusterName,
-			Private:    privateDevice,
-			Region:     deviceRegion,
-			Replace:    replaceDevice,
-			AutoUpdate: !noUpdate,
-		}
-		if testID := os.Getenv("INCTL_CREATED_BY_TEST"); testID != "" {
-			// This is an automated test.
-			data.CreatedByTest = testID
-		}
-		body, err := json.Marshal(data)
-		if err != nil {
-			return fmt.Errorf("failed to marshal config: %w", err)
-		}
-
-		resp, err := client.postDevice(ctx, clusterName, deviceID, "configure", bytes.NewBuffer(body))
-		if err != nil {
-			return err
-		}
-		defer resp.Body.Close()
-
-		switch resp.StatusCode {
-		case http.StatusOK:
-			fmt.Printf("Sent configuration to server. The device will reboot and apply the configuration within a minute.\n")
-		case http.StatusConflict:
-			return fmt.Errorf("cluster %q already exists. Please use a unique value for --hostname if this is a new cluster.\nTo replace the old cluster, call with --%s", hostname, replaceKey)
-		case http.StatusPreconditionFailed:
-			return fmt.Errorf("cluster %q does not exist. Please make sure that --cluster_name matches the --hostname from a previously registered cluster.\nIf you want to create a new cluster, do not use --device_role", clusterName)
-		case http.StatusNotFound:
-			return fmt.Errorf("device %q does not exist. Please make sure you have the exact id from the device you are trying to register", deviceID)
-		case http.StatusUnauthorized:
-			return fmt.Errorf("your login key has expired or been replaced.\nRun 'inctl auth login' to update it")
-		case http.StatusForbidden:
-			return fmt.Errorf("you do not have the necessary permissions to add a cluster on organization %q.\nOpen a support request to get the 'clusterProvisioner' role", orgutil.QualifiedOrg(projectName, orgName))
-		default:
-			io.Copy(os.Stderr, resp.Body)
-
-			return fmt.Errorf("request failed. http code: %v", resp.StatusCode)
+		if deviceRole == "control-plane" {
+			if err := registerControlPlane(ctx, client, projectName, orgName); err != nil {
+				return err
+			}
+		} else {
+			if err := registerWorker(ctx, client, projectName, orgName); err != nil {
+				return err
+			}
 		}
 		if !noWait {
 			if err := waitForCluster(ctx, client, clusterName, deviceID, hostname); err != nil {
