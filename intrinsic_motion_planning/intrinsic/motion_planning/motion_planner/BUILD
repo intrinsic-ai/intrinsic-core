@@ -306,7 +306,6 @@ cc_library(
         "//intrinsic/world",
         "//intrinsic/world:kinematic_world_views",
         "//intrinsic/world/objects:object_world",
-        "//intrinsic/world/objects/test:object_world_test_utils",
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits_xd",
