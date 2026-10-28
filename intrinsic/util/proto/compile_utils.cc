@@ -146,6 +146,10 @@ CreateFileDescriptorSetFromFileDescriptors(
   for (const auto& [name, fd] : fd_map) {
     google::protobuf::FileDescriptorProto* file_proto = fds.add_file();
     fd->CopyTo(file_proto);
+    // CopyTo() only sets json_name for fields that specify it explicitly. Set
+    // it for all fields like protoc does, so that clients get the JSON names
+    // without having to compute them.
+    fd->CopyJsonNameTo(file_proto);
     CopySourceCodeInfoWithComments(*fd, file_proto);
   }
   return fds;
