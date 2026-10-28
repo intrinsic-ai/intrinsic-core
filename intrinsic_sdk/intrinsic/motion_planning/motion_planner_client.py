@@ -43,11 +43,13 @@ from intrinsic.motion_planning.proto.v1 import geometric_constraints_pb2
 from intrinsic.motion_planning.proto.v1 import motion_planner_config_pb2
 from intrinsic.motion_planning.proto.v1 import motion_planner_service_pb2
 from intrinsic.motion_planning.proto.v1 import motion_planner_service_pb2_grpc
+from intrinsic.motion_planning.proto.v1 import motion_planning_error_pb2
 from intrinsic.motion_planning.proto.v1 import motion_planning_pb2
 from intrinsic.motion_planning.proto.v1 import motion_specification_pb2
 from intrinsic.motion_planning.proto.v1 import robot_specification_pb2
 from intrinsic.world.proto import collision_checker_config_pb2
 from intrinsic.world.proto import collision_settings_pb2
+from intrinsic.world.proto import object_world_service_pb2
 from intrinsic.world.python import object_world_ids
 
 MOTION_PLANNER_SERVICE_INTERFACE = (
@@ -59,6 +61,33 @@ def _repeated_vec_to_list_of_floats(
     vectors: list[joint_space_pb2.JointVec],
 ) -> list[list[float]]:
   return [list(vector.joints) for vector in vectors]
+
+
+def _set_target_constraint(
+    constraint: geometric_constraints_pb2.GeometricConstraint,
+    target: (
+        motion_target_pb2.CartesianMotionTarget
+        | geometric_constraints_pb2.GeometricConstraint
+    ),
+) -> None:
+  """Populates `constraint` from `target`, converting if necessary.
+
+  A CartesianMotionTarget is expressed as a `cartesian_pose` (pose equality)
+  geometric constraint; a GeometricConstraint is copied verbatim. This is shared
+  by `compute_ik` and `batch_check` so that both interpret a given target
+  identically.
+
+  Args:
+    constraint: The constraint message to populate in place.
+    target: The target to convert.
+  """
+  if isinstance(target, motion_target_pb2.CartesianMotionTarget):
+    constraint.cartesian_pose.moving_frame.CopyFrom(target.tool)
+    constraint.cartesian_pose.target_frame.CopyFrom(target.frame)
+    if target.HasField("offset"):
+      constraint.cartesian_pose.target_frame_offset.CopyFrom(target.offset)
+  else:
+    constraint.CopyFrom(target)
 
 
 @dataclasses.dataclass
@@ -194,6 +223,227 @@ class ComputeIkResult:
       None
   )
   logging_id: str = ""
+
+
+@dataclasses.dataclass
+class BatchIkQuery:
+  """A single inverse kinematics query within a `batch_check` request.
+
+  Mirrors `BatchIkQuery` in motion_planner_service.proto. Note that collision
+  settings are deliberately absent: they are a property of the whole request
+  (see `BatchCheckOptions.collision_settings`) and cannot be varied per query.
+
+  Attributes:
+    target: The target pose to compute IK for.
+    starting_joints: Used as seed for IK, optional. If not set, the current
+      position of the robot in the world is used.
+    max_num_solutions: The maximum number of solutions to be returned. If not
+      set (== 0), the underlying implementation chooses. Negative values are
+      invalid.
+    ensure_same_branch: Flag to ensure the IK solution is on the same kinematic
+      branch as `starting_joints`.
+    prefer_same_branch: If True, the solution on the same kinematic branch as
+      `starting_joints` is returned first, even if another solution is closer in
+      joint space; the remaining solutions follow. Without it, solutions are
+      sorted by joint-space distance to `starting_joints`. Does not fail if no
+      same-branch solution exists.
+    disable_error_on_collisions: If True, the query does not fail when no
+      collision-free solution is found.
+  """
+
+  target: (
+      motion_target_pb2.CartesianMotionTarget
+      | geometric_constraints_pb2.GeometricConstraint
+  )
+  starting_joints: list[float] | None = None
+  max_num_solutions: int = 0
+  ensure_same_branch: bool = False
+  prefer_same_branch: bool = False
+  disable_error_on_collisions: bool = False
+
+
+@dataclasses.dataclass
+class BatchCollisionQuery:
+  """A single collision check query within a `batch_check` request.
+
+  Mirrors `BatchCollisionQuery` in motion_planner_service.proto.
+
+  Attributes:
+    waypoints: The path of the robot to be collision checked. A single waypoint
+      is checked as a static configuration; more than one waypoint is checked
+      with linear joint interpolation in between.
+    collision_check_spacing: Collision check spacing in radians used when
+      interpolating between waypoints. If not set, the service default is used.
+      Must be > 0.0 if specified.
+  """
+
+  waypoints: list[joint_space_pb2.JointVec]
+  collision_check_spacing: float | None = None
+
+
+@dataclasses.dataclass
+class BatchCheckOptions:
+  """Request-level options for `batch_check`.
+
+  Every field here applies to *all* queries in the request; the underlying proto
+  has no per-query equivalents. Queries that need different collision settings
+  must therefore be split across separate `batch_check` calls.
+
+  Attributes:
+    collision_settings: Settings applied during collision checking and
+      collision-aware IK on top of the collision settings of the world, taking
+      precedence over them. If not set, none of the world's collision settings
+      are overridden, i.e. only the world's own settings (e.g. its margins and
+      collision exclusions) apply.
+    collision_checker_config: Configuration override for the collision checker.
+    timeout_sec: If set, used as the gRPC deadline of the BatchCheck call. Note
+      that an expired deadline aborts the whole call and discards the results of
+      every query in it, so this is not a suitable mechanism for "return what
+      has been computed so far" style budgets.
+  """
+
+  collision_settings: collision_settings_pb2.CollisionSettings | None = None
+  collision_checker_config: (
+      collision_checker_config_pb2.CollisionCheckerConfig | None
+  ) = None
+  timeout_sec: float | None = None
+
+
+@dataclasses.dataclass
+class BatchIkQueryResult:
+  """Result of a single IK query within a `batch_check` response.
+
+  Unlike `compute_ik`, which raises a NOT_FOUND `grpc.RpcError` when no IK
+  solution exists, a failing batch query is reported here as `success = False`
+  with an `error_message`, and no exception is raised.
+
+  Attributes:
+    success: Whether the IK computation succeeded for this query.
+    error_message: Error message if the IK computation failed.
+    solutions: The computed IK solutions (joint configurations).
+    ik_debug_information: Detailed internal diagnostics and metrics from the IK
+      solver, or None if the service did not return any. NOTE: Unintuitively,
+      the `ik_solutions` list within this debug structure contains all candidate
+      configurations generated and evaluated during the search, including those
+      that were ultimately REJECTED (e.g., due to collisions, joint limit
+      violations, or constraint failures).
+    error: Structured failure reason when `success` is False, or None if the
+      service did not provide one. This is the same `MotionPlanningError` that
+      `compute_ik` raises as a gRPC status detail, so both paths can classify a
+      failure identically instead of matching on `error_message` prose. Always
+      optional: an older service will leave it unset.
+  """
+
+  success: bool
+  error_message: str
+  solutions: list[list[float]]
+  ik_debug_information: Optional[compute_ik_pb2.ComputeIkDebugInformation] = (
+      None
+  )
+  error: Optional[motion_planning_error_pb2.MotionPlanningError] = None
+
+
+@dataclasses.dataclass
+class BatchCollisionQueryResult:
+  """Result of a single collision query within a `batch_check` response.
+
+  Attributes:
+    success: Whether the collision check could be performed, i.e. whether the
+      inputs were valid. This is not the outcome of the check itself.
+    error_message: Error message if the collision check could not be performed.
+    has_collision: Whether the checked configuration or path is in collision.
+    collision_debug_msg: Description of the first collision encountered, if
+      `has_collision` is True.
+  """
+
+  success: bool
+  error_message: str
+  has_collision: bool
+  collision_debug_msg: str
+
+
+@dataclasses.dataclass
+class BatchCheckResult:
+  """Wrapped result from calling batch_check.
+
+  Attributes:
+    ik_results: One result per IK query, in the order the queries were passed.
+    collision_results: One result per collision query, in the order the queries
+      were passed.
+  """
+
+  ik_results: list[BatchIkQueryResult]
+  collision_results: list[BatchCollisionQueryResult]
+
+
+def _fill_batch_ik_query(
+    request_query: motion_planner_service_pb2.BatchIkQuery,
+    query: BatchIkQuery,
+) -> None:
+  """Populates a `BatchIkQuery` proto in place from its dataclass."""
+  _set_target_constraint(request_query.target, query.target)
+  if query.starting_joints is not None:
+    request_query.starting_joints.joints.extend(query.starting_joints)
+  if query.max_num_solutions:
+    request_query.max_num_solutions = query.max_num_solutions
+  if query.ensure_same_branch:
+    request_query.ensure_same_branch = query.ensure_same_branch
+  if query.prefer_same_branch:
+    request_query.prefer_same_branch = query.prefer_same_branch
+  if query.disable_error_on_collisions:
+    request_query.disable_error_on_collisions = (
+        query.disable_error_on_collisions
+    )
+
+
+def _fill_batch_collision_query(
+    request_query: motion_planner_service_pb2.BatchCollisionQuery,
+    query: BatchCollisionQuery,
+) -> None:
+  """Populates a `BatchCollisionQuery` proto in place from its dataclass."""
+  request_query.waypoints.extend(query.waypoints)
+  if query.collision_check_spacing is not None:
+    request_query.collision_check_spacing = query.collision_check_spacing
+
+
+def _fill_batch_check_options(
+    request: motion_planner_service_pb2.BatchCheckRequest,
+    options: BatchCheckOptions,
+) -> None:
+  """Applies the request-level options to a `BatchCheckRequest` in place."""
+  if options.collision_settings:
+    request.collision_settings.CopyFrom(options.collision_settings)
+  if options.collision_checker_config:
+    request.collision_checker_config.CopyFrom(options.collision_checker_config)
+
+
+def _batch_ik_result_from_proto(
+    result: motion_planner_service_pb2.BatchIkQueryResult,
+) -> BatchIkQueryResult:
+  """Converts a `BatchIkQueryResult` proto to its dataclass."""
+  return BatchIkQueryResult(
+      success=result.success,
+      error_message=result.error_message,
+      solutions=_repeated_vec_to_list_of_floats(result.solutions),
+      ik_debug_information=(
+          result.ik_debug_information
+          if result.HasField("ik_debug_information")
+          else None
+      ),
+      error=result.error if result.HasField("error") else None,
+  )
+
+
+def _batch_collision_result_from_proto(
+    result: motion_planner_service_pb2.BatchCollisionQueryResult,
+) -> BatchCollisionQueryResult:
+  """Converts a `BatchCollisionQueryResult` proto to its dataclass."""
+  return BatchCollisionQueryResult(
+      success=result.success,
+      error_message=result.error_message,
+      has_collision=result.has_collision,
+      collision_debug_msg=result.collision_debug_msg,
+  )
 
 
 class MotionPlannerClientBase:
@@ -395,16 +645,7 @@ class MotionPlannerClient(MotionPlannerClientBase):
     request = motion_planner_service_pb2.IkRequest(world_id=self._world_id)
     request.robot_reference.object_id.by_name.object_name = robot_name
 
-    # Convert CartesianMotionTarget to GeometricConstraint::PoseEquality.
-    if isinstance(target, motion_target_pb2.CartesianMotionTarget):
-      request.target.cartesian_pose.moving_frame.CopyFrom(target.tool)
-      request.target.cartesian_pose.target_frame.CopyFrom(target.frame)
-      if target.HasField("offset"):
-        request.target.cartesian_pose.target_frame_offset.CopyFrom(
-            target.offset
-        )
-    else:
-      request.target.CopyFrom(target)
+    _set_target_constraint(request.target, target)
 
     if starting_joints is not None:
       request.starting_joints.joints.extend(starting_joints)
@@ -516,6 +757,80 @@ class MotionPlannerClient(MotionPlannerClientBase):
     request.robot_reference.object_id.by_name.object_name = robot_name
     response = self._stub.CheckCollisions(request)
     return response
+
+  def batch_check(
+      self,
+      robot_name: object_world_ids.WorldObjectName,
+      ik_queries: Sequence[BatchIkQuery] = (),
+      collision_queries: Sequence[BatchCollisionQuery] = (),
+      options: Optional[BatchCheckOptions] = None,
+      world_snapshot: Optional[object_world_service_pb2.World] = None,
+  ) -> BatchCheckResult:
+    """Calls the BatchCheck rpc, doing argument conversion as necessary.
+
+    Evaluates many IK and/or collision queries against a single world and robot
+    instance, which the service resolves once for the whole request rather than
+    once per query. Either query list may be empty.
+
+    A query that fails does not raise. It is reported as an unsuccessful entry
+    in the corresponding result list, carrying the service's error message. In
+    particular, and unlike `compute_ik`, an IK query for which no solution
+    exists yields `success = False` rather than a NOT_FOUND `grpc.RpcError`.
+
+    Args:
+      robot_name: Name of robot, must map to a kinematic object. Applies to
+        every query in the request.
+      ik_queries: The IK queries to compute.
+      collision_queries: The collision queries to evaluate.
+      options: Request-level options, see BatchCheckOptions. These apply to
+        every query in the request.
+      world_snapshot: If set, all queries are evaluated against this world
+        state, which is sent instead of the client's world id, so the service
+        does not fetch the world. A world as returned by
+        `ObjectWorldService.GetWorld` with `WORLD_VIEW_FULL` and
+        `COLLISION_SETTINGS_VIEW_EFFECTIVE` can be passed as is, since its
+        collision settings include the world's collision exclusion pairs. If
+        not set, the request carries the client's world id and the service
+        fetches that world. See `BatchCheckRequest.world_snapshot`.
+
+    Returns:
+      The results of all queries. `ik_results` and `collision_results` are
+      positional: entry `i` is the result of query `i` of the corresponding
+      argument, and neither list is filtered or reordered.
+    """
+    request = motion_planner_service_pb2.BatchCheckRequest()
+    # `world_id` and `world_snapshot` form the oneof `world_source`; exactly one
+    # of them is set.
+    if world_snapshot is not None:
+      request.world_snapshot.CopyFrom(world_snapshot)
+    else:
+      request.world_id = self._world_id
+    request.robot_reference.object_id.by_name.object_name = robot_name
+
+    for query in ik_queries:
+      _fill_batch_ik_query(request.ik_queries.add(), query)
+    for query in collision_queries:
+      _fill_batch_collision_query(request.collision_queries.add(), query)
+    if options is not None:
+      _fill_batch_check_options(request, options)
+
+    # Make the rpc. An unset timeout leaves the call without a deadline, which
+    # is the stub's default, so it is not passed at all in that case.
+    if options is not None and options.timeout_sec is not None:
+      response = self._stub.BatchCheck(request, timeout=options.timeout_sec)
+    else:
+      response = self._stub.BatchCheck(request)
+
+    return BatchCheckResult(
+        ik_results=[
+            _batch_ik_result_from_proto(result)
+            for result in response.ik_results
+        ],
+        collision_results=[
+            _batch_collision_result_from_proto(result)
+            for result in response.collision_results
+        ],
+    )
 
 
 def get_motion_planner_service_asset_client(
