@@ -32,26 +32,6 @@ filegroup(
     ],
 )
 
-# PubSub API library. The user-facing API providing access to
-# publish-subscribe system.
-alias(
-    name = "pubsub",
-    actual = "//intrinsic_sdk/intrinsic/platform/pubsub",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "publisher",
-    actual = "//intrinsic_sdk/intrinsic/platform/pubsub:publisher",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "subscription",
-    actual = "//intrinsic_sdk/intrinsic/platform/pubsub:subscription",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 cc_library(
     name = "pubsub_metrics",
     srcs = ["pubsub_metrics.cc"],

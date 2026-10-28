@@ -31,9 +31,3 @@ go_proto_library(
         "//intrinsic_sdk/intrinsic/skills/proto:skill_registry_config_go_proto",
     ],
 )
-
-alias(
-    name = "skill_service_cc_proto",
-    actual = "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

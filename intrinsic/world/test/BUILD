@@ -24,8 +24,6 @@ cc_library(
     srcs = ["world_test_utils.cc"],
     hdrs = ["world_test_utils.h"],
     deps = [
-        "//intrinsic/util/proto:parse_text_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic/world",
         "//intrinsic/world:entity",
         "//intrinsic/world:grouping",
@@ -34,6 +32,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:shape_factory",
         "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world:geometry_types",
         "//intrinsic_sdk/intrinsic/world:labels",

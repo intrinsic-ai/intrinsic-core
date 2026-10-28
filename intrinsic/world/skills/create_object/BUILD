@@ -15,7 +15,7 @@
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
 
 proto_library(
     name = "create_object_proto",
@@ -59,11 +59,6 @@ cc_library(
     deps = [
         ":create_object_cc_proto",
         "//intrinsic/scene/util:scene_object_from_asset",
-        "//intrinsic/skills/proto:skill_service_cc_proto",
-        "//intrinsic/util/grpc:channel",
-        "//intrinsic/util/status:status_macros",
-        "//intrinsic/util/status:status_macros_grpc",
-        "//intrinsic/world/proto:object_world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/assets:interface_utils",
         "//intrinsic_sdk/intrinsic/assets/catalog/proto/v1:asset_catalog_cc_proto",
         "//intrinsic_sdk/intrinsic/assets/dependencies:utils_cc",
@@ -81,9 +76,14 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills/cc:preview_request",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/grpc:channel",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/random",
         "@abseil-cpp//absl/random:distributions",

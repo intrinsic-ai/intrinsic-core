@@ -24,8 +24,6 @@ cc_library(
     ],
     deps = [
         "//intrinsic/resources/proto:geometric_resource_data_cc_proto",
-        "//intrinsic/util/proto:parse_text_proto",
-        "//intrinsic/util/status:status_macros",
         "//intrinsic/world",
         "//intrinsic/world:entity",
         "//intrinsic/world:kinematic_world_views",
@@ -45,6 +43,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/scene/conversion:object_properties_conversion",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world:geometry_types",
         "//intrinsic_sdk/intrinsic/world:labels",

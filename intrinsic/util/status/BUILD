@@ -20,66 +20,6 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
-alias(
-    name = "status_builder",
-    actual = "//intrinsic_sdk/intrinsic/util/status:status_builder",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "status_macros",
-    actual = "//intrinsic_sdk/intrinsic/util/status:status_macros",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "status_conversion_rpc",
-    actual = "//intrinsic_sdk/intrinsic/util/status:status_conversion_rpc",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "status_conversion_grpc",
-    actual = "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "log_if_error",
-    actual = "//intrinsic_sdk/intrinsic/util/status:log_if_error",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "return",
-    actual = "//intrinsic_sdk/intrinsic/util/status:return",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "ret_check",
-    actual = "//intrinsic_sdk/intrinsic/util/status:ret_check",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "status_builder_grpc",
-    actual = "//intrinsic_sdk/intrinsic/util/status:status_builder_grpc",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "status_macros_grpc",
-    actual = "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "ret_check_grpc",
-    actual = "//intrinsic_sdk/intrinsic/util/status:ret_check_grpc",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 go_library(
     name = "approximatestatus",
     srcs = ["approximatestatus.go"],

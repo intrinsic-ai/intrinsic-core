@@ -17,12 +17,6 @@ load("//bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = ["//visibility:public"])
 
-alias(
-    name = "repeated_field_util",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:repeated_field_util",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 cc_library(
     name = "compile_utils",
     srcs = ["compile_utils.cc"],
@@ -57,12 +51,6 @@ cc_library(
         "@com_google_protobuf//:protobuf",
         "@com_google_protobuf//src/google/protobuf/io",
     ],
-)
-
-alias(
-    name = "parse_text_proto",
-    actual = "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 cc_library(

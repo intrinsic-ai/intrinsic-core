@@ -20,12 +20,6 @@ package(default_visibility = ["//visibility:public"])
 # The targets below are not exported to the SDK.
 # --------------------------------------------------------------------------------------------------
 
-alias(
-    name = "periodic",
-    actual = "//intrinsic_sdk/intrinsic/util/thread:periodic",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 cc_library(
     name = "rt_trace",
     srcs = ["rt_trace.cc"],

@@ -13,9 +13,3 @@
 # limitations under the License.
 
 package(default_visibility = ["//visibility:public"])
-
-alias(
-    name = "path_resolver",
-    actual = "//intrinsic_sdk/intrinsic/util/path_resolver",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

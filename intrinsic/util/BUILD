@@ -18,12 +18,6 @@ package(
     default_visibility = ["//visibility:public"],
 )
 
-alias(
-    name = "aggregate_type",
-    actual = "//intrinsic_sdk/intrinsic/util:aggregate_type",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 cc_library(
     name = "cyclic_runner",
     srcs = ["cyclic_runner.cc"],
@@ -53,12 +47,6 @@ cc_library(
     ],
 )
 
-alias(
-    name = "macros",
-    actual = "//intrinsic_sdk/intrinsic/util:macros",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 cc_library(
     name = "unique_id",
     srcs = ["unique_id.cc"],
@@ -68,12 +56,6 @@ cc_library(
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/strings:string_view",
     ],
-)
-
-alias(
-    name = "eigen",
-    actual = "//intrinsic_sdk/intrinsic/util:eigen",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 cc_library(
@@ -90,18 +72,6 @@ cc_library(
     name = "full_precision",
     hdrs = ["full_precision.h"],
     deps = ["@abseil-cpp//absl/strings:str_format"],
-)
-
-alias(
-    name = "string_type",
-    actual = "//intrinsic_sdk/intrinsic/util:string_type",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "proto_time",
-    actual = "//intrinsic_sdk/intrinsic/util:proto_time",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 cc_library(
