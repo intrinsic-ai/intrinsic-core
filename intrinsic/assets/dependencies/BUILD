@@ -69,20 +69,13 @@ cc_library(
     ],
 )
 
-alias(
-    name = "utils",
-    actual = "//intrinsic_sdk/intrinsic/assets/dependencies:utils",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)
-
 go_library(
     name = "traversal",
     srcs = ["traversal.go"],
     importpath = "intrinsic/assets/dependencies/traversal",
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        ":utils",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils",
         "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:dependency_go_proto",
@@ -93,13 +86,6 @@ go_library(
         "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
         "@org_golang_google_protobuf//types/known/anypb",
     ],
-)
-
-alias(
-    name = "platform",
-    actual = "//intrinsic_sdk/intrinsic/assets/dependencies:platform",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:__subpackages__"],
 )
 
 intrinsic_runtime_installed_asset(
@@ -128,7 +114,7 @@ go_library(
     importpath = "intrinsic/assets/dependencies/runtimeasset",
     visibility = ["//intrinsic:__subpackages__"],
     deps = [
-        ":platform",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:platform",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_go_proto",
@@ -156,8 +142,8 @@ go_library(
     deps = [
         ":errors",
         ":traversal",
-        ":utils",
         "//intrinsic_sdk/intrinsic/assets:typeutils",
+        "//intrinsic_sdk/intrinsic/assets/dependencies:utils",
         "//intrinsic_sdk/intrinsic/assets/errors:report",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:dependency_go_proto",

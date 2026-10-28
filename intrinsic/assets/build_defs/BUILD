@@ -18,12 +18,6 @@ package(default_visibility = [
     "//visibility:public",
 ])
 
-alias(
-    name = "asset_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/assets/build_defs:asset_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 go_library(
     name = "cascopyprocessor",
     srcs = ["cascopyprocessor.go"],
@@ -44,7 +38,6 @@ go_binary(
     srcs = ["solution_update.go"],
     importpath = "intrinsic/assets/build_defs/solution_update",
     deps = [
-        ":asset_go_proto",
         ":cascopyprocessor",
         "//intrinsic/assets/conversion:solutionconversion",
         "//intrinsic/config/proto:application_go_proto",
@@ -63,6 +56,7 @@ go_binary(
         "//intrinsic_sdk/intrinsic/assets:imagetransfer",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "//intrinsic_sdk/intrinsic/assets:throttle",
+        "//intrinsic_sdk/intrinsic/assets/build_defs:asset_go_proto",
         "//intrinsic_sdk/intrinsic/assets/build_defs:assetprocessor",
         "//intrinsic_sdk/intrinsic/assets/platformlevelswitch",
         "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_deployment_go_proto",

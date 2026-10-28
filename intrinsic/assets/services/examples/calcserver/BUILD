@@ -24,12 +24,6 @@ package(default_visibility = [
     "//visibility:public",
 ])
 
-alias(
-    name = "calculator_service",
-    actual = "//intrinsic_sdk/intrinsic/assets/services/examples/calcserver:calculator_service",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 go_library(
     name = "calcserver",
     srcs = ["calcserver.go"],
@@ -89,12 +83,6 @@ intrinsic_service(
     ],
 )
 
-alias(
-    name = "calculator_py",
-    actual = "//intrinsic_sdk/intrinsic/assets/services/examples/calcserver:calculator_py",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 intrinsic_asset_instance(
     name = "my_cc_calculator",
     asset = "ai.intrinsic.calculator_service",
@@ -113,9 +101,9 @@ intrinsic_asset_instance(
 intrinsic_solution(
     name = "e2e_calculator_application",
     assets = [
-        ":calculator_service",
+        "//intrinsic_sdk/intrinsic/assets/services/examples/calcserver:calculator_service",
         ":calculator_go",
-        ":calculator_py",
+        "//intrinsic_sdk/intrinsic/assets/services/examples/calcserver:calculator_py",
         "//intrinsic/skills/examples:adder_skill",
     ],
     instances = [

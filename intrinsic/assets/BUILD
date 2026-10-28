@@ -30,13 +30,6 @@ alias(
     visibility = ["//intrinsic:public_api_users"],
 )
 
-alias(
-    name = "idutils",
-    actual = "//intrinsic_sdk/intrinsic/assets:idutils",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)
-
 go_library(
     name = "pageutils",
     srcs = ["pageutils.go"],
@@ -50,22 +43,15 @@ go_library(
     ],
 )
 
-alias(
-    name = "interfaceutils",
-    actual = "//intrinsic_sdk/intrinsic/assets:interfaceutils",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)
-
 go_library(
     name = "metadatautilsinternal",
     srcs = ["metadatautilsinternal.go"],
     importpath = "intrinsic/assets/metadatautilsinternal",
     visibility = ["//intrinsic:internal_api_users"],
     deps = [
-        ":idutils",
-        ":interfaceutils",
         "//intrinsic/assets/hardware_devices:graph",
+        "//intrinsic_sdk/intrinsic/assets:idutils",
+        "//intrinsic_sdk/intrinsic/assets:interfaceutils",
         "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_go_proto",
         "//intrinsic_sdk/intrinsic/util/proto:descriptor",
         "//intrinsic_sdk/intrinsic/util/proto:names",
