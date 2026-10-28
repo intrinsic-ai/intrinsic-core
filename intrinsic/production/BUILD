@@ -25,9 +25,9 @@ go_library(
     importpath = "intrinsic/production/imagepublisher",
     visibility = ["//intrinsic:internal_api_users"],
     deps = [
-        "//intrinsic/kubernetes/workcell_spec:imagetags",
         "//intrinsic/kubernetes/workcell_spec:workcellspec",
-        "//intrinsic/util/go:set",
+        "//intrinsic_sdk/intrinsic/kubernetes/workcell_spec:imagetags",
+        "//intrinsic_sdk/intrinsic/util/go:set",
         "@com_github_cenkalti_backoff_v4//:go_default_library",
         "@com_github_containerd_containerd//:go_default_library",
         "@com_github_containerd_containerd//images:go_default_library",

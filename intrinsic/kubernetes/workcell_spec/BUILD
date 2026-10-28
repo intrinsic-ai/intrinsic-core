@@ -382,12 +382,3 @@ go_library(
         "@org_golang_google_protobuf//types/known/emptypb",
     ] + [],
 )
-
-alias(
-    name = "imagetags",
-    actual = "//intrinsic_sdk/intrinsic/kubernetes/workcell_spec:imagetags",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = [
-        "//visibility:public",
-    ],
-)
