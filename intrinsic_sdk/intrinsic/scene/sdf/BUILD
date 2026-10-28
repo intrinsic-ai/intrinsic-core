@@ -192,7 +192,6 @@ cc_binary(
     name = "sdf_to_scene_object",
     srcs = ["sdf_to_scene_object.cc"],
     visibility = [
-        "//intrinsic/scene/build_defs:__subpackages__",
         "//intrinsic/scene/sdf:__pkg__",
         "//intrinsic_sdk/intrinsic/scene/build_defs:__subpackages__",
     ],
