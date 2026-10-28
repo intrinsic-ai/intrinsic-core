@@ -16,20 +16,6 @@
 
 load("//bazel:go_macros.bzl", "go_library")
 
-alias(
-    name = "id_utils",
-    actual = "//intrinsic_sdk/intrinsic/assets:id_utils",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)
-
-alias(
-    name = "id_utils_py",
-    actual = "//intrinsic_sdk/intrinsic/assets:id_utils_py",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)
-
 go_library(
     name = "pageutils",
     srcs = ["pageutils.go"],

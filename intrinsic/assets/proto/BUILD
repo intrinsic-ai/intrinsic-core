@@ -54,10 +54,3 @@ go_proto_library(
     protos = [":page_token_data_proto"],
     visibility = ["//intrinsic/assets:__pkg__"],
 )
-
-alias(
-    name = "installed_assets_py_pb2",
-    actual = "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_py_pb2",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)

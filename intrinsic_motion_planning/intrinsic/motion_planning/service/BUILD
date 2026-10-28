@@ -38,7 +38,6 @@ cc_library(
     deps = [
         ":motion_planner_service_asset_utils",
         ":motion_planner_service_utils",
-        "//intrinsic/assets:id_utils",
         "//intrinsic/logging:log_item_builder",
         "//intrinsic/skills/internal:world_service_utils",
         "//intrinsic/stats:scoped_span",
