@@ -21,9 +21,9 @@ go_library(
     srcs = ["releaseutil.go"],
     importpath = "intrinsic/tools/inctl/util/releaseutil",
     deps = [
-        ":color",
         "//intrinsic/storage/content_addressable_storage/pkg/crossproject",
         "//intrinsic/storage/content_addressable_storage/pkg/filetocas",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:transfer_go_proto",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
@@ -76,7 +76,7 @@ go_library(
     srcs = ["traceutil.go"],
     importpath = "intrinsic/tools/inctl/util/traceutil",
     deps = [
-        ":orgutil",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "@com_github_golang_glog//:go_default_library",
         "@io_opentelemetry_go_otel//:otel",
         "@io_opentelemetry_go_otel//attribute",
@@ -88,18 +88,6 @@ go_library(
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//credentials/oauth:go_default_library",
     ],
-)
-
-alias(
-    name = "color",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "orgutil",
-    actual = "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 
 go_library(
