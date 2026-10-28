@@ -135,7 +135,7 @@ go_library(
         "//intrinsic/config/proto:resource_set_go_proto",
         "//intrinsic/resources/proto:geometric_resource_data_go_proto",
         "//intrinsic/storage/hot_shared_state/proto/v1:resource_set_service_go_proto",
-        "//intrinsic/world/proto:object_world_service_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_go_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_pkg_errors//:go_default_library",

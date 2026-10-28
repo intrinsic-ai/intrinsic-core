@@ -28,9 +28,9 @@ go_library(
     ],
     importpath = "intrinsic/storage/artifacts/internal/internal",
     deps = [
-        ":utils",
         "//intrinsic/storage/artifacts/internal/registry",
         "//intrinsic/storage/artifacts/writer",
+        "//intrinsic_sdk/intrinsic/storage/artifacts/internal:utils",
         "@com_github_containerd_containerd//:go_default_library",
         "@com_github_containerd_containerd//content:go_default_library",
         "@com_github_containerd_containerd//errdefs:go_default_library",
@@ -54,10 +54,4 @@ go_library(
         "@org_golang_google_grpc//status:go_default_library",
         "@org_uber_go_atomic//:go_default_library",
     ],
-)
-
-alias(
-    name = "utils",
-    actual = "//intrinsic_sdk/intrinsic/storage/artifacts/internal:utils",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
 )

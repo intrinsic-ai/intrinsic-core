@@ -19,9 +19,3 @@ alias(
     actual = "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_proto",
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
-
-alias(
-    name = "geometry_service_cc_grpc_proto",
-    actual = "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_grpc_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

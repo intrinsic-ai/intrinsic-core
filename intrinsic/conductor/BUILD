@@ -134,7 +134,7 @@ go_binary(
         "//intrinsic/resources/service:resourceworld",
         "//intrinsic/storage/hot_shared_state/proto/v1:resource_set_service_go_proto",
         "//intrinsic/util/cgo:cgoconvert",
-        "//intrinsic/world/proto:object_world_service_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
