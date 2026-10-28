@@ -37,12 +37,6 @@ package(default_visibility = [
     "//incode/motion_planning/skills:__subpackages__",
 ])
 
-alias(
-    name = "error_utils",
-    actual = "//intrinsic_sdk/intrinsic/skills/internal:error_utils",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 cc_library(
     name = "conflicts",
     srcs = ["conflicts.cc"],
@@ -86,7 +80,6 @@ cc_library(
     srcs = ["skill_service_client.cc"],
     hdrs = ["skill_service_client.h"],
     deps = [
-        ":error_utils",
         ":skill_service_client_interface",
         "//intrinsic/logging/utils:logger_labels",
         "//intrinsic/stats:scoped_span",
@@ -95,6 +88,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/logging:data_logger_client",
         "//intrinsic_sdk/intrinsic/logging/proto:log_item_cc_proto",
         "//intrinsic_sdk/intrinsic/skills/cc:client_common",
+        "//intrinsic_sdk/intrinsic/skills/internal:error_utils",
         "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
         "//intrinsic_sdk/intrinsic/util:proto_time",

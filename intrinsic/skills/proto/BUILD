@@ -20,7 +20,7 @@ package(default_visibility = ["//visibility:public"])
 proto_library(
     name = "skill_runtime_proto",
     srcs = ["skill_runtime.proto"],
-    deps = [":skill_registry_config_proto"],
+    deps = ["//intrinsic_sdk/intrinsic/skills/proto:skill_registry_config_proto"],
 )
 
 go_proto_library(
@@ -28,19 +28,13 @@ go_proto_library(
     importpath = "intrinsic/skills/proto/skill_runtime_go_proto",
     protos = [":skill_runtime_proto"],
     deps = [
-        ":skill_registry_config_go_proto",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_registry_config_go_proto",
     ],
 )
 
 alias(
     name = "skill_service_cc_proto",
     actual = "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
-alias(
-    name = "skill_registry_config_proto",
-    actual = "//intrinsic_sdk/intrinsic/skills/proto:skill_registry_config_proto",
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
 

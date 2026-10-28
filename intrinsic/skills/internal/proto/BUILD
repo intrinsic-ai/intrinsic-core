@@ -20,12 +20,6 @@ package(default_visibility = [
     "//visibility:public",
 ])
 
-alias(
-    name = "skill_registry_internal_proto",
-    actual = "//intrinsic_sdk/intrinsic/skills/internal/proto:skill_registry_internal_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 go_proto_library(
     name = "skill_registry_internal_go_proto",
     compilers = [
@@ -33,7 +27,7 @@ go_proto_library(
         "@io_bazel_rules_go//proto:go_proto",
     ],
     importpath = "intrinsic/skills/internal/proto/skill_registry_internal_go_proto",
-    protos = [":skill_registry_internal_proto"],
+    protos = ["//intrinsic_sdk/intrinsic/skills/internal/proto:skill_registry_internal_proto"],
     deps = [
         "//intrinsic_sdk/intrinsic/skills/proto:skill_registry_config_go_proto",
         "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
@@ -43,12 +37,6 @@ go_proto_library(
     ],
 )
 
-alias(
-    name = "behavior_tree_registry_internal_proto",
-    actual = "//intrinsic_sdk/intrinsic/skills/internal/proto:behavior_tree_registry_internal_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 go_proto_library(
     name = "behavior_tree_registry_internal_go_proto",
     compilers = [
@@ -56,7 +44,7 @@ go_proto_library(
         "@io_bazel_rules_go//proto:go_proto",
     ],
     importpath = "intrinsic/skills/internal/proto/behavior_tree_registry_internal_go_proto",
-    protos = [":behavior_tree_registry_internal_proto"],
+    protos = ["//intrinsic_sdk/intrinsic/skills/internal/proto:behavior_tree_registry_internal_proto"],
     deps = [
         "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
     ],
