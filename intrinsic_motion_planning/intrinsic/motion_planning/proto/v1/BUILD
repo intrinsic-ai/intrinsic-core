@@ -31,6 +31,7 @@ proto_library(
     deps = [
         ":motion_events_proto",
         ":motion_specification_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_protobuf//:empty_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
@@ -43,6 +44,7 @@ proto_library(
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:compute_ik_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:geometric_constraints_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planner_config_proto",
+        "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planning_error_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planning_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:robot_specification_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_checker_config_proto",
@@ -77,6 +79,7 @@ go_proto_library(
     deps = [
         ":motion_events_go_proto",
         ":motion_specification_go_proto",
+        "//intrinsic/world/proto:object_world_service_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:transformed_geometry_go_proto",
@@ -87,6 +90,7 @@ go_proto_library(
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:compute_ik_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:geometric_constraints_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planner_config_go_proto",
+        "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planning_error_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planning_go_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:robot_specification_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_checker_config_go_proto",

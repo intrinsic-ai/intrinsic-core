@@ -390,6 +390,7 @@ cc_test(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/log:scoped_mock_log",

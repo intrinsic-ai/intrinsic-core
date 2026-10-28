@@ -178,6 +178,16 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
           request,
       intrinsic_proto::motion_planning::v1::CheckCollisionsResponse* response)
       override;
+
+  // Computes a batch of IK queries and/or collision check queries against a
+  // single world and robot. The world, object world view and kinematics proxy
+  // are built once and reused for all queries. Per-query failures are reported
+  // in the individual query results and do not fail the whole RPC.
+  ::grpc::Status BatchCheck(
+      ::grpc::ServerContext* context,
+      const intrinsic_proto::motion_planning::v1::BatchCheckRequest* request,
+      intrinsic_proto::motion_planning::v1::BatchCheckResponse* response)
+      override;
   ::grpc::Status ClearCache(::grpc::ServerContext* context,
                             const google::protobuf::Empty* request,
                             google::protobuf::Empty* response) override;
@@ -202,6 +212,18 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
   // ID `world_id`.
   absl::StatusOr<WorldAndProto> GetInitialWorldFromWorldService(
       absl::string_view world_id);
+
+  // Serializes `world` into its proto and, if a geometry library is
+  // configured, deserializes the world geometries in-place. Shared tail of all
+  // paths that construct the initial world of a request.
+  absl::StatusOr<WorldAndProto> MakeWorldAndProto(World world);
+
+  // Returns both the initial World and its proto for a BatchCheck request,
+  // built from the request's `world_snapshot` or fetched from the World
+  // Service using `world_id`, depending on which of the two is set. Returns
+  // INVALID_ARGUMENT if neither is set or `world_id` is empty.
+  absl::StatusOr<WorldAndProto> GetWorldAndProtoForBatchCheck(
+      const intrinsic_proto::motion_planning::v1::BatchCheckRequest& request);
 
   // If the `robot_specification` specifies a start joint configuration, then
   // set this joint configuration on the `robot`.

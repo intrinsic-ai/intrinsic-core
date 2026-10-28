@@ -90,6 +90,8 @@ using ::protobuf_matchers::proto::IgnoringRepeatedFieldOrdering;
 using ::testing::HasSubstr;
 
 using ::google::protobuf::Empty;
+using ::intrinsic_proto::motion_planning::v1::BatchCheckRequest;
+using ::intrinsic_proto::motion_planning::v1::BatchCheckResponse;
 using ::intrinsic_proto::motion_planning::v1::CheckCollisionsRequest;
 using ::intrinsic_proto::motion_planning::v1::CheckCollisionsResponse;
 using ::intrinsic_proto::motion_planning::v1::FkRequest;
@@ -408,6 +410,10 @@ EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_IGNORE(
 
 EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_IGNORE(
     CheckCollisions, CheckCollisionsRequest, CheckCollisionsResponse,
+    std::initializer_list<std::string>({}));
+
+EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_IGNORE(
+    BatchCheck, BatchCheckRequest, BatchCheckResponse,
     std::initializer_list<std::string>({}));
 EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_IGNORE(
     ClearCache, Empty, Empty, std::initializer_list<std::string>({}));

@@ -33,6 +33,8 @@ namespace {
 using ::google::protobuf::Empty;
 using ::grpc::ClientContext;
 using ::grpc::ServerContext;
+using ::intrinsic_proto::motion_planning::v1::BatchCheckRequest;
+using ::intrinsic_proto::motion_planning::v1::BatchCheckResponse;
 using ::intrinsic_proto::motion_planning::v1::CheckCollisionsRequest;
 using ::intrinsic_proto::motion_planning::v1::CheckCollisionsResponse;
 using ::intrinsic_proto::motion_planning::v1::FkRequest;
@@ -88,6 +90,7 @@ FORWARD_RPC(PlanPath, MotionPlanningRequest, PathPlanningResponse);
 FORWARD_RPC(ComputeIk, IkRequest, IkResponse);
 FORWARD_RPC(ComputeFk, FkRequest, FkResponse);
 FORWARD_RPC(CheckCollisions, CheckCollisionsRequest, CheckCollisionsResponse);
+FORWARD_RPC(BatchCheck, BatchCheckRequest, BatchCheckResponse);
 FORWARD_RPC(ClearCache, Empty, Empty);
 #undef FORWARD_RPC
 

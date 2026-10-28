@@ -70,6 +70,12 @@ class MotionPlannerServiceProxy final
           request,
       intrinsic_proto::motion_planning::v1::CheckCollisionsResponse* response)
       override;
+
+  ::grpc::Status BatchCheck(
+      ::grpc::ServerContext* context,
+      const intrinsic_proto::motion_planning::v1::BatchCheckRequest* request,
+      intrinsic_proto::motion_planning::v1::BatchCheckResponse* response)
+      override;
   ::grpc::Status ClearCache(::grpc::ServerContext* context,
                             const google::protobuf::Empty* request,
                             google::protobuf::Empty* response) override;

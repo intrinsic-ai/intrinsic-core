@@ -153,6 +153,15 @@ static const auto* const failed_plan_cache_format_string =
 static constexpr char kPubSubName[] = "motion_planning";
 static constexpr char kPlannedTrajectoryTopicName[] = "planned_trajectory";
 
+// Default maximum number of inverse kinematics solutions to compute if
+// `max_num_solutions` is not set (or set to 0) in an IK request.
+constexpr int kDefaultMaxNumIkSolutions = 8;
+
+using intrinsic_proto::motion_planning::v1::BatchCheckRequest;
+using intrinsic_proto::motion_planning::v1::BatchCollisionQuery;
+using intrinsic_proto::motion_planning::v1::BatchCollisionQueryResult;
+using intrinsic_proto::motion_planning::v1::BatchIkQuery;
+using intrinsic_proto::motion_planning::v1::BatchIkQueryResult;
 using intrinsic_proto::motion_planning::v1::MotionPlanningRequest;
 using intrinsic_proto::world::CreateWorldRequest;
 using intrinsic_proto::world::Objects;
@@ -320,6 +329,212 @@ absl::Status CheckSweptVolumeRequestAllowed(
   }
   return absl::OkStatus();
 }
+// Validates the top-level arguments of a BatchCheckRequest.
+absl::Status ValidateBatchCheckRequest(const BatchCheckRequest& request) {
+  if (request.ik_queries().empty() && request.collision_queries().empty()) {
+    return absl::InvalidArgumentError(
+        "BatchCheckRequest must contain at least one IK query or collision "
+        "query.");
+  }
+  for (const auto& query : request.collision_queries()) {
+    if (query.has_collision_check_spacing() &&
+        query.collision_check_spacing() <= 0.0) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("collision_check_spacing must be positive. Got ",
+                       query.collision_check_spacing()));
+    }
+  }
+  return absl::OkStatus();
+}
+
+// Evaluates a single inverse kinematics query statelessly against the proxy and
+// robot without mutating the robot's joint positions in the object world.
+BatchIkQueryResult ExecuteSingleIkQuery(
+    const object_world::ObjectWorld& object_world,
+    const KinematicsSystemProxy& proxy,
+    const object_world::KinematicObject& robot, const BatchIkQuery& query) {
+  BatchIkQueryResult result;
+
+  if (query.max_num_solutions() < 0) {
+    result.set_success(false);
+    result.set_error_message(
+        absl::StrCat("max_num_solutions must be non-negative. Got ",
+                     query.max_num_solutions()));
+    return result;
+  }
+
+  const int max_num_solutions = query.max_num_solutions() == 0
+                                    ? kDefaultMaxNumIkSolutions
+                                    : query.max_num_solutions();
+
+  ComputeIkOptions options;
+  options.max_num_solutions = max_num_solutions;
+  options.ensure_same_branch = query.ensure_same_branch();
+  options.prefer_same_branch = query.prefer_same_branch();
+  options.disable_error_on_collisions = query.disable_error_on_collisions();
+
+  if (query.has_starting_joints()) {
+    options.seed_configuration =
+        RepeatedDoubleToVectorXd(query.starting_joints().joints());
+  }
+
+  ComputeIkDebugInformation ik_debug_info;
+  const auto ik_status_or_solutions = GetCollisionFreeIkSolutions(
+      object_world, proxy, robot, query.target(), options, &ik_debug_info);
+
+  if (!ik_status_or_solutions.ok()) {
+    result.set_success(false);
+    // The free-text message is set unconditionally, and remains the fallback
+    // for callers that hit a failure carrying no structured payload.
+    result.set_error_message(
+        std::string(ik_status_or_solutions.status().message()));
+    // Additionally surface the structured failure reason that
+    // `GetCollisionFreeIkSolutions` attaches to its status as a payload (see
+    // `CreateStatusWithIKError` / `CreateStatusWithCollisionError` in
+    // motion_planning_error_utils.h). Without this, batched callers can only
+    // classify failures by matching on `error_message`, whereas single-query
+    // `ComputeIk` callers receive this same proto as a gRPC status detail.
+    //
+    // Only bare `MotionPlanningError` payloads are handled here.
+    // `MotionPipelineError`-wrapped payloads are produced exclusively by
+    // `UpdateStatusWithPipelineError`, which runs in the multi-segment
+    // trajectory-planning pipeline that this stateless single-query path never
+    // enters. Their type URLs nevertheless contain the substring
+    // "MotionPlanningError", so they are excluded explicitly to avoid parsing
+    // one message type as the other.
+    ik_status_or_solutions.status().ForEachPayload(
+        [&result](absl::string_view type_url, const absl::Cord& payload) {
+          // `GetCollisionFreeIkSolutions` attaches exactly one such payload,
+          // so at most one match is expected. Should that ever change,
+          // `ForEachPayload`'s visitation order is unspecified, so pick the
+          // first one visited rather than letting a later one silently
+          // overwrite it.
+          if (result.has_error() ||
+              !absl::StrContains(type_url, "MotionPlanningError") ||
+              absl::StrContains(type_url, "MotionPipelineError")) {
+            return;
+          }
+          intrinsic_proto::motion_planning::v1::MotionPlanningError
+              motion_planning_error;
+          if (!motion_planning_error.ParseFromString(payload)) {
+            LOG(ERROR) << "Failed to parse MotionPlanningError from IK status "
+                          "payload with type URL: "
+                       << type_url;
+            return;
+          }
+          *result.mutable_error() = std::move(motion_planning_error);
+        });
+    return result;
+  }
+
+  result.set_success(true);
+  for (const auto& solution : ik_status_or_solutions.value()) {
+    auto* const solution_proto = result.add_solutions();
+    VectorXdToRepeatedDouble(solution, solution_proto->mutable_joints());
+  }
+
+  return result;
+}
+
+// Executes a batch of inverse kinematics queries statelessly against the
+// provided proxy and robot.
+void ExecuteBatchIkQueries(
+    const object_world::ObjectWorld& object_world,
+    const KinematicsSystemProxy& proxy,
+    const object_world::KinematicObject& robot,
+    const google::protobuf::RepeatedPtrField<BatchIkQuery>& ik_queries,
+    google::protobuf::RepeatedPtrField<BatchIkQueryResult>* const ik_results) {
+  ik_results->Reserve(ik_queries.size());
+  for (const auto& query : ik_queries) {
+    *ik_results->Add() =
+        ExecuteSingleIkQuery(object_world, proxy, robot, query);
+  }
+}
+
+// Evaluates a single collision query against the proxy and robot.
+BatchCollisionQueryResult ExecuteSingleCollisionQuery(
+    const KinematicsSystemProxy& proxy,
+    const object_world::KinematicObject& robot,
+    const double default_collision_check_spacing,
+    const BatchCollisionQuery& query) {
+  BatchCollisionQueryResult result;
+
+  if (query.waypoints().empty()) {
+    result.set_success(false);
+    result.set_error_message(
+        "The input path must contain at least one joint configuration.");
+    return result;
+  }
+
+  const auto joint_positions = robot.GetJointPositions();
+  const int expected_dofs = joint_positions.ok() ? joint_positions->size()
+                                                 : proxy.GetDofLabels().size();
+  for (int i = 0; i < query.waypoints_size(); ++i) {
+    const int actual_dofs = query.waypoints(i).joints_size();
+    if (actual_dofs != expected_dofs) {
+      result.set_success(false);
+      result.set_error_message(absl::StrCat(
+          "Waypoint ", i, " has ", actual_dofs, " joints, but robot expects ",
+          expected_dofs, " joints."));
+      return result;
+    }
+  }
+
+  // A non-positive spacing is rejected for the whole request by
+  // `ValidateBatchCheckRequest` before any query is executed.
+  const double spacing = query.has_collision_check_spacing()
+                             ? query.collision_check_spacing()
+                             : default_collision_check_spacing;
+
+  if (query.waypoints_size() == 1) {
+    const auto check_status_or = CheckLimitsAndCollisionsForConfiguration(
+        proxy, RepeatedDoubleToVectorXd(query.waypoints(0).joints()));
+    if (!check_status_or.ok()) {
+      result.set_success(false);
+      result.set_error_message(std::string(check_status_or.status().message()));
+      return result;
+    }
+    result.set_success(true);
+    result.set_has_collision(!check_status_or->is_valid);
+    if (!check_status_or->is_valid) {
+      result.set_collision_debug_msg(check_status_or->debug_message);
+    }
+  } else {
+    const auto check_status_or = CheckLimitsAndCollisionsForPointPath(
+        proxy, ToVectorXds(query.waypoints()), spacing);
+    if (!check_status_or.ok()) {
+      result.set_success(false);
+      result.set_error_message(std::string(check_status_or.status().message()));
+      return result;
+    }
+    result.set_success(true);
+    result.set_has_collision(!check_status_or->is_valid);
+    if (!check_status_or->is_valid) {
+      result.set_collision_debug_msg(check_status_or->debug_message);
+    }
+  }
+
+  return result;
+}
+
+// Executes a batch of collision checking queries against the provided proxy.
+// Queries with 1 waypoint are evaluated as static configurations, and queries
+// with more than 1 waypoint are evaluated as linearly interpolated joint paths.
+void ExecuteBatchCollisionQueries(
+    const KinematicsSystemProxy& proxy,
+    const object_world::KinematicObject& robot,
+    const double default_collision_check_spacing,
+    const google::protobuf::RepeatedPtrField<BatchCollisionQuery>&
+        collision_queries,
+    google::protobuf::RepeatedPtrField<BatchCollisionQueryResult>* const
+        collision_results) {
+  collision_results->Reserve(collision_queries.size());
+  for (const auto& query : collision_queries) {
+    *collision_results->Add() = ExecuteSingleCollisionQuery(
+        proxy, robot, default_collision_check_spacing, query);
+  }
+}
+
 }  // namespace
 
 void FromProto(
@@ -351,16 +566,48 @@ MotionPlannerService::GetInitialWorldFromWorldService(
       World initial_world,
       skills::DownloadWorldFromObjectWorldService(
           world_id, *object_world_service_, /*geolib=*/nullptr));
+  return MakeWorldAndProto(std::move(initial_world));
+}
+
+absl::StatusOr<WorldAndProto> MotionPlannerService::MakeWorldAndProto(
+    World world) {
   LOG(INFO) << "Serializing initial world proto...";
-  INTR_ASSIGN_OR_RETURN(
-      intrinsic_proto::world::internal::World initial_world_proto,
-      initial_world.Serialize());
+  INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::internal::World world_proto,
+                        world.Serialize());
   if (geometry_library_ != nullptr) {
     INTR_RETURN_IF_ERROR(skills::DeserializeWorldGeometries(
-        initial_world, geometry_library_->Deserializer()));
+        world, geometry_library_->Deserializer()));
   }
-  return WorldAndProto{.world = std::move(initial_world),
-                       .world_proto = std::move(initial_world_proto)};
+  return WorldAndProto{.world = std::move(world),
+                       .world_proto = std::move(world_proto)};
+}
+
+absl::StatusOr<WorldAndProto>
+MotionPlannerService::GetWorldAndProtoForBatchCheck(
+    const BatchCheckRequest& request) {
+  switch (request.world_source_case()) {
+    case BatchCheckRequest::kWorldSnapshot: {
+      // The snapshot is provided by the caller, so failing to construct a
+      // world from it is an invalid argument, whatever the underlying error
+      // code.
+      absl::StatusOr<World> world = skills::CreateWorldFromObjectWorldProto(
+          request.world_snapshot(), /*geolib=*/nullptr);
+      if (!world.ok()) {
+        return absl::InvalidArgumentError(
+            absl::StrCat("Invalid world_snapshot: ", world.status().message()));
+      }
+      return MakeWorldAndProto(*std::move(world));
+    }
+    case BatchCheckRequest::kWorldId:
+      if (request.world_id().empty()) {
+        return absl::InvalidArgumentError("world_id must not be empty.");
+      }
+      return GetInitialWorldFromWorldService(request.world_id());
+    case BatchCheckRequest::WORLD_SOURCE_NOT_SET:
+      break;
+  }
+  return absl::InvalidArgumentError(
+      "One of world_id or world_snapshot must be set.");
 }
 
 absl::Status
@@ -862,9 +1109,10 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
                      request->max_num_solutions())));
   }
   // Get maximum number of IK solutions that should be sampled for each pose
-  // from the request. Defaults to 8 if not provided.
-  const int max_num_solutions =
-      request->max_num_solutions() == 0 ? 8 : request->max_num_solutions();
+  // from the request. Defaults to kDefaultMaxNumIkSolutions if not provided.
+  const int max_num_solutions = request->max_num_solutions() == 0
+                                    ? kDefaultMaxNumIkSolutions
+                                    : request->max_num_solutions();
 
   // Download the world from the world service.
   INTR_ASSIGN_OR_RETURN_GRPC(
@@ -1030,6 +1278,63 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
                          mps_config_.flags.default_collision_check_spacing));
     response->set_has_collision(!result.is_valid);
     response->set_collision_debug_msg(result.debug_message);
+  }
+
+  return grpc::Status::OK;
+}
+
+::grpc::Status MotionPlannerService::BatchCheck(
+    ::grpc::ServerContext* context,
+    const intrinsic_proto::motion_planning::v1::BatchCheckRequest* request,
+    intrinsic_proto::motion_planning::v1::BatchCheckResponse* response) {
+  const stats::ScopedSpan span("MotionPlannerService/BatchCheck", context);
+
+  INTR_RETURN_IF_ERROR_GRPC(ValidateBatchCheckRequest(*request));
+
+  // Load the world, the object world view and the robot once for the whole
+  // batch; all queries are evaluated against them.
+  INTR_ASSIGN_OR_RETURN_GRPC(WorldAndProto initial_world_and_proto,
+                             GetWorldAndProtoForBatchCheck(*request));
+
+  INTR_ASSIGN_OR_RETURN_GRPC(
+      const std::unique_ptr<object_world::ObjectWorld> object_world,
+      GetObjectWorldView(initial_world_and_proto.world));
+
+  INTR_ASSIGN_OR_RETURN_GRPC(
+      const object_world::KinematicObject* const robot,
+      GetRobot(request->robot_reference(), object_world.get()));
+
+  const bool collision_checking_enabled =
+      !request->collision_settings().disable_collision_checking();
+
+  intrinsic_proto::RuleSet rule_set;
+  if (collision_checking_enabled) {
+    INTR_ASSIGN_OR_RETURN_GRPC(
+        rule_set, MakeRuleSet(request->collision_settings(), *object_world));
+  }
+
+  // The proxy is only required to support IK/FK if there are IK queries.
+  const bool require_ik_and_fk = request->ik_queries_size() > 0;
+  INTR_ASSIGN_OR_RETURN_GRPC(
+      const std::unique_ptr<KinematicsSystemProxy> proxy,
+      GetProxyForPathPlanning(*object_world, *robot,
+                              request->collision_checker_config(), rule_set,
+                              require_ik_and_fk, !collision_checking_enabled));
+  if (proxy == nullptr) {
+    return ToGrpcStatus(absl::InternalError(
+        "An unexpected error occurred during BatchCheck. No validation proxy "
+        "available."));
+  }
+
+  if (request->ik_queries_size() > 0) {
+    ExecuteBatchIkQueries(*object_world, *proxy, *robot, request->ik_queries(),
+                          response->mutable_ik_results());
+  }
+
+  if (request->collision_queries_size() > 0) {
+    ExecuteBatchCollisionQueries(
+        *proxy, *robot, mps_config_.flags.default_collision_check_spacing,
+        request->collision_queries(), response->mutable_collision_results());
   }
 
   return grpc::Status::OK;

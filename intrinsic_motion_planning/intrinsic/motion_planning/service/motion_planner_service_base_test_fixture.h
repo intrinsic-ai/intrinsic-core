@@ -141,6 +141,11 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
       const intrinsic_proto::motion_planning::v1::CheckCollisionsRequest&
           request,
       bool compare_against_mps_proxy = true);
+
+  absl::StatusOr<intrinsic_proto::motion_planning::v1::BatchCheckResponse>
+  BatchCheck(
+      const intrinsic_proto::motion_planning::v1::BatchCheckRequest& request,
+      bool compare_against_mps_proxy = true);
   absl::StatusOr<google::protobuf::Empty> ClearCache(
       const google::protobuf::Empty& request,
       bool compare_against_mps_proxy = true);

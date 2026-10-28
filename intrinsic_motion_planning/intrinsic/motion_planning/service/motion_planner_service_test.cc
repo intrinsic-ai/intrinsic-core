@@ -103,6 +103,7 @@
 #include "intrinsic/world/objects/object_world_ids.h"
 #include "intrinsic/world/objects/world_object.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
+#include "intrinsic/world/proto/object_world_service.pb.h"
 #include "intrinsic/world/service/objects/object_world_converter.h"
 #include "intrinsic/world/service/objects/world_comparator.h"
 #include "intrinsic/world/service/test/world_service_fake.h"
@@ -129,6 +130,9 @@ using ::testing::Not;
 using ::testing::Pointwise;
 
 using ::google::protobuf::Empty;
+using ::intrinsic_proto::motion_planning::v1::BatchCheckRequest;
+using ::intrinsic_proto::motion_planning::v1::BatchCheckResponse;
+using ::intrinsic_proto::motion_planning::v1::BatchCollisionQueryResult;
 using ::intrinsic_proto::motion_planning::v1::CheckCollisionsRequest;
 using ::intrinsic_proto::motion_planning::v1::CheckCollisionsResponse;
 using ::intrinsic_proto::motion_planning::v1::FkRequest;
@@ -884,6 +888,630 @@ TEST_P(MotionPlannerServiceWithoutLoggerTest, CheckCollisionsDisabled) {
 
   ASSERT_OK_AND_ASSIGN(auto result, CheckCollisions(request));
   EXPECT_FALSE(result.has_collision());
+}
+
+// Returns a snapshot of the world `world_id` as a client holding one would
+// send it in `BatchCheckRequest.world_snapshot`: the objects from
+// `ObjectWorldService.GetWorld` with `WORLD_VIEW_FULL` and the collision
+// settings from `GetCollisionSettings`, which include the world's collision
+// exclusion pairs (e.g. between adjacent robot links).
+absl::StatusOr<intrinsic_proto::world::World> GetWorldSnapshot(
+    intrinsic_proto::world::ObjectWorldService::StubInterface& stub,
+    absl::string_view world_id) {
+  intrinsic_proto::world::GetWorldRequest get_world_request;
+  get_world_request.set_world_id(std::string(world_id));
+  get_world_request.set_view(intrinsic_proto::world::WORLD_VIEW_FULL);
+  grpc::ClientContext get_world_context;
+  intrinsic_proto::world::World snapshot;
+  INTR_RETURN_IF_ERROR(ToAbslStatus(
+      stub.GetWorld(&get_world_context, get_world_request, &snapshot)));
+
+  intrinsic_proto::world::GetCollisionSettingsRequest
+      get_collision_settings_request;
+  get_collision_settings_request.set_world_id(std::string(world_id));
+  grpc::ClientContext get_collision_settings_context;
+  INTR_RETURN_IF_ERROR(ToAbslStatus(stub.GetCollisionSettings(
+      &get_collision_settings_context, get_collision_settings_request,
+      snapshot.mutable_collision_settings())));
+  return snapshot;
+}
+
+// Returns the object `object_name` in `snapshot`. The pointer is valid as long
+// as no objects are added to `snapshot`.
+absl::StatusOr<intrinsic_proto::world::Object*> FindObjectInSnapshot(
+    absl::string_view object_name, intrinsic_proto::world::World& snapshot) {
+  for (intrinsic_proto::world::Object& object : *snapshot.mutable_objects()) {
+    if (object.name() == object_name) return &object;
+  }
+  return absl::NotFoundError(
+      absl::StrCat("Object '", object_name, "' not in snapshot."));
+}
+
+// Returns the root entity of `object`.
+absl::StatusOr<intrinsic_proto::world::Entity*> FindRootEntity(
+    intrinsic_proto::world::Object& object) {
+  const auto root_entity =
+      object.mutable_entities()->find(object.root_entity_id());
+  if (root_entity == object.mutable_entities()->end()) {
+    return absl::NotFoundError(absl::StrCat(
+        "Root entity of object '", object.name(), "' not in snapshot."));
+  }
+  return &root_entity->second;
+}
+
+// Moves the object `object_name` of `snapshot` to the pose of the object
+// `target_object_name`. Both objects must be attached to the same parent
+// entity. The pose is stored redundantly in the object and in its root entity,
+// both are updated.
+absl::Status MoveObjectInSnapshotOnto(absl::string_view object_name,
+                                      absl::string_view target_object_name,
+                                      intrinsic_proto::world::World& snapshot) {
+  INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::Object* const object,
+                        FindObjectInSnapshot(object_name, snapshot));
+  INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::Object* const target_object,
+                        FindObjectInSnapshot(target_object_name, snapshot));
+  INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::Entity* const root_entity,
+                        FindRootEntity(*object));
+  INTR_ASSIGN_OR_RETURN(
+      const intrinsic_proto::world::Entity* const target_root_entity,
+      FindRootEntity(*target_object));
+  if (root_entity->parent_id() != target_root_entity->parent_id()) {
+    return absl::InvalidArgumentError(
+        "Objects are attached to different parent entities.");
+  }
+  *root_entity->mutable_parent_t_this() = target_root_entity->parent_t_this();
+  *object->mutable_object_component()->mutable_parent_t_this() =
+      target_object->object_component().parent_t_this();
+  return absl::OkStatus();
+}
+
+// Id of an entity that does not exist in the test world. Attaching an object to
+// it makes a world snapshot invalid.
+constexpr absl::string_view kNonexistentEntityId = "nonexistent_entity";
+
+// Attaches the object `object_name` of `snapshot` to the entity
+// `kNonexistentEntityId`, so that no world can be constructed from `snapshot`.
+absl::Status AttachObjectInSnapshotToNonexistentParent(
+    absl::string_view object_name, intrinsic_proto::world::World& snapshot) {
+  INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::Object* const object,
+                        FindObjectInSnapshot(object_name, snapshot));
+  INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::Entity* const root_entity,
+                        FindRootEntity(*object));
+  root_entity->set_parent_id(std::string(kNonexistentEntityId));
+  return absl::OkStatus();
+}
+
+// Verifies top-level validation rules for BatchCheckRequest.
+TEST_P(MotionPlannerServiceWithoutLoggerTest, BatchCheckValidationFailures) {
+  // Scenario 1: Neither world_snapshot nor world_id is set.
+  const BatchCheckRequest request_no_world = ParseTextProtoOrDie(R"pb(
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    collision_queries { waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] } }
+  )pb");
+  ASSERT_EQ(request_no_world.world_source_case(),
+            BatchCheckRequest::WORLD_SOURCE_NOT_SET);
+  EXPECT_THAT(BatchCheck(request_no_world),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("One of world_id or world_snapshot must be "
+                                 "set.")));
+
+  // Scenario 1b: world_id is selected but empty.
+  BatchCheckRequest request_empty_world_id = request_no_world;
+  request_empty_world_id.set_world_id("");
+  ASSERT_EQ(request_empty_world_id.world_source_case(),
+            BatchCheckRequest::kWorldId);
+  EXPECT_THAT(BatchCheck(request_empty_world_id),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("world_id must not be empty.")));
+
+  // Scenario 2: Neither IK queries nor collision queries are provided.
+  const BatchCheckRequest request_no_queries = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+  )pb");
+  EXPECT_THAT(
+      BatchCheck(request_no_queries),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("BatchCheckRequest must contain at least one IK query "
+                         "or collision query.")));
+
+  // Scenario 3: Non-positive collision_check_spacing.
+  BatchCheckRequest request_invalid_spacing = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    collision_queries {
+      waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] }
+      waypoints { joints: [ 1.2, -2, 2, 0, 0, 0 ] }
+    }
+  )pb");
+  // Non-positive collision check spacing used to verify validation rejection.
+  constexpr double kInvalidCollisionCheckSpacing = 0.0;
+  request_invalid_spacing.mutable_collision_queries(0)
+      ->set_collision_check_spacing(kInvalidCollisionCheckSpacing);
+  EXPECT_THAT(
+      BatchCheck(request_invalid_spacing),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("collision_check_spacing must be positive. Got 0")));
+
+  // Scenario 4: A world_snapshot from which no world can be constructed, here
+  // because an object is attached to a parent entity that does not exist.
+  BatchCheckRequest request_invalid_snapshot = ParseTextProtoOrDie(R"pb(
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    collision_queries { waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] } }
+  )pb");
+  ASSERT_OK_AND_ASSIGN(*request_invalid_snapshot.mutable_world_snapshot(),
+                       GetWorldSnapshot(*object_world_service_stub_, "world"));
+  ASSERT_OK(AttachObjectInSnapshotToNonexistentParent(
+      "workpiece", *request_invalid_snapshot.mutable_world_snapshot()));
+  EXPECT_THAT(BatchCheck(request_invalid_snapshot),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("Invalid world_snapshot: ")));
+}
+
+// Verifies evaluating multiple IK queries in a single BatchCheck RPC using
+// world_id.
+TEST_P(MotionPlannerServiceWithoutLoggerTest, BatchCheckIkOnlyWithWorldId) {
+  const BatchCheckRequest request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+    }
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.05 y: 0.05 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+    }
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto response, BatchCheck(request));
+  ASSERT_EQ(response.ik_results_size(), 2);
+  EXPECT_EQ(response.collision_results_size(), 0);
+
+  for (const auto& ik_result : response.ik_results()) {
+    EXPECT_TRUE(ik_result.success());
+    EXPECT_GE(ik_result.solutions_size(), 1);
+  }
+}
+
+// Verifies evaluating multiple collision queries (single configuration and
+// multi-waypoint paths) in a single BatchCheck RPC.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckCollisionOnlyWithWorldId) {
+  const BatchCheckRequest request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    # Query 0: Single configuration, collision-free.
+    collision_queries { waypoints { joints: [ 0, -0.6, 1.7, 0, 0, 0 ] } }
+    # Query 1: Single configuration, in collision.
+    collision_queries { waypoints { joints: [ 0.6, -0.6, 1.7, 0, 0, 0 ] } }
+    # Query 2: Multi-waypoint path, collision-free.
+    collision_queries {
+      waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] }
+      waypoints { joints: [ 1.2, -2, 2, 0, 0, 0 ] }
+    }
+    # Query 3: Multi-waypoint path, in collision.
+    collision_queries {
+      waypoints { joints: [ 0, -0.6, 1.7, 0, 0, 0 ] }
+      waypoints { joints: [ 1.2, -0.6, 1.7, 0, 0, 0 ] }
+    }
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto response, BatchCheck(request));
+  ASSERT_EQ(response.collision_results_size(), 4);
+  EXPECT_EQ(response.ik_results_size(), 0);
+
+  // Single config collision-free.
+  EXPECT_TRUE(response.collision_results(0).success());
+  EXPECT_FALSE(response.collision_results(0).has_collision());
+
+  // Single config in collision.
+  EXPECT_TRUE(response.collision_results(1).success());
+  EXPECT_TRUE(response.collision_results(1).has_collision());
+
+  // Multi-waypoint path collision-free.
+  EXPECT_TRUE(response.collision_results(2).success());
+  EXPECT_FALSE(response.collision_results(2).has_collision());
+
+  // Multi-waypoint path in collision.
+  EXPECT_TRUE(response.collision_results(3).success());
+  EXPECT_TRUE(response.collision_results(3).has_collision());
+}
+
+// Verifies that starting_joints seed in one IK query does not bleed into
+// subsequent queries.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckCrossQuerySeedIndependence) {
+  // Baseline request with no seed to capture the default unseeded solution.
+  const BatchCheckRequest baseline_request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+      max_num_solutions: 1
+    }
+  )pb");
+  ASSERT_OK_AND_ASSIGN(const auto baseline_response,
+                       BatchCheck(baseline_request));
+  ASSERT_EQ(baseline_response.ik_results_size(), 1);
+  ASSERT_TRUE(baseline_response.ik_results(0).success());
+  ASSERT_EQ(baseline_response.ik_results(0).solutions_size(), 1);
+  const auto expected_unseeded_solution =
+      baseline_response.ik_results(0).solutions(0);
+
+  // Batch with Seed A in query 0, unseeded query in query 1, Seed B in query 2.
+  const BatchCheckRequest request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+      starting_joints { joints: [ 0.1, -0.5, 1.5, 0.1, -0.2, 0.3 ] }
+      max_num_solutions: 1
+    }
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+      max_num_solutions: 1
+    }
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+      starting_joints { joints: [ -0.2, 0.3, 1.0, -0.5, 0.4, -0.1 ] }
+      max_num_solutions: 1
+    }
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto response, BatchCheck(request));
+  ASSERT_EQ(response.ik_results_size(), 3);
+  for (const auto& ik_result : response.ik_results()) {
+    EXPECT_TRUE(ik_result.success());
+    EXPECT_EQ(ik_result.solutions_size(), 1);
+  }
+
+  // Unseeded query at index 1 must match the baseline unseeded solution.
+  EXPECT_THAT(response.ik_results(1).solutions(0),
+              EqualsProto(expected_unseeded_solution));
+}
+
+// Verifies evaluating both IK and collision queries combined within the same
+// BatchCheck request.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckCombinedIkAndCollisions) {
+  const BatchCheckRequest request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+    }
+    collision_queries {
+      waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] }
+      waypoints { joints: [ 1.2, -2, 2, 0, 0, 0 ] }
+    }
+    collision_queries {
+      waypoints { joints: [ 0, -0.6, 1.7, 0, 0, 0 ] }
+      waypoints { joints: [ 1.2, -0.6, 1.7, 0, 0, 0 ] }
+    }
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto response, BatchCheck(request));
+  ASSERT_EQ(response.ik_results_size(), 1);
+  EXPECT_TRUE(response.ik_results(0).success());
+  EXPECT_GE(response.ik_results(0).solutions_size(), 1);
+
+  ASSERT_EQ(response.collision_results_size(), 2);
+  EXPECT_TRUE(response.collision_results(0).success());
+  EXPECT_FALSE(response.collision_results(0).has_collision());
+  EXPECT_TRUE(response.collision_results(1).success());
+  EXPECT_TRUE(response.collision_results(1).has_collision());
+}
+
+// IK and collision queries used by the BatchCheck world snapshot tests. The
+// collision queries are collision-free in the unmodified test world.
+constexpr absl::string_view kBatchCheckSnapshotTestQueries = R"pb(
+  robot_reference { object_id { by_name { object_name: "iris622" } } }
+  ik_queries {
+    target {
+      cartesian_pose {
+        target_frame { by_name { object { object_name: "iris622_tool" } } }
+        moving_frame { by_name { object { object_name: "iris622_tool" } } }
+        target_frame_offset {
+          position { x: 0.1 y: 0 z: 0 }
+          orientation { w: 1 x: 0 y: 0 z: 0 }
+        }
+      }
+    }
+  }
+  collision_queries { waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] } }
+  collision_queries {
+    waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] }
+    waypoints { joints: [ 1.2, -2, 2, 0, 0, 0 ] }
+  }
+)pb";
+
+// Verifies that a `world_snapshot` of the world gives the same results as
+// fetching the world via `world_id`.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckWorldSnapshotMatchesWorldId) {
+  BatchCheckRequest world_id_request =
+      ParseTextProtoOrDie(kBatchCheckSnapshotTestQueries);
+  world_id_request.set_world_id("world");
+  ASSERT_OK_AND_ASSIGN(const BatchCheckResponse world_id_response,
+                       BatchCheck(world_id_request));
+
+  BatchCheckRequest snapshot_request =
+      ParseTextProtoOrDie(kBatchCheckSnapshotTestQueries);
+  ASSERT_OK_AND_ASSIGN(*snapshot_request.mutable_world_snapshot(),
+                       GetWorldSnapshot(*object_world_service_stub_, "world"));
+  ASSERT_OK_AND_ASSIGN(const BatchCheckResponse snapshot_response,
+                       BatchCheck(snapshot_request));
+
+  ASSERT_EQ(snapshot_response.ik_results_size(), 1);
+  EXPECT_TRUE(snapshot_response.ik_results(0).success());
+  ASSERT_EQ(snapshot_response.collision_results_size(), 2);
+  EXPECT_FALSE(snapshot_response.collision_results(0).has_collision());
+  EXPECT_FALSE(snapshot_response.collision_results(1).has_collision());
+  EXPECT_THAT(snapshot_response, EqualsProto(world_id_response));
+}
+
+// Verifies that the queries are evaluated against the `world_snapshot` rather
+// than the world in the world service.
+TEST_P(MotionPlannerServiceWithoutLoggerTest, BatchCheckUsesWorldSnapshot) {
+  // Moving an obstacle onto the robot's base makes every configuration of the
+  // robot collide, but only in the snapshot.
+  ASSERT_OK_AND_ASSIGN(intrinsic_proto::world::World snapshot,
+                       GetWorldSnapshot(*object_world_service_stub_, "world"));
+  ASSERT_OK(MoveObjectInSnapshotOnto("workpiece", "iris622", snapshot));
+
+  BatchCheckRequest request =
+      ParseTextProtoOrDie(kBatchCheckSnapshotTestQueries);
+  *request.mutable_world_snapshot() = snapshot;
+  ASSERT_OK_AND_ASSIGN(const BatchCheckResponse response, BatchCheck(request));
+
+  // No collision-free IK solution exists either.
+  ASSERT_EQ(response.ik_results_size(), 1);
+  EXPECT_FALSE(response.ik_results(0).success());
+  // The collisions are caused by the moved workpiece, not by e.g. missing
+  // collision exclusions between the robot's links.
+  ASSERT_EQ(response.collision_results_size(), 2);
+  for (const BatchCollisionQueryResult& result : response.collision_results()) {
+    EXPECT_TRUE(result.success());
+    EXPECT_TRUE(result.has_collision());
+    EXPECT_THAT(result.collision_debug_msg(), HasSubstr("workpiece"));
+  }
+
+  // The world in the world service is unaffected.
+  BatchCheckRequest world_id_request =
+      ParseTextProtoOrDie(kBatchCheckSnapshotTestQueries);
+  world_id_request.set_world_id("world");
+  ASSERT_OK_AND_ASSIGN(const BatchCheckResponse world_id_response,
+                       BatchCheck(world_id_request));
+  ASSERT_EQ(world_id_response.ik_results_size(), 1);
+  EXPECT_TRUE(world_id_response.ik_results(0).success());
+  ASSERT_EQ(world_id_response.collision_results_size(), 2);
+  EXPECT_FALSE(world_id_response.collision_results(0).has_collision());
+  EXPECT_FALSE(world_id_response.collision_results(1).has_collision());
+}
+
+// Verifies that errors in individual queries do not fail the overall RPC and
+// are isolated.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckPerQueryErrorIsolation) {
+  const BatchCheckRequest request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    # Query 0 (IK): Valid reachable target.
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+    }
+    # Query 1 (IK): Invalid query with negative max_num_solutions.
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+      max_num_solutions: -1
+    }
+    # Query 2 (Collision): Valid collision query.
+    collision_queries { waypoints { joints: [ 0, -2, 2, 0, 0, 0 ] } }
+    # Query 3 (Collision): Invalid collision query with empty waypoints.
+    collision_queries {}
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto response, BatchCheck(request));
+
+  // Verify IK results.
+  ASSERT_EQ(response.ik_results_size(), 2);
+  EXPECT_TRUE(response.ik_results(0).success());
+  EXPECT_GE(response.ik_results(0).solutions_size(), 1);
+
+  EXPECT_FALSE(response.ik_results(1).success());
+  EXPECT_THAT(response.ik_results(1).error_message(),
+              HasSubstr("max_num_solutions must be non-negative"));
+
+  // Verify Collision results.
+  ASSERT_EQ(response.collision_results_size(), 2);
+  EXPECT_TRUE(response.collision_results(0).success());
+  EXPECT_FALSE(response.collision_results(0).has_collision());
+
+  EXPECT_FALSE(response.collision_results(1).success());
+  EXPECT_THAT(response.collision_results(1).error_message(),
+              HasSubstr("The input path must contain at least one joint "
+                        "configuration."));
+}
+
+// Verifies that a failing batched IK query reports the same structured
+// `MotionPlanningError` that the single-query ComputeIk RPC surfaces as a gRPC
+// status detail, and that `error_message` is populated as well.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckIkFailurePopulatesStructuredError) {
+  const BatchCheckRequest request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    # Query 0 (IK): target 100 m from the world root, i.e. far outside the
+    # reachable workspace of any robot in the test world.
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "root" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 100.0 y: 100.0 z: 100.0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+    }
+    # Query 1 (IK): reachable target, used to check that the structured error
+    # stays unset on success.
+    ik_queries {
+      target {
+        cartesian_pose {
+          target_frame { by_name { object { object_name: "iris622_tool" } } }
+          moving_frame { by_name { object { object_name: "iris622_tool" } } }
+          target_frame_offset {
+            position { x: 0.1 y: 0 z: 0 }
+            orientation { w: 1 x: 0 y: 0 z: 0 }
+          }
+        }
+      }
+    }
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto response, BatchCheck(request));
+  ASSERT_EQ(response.ik_results_size(), 2);
+
+  const auto& failed_result = response.ik_results(0);
+  EXPECT_FALSE(failed_result.success());
+  // `error_message` must contain the IK solver's message. It is the only
+  // failure information available to callers built against the stripped proto.
+  EXPECT_THAT(failed_result.error_message(),
+              HasSubstr("IK solver couldn't find any solutions for the given "
+                        "constraints"));
+  ASSERT_TRUE(failed_result.has_error());
+  ASSERT_EQ(
+      failed_result.error().error_case(),
+      intrinsic_proto::motion_planning::v1::MotionPlanningError::kIkError);
+  EXPECT_EQ(failed_result.error().ik_error().error_context(),
+            intrinsic_proto::motion_planning::v1::ErrorContext::
+                IK_NO_SOLUTIONS_FOUND);
+  EXPECT_EQ(failed_result.error().ik_error().error_message(),
+            failed_result.error_message());
+
+  const auto& successful_result = response.ik_results(1);
+  EXPECT_TRUE(successful_result.success());
+  EXPECT_FALSE(successful_result.has_error());
+}
+
+// Verifies that disabling collision checking applies properly in BatchCheck.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckCollisionSettingsVariation) {
+  // Path that collides under default collision checking.
+  const BatchCheckRequest default_request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    collision_queries {
+      waypoints { joints: [ 0, -0.6, 1.7, 0, 0, 0 ] }
+      waypoints { joints: [ 1.2, -0.6, 1.7, 0, 0, 0 ] }
+    }
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto default_response,
+                       BatchCheck(default_request));
+  ASSERT_EQ(default_response.collision_results_size(), 1);
+  EXPECT_TRUE(default_response.collision_results(0).success());
+  EXPECT_TRUE(default_response.collision_results(0).has_collision());
+
+  // Same path evaluated with disable_collision_checking = true should not
+  // detect collision.
+  const BatchCheckRequest disabled_request = ParseTextProtoOrDie(R"pb(
+    world_id: "world"
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    collision_settings { disable_collision_checking: true }
+    collision_queries {
+      waypoints { joints: [ 0, -0.6, 1.7, 0, 0, 0 ] }
+      waypoints { joints: [ 1.2, -0.6, 1.7, 0, 0, 0 ] }
+    }
+  )pb");
+
+  ASSERT_OK_AND_ASSIGN(const auto disabled_response,
+                       BatchCheck(disabled_request));
+  ASSERT_EQ(disabled_response.collision_results_size(), 1);
+  EXPECT_TRUE(disabled_response.collision_results(0).success());
+  EXPECT_FALSE(disabled_response.collision_results(0).has_collision());
 }
 
 

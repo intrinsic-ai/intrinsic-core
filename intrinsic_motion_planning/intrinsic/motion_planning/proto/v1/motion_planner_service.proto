@@ -30,11 +30,13 @@ import "intrinsic/motion_planning/proto/v1/geometric_constraints.proto";
 import "intrinsic/motion_planning/proto/v1/motion_events.proto"; 
 import "intrinsic/motion_planning/proto/v1/motion_planner_config.proto";
 import "intrinsic/motion_planning/proto/v1/motion_planning.proto";
+import "intrinsic/motion_planning/proto/v1/motion_planning_error.proto";
 import "intrinsic/motion_planning/proto/v1/motion_specification.proto";
 import "intrinsic/motion_planning/proto/v1/robot_specification.proto";
 import "intrinsic/world/proto/collision_checker_config.proto";
 import "intrinsic/world/proto/collision_settings.proto";
 import "intrinsic/world/proto/object_world_refs.proto";
+import "intrinsic/world/proto/object_world_service.proto";
 
 option go_package = "intrinsic/motion_planning/proto/v1/motion_planner_service_go_proto";
 
@@ -365,6 +367,164 @@ message CheckCollisionsResponse {
   // be more collisions.
   string collision_debug_msg = 2;
 }
+
+// Single inverse kinematics query within a batch request.
+message BatchIkQuery {
+  // The Cartesian motion target constraint for which we want to compute joint
+  // configurations that satisfy the constraint.
+  intrinsic_proto.motion_planning.v1.GeometricConstraint target = 1;
+
+  // [Optional] Joint configuration, used to seed the IK. If not set,
+  // the current position in the world will be used.
+  intrinsic_proto.icon.JointVec starting_joints = 2;
+
+  // The maximum number of solutions to be returned. If not set (== 0), the
+  // underlying implementation defaults to 8. Negative values are invalid.
+  int32 max_num_solutions = 3;
+
+  // Specify whether to compute an IK solution which is on the same kinematic
+  // branch as the `starting_joints` configuration of the robot. Defaults to
+  // false.
+  optional bool ensure_same_branch = 4;
+
+  // Optional same branch IK flag that will prefer solutions on the same
+  // kinematic branch over those close to the `starting_joints` configuration.
+  // Defaults to false.
+  optional bool prefer_same_branch = 5;
+
+  // Optional flag to disable setting the error status when there are no valid
+  // solutions due to collisions. When false, the query result fails if no
+  // collision free solution is found. Defaults to false.
+  optional bool disable_error_on_collisions = 6;
+}
+
+// Result of a single inverse kinematics query within a batch.
+message BatchIkQueryResult {
+  // Whether the IK computation succeeded for this query.
+  bool success = 1;
+
+  // Error message if the IK computation failed.
+  string error_message = 2;
+
+  // Robot joint configurations that satisfy the Cartesian target constraint.
+  repeated intrinsic_proto.icon.JointVec solutions = 3;
+
+  // Debug information from the IK solver.
+  intrinsic_proto.motion_planning.v1.ComputeIkDebugInformation
+      ik_debug_information = 4;
+
+  // Machine-readable failure reason. Only populated when `success` is false,
+  // and only when the underlying IK failure carried a structured error; callers
+  // must treat it as optional and fall back to `error_message`.
+  //
+  // This is the same `MotionPlanningError` that the single-query `ComputeIk`
+  // RPC returns as a gRPC status detail, so a caller can classify a failure
+  // (e.g. `ErrorContext.IK_NO_SOLUTIONS_FOUND` vs. a collision) identically
+  // whether it went through `ComputeIk` or through `BatchCheck`.
+  optional MotionPlanningError error = 5;
+}
+
+// Single collision check query within a batch request.
+message BatchCollisionQuery {
+  // The joint path of the request's robot to be collision checked. If 1
+  // waypoint is provided, it is checked as a static configuration. If >1
+  // waypoints are provided, the path is checked with linear joint
+  // interpolation.
+  repeated intrinsic_proto.icon.JointVec waypoints = 1;
+
+  // Optional collision check spacing in radians for interpolating between
+  // waypoints. If not set, the default collision check spacing is used. Must be
+  // > 0.0 if specified.
+  optional double collision_check_spacing = 2;
+}
+
+// Result of a single collision check query within a batch.
+message BatchCollisionQueryResult {
+  // Whether the collision check computation succeeded (i.e. valid inputs).
+  bool success = 1;
+
+  // Error message if the collision check could not be performed (e.g. invalid
+  // joint count).
+  string error_message = 2;
+
+  // Whether the checked configuration or path is in collision.
+  bool has_collision = 3;
+
+  // Description of the first collision encountered, if has_collision is true.
+  string collision_debug_msg = 4;
+}
+
+// Request message for BatchCheck.
+message BatchCheckRequest {
+  // The world against which all queries are evaluated. Exactly one must be
+  // set. A request with neither, or with an empty `world_id`, fails with
+  // INVALID_ARGUMENT.
+  oneof world_source {
+    // The id of the world to be used for the batch computation. The world is
+    // fetched from the world service using this id. Must not be empty.
+    string world_id = 1;
+
+    // Snapshot of the world. All queries are evaluated against exactly this
+    // world state and the world is not fetched from the world service. This
+    // lets callers that already hold a snapshot guarantee consistency with the
+    // state they read and saves downloading the world on every request.
+    //
+    // A world as returned by `ObjectWorldService.GetWorld` with
+    // `view: WORLD_VIEW_FULL` and
+    // `collision_settings_view: COLLISION_SETTINGS_VIEW_EFFECTIVE` can be sent
+    // as is: its collision settings include the world's collision exclusion
+    // pairs (e.g. between adjacent robot links), without which every robot
+    // configuration is reported as colliding. With a world service whose
+    // `GetWorld` omits the exclusion pairs, `collision_settings` must be taken
+    // from `ObjectWorldService.GetCollisionSettings` instead.
+    //
+    // Geometries are only referenced (`geometry_storage_refs`), not inlined, so
+    // the snapshot size grows with the number of objects, entities, frames and
+    // collision rules, not with mesh sizes; e.g. a UR5e cell with 3 to 6
+    // workpieces takes about 12 to 15 kB, a cell with 4 robots and 16 objects
+    // about 63 kB. The whole request must stay below the service's maximum
+    // receive message size, which is the gRPC default of 4 MiB; a larger
+    // request fails with RESOURCE_EXHAUSTED.
+    //
+    // A snapshot from which no world can be constructed fails the request with
+    // INVALID_ARGUMENT.
+    intrinsic_proto.world.World world_snapshot = 2;
+  }
+
+  // Specification of what robot is being controlled.
+  RobotReference robot_reference = 3;
+
+  // Collision settings applied during collision checking and collision-aware
+  // IK in addition to the collision settings of the world given by
+  // `world_source`: the rules made from these settings are applied on top of
+  // the world's default collision rule set and take precedence over it. If not
+  // defined, only the world's collision settings (e.g. its margins and
+  // collision exclusions) apply. If `disable_collision_checking` is set,
+  // collision checking is disabled entirely, i.e. the world's collision
+  // settings are not applied either.
+  intrinsic_proto.world.CollisionSettings collision_settings = 4;
+
+  // Optional override for default collision checker configuration.
+  optional intrinsic_proto.world.CollisionCheckerConfig
+      collision_checker_config = 5;
+
+  // Batch of IK queries to compute.
+  repeated BatchIkQuery ik_queries = 6;
+
+  // Batch of collision check queries to evaluate.
+  repeated BatchCollisionQuery collision_queries = 7;
+}
+
+// Response message for BatchCheck.
+message BatchCheckResponse {
+  // Results for each IK query in the same order as in
+  // `BatchCheckRequest.ik_queries`.
+  repeated BatchIkQueryResult ik_results = 1;
+
+  // Results for each collision query in the same order as in
+  // `BatchCheckRequest.collision_queries`.
+  repeated BatchCollisionQueryResult collision_results = 2;
+}
 // The Motion Planner Service provides motion planning and related operations,
 // such as kinematics and collision checking. It is used by skills such as
 // `Move Robot` and is available by thid party skills and services.
@@ -428,6 +588,15 @@ service MotionPlannerService {
       returns (CheckCollisionsResponse) {
     option (google.api.http) = {
       post: "/v1/collisions:check"
+      body: "*"
+    };
+  }
+
+  // Computes batch Inverse Kinematics (IK) and/or batch collision checks
+  // against a single world and robot instance.
+  rpc BatchCheck(BatchCheckRequest) returns (BatchCheckResponse) {
+    option (google.api.http) = {
+      post: "/v1/batch:check"
       body: "*"
     };
   }
