@@ -37,9 +37,3 @@ go_proto_library(
     importpath = "intrinsic/kubernetes/workcell_spec/proto/solution_internal_go_proto",
     protos = [":solution_internal_proto"],
 )
-
-alias(
-    name = "deploy_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/kubernetes/workcell_spec/proto:deploy_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

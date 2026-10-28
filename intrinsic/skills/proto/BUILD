@@ -37,9 +37,3 @@ alias(
     actual = "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
-
-alias(
-    name = "skill_registry_config_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/skills/proto:skill_registry_config_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

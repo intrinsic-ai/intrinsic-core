@@ -48,15 +48,6 @@ go_library(
     ],
 )
 
-alias(
-    name = "environments",
-    actual = "//intrinsic_sdk/intrinsic/config:environments",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = [
-        "//visibility:public",
-    ],
-)
-
 go_library(
     name = "convertrunnables",
     srcs = ["convert_runnables.go"],

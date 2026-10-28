@@ -30,9 +30,3 @@ alias(
     tags = ["go/intrinsic-ioc-transition-tdd"],
     visibility = ["//intrinsic:public_api_users"],
 )
-
-alias(
-    name = "statusutil",
-    actual = "//intrinsic_sdk/intrinsic/util/grpc:statusutil",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

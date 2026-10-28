@@ -22,10 +22,3 @@ exports_files(
     ["identity_internal.go"],
     visibility = ["//intrinsic_sdk/intrinsic/kubernetes/acl:__pkg__"],
 )
-
-alias(
-    name = "clientcontext",
-    actual = "//intrinsic_sdk/intrinsic/kubernetes/acl:clientcontext",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//visibility:public"],
-)

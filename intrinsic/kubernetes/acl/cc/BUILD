@@ -25,7 +25,7 @@ cc_library(
     srcs = ["cookies.cc"],
     hdrs = ["cookies.h"],
     deps = [
-        "//intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -42,7 +42,7 @@ cc_library(
     hdrs = ["client_context.h"],
     deps = [
         ":cookies",
-        "//intrinsic/util/grpc",
+        "//intrinsic_sdk/intrinsic/util/grpc",
         "@abseil-cpp//absl/strings:string_view",
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",

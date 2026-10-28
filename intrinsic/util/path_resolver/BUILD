@@ -19,9 +19,3 @@ alias(
     actual = "//intrinsic_sdk/intrinsic/util/path_resolver",
     tags = ["go/intrinsic-ioc-transition-tdd"],
 )
-
-alias(
-    name = "pathresolver",
-    actual = "//intrinsic_sdk/intrinsic/util/path_resolver:pathresolver",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)

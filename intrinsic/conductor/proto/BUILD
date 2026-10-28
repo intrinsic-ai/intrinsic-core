@@ -20,12 +20,6 @@ package(default_visibility = [
     "//visibility:public",
 ])
 
-alias(
-    name = "conductor_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/conductor/proto:conductor_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
-
 proto_library(
     name = "execution_context_proto",
     srcs = ["execution_context.proto"],

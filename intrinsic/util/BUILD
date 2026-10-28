@@ -121,9 +121,3 @@ cc_library(
         "@abseil-cpp//absl/synchronization",
     ],
 )
-
-alias(
-    name = "flag",
-    actual = "//intrinsic_sdk/intrinsic/util:flag",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-)
