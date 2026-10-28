@@ -34,7 +34,7 @@ go_binary(
     ],
     importpath = "intrinsic/apps/testing/e2e/testgen",
     deps = [
-        "//intrinsic/production:intrinsic",
+        "//intrinsic_sdk/intrinsic/production:intrinsic",
         "@com_github_golang_glog//:go_default_library",
     ],
 )

@@ -46,10 +46,3 @@ go_library(
         "@org_golang_x_sync//errgroup:go_default_library",
     ],
 )
-
-alias(
-    name = "intrinsic",
-    actual = "//intrinsic_sdk/intrinsic/production:intrinsic",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:intrinsic_internal"],
-)
