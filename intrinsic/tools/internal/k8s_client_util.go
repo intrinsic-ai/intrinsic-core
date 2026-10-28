@@ -232,6 +232,20 @@ func ClusterLocation(ctx context.Context, cluster string) (string, error) {
 	return "", nil
 }
 
+// ClusterName returns the Kubernetes cluster name for the given k8s context: the GKE cluster name
+// (e.g. "cloud-robotics") for cloud contexts, otherwise the context name itself. Unlike
+// UniqueClusterName, this is not the Cloud Robotics identity of the cluster (e.g. "cloud").
+func ClusterName(cluster string) (string, error) {
+	if !isCloudCluster(cluster) {
+		return cluster, nil
+	}
+	_, _, name, err := parseGKEContext(cluster)
+	if err != nil {
+		return "", err
+	}
+	return name, nil
+}
+
 // ErrMinikubeContext is returned when trying to resolve a minikube context to a project.
 var ErrMinikubeContext = errors.New("project unknown for user \"minikube\"")
 

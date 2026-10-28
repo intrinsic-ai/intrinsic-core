@@ -350,16 +350,20 @@ func generateManifest(ctx context.Context, chart *helmchart.Chart, overrideNames
 
 // buildApplicationName builds a unique application name for the chart when deployed to the project
 // cluster, matching ArgoCD's logic.
-func buildApplicationName(clusterConfig *ClusterConfig, chartName string) string {
+func buildApplicationName(clusterConfig *ClusterConfig, chartName string) (string, error) {
 	// TODO(b/455689093): Pipe the cluster hash through the ArgoCD cluster management ConfigMap instead of deriving it here.
 	// This is the same logic used in the deployment repo to generate hash ids for clusters.
-	s := fmt.Sprintf("%s_%s", clusterConfig.Project, clusterConfig.UniqueClusterName)
+	k8sClusterName, err := k8sclientutil.ClusterName(clusterConfig.ClusterName)
+	if err != nil {
+		return "", fmt.Errorf("get kubernetes cluster name: %w", err)
+	}
+	s := fmt.Sprintf("%s_%s", clusterConfig.Project, k8sClusterName)
 	hashBytes := sha256.Sum256([]byte(s))
 	hashString := fmt.Sprintf("%x", hashBytes)
 	hashID := hashString[:10]
 
 	// ApplicationSets should follow format {{name}}-{{.metadata.labels.hashId}} in their templates
-	return fmt.Sprintf("%s-%s", chartName, hashID)
+	return fmt.Sprintf("%s-%s", chartName, hashID), nil
 }
 
 func buildResourceTrackingValue(applicationName string, resource unstructured.Unstructured) string {
@@ -384,6 +388,11 @@ func applyManifest(ctx context.Context, manifest string, chartName string, clust
 		defaultNamespace = overrideNamespace
 	}
 	checkedNamespaces := make(map[string]bool)
+
+	applicationName, err := buildApplicationName(clusterConfig, chartName)
+	if err != nil {
+		return fmt.Errorf("failed to build application name: %w", err)
+	}
 
 	// Apply each document to the cluster
 	for {
@@ -419,9 +428,6 @@ func applyManifest(ctx context.Context, manifest string, chartName string, clust
 		if annotations == nil {
 			annotations = make(map[string]string)
 		}
-
-		applicationName := buildApplicationName(clusterConfig, chartName)
-
 		annotations[resourceTrackingKey] = buildResourceTrackingValue(applicationName, obj)
 		obj.SetAnnotations(annotations)
 
@@ -698,7 +704,10 @@ func DeleteChart(ctx context.Context, chartName string, clusterConfig *ClusterCo
 	if overrideNamespace != "" {
 		namespace = overrideNamespace
 	}
-	applicationName := buildApplicationName(clusterConfig, chartName)
+	applicationName, err := buildApplicationName(clusterConfig, chartName)
+	if err != nil {
+		return fmt.Errorf("failed to build application name: %w", err)
+	}
 	trackingPrefixes := []string{
 		applicationName + ":",
 		clusterConfig.Project + "-" + chartName + ":",
