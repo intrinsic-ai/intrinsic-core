@@ -660,10 +660,7 @@ func nodeFromAsset(ctx context.Context, assetID string, sc *SolutionContext) (*n
 func collectDependencies(config *anypb.Any, fds *descriptorpb.FileDescriptorSet) ([]*dependency, error) {
 	var deps []*dependency
 	err := traversal.ForEachResolvedDependency(config, fds, func(dep *dependencypb.Dependency, msg *rdpb.ResolvedDependency, field traversal.FieldContext) (*rdpb.ResolvedDependency, error) {
-		if msg == nil {
-			return nil, nil
-		}
-		if msg.GetName() == "" && field.Optional {
+		if (msg == nil || msg.GetName() == "") && field.Optional {
 			return msg, nil
 		}
 		deps = append(deps, &dependency{
