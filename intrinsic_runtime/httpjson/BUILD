@@ -49,6 +49,7 @@ protoc_gen_openapi(
         "@intrinsic_apis//intrinsic/executive/proto:proto_builder_proto",
         "@intrinsic_apis//intrinsic/kubernetes/intrinsic_os/protos/v1:cluster_service_proto",
         "@intrinsic_apis//intrinsic/kubernetes/inversion/v1:inversion_proto",
+        "@intrinsic_apis//intrinsic/logging/proto:replay_service",
         "@intrinsic_apis//intrinsic/perception/proto/v1:train_service_proto",
         "@intrinsic_apis//intrinsic/proto_tools/proto:proto_registry_proto",
     ],
