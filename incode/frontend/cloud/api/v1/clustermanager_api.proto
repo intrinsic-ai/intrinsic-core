@@ -428,7 +428,6 @@ message DNSRange {
 
 // EtherType lists IP or non-IP protocols that are or can be used on Ethernet
 // interfaces.
-// TODO(b/429603718): replace IntOSInterfaceConfig.EtherType with this enum.
 enum EtherType {
   // UNSPECIFIED is used for IP interfaces (realtime and non-realtime).
   ETHER_TYPE_UNSPECIFIED = 0;
@@ -442,16 +441,6 @@ enum EtherType {
 // IntOSInterfaceConfig represents the configuration of a single on-prem
 // interface.
 message IntOSInterfaceConfig {
-  enum EtherType {
-    // UNSPECIFIED is used for IP interfaces (realtime and non-realtime).
-    ETHER_TYPE_UNSPECIFIED = 0;
-    // ETHERCAT is used for EtherCAT interfaces.
-    ETHER_TYPE_ETHERCAT = 1;
-    // REALTIME is used for realtime interfaces.
-    // To ensure backward/downgrade compatibility, this is not in the config
-    // file.
-    ETHER_TYPE_REALTIME = 2;
-  }
   // Enable automatic configuration via DHCP for IPv4
   bool dhcp4 = 1 [(google.api.field_behavior) = OPTIONAL];
   // Standard gateway for IPv4 (mostly useful when dhcp4=false)
