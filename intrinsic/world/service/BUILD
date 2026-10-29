@@ -235,8 +235,8 @@ go_proto_library(
     importpath = "intrinsic/world/service/world_compatibility_service_go_proto",
     protos = [":world_compatibility_service_proto"],
     deps = [
-        "//intrinsic/world/proto:object_world_service_go_proto",
         "//intrinsic/world/proto:world_entity_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_go_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_go_proto",
     ],

@@ -19,20 +19,6 @@ load("//bazel:protos.bzl", "proto_library")
 
 package(default_visibility = ["//visibility:public"])
 
-alias(
-    name = "object_world_service_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/world/proto:object_world_service_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:internal_api_users"],
-)
-
-alias(
-    name = "object_world_updates_go_proto",
-    actual = "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
-    tags = ["go/intrinsic-ioc-transition-tdd"],
-    visibility = ["//intrinsic:public_api_users"],
-)
-
 proto_library(
     name = "ppr_component_proto",
     srcs = ["ppr_component.proto"],

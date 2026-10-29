@@ -79,7 +79,7 @@ go_proto_library(
     deps = [
         ":motion_events_go_proto",
         ":motion_specification_go_proto",
-        "//intrinsic/world/proto:object_world_service_go_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:object_world_service_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:transformed_geometry_go_proto",

@@ -18,7 +18,7 @@ load("@nvidia_pose_estimator_models//:files.bzl", "FOUNDATIONPOSE_PLANS", "FOUND
 load("@rules_pkg//pkg:tar.bzl", "pkg_tar")
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
 load("//bazel:python_oci_image.bzl", "python_oci_image")
-load("//intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load(":model_data_asset.bzl", "perception_model_data_asset", "sam3_model_data_asset")
 
 package(default_visibility = ["//visibility:public"])
