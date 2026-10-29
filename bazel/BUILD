@@ -127,6 +127,19 @@ platform(
     parents = ["@platforms//host"],
 )
 
+# WARNING: This platform definition is experimental and expected to change
+# substantially. Do not rely on these constraints remaining stable.
+platform(
+    name = "linux_arm64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+        "@bazel_tools//tools/cpp:clang",
+        "@llvm//constraints/libc:gnu.2.31",
+    ],
+    exec_properties = DEFAULT,
+)
+
 go_proto_compiler(
     name = "go_gen_grpc_gateway",
     options = [
