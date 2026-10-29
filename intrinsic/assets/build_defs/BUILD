@@ -45,7 +45,6 @@ go_binary(
         "//intrinsic/storage/content_addressable_storage/pkg/filetocas",
         "//intrinsic/tools/inctl/cmd:apputil",
         "//intrinsic/tools/inctl/util:casgeometryuploader",
-        "//intrinsic/tools/inctl/util:gcpauth",
         "//intrinsic/tools/inctl/util:introspection",
         "//intrinsic/tools/inctl/util:releaseutil",
         "//intrinsic/tools/inctl/util:traceutil",
