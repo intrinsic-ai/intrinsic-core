@@ -32,6 +32,9 @@ filegroup(
     ],
 )
 
+# PubSub API library. The user-facing API providing access to
+# publish-subscribe system.
+
 cc_library(
     name = "pubsub_metrics",
     srcs = ["pubsub_metrics.cc"],
