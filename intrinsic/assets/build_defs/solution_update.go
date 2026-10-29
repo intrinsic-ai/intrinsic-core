@@ -278,13 +278,21 @@ $ bazel run //intrinsic/config:empty_application --\
 			span.AddAttributes(trace.BoolAttribute("completed", false))
 			span.AddAttributes(trace.StringAttribute("build_label", build.Label()))
 			span.AddAttributes(trace.StringAttribute("operation_mode", flagOperationMode))
+			span.AddAttributes(trace.StringAttribute("org", flags.GetFlagOrganization()))
 			defer span.End()
+
+			project := flags.GetFlagProject()
+			if project != "" {
+				color.C.Blue().Printf(
+					"\n\tTentative Cloud Trace link (not guaranteed to work if you interrupt this run):\n\n\t%s\n\n",
+					introspection.CloudTraceURL(span.SpanContext().TraceID.String(), flags.GetFlagProject()),
+				)
+			}
 
 			ctx, err := platformlevelswitch.AppendOrgToOutgoingContext(ctx, flags.GetFlagOrganization())
 			if err != nil {
 				return errors.Wrap(err, "unable to setup the context")
 			}
-			project := "giza-workcells"
 
 			log.InfoContextf(ctx, "Deploying to cluster")
 
@@ -340,8 +348,12 @@ $ bazel run //intrinsic/config:empty_application --\
 				assetartifactspb.NewAssetArtifactsClient(ingressConn),
 				lroClient,
 			)
-			rdProcessor := cascopyprocessor.New(baseRDProcessor, project, casClient)
-			defer rdProcessor.Close()
+			rdProcessor := baseRDProcessor
+			if project != "" {
+				copyProc := cascopyprocessor.New(baseRDProcessor, project, casClient)
+				defer copyProc.Close()
+				rdProcessor = copyProc
+			}
 			proc := &assetprocessor.Processor{
 				Processor: bundle.Processor{
 					ImageProcessor: bundleimages.CreateImageProcessor(transfer),
@@ -401,7 +413,9 @@ $ bazel run //intrinsic/config:empty_application --\
 			fmt.Printf("Timing: %.2f seconds to deploy application.\n", dDeployApplication.Seconds())
 			fmt.Printf("Timing: %.2f seconds to wait for ready.\n", dWaitForReady.Seconds())
 
-			fmt.Println(introspection.CloudTraceURL(span.SpanContext().TraceID.String(), project))
+			if project != "" {
+				fmt.Println(introspection.CloudTraceURL(span.SpanContext().TraceID.String(), project))
+			}
 
 			// This must be at the very end.
 			span.AddAttributes(trace.BoolAttribute("completed", true))
