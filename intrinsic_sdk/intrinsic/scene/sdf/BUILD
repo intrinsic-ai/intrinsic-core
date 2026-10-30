@@ -191,10 +191,7 @@ cc_library(
 cc_binary(
     name = "sdf_to_scene_object",
     srcs = ["sdf_to_scene_object.cc"],
-    visibility = [
-        "//intrinsic/scene/sdf:__pkg__",
-        "//intrinsic_sdk/intrinsic/scene/build_defs:__subpackages__",
-    ],
+    visibility = ["//intrinsic_sdk/intrinsic/scene/build_defs:__subpackages__"],
     deps = [
         ":scene_object_from_sdf",
         ":sdf_path_resolver",
@@ -238,10 +235,7 @@ cc_library(
     name = "sim_spec_from_sdf",
     srcs = ["sim_spec_from_sdf.cc"],
     hdrs = ["sim_spec_from_sdf.h"],
-    visibility = [
-        "//intrinsic/scene/sdf:__pkg__",
-        "//intrinsic/scene/service:__subpackages__",
-    ],
+    visibility = ["//intrinsic/scene/sdf:__pkg__"],
     deps = [
         ":sdf_util",
         ":xml_utils",
