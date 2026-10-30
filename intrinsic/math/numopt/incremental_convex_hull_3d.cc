@@ -802,19 +802,28 @@ ComputeConvexHullFacetPlanes3d(
   // point being tested, rather than from the largest point in the cloud. A
   // single global magnitude would be far too generous for the facets that sit
   // in the small-scale part of an anisotropic input.
-  std::vector<double> facet_magnitudes;
-  facet_magnitudes.reserve(facet_planes.size());
-  for (const ConvexHullFacetPlane3d& facet_plane : facet_planes) {
+  // Precompute the infinity-norm of each input point once so facet and
+  // per-point completeness scales can be assembled in O(1) inside the loop.
+  std::vector<double> point_magnitudes(points.size());
+  for (size_t j = 0; j < points.size(); ++j) {
+    point_magnitudes[j] = points[j].cwiseAbs().maxCoeff();
+  }
+  std::vector<double> facet_magnitudes(facet_planes.size());
+  for (size_t i = 0; i < facet_planes.size(); ++i) {
+    const ConvexHullFacetPlane3d& facet_plane = facet_planes[i];
     double magnitude = 0.0;
     for (const int point_index : facet_plane.point_indices) {
-      if (point_index < 0) continue;
-      magnitude =
-          std::max(magnitude, points[point_index].cwiseAbs().maxCoeff());
+      if (point_index < 0 ||
+          point_index >= static_cast<int>(point_magnitudes.size())) {
+        continue;
+      }
+      magnitude = std::max(magnitude, point_magnitudes[point_index]);
     }
-    facet_magnitudes.push_back(magnitude);
+    facet_magnitudes[i] = magnitude;
   }
-  for (const eigenmath::Vector3d& point : points) {
-    const double point_magnitude = point.cwiseAbs().maxCoeff();
+  for (size_t j = 0; j < points.size(); ++j) {
+    const eigenmath::Vector3d& point = points[j];
+    const double point_magnitude = point_magnitudes[j];
     for (size_t i = 0; i < facet_planes.size(); ++i) {
       const ConvexHullFacetPlane3d& facet_plane = facet_planes[i];
       const double projection = facet_plane.normal.dot(point);
