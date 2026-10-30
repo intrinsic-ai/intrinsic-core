@@ -314,7 +314,6 @@ $ bazel run //intrinsic/config:empty_application --\
 				casClient,
 				filetocas.UseChunkSize(releaseutil.CASUploadChunkSize),
 			)
-			processingLimiter := throttle.NewConcurrencyLimiter(flags.GetFlagProcessingConcurrency())
 			gu, err := casgeometryuploader.New(f2c, 8)
 			if err != nil {
 				return fmt.Errorf("failed to create a CAS geometry uploader: %w", err)
@@ -352,6 +351,8 @@ $ bazel run //intrinsic/config:empty_application --\
 				defer copyProc.Close()
 				rdProcessor = copyProc
 			}
+
+			processingLimiter := throttle.NewConcurrencyLimiter(flags.GetFlagProcessingConcurrency())
 			proc := &assetprocessor.Processor{
 				Processor: bundle.Processor{
 					ImageProcessor: bundleimages.CreateImageProcessor(transfer),
