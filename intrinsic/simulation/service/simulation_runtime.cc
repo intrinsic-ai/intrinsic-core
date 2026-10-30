@@ -14,6 +14,7 @@
 
 #include "intrinsic/simulation/service/simulation_runtime.h"
 
+#include <chrono>  // NOLINT(build/c++11)
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -22,6 +23,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_set.h"
+#include "absl/functional/function_ref.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -33,6 +35,7 @@
 #include "google/protobuf/empty.pb.h"
 #include "google/protobuf/wrappers.pb.h"
 #include "grpcpp/client_context.h"
+#include "grpcpp/server_context.h"
 #include "intrinsic/icon/cc_client/client.h"
 #include "intrinsic/icon/cc_client/operational_status.h"
 #include "intrinsic/icon/equipment/equipment_utils.h"
@@ -64,6 +67,85 @@ using ::intrinsic_proto::simulation::first_party::VisualizeWorldUpdatesRequest;
 // Default start world and visualized world are the canonical world.
 constexpr std::string_view kDefaultStartWorld = "world";
 constexpr std::string_view kDefaultVisualizedWorld = "world";
+
+// Maximum duration for retrying simulator requests that fail with UNAVAILABLE
+// if the client did not set a deadline. Clients that expect the simulator to
+// still be starting up, e.g., right after a solution was deployed, should set a
+// more generous deadline.
+constexpr absl::Duration kMaxSimulatorRetryDurationWithoutDeadline =
+    absl::Seconds(30);
+
+// Pause between calls in `CallSimulatorWithRetries`. The backoff between
+// attempts happens within each call (see the retry policy of the simulator
+// channel in simulator_v1.cc); this pause only avoids a busy loop if a call
+// fails with UNAVAILABLE without reaching gRPC.
+constexpr absl::Duration kSimulatorRetryPause = absl::Milliseconds(250);
+
+// Deadline for querying the simulator status in `GetSimulatorStatus` if not
+// provided in the client context.
+constexpr absl::Duration kSimulatorStatusTimeout = absl::Seconds(10);
+
+// Calls `call_simulator` and calls it again while it returns UNAVAILABLE, e.g.,
+// because the simulator is still starting up and the ingress cannot reach it
+// yet.
+//
+// The simulator channel retries UNAVAILABLE errors with backoff within each
+// call, but gRPC caps that at 5 attempts. This loop lifts the cap so that the
+// retries span the whole deadline of `context`. Each call gets a client context
+// that propagates the deadline and cancellation of `context`, so the loop ends
+// with DEADLINE_EXCEEDED or CANCELLED once the incoming call expires or is
+// cancelled. If the client did not set a deadline, the calls are bounded by
+// `kMaxSimulatorRetryDurationWithoutDeadline`.
+//
+// If the deadline expires while retrying, the returned DEADLINE_EXCEEDED error
+// includes the last UNAVAILABLE error, which explains why the simulator could
+// not be reached.
+absl::Status CallSimulatorWithRetries(
+    const ::grpc::ServerContext& context, std::string_view description,
+    absl::FunctionRef<absl::Status(std::unique_ptr<::grpc::ClientContext>)>
+        call_simulator) {
+  const bool has_client_deadline =
+      context.deadline() != std::chrono::system_clock::time_point::max();
+  const absl::Time deadline =
+      has_client_deadline
+          ? absl::FromChrono(context.deadline())
+          : absl::Now() + kMaxSimulatorRetryDurationWithoutDeadline;
+  const auto deadline_exceeded = [&](int num_calls,
+                                     const absl::Status& last_unavailable) {
+    return absl::DeadlineExceededError(absl::StrCat(
+        description, " did not succeed before the deadline after ", num_calls,
+        " unavailable call(s). Last error: ", last_unavailable.message()));
+  };
+
+  absl::Status last_unavailable;
+  for (int attempt = 1;; ++attempt) {
+    std::unique_ptr<::grpc::ClientContext> ctx =
+        ::grpc::ClientContext::FromServerContext(context);
+    if (!has_client_deadline) {
+      ctx->set_deadline(absl::ToChronoTime(deadline));
+    }
+    absl::Status status = call_simulator(std::move(ctx));
+    if (!absl::IsUnavailable(status)) {
+      if (absl::IsDeadlineExceeded(status) && !last_unavailable.ok()) {
+        return deadline_exceeded(attempt - 1, last_unavailable);
+      }
+      LOG_IF(INFO, attempt > 1 && status.ok())
+          << description << " succeeded after " << attempt << " calls.";
+      return status;
+    }
+    last_unavailable = status;
+    if (absl::Now() + kSimulatorRetryPause >= deadline) {
+      return deadline_exceeded(attempt, last_unavailable);
+    }
+    LOG(WARNING) << description << " failed (call " << attempt
+                 << "), retrying: " << status;
+    absl::SleepFor(kSimulatorRetryPause);
+    if (context.IsCancelled()) {
+      return absl::CancelledError(absl::StrCat(
+          description, " was cancelled while retrying: ", status.message()));
+    }
+  }
+}
 
 struct IconClientFaultInfo {
   icon::Client client;
@@ -364,6 +446,11 @@ absl::Status SimulationRuntime::GetSimulatorName(
 
 absl::Status SimulationRuntime::ResetSimulatorWithRetries(
     ::grpc::ServerContext* context, bool start_paused, int num_reset_retries) {
+  // TODO(b/575620498): Consolidate this retry logic with
+  // `CallSimulatorWithRetries`, which retries UNAVAILABLE errors until the
+  // deadline of `context`, e.g., while the simulator is still starting up. The
+  // attempts here retry any error, without a pause in between, and stop after a
+  // fixed number of attempts.
   LOG(INFO) << "Resetting the simulator...";
   for (int i = 1; i <= num_reset_retries; ++i) {
     if (context->IsCancelled()) {
@@ -471,7 +558,12 @@ absl::Status SimulationRuntime::PauseSimulation(
 
   LOG(INFO) << "Received PauseSimulation command.";
 
-  INTR_RETURN_IF_ERROR((*simulator_)->Pause());
+  Simulator& simulator = **simulator_;
+  INTR_RETURN_IF_ERROR(
+      CallSimulatorWithRetries(*context, "Simulator Pause",
+                               [&](std::unique_ptr<::grpc::ClientContext> ctx) {
+                                 return simulator.Pause(std::move(ctx));
+                               }));
 
   LOG(INFO) << "Simulation was paused successfully.";
   return absl::OkStatus();
@@ -490,7 +582,12 @@ absl::Status SimulationRuntime::UnpauseSimulation(
 
   LOG(INFO) << "Received UnpauseSimulation command.";
 
-  INTR_RETURN_IF_ERROR((*simulator_)->Unpause());
+  Simulator& simulator = **simulator_;
+  INTR_RETURN_IF_ERROR(
+      CallSimulatorWithRetries(*context, "Simulator Unpause",
+                               [&](std::unique_ptr<::grpc::ClientContext> ctx) {
+                                 return simulator.Unpause(std::move(ctx));
+                               }));
   // TODO(b/336962391) We can remove ClearIconFaults from here once ICON no
   // longer faults fatally due to sim pause.
   INTR_RETURN_IF_ERROR(ClearIconFaults(*context));
@@ -510,8 +607,13 @@ absl::Status SimulationRuntime::GetSimulationStatus(
     return absl::FailedPreconditionError(simulator_.status().message());
   }
 
-  INTR_ASSIGN_OR_RETURN(*response, (*simulator_)->GetStatus());
-  return absl::OkStatus();
+  Simulator& simulator = **simulator_;
+  return CallSimulatorWithRetries(
+      *context, "Simulator GetStatus",
+      [&](std::unique_ptr<::grpc::ClientContext> ctx) -> absl::Status {
+        INTR_ASSIGN_OR_RETURN(*response, simulator.GetStatus(std::move(ctx)));
+        return absl::OkStatus();
+      });
 }
 
 absl::Status SimulationRuntime::RunVisualization(
@@ -666,8 +768,10 @@ absl::Status SimulationRuntime::GetSimulatorStatusInternal(
   simulator_status->mutable_simulator_info()->set_simulator_name(
       (*simulator_)->GetName());
 
+  auto ctx = std::make_unique<::grpc::ClientContext>();
+  ctx->set_deadline(absl::ToChronoTime(absl::Now() + kSimulatorStatusTimeout));
   absl::StatusOr<GetSimulationStatusResponse> status_or =
-      (*simulator_)->GetStatus();
+      (*simulator_)->GetStatus(std::move(ctx));
   if (status_or.ok()) {
     if (status_or->has_simulator_state()) {
       simulator_status->set_simulator_state(status_or->simulator_state());

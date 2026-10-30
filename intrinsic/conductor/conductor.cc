@@ -120,6 +120,10 @@ constexpr int kExtstatusCodeEditWorldSkippedWorldUpdate = 10002;
 constexpr absl::string_view kConductorComponent = "ai.intrinsic.conductor";
 constexpr absl::Duration kDefaultGrpcTimeout = absl::Seconds(30);
 constexpr absl::Duration kSimResetTimeout = absl::Seconds(60);
+// Deadline for the simulation service calls that ensure the simulator is
+// running before a process starts. Generous since initializing the simulator
+// can take a while.
+constexpr absl::Duration kSimControlTimeout = absl::Seconds(90);
 // ID of the edit world that is composed from the solution's resource set.
 constexpr absl::string_view kInitWorldId = "init_world";
 
@@ -754,7 +758,10 @@ ConductorImpl::PrepareProcessStartImpl(
     };
   } else {
     // Don't need to reset, just ensure that the simulator is in a running
-    // state.
+    // state. The simulator might still be starting up right after the solution
+    // was deployed. The simulation service retries its requests to the
+    // simulator in that case for as long as the deadline of the call allows,
+    // so a generous deadline is used for the calls below.
     op_name_prefix = "UnpauseSimOperation";
     pps_op_fn = [this](std::stop_token stop_token) -> absl::Status {
       mu_.AssertHeld();
@@ -762,20 +769,23 @@ ConductorImpl::PrepareProcessStartImpl(
         return absl::OkStatus();
       }
       if (pause_sim_) {
-        grpc::ClientContext unpause_context;
-        std::stop_callback cb(stop_token,
-                              [&]() { unpause_context.TryCancel(); });
+        std::unique_ptr<grpc::ClientContext> unpause_context =
+            CreateClientContext(/*user=*/nullptr, kSimControlTimeout);
+        std::stop_callback cb(
+            stop_token, [&unpause_context]() { unpause_context->TryCancel(); });
         google::protobuf::Empty empty_response;
         INTR_RETURN_IF_ERROR(ToAbslStatus(sim_service_stub_->UnpauseSimulation(
-            &unpause_context, google::protobuf::Empty(), &empty_response)));
+            unpause_context.get(), google::protobuf::Empty(),
+            &empty_response)));
       } else {
-        grpc::ClientContext status_context;
-        std::stop_callback cb(stop_token,
-                              [&]() { status_context.TryCancel(); });
+        std::unique_ptr<grpc::ClientContext> status_context =
+            CreateClientContext(/*user=*/nullptr, kSimControlTimeout);
+        std::stop_callback cb(
+            stop_token, [&status_context]() { status_context->TryCancel(); });
         GetSimulationStatusResponse simulation_status_response;
         INTR_RETURN_IF_ERROR(
             ToAbslStatus(sim_service_stub_->GetSimulationStatus(
-                &status_context, google::protobuf::Empty(),
+                status_context.get(), google::protobuf::Empty(),
                 &simulation_status_response)));
         if (simulation_status_response.has_simulator_state() &&
             simulation_status_response.simulator_state() != RUNNING) {

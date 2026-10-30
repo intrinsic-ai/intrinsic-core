@@ -25,7 +25,6 @@
 #include "intrinsic/simulation/service/proto/first_party/simulation_service.pb.h"
 #include "intrinsic/simulation/service/simulator.h"
 #include "intrinsic/simulation/simulator/proto/v1/simulator_control_service.grpc.pb.h"
-#include "intrinsic/util/grpc/channel.h"
 #include "intrinsic/util/grpc/connection_params.h"
 
 namespace intrinsic {
@@ -50,24 +49,26 @@ class SimulatorV1 : public Simulator {
   absl::Status Reset(const Simulator::ResetParams& reset_request,
                      std::unique_ptr<::grpc::ClientContext> ctx) override;
 
-  absl::Status Pause() override;
+  absl::Status Pause(std::unique_ptr<::grpc::ClientContext> ctx) override;
 
-  absl::Status Unpause() override;
+  absl::Status Unpause(std::unique_ptr<::grpc::ClientContext> ctx) override;
 
   absl::StatusOr<
       intrinsic_proto::simulation::first_party::GetSimulationStatusResponse>
-  GetStatus() override;
+  GetStatus(std::unique_ptr<::grpc::ClientContext> ctx) override;
 
  private:
+  // Returns the stub, connecting to the simulator first if there is none yet.
+  // Waits for the connection until the deadline of `ctx`, but at most
+  // `kSimulatorRPCWaitForConnected`.
   absl::StatusOr<
       intrinsic_proto::simulation::v1::SimulatorControlService::Stub*>
-  GetStub() ABSL_LOCKS_EXCLUDED(stub_mutex_);
+  GetStub(const ::grpc::ClientContext& ctx) ABSL_LOCKS_EXCLUDED(stub_mutex_);
 
   const ConnectionParams sim_control_connection_params_;
   const std::string name_;
 
   mutable absl::Mutex stub_mutex_;
-  std::shared_ptr<Channel> channel_ ABSL_GUARDED_BY(stub_mutex_);
   std::unique_ptr<
       intrinsic_proto::simulation::v1::SimulatorControlService::Stub>
       stub_ ABSL_GUARDED_BY(stub_mutex_);

@@ -53,13 +53,16 @@ class Simulator {
   virtual absl::Status Reset(const ResetParams& reset_request,
                              std::unique_ptr<::grpc::ClientContext> ctx) = 0;
 
-  virtual absl::Status Pause() = 0;
+  // The given client contexts determine the deadline and cancellation of the
+  // requests to the simulator, e.g., via
+  // `grpc::ClientContext::FromServerContext`.
+  virtual absl::Status Pause(std::unique_ptr<::grpc::ClientContext> ctx) = 0;
 
-  virtual absl::Status Unpause() = 0;
+  virtual absl::Status Unpause(std::unique_ptr<::grpc::ClientContext> ctx) = 0;
 
   virtual absl::StatusOr<
       ::intrinsic_proto::simulation::first_party::GetSimulationStatusResponse>
-  GetStatus() = 0;
+  GetStatus(std::unique_ptr<::grpc::ClientContext> ctx) = 0;
 };
 
 }  // namespace simulation
