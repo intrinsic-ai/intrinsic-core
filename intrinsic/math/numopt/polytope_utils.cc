@@ -59,6 +59,13 @@ constexpr double kMinimumEdgeLength = 1.0e-12;
 // result is rejected.
 constexpr double kFeasibilityTolerance = 1.0e-9;
 
+// Minimum absolute determinant of the column-equilibrated 3x3 facet normal
+// matrix required to solve the system directly via the closed-form 3x3
+// adjugate/cross-product formula instead of falling back to `Eigen::FullPivLU`.
+// After column equilibration each column has infinity-norm 1, so by Hadamard's
+// inequality `|det| <= 3 * sqrt(3)` and this threshold is scale-free.
+constexpr double kMinDeterminantForDirectInverse = 1.0e-9;
+
 // Validates that
 // - The `matrix_a` has non-zero dimensions.
 // - Input dimensions of `matrix_a`, `vector_b`, and `interior_point` are
@@ -340,7 +347,6 @@ absl::StatusOr<HalfspaceIntersection3d> ComputeHalfspaceIntersectionDualHull(
   // Row data for the feasibility filter below, hoisted out of the loop.
   const eigenmath::VectorXd row_norms = matrix_a.rowwise().norm();
   const eigenmath::VectorXd absolute_offsets = vector_b.cwiseAbs();
-  eigenmath::VectorXd residual(num_constraints);
   for (const ConvexHullFacetPlane3d& facet_plane : facet_planes) {
     for (int k = 0; k < 3; ++k) {
       const int constraint_index = facet_plane.point_indices[k];
@@ -365,20 +371,41 @@ absl::StatusOr<HalfspaceIntersection3d> ComputeHalfspaceIntersectionDualHull(
     const eigenmath::Matrix3d scaled_normals =
         facet_normals * column_scales.cwiseInverse().asDiagonal();
 
-    const Eigen::FullPivLU<eigenmath::Matrix3d> plane_intersection(
-        scaled_normals);
-    // A singular triple means the three halfspaces have no single common
-    // point. That is the unbounded case the offset test used to catch, except
-    // that rank is scale-free, whereas comparing the dual offset against an
-    // absolute threshold was not.
-    if (!plane_intersection.isInvertible()) continue;
-
-    eigenmath::Vector3d scaled_vertex = plane_intersection.solve(facet_offsets);
-    // One step of iterative refinement. The residual is formed in the scaled
-    // system, where the entries are comparable in magnitude and the
-    // subtraction therefore keeps its significant digits.
-    scaled_vertex += plane_intersection.solve(facet_offsets -
-                                              scaled_normals * scaled_vertex);
+    // Direct 3x3 adjugate / Cramer inversion on the equilibrated 3x3 matrix:
+    // for `M = [c0, c1, c2]`, `adj(M)` has rows `(c1 x c2)^T`, `(c2 x c0)^T`,
+    // and `(c0 x c1)^T`, satisfying `adj(M) * M = det(M) * I`, followed by one
+    // step of iterative refinement in the equilibrated system.
+    const eigenmath::Vector3d c0 = scaled_normals.col(0);
+    const eigenmath::Vector3d c1 = scaled_normals.col(1);
+    const eigenmath::Vector3d c2 = scaled_normals.col(2);
+    const eigenmath::Vector3d c1_cross_c2 = c1.cross(c2);
+    const double det = c0.dot(c1_cross_c2);
+    eigenmath::Vector3d scaled_vertex;
+    if (std::abs(det) > kMinDeterminantForDirectInverse) {
+      const double inv_det = 1.0 / det;
+      eigenmath::Matrix3d adjugate;
+      adjugate.row(0) = c1_cross_c2.transpose();
+      adjugate.row(1) = c2.cross(c0).transpose();
+      adjugate.row(2) = c0.cross(c1).transpose();
+      scaled_vertex = (adjugate * facet_offsets) * inv_det;
+      const eigenmath::Vector3d scaled_residual =
+          facet_offsets - scaled_normals * scaled_vertex;
+      scaled_vertex += (adjugate * scaled_residual) * inv_det;
+    } else {
+      const Eigen::FullPivLU<eigenmath::Matrix3d> plane_intersection(
+          scaled_normals);
+      // A singular triple means the three halfspaces have no single common
+      // point. That is the unbounded case the offset test used to catch, except
+      // that rank is scale-free, whereas comparing the dual offset against an
+      // absolute threshold was not.
+      if (!plane_intersection.isInvertible()) continue;
+      scaled_vertex = plane_intersection.solve(facet_offsets);
+      // One step of iterative refinement. The residual is formed in the scaled
+      // system, where the entries are comparable in magnitude and the
+      // subtraction therefore keeps its significant digits.
+      scaled_vertex += plane_intersection.solve(facet_offsets -
+                                                scaled_normals * scaled_vertex);
+    }
     const eigenmath::Vector3d vertex =
         scaled_vertex.cwiseQuotient(column_scales);
     if (!vertex.allFinite()) continue;
@@ -397,12 +424,16 @@ absl::StatusOr<HalfspaceIntersection3d> ComputeHalfspaceIntersectionDualHull(
     // matters: a shared bound driven by the largest vertex is exactly the
     // bound that the spurious far away vertices inflate themselves, so it
     // stops rejecting the points it exists to reject.
-    residual = matrix_a * vertex;
-    const bool lies_in_every_halfspace =
-        ((residual - vector_b).array() <=
-         kFeasibilityTolerance *
-             (absolute_offsets.array() + row_norms.array() * vertex.norm()))
-            .all();
+    const double v_norm = vertex.norm();
+    bool lies_in_every_halfspace = true;
+    for (int i = 0; i < num_constraints; ++i) {
+      if (!(matrix_a.row(i).dot(vertex) - vector_b(i) <=
+            kFeasibilityTolerance *
+                (absolute_offsets(i) + row_norms(i) * v_norm))) {
+        lies_in_every_halfspace = false;
+        break;
+      }
+    }
     if (!lies_in_every_halfspace) continue;
 
     intersection_points.push_back(vertex);
