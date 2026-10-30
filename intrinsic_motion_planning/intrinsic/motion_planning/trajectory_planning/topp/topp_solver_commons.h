@@ -425,9 +425,26 @@ CreateDynamicJointConstraintSteps(
 absl::Status ValidateKinematicsChain(const kinematics::Chain& chain,
                                      const PathSample& sample);
 
-// Scales all joint and Cartesian limits by a safety margin between 0 and 1,
-// to have a small margin of numerical tolerance for the construction of the
-// motion trajectory. Returns a vector of path samples where only joint and
+// Per-derivative safety margin factors in `(0.0, 1.0]` used to scale dynamic
+// joint and Cartesian limits.
+struct DynamicLimitsSafetyMargins {
+  double velocity = 1.0;
+  double acceleration = 1.0;
+  double jerk = 1.0;
+};
+
+// Scales all joint and Cartesian dynamic limits by the per-derivative safety
+// margins in `margins` (each in `(0.0, 1.0]`). Joint torque limits are scaled
+// by `margins.acceleration`. Joint and Cartesian positional limits are not
+// affected by this function.
+absl::StatusOr<std::vector<PathSample>> ScaleDynamicLimitsBySafetyMargins(
+    const DynamicLimitsSafetyMargins& margins,
+    absl::Span<const PathSample> path_samples);
+
+// Scales all joint and Cartesian limits by a safety margin between 0 and 1
+// (`margin` for velocity, `margin^2` for acceleration/torque, `margin^3` for
+// jerk), to have a small margin of numerical tolerance for the construction of
+// the motion trajectory. Returns a vector of path samples where only joint and
 // Cartesian limits were scaled. Joint and Cartesian positional limits are not
 // affected by this function.
 absl::StatusOr<std::vector<PathSample>> ScaleDynamicLimitsBySafetyMargin(

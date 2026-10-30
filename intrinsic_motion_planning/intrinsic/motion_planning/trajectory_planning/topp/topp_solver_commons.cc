@@ -635,6 +635,42 @@ absl::Status ValidateKinematicsChain(const kinematics::Chain& chain,
   return absl::OkStatus();
 }
 
+absl::StatusOr<std::vector<PathSample>> ScaleDynamicLimitsBySafetyMargins(
+    const DynamicLimitsSafetyMargins& margins,
+    absl::Span<const PathSample> path_samples) {
+  if (margins.velocity <= 0.0 || margins.velocity > 1.0 ||
+      margins.acceleration <= 0.0 || margins.acceleration > 1.0 ||
+      margins.jerk <= 0.0 || margins.jerk > 1.0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "All safety margins should be in the range (0.0, 1.0], but got "
+        "velocity=",
+        margins.velocity, ", acceleration=", margins.acceleration,
+        ", jerk=", margins.jerk, "."));
+  }
+
+  std::vector<PathSample> scaled_path_samples(path_samples.begin(),
+                                              path_samples.end());
+  for (PathSample& path_sample : scaled_path_samples) {
+    JointLimits& scaled_joint_limits = path_sample.joint_limits;
+    scaled_joint_limits.max_velocity *= margins.velocity;
+    scaled_joint_limits.max_acceleration *= margins.acceleration;
+    scaled_joint_limits.max_jerk *= margins.jerk;
+    scaled_joint_limits.max_torque *= margins.acceleration;
+
+    CartesianLimits& scaled_cart_limits = path_sample.cart_limits;
+    scaled_cart_limits.min_translational_velocity *= margins.velocity;
+    scaled_cart_limits.max_translational_velocity *= margins.velocity;
+    scaled_cart_limits.min_translational_acceleration *= margins.acceleration;
+    scaled_cart_limits.max_translational_acceleration *= margins.acceleration;
+    scaled_cart_limits.min_translational_jerk *= margins.jerk;
+    scaled_cart_limits.max_translational_jerk *= margins.jerk;
+    scaled_cart_limits.max_rotational_velocity *= margins.velocity;
+    scaled_cart_limits.max_rotational_acceleration *= margins.acceleration;
+    scaled_cart_limits.max_rotational_jerk *= margins.jerk;
+  }
+  return scaled_path_samples;
+}
+
 absl::StatusOr<std::vector<PathSample>> ScaleDynamicLimitsBySafetyMargin(
     double margin, absl::Span<const PathSample> path_samples) {
   if (margin <= 0.0 || margin > 1.0) {
@@ -643,28 +679,9 @@ absl::StatusOr<std::vector<PathSample>> ScaleDynamicLimitsBySafetyMargin(
   }
   const double margin_pow_2 = margin * margin;
   const double margin_pow_3 = margin_pow_2 * margin;
-
-  std::vector<PathSample> scaled_path_samples(path_samples.begin(),
-                                              path_samples.end());
-  for (PathSample& path_sample : scaled_path_samples) {
-    JointLimits& scaled_joint_limits = path_sample.joint_limits;
-    scaled_joint_limits.max_velocity *= margin;
-    scaled_joint_limits.max_acceleration *= margin_pow_2;
-    scaled_joint_limits.max_jerk *= margin_pow_3;
-    scaled_joint_limits.max_torque *= margin_pow_2;
-
-    CartesianLimits& scaled_cart_limits = path_sample.cart_limits;
-    scaled_cart_limits.min_translational_velocity *= margin;
-    scaled_cart_limits.max_translational_velocity *= margin;
-    scaled_cart_limits.min_translational_acceleration *= margin_pow_2;
-    scaled_cart_limits.max_translational_acceleration *= margin_pow_2;
-    scaled_cart_limits.min_translational_jerk *= margin_pow_3;
-    scaled_cart_limits.max_translational_jerk *= margin_pow_3;
-    scaled_cart_limits.max_rotational_velocity *= margin;
-    scaled_cart_limits.max_rotational_acceleration *= margin_pow_2;
-    scaled_cart_limits.max_rotational_jerk *= margin_pow_3;
-  }
-  return scaled_path_samples;
+  return ScaleDynamicLimitsBySafetyMargins(
+      {.velocity = margin, .acceleration = margin_pow_2, .jerk = margin_pow_3},
+      path_samples);
 }
 
 absl::Status ScalePath(absl::Span<PathSample> path_samples,
