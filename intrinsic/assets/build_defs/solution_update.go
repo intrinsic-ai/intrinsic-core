@@ -46,7 +46,6 @@ import (
 	"intrinsic/tools/inctl/util/introspection"
 	"intrinsic/tools/inctl/util/releaseutil"
 	"intrinsic/tools/inctl/util/traceutil"
-	"intrinsic/util/go/build"
 	"intrinsic/util/proto/protoio"
 	"intrinsic/util/status/extstatus"
 
@@ -276,7 +275,6 @@ $ bazel run //intrinsic/config:empty_application --\
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx, span := trace.StartSpan(cmd.Context(), "inctl app start")
 			span.AddAttributes(trace.BoolAttribute("completed", false))
-			span.AddAttributes(trace.StringAttribute("build_label", build.Label()))
 			span.AddAttributes(trace.StringAttribute("operation_mode", flagOperationMode))
 			span.AddAttributes(trace.StringAttribute("org", flags.GetFlagOrganization()))
 			defer span.End()

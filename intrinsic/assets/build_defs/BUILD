@@ -48,7 +48,6 @@ go_binary(
         "//intrinsic/tools/inctl/util:introspection",
         "//intrinsic/tools/inctl/util:releaseutil",
         "//intrinsic/tools/inctl/util:traceutil",
-        "//intrinsic/util/go:build",
         "//intrinsic_sdk/intrinsic/assets:bundle",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
