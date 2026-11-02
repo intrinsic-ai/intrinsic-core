@@ -436,6 +436,8 @@ enum EtherType {
   // REALTIME is used for realtime interfaces.
   // To ensure backward/downgrade compatibility, this is not in the config file.
   ETHER_TYPE_REALTIME = 2;
+  // ETHERLAB is used for Etherlab EtherCAT interfaces.
+  ETHER_TYPE_ETHERLAB = 3;
 }
 
 // IntOSInterfaceConfig represents the configuration of a single on-prem
