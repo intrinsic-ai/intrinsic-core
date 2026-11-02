@@ -17,7 +17,6 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 package(default_visibility = [
-    "//intrinsic/apps:__subpackages__",
     "//intrinsic/executive:__subpackages__",
     "//intrinsic/scene:__subpackages__",
     "//intrinsic/simulation:__subpackages__",
@@ -28,6 +27,7 @@ package(default_visibility = [
     "//intrinsic_kinematics/intrinsic/kinematics:__subpackages__",
     "//intrinsic_motion_planning:__subpackages__",
     "//intrinsic_sdk/intrinsic/skills:__subpackages__",
+    "//intrinsic_sdk/intrinsic/world:__subpackages__",
 ])
 
 cc_library(
