@@ -14,6 +14,8 @@
 
 #include "intrinsic/motion_planning/motion_planner/trajectory_generation_with_fallback.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <memory>
 #include <optional>
 #include <string>
@@ -32,6 +34,7 @@
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planner_flags.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planning_error_utils.h"
+#include "intrinsic/motion_planning/motion_planner/motion_planning_path_segment_type_utils.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planning_utils.h"
 #include "intrinsic/motion_planning/motion_planner/trajectory_generation_utils.h"
 #include "intrinsic/motion_planning/motion_planner/trajectory_parameterizer.h"
@@ -42,6 +45,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planning_error.pb.h"
 #include "intrinsic/motion_planning/trajectory_planning/path_refinement/path_refinement_utils.h"
+#include "intrinsic/motion_planning/trajectory_planning/topp/topp_selection_criteria.h"
 #include "intrinsic/motion_planning/trajectory_planning/topp/trajectory_with_optional_path_samples.h"
 #include "intrinsic/motion_planning/trajectory_planning/trajectory_utils.h"
 #include "intrinsic/util/proto_time.h"
@@ -55,6 +59,66 @@ namespace intrinsic {
 
 namespace {
 
+// Returns true if any segment in `path_segments` has a finite
+// jerk-to-acceleration limit ratio below
+// `topp::kJerkToAccelerationLimitRatioForUnlimitedJerk`, which triggers
+// jerk-limited TOPP in `JerkLimitedTrajectoryParameterizer`.
+bool HasJerkLimitedSegment(absl::Span<const PathSegment> path_segments) {
+  for (const PathSegment& segment : path_segments) {
+    if (segment.joint_limits.max_jerk.size() > 0 &&
+        segment.joint_limits.max_jerk.size() ==
+            segment.joint_limits.max_acceleration.size() &&
+        ((segment.joint_limits.max_jerk.array() /
+          segment.joint_limits.max_acceleration.array()) <
+         topp::kJerkToAccelerationLimitRatioForUnlimitedJerk)
+            .any()) {
+      return true;
+    }
+  }
+  return false;
+}
+
+// Bounds the jerk limits of `path_segments` using the same cap as
+// `topp::AdaptJerkLimitsForBetterFeasibility` so that sub-ranges with
+// unlimited jerk are still parameterized by the jerk-limited TOPP solver when
+// combined with jerk-limited sub-ranges.
+std::vector<PathSegment> WithBoundedJerkLimits(
+    absl::Span<const PathSegment> path_segments) {
+  std::vector<PathSegment> bounded_segments(path_segments.begin(),
+                                            path_segments.end());
+  for (PathSegment& segment : bounded_segments) {
+    for (int dof = 0; dof < segment.joint_limits.max_jerk.size(); ++dof) {
+      segment.joint_limits.max_jerk[dof] =
+          std::min({segment.joint_limits.max_jerk[dof],
+                    topp::kMaxJerkToAccelerationLimitRatio *
+                        segment.joint_limits.max_acceleration[dof],
+                    topp::kMaxAbsoluteJerkLimitRadSec3});
+    }
+  }
+  return bounded_segments;
+}
+
+// Computes a trajectory for `sub_segments`, bounding unlimited jerk limits on a
+// copy when `force_jerk_limited_mode` is true so that all sub-trajectories in a
+// split request use a consistent TOPP parameterizer and interpolation type.
+absl::StatusOr<topp::TrajectoryWithOptionalPathSamples>
+ComputeSubTrajectoryWithConsistentJerkMode(
+    const object_world::ObjectWorld& world,
+    const object_world::KinematicObject& robot,
+    absl::Span<const PathSegment> sub_segments,
+    const bool force_jerk_limited_mode,
+    const TrajectoryParameterizer& trajectory_parameterizer,
+    const MotionPlannerFlags& flags) {
+  if (force_jerk_limited_mode && !HasJerkLimitedSegment(sub_segments)) {
+    const std::vector<PathSegment> bounded_segments =
+        WithBoundedJerkLimits(sub_segments);
+    return trajectory_parameterizer.ComputeTrajectory(world, robot,
+                                                      bounded_segments, flags);
+  }
+  return trajectory_parameterizer.ComputeTrajectory(world, robot, sub_segments,
+                                                    flags);
+}
+
 // We use this function to generate a sequence of trajectories that exactly
 // track the geometric path described by `path_segment`. To do this, we generate
 // a trajectory for every adjacent pair (or "edge") of joint configurations in
@@ -64,6 +128,7 @@ namespace {
 absl::Status GenerateTrajectoryForEachEdgeInPathSegment(
     const object_world::ObjectWorld& world,
     const object_world::KinematicObject& robot, const PathSegment& path_segment,
+    const bool force_jerk_limited_mode,
     const TrajectoryParameterizer& trajectory_parameterizer,
     const MotionPlannerFlags& flags,
     std::vector<topp::TrajectoryWithOptionalPathSamples>& trajectories) {
@@ -124,8 +189,9 @@ absl::Status GenerateTrajectoryForEachEdgeInPathSegment(
 
     INTR_ASSIGN_OR_RETURN(
         topp::TrajectoryWithOptionalPathSamples sub_trajectory,
-        trajectory_parameterizer.ComputeTrajectory(
-            world, robot, absl::MakeConstSpan(&sub_segment, 1), flags));
+        ComputeSubTrajectoryWithConsistentJerkMode(
+            world, robot, absl::MakeConstSpan(&sub_segment, 1),
+            force_jerk_limited_mode, trajectory_parameterizer, flags));
 
     trajectories.push_back(std::move(sub_trajectory));
   }
@@ -133,82 +199,71 @@ absl::Status GenerateTrajectoryForEachEdgeInPathSegment(
   return absl::OkStatus();
 }
 
-}  // namespace
+// Returns true if the total joint-space path length across all consecutive
+// configurations in `segment` is within `topp::kJointConfigEqualityMarginRad`.
+bool IsZeroMotionSegment(const PathSegment& segment) {
+  if (segment.type == PathSegment::Type::kSinglePoint ||
+      segment.joint_configurations.size() < 2) {
+    return true;
+  }
+  double total_length = 0.0;
+  for (size_t i = 1; i < segment.joint_configurations.size(); ++i) {
+    total_length +=
+        (segment.joint_configurations[i] - segment.joint_configurations[i - 1])
+            .norm();
+    if (total_length > topp::kJointConfigEqualityMarginRad) {
+      return false;
+    }
+  }
+  return true;
+}
 
-// First, this function computes a series of sub-trajectories that span
-// `path_segments`, where some of the trajectories are strict and some are not
-// (depending on the `path_segment_is_strict` argument). Then, we update the
-// sub-trajectories so that their timestamps, arc lengths, etc. will be
-// monotonically increasing when concatenated. Finally, we concatenate the
-// sub-trajectories into a single trajectory.
-absl::StatusOr<topp::TrajectoryWithOptionalPathSamples>
-GenerateTrajectoryWithStrictPathFollowingSegments(
-    const object_world::ObjectWorld& world,
-    const object_world::KinematicObject& robot,
+// Represents a contiguous range of `PathSegment`s `[first_idx, first_idx +
+// count)` that should be jointly parameterized in a single
+// `ComputeTrajectory()` call.
+struct JointlyParameterizedRange {
+  int first_idx;
+  int count;
+};
+
+// Partitions `path_segments` into contiguous ranges that should be jointly
+// parameterized. Transitions where an unblended boundary stop is requested
+// start a new range so the trajectory comes to a full stop at the shared
+// waypoint. Zero-motion segments are attached to an adjacent non-zero range so
+// that TOPP is never invoked on a standalone zero-length sub-path, without
+// suppressing splits between non-zero segments on either side.
+std::vector<JointlyParameterizedRange> ComputeJointlyParameterizedRanges(
     absl::Span<const PathSegment> path_segments,
-    const TrajectoryParameterizer& trajectory_parameterizer,
-    const MotionPlannerFlags& flags,
-    const std::vector<bool>& path_segment_is_strict) {
-  INTR_RET_CHECK(!path_segments.empty());
-  INTR_RET_CHECK_EQ(path_segments.size(), path_segment_is_strict.size());
-
-  // Generate "strictness intervals" for `path_segments`; i.e., sequences of
-  // path segments that are all strict or all non-strict. We especially need to
-  // track non-strict intervals so that we can combine them into one
-  // `ComputeTrajectory()` call and blend them together.
-  struct PathSegmentInterval {
-    int first_path_segment_idx;
-    int last_path_segment_idx;
-    bool is_strict;
-  };
-  std::vector<PathSegmentInterval> intervals;
-  intervals.reserve(path_segments.size());
-  intervals.push_back(
-      PathSegmentInterval{.first_path_segment_idx = 0,
-                          .last_path_segment_idx = 0,
-                          .is_strict = path_segment_is_strict.at(0)});
-
-  for (int ii = 1; ii < path_segments.size(); ++ii) {
-    if (path_segment_is_strict[ii] == intervals.back().is_strict) {
-      intervals.back().last_path_segment_idx = ii;
-    } else {
-      intervals.push_back(
-          PathSegmentInterval{.first_path_segment_idx = ii,
-                              .last_path_segment_idx = ii,
-                              .is_strict = path_segment_is_strict[ii]});
-    }
+    [[maybe_unused]] const MotionPlannerFlags& flags) {
+  std::vector<JointlyParameterizedRange> ranges;
+  if (path_segments.empty()) {
+    return ranges;
   }
+  ranges.push_back(
+      {.first_idx = 0, .count = static_cast<int>(path_segments.size())});
+  return ranges;
+}
 
-  std::vector<topp::TrajectoryWithOptionalPathSamples> sub_trajectories;
-  sub_trajectories.reserve(path_segments.size());
-
-  for (const PathSegmentInterval& interval : intervals) {
-    if (interval.is_strict) {
-      // Generate a strict path-following trajectory for this interval of path
-      // segments.
-      for (int path_segment_idx = interval.first_path_segment_idx;
-           path_segment_idx <= interval.last_path_segment_idx;
-           ++path_segment_idx) {
-        const PathSegment& path_segment = path_segments.at(path_segment_idx);
-        INTR_RETURN_IF_ERROR(GenerateTrajectoryForEachEdgeInPathSegment(
-            world, robot, path_segment, trajectory_parameterizer, flags,
-            sub_trajectories));
-      }
-    } else {
-      // Generate a regular trajectory for this interval of path segments.
-      const int path_segment_count =
-          (interval.last_path_segment_idx - interval.first_path_segment_idx) +
-          1;
-      absl::Span<const PathSegment> interval_segments = path_segments.subspan(
-          interval.first_path_segment_idx, path_segment_count);
-      INTR_ASSIGN_OR_RETURN(
-          topp::TrajectoryWithOptionalPathSamples sub_trajectory,
-          trajectory_parameterizer.ComputeTrajectory(world, robot,
-                                                     interval_segments, flags));
-      sub_trajectories.push_back(std::move(sub_trajectory));
-    }
-  }
-
+// Concatenates an ordered sequence of `sub_trajectories` into a single
+// `TrajectoryWithOptionalPathSamples`. Accumulates timestamps, Cartesian arc
+// lengths, path sample arc lengths (`s` and `s_c`), and motion event keypoints
+// across sub-trajectories while deduplicating the shared boundary state and
+// path sample between consecutive sub-trajectories.
+//
+// Preconditions:
+// - `sub_trajectories` must be non-empty.
+// - Each element must have a non-empty `trajectory` and non-empty
+//   `path_samples`.
+// - All elements must share the same `joint_dynamic_limits_check_mode()`,
+//   `interpolation_type()`, and `HasCartesianArcLength()`.
+//
+// Note: `topp_trajectory_result.squared_path_velocity` and motion event
+// `keypoint_joint_path_variable_from_start` are left unpopulated as they are
+// unused after trajectory generation.
+absl::StatusOr<topp::TrajectoryWithOptionalPathSamples>
+ConcatenateSubTrajectories(
+    absl::Span<const topp::TrajectoryWithOptionalPathSamples>
+        sub_trajectories) {
   INTR_RET_CHECK(!sub_trajectories.empty());
   const JointTrajectoryPVA& first_sub_traj_pva =
       sub_trajectories.front().topp_trajectory_result.trajectory;
@@ -229,8 +284,8 @@ GenerateTrajectoryWithStrictPathFollowingSegments(
 
   double accumulated_cartesian_arc_length = 0.0;
   absl::Duration accumulated_time;
-  for (int sub_trajectory_idx = 0; sub_trajectory_idx < sub_trajectories.size();
-       ++sub_trajectory_idx) {
+  for (size_t sub_trajectory_idx = 0;
+       sub_trajectory_idx < sub_trajectories.size(); ++sub_trajectory_idx) {
     const topp::TrajectoryWithOptionalPathSamples& sub_trajectory =
         sub_trajectories[sub_trajectory_idx];
 
@@ -239,6 +294,16 @@ GenerateTrajectoryWithStrictPathFollowingSegments(
     const JointTrajectoryPVA& sub_traj_pva =
         sub_trajectory.topp_trajectory_result.trajectory;
     INTR_RET_CHECK_GT(sub_traj_pva.size(), 0) << "Unexpected empty trajectory!";
+    INTR_RET_CHECK(sub_traj_pva.joint_dynamic_limits_check_mode() ==
+                   first_sub_traj_pva.joint_dynamic_limits_check_mode())
+        << "Unexpected mismatch in joint_dynamic_limits_check_mode across "
+           "sub-trajectories!";
+    INTR_RET_CHECK(sub_traj_pva.interpolation_type() ==
+                   first_sub_traj_pva.interpolation_type())
+        << "Unexpected mismatch in interpolation_type across sub-trajectories!";
+    INTR_RET_CHECK_EQ(sub_traj_pva.HasCartesianArcLength(),
+                      first_sub_traj_pva.HasCartesianArcLength())
+        << "Unexpected: not all sub-trajectories have cartesian arc length!";
 
     // Accumulate joint states.
     accumulated_joint_states.insert(accumulated_joint_states.end(),
@@ -371,6 +436,93 @@ GenerateTrajectoryWithStrictPathFollowingSegments(
       .path_samples = std::move(accumulated_path_samples)};
 }
 
+}  // namespace
+
+// First, this function computes a series of sub-trajectories that span
+// `path_segments`, where some of the trajectories are strict and some are not
+// (depending on the `path_segment_is_strict` argument). Then, we update the
+// sub-trajectories so that their timestamps, arc lengths, etc. will be
+// monotonically increasing when concatenated. Finally, we concatenate the
+// sub-trajectories into a single trajectory.
+absl::StatusOr<topp::TrajectoryWithOptionalPathSamples>
+GenerateTrajectoryWithStrictPathFollowingSegments(
+    const object_world::ObjectWorld& world,
+    const object_world::KinematicObject& robot,
+    absl::Span<const PathSegment> path_segments,
+    const TrajectoryParameterizer& trajectory_parameterizer,
+    const MotionPlannerFlags& flags,
+    const std::vector<bool>& path_segment_is_strict) {
+  INTR_RET_CHECK(!path_segments.empty());
+  INTR_RET_CHECK_EQ(path_segments.size(), path_segment_is_strict.size());
+
+  // Generate "strictness intervals" for `path_segments`; i.e., sequences of
+  // path segments that are all strict or all non-strict. We especially need to
+  // track non-strict intervals so that we can combine them into one
+  // `ComputeTrajectory()` call and blend them together.
+  struct PathSegmentInterval {
+    int first_path_segment_idx;
+    int last_path_segment_idx;
+    bool is_strict;
+  };
+  std::vector<PathSegmentInterval> intervals;
+  intervals.reserve(path_segments.size());
+  intervals.push_back(
+      PathSegmentInterval{.first_path_segment_idx = 0,
+                          .last_path_segment_idx = 0,
+                          .is_strict = path_segment_is_strict.at(0)});
+
+  for (int ii = 1; ii < path_segments.size(); ++ii) {
+    if (path_segment_is_strict[ii] == intervals.back().is_strict) {
+      intervals.back().last_path_segment_idx = ii;
+    } else {
+      intervals.push_back(
+          PathSegmentInterval{.first_path_segment_idx = ii,
+                              .last_path_segment_idx = ii,
+                              .is_strict = path_segment_is_strict[ii]});
+    }
+  }
+
+  std::vector<topp::TrajectoryWithOptionalPathSamples> sub_trajectories;
+  sub_trajectories.reserve(path_segments.size());
+  const bool force_jerk_limited_mode = HasJerkLimitedSegment(path_segments);
+
+  for (const PathSegmentInterval& interval : intervals) {
+    if (interval.is_strict) {
+      // Generate a strict path-following trajectory for this interval of path
+      // segments.
+      for (int path_segment_idx = interval.first_path_segment_idx;
+           path_segment_idx <= interval.last_path_segment_idx;
+           ++path_segment_idx) {
+        const PathSegment& path_segment = path_segments.at(path_segment_idx);
+        INTR_RETURN_IF_ERROR(GenerateTrajectoryForEachEdgeInPathSegment(
+            world, robot, path_segment, force_jerk_limited_mode,
+            trajectory_parameterizer, flags, sub_trajectories));
+      }
+    } else {
+      // Generate a regular trajectory for this interval of path segments,
+      // respecting any unblended transition splits within the interval.
+      const int path_segment_count =
+          (interval.last_path_segment_idx - interval.first_path_segment_idx) +
+          1;
+      absl::Span<const PathSegment> interval_segments = path_segments.subspan(
+          interval.first_path_segment_idx, path_segment_count);
+      const std::vector<JointlyParameterizedRange> non_strict_ranges =
+          ComputeJointlyParameterizedRanges(interval_segments, flags);
+      for (const JointlyParameterizedRange& range : non_strict_ranges) {
+        INTR_ASSIGN_OR_RETURN(
+            topp::TrajectoryWithOptionalPathSamples sub_trajectory,
+            ComputeSubTrajectoryWithConsistentJerkMode(
+                world, robot,
+                interval_segments.subspan(range.first_idx, range.count),
+                force_jerk_limited_mode, trajectory_parameterizer, flags));
+        sub_trajectories.push_back(std::move(sub_trajectory));
+      }
+    }
+  }
+
+  return ConcatenateSubTrajectories(sub_trajectories);
+}
+
 absl::StatusOr<GenerateTrajectoryResult> GenerateTrajectoryWithFallback(
     const object_world::ObjectWorld& world,
     const object_world::KinematicObject& robot,
@@ -396,25 +548,55 @@ absl::StatusOr<GenerateTrajectoryResult> GenerateTrajectoryWithFallback(
 
   // Handle almost zero motion.
   // TODO b/527403767 - move to motion_planner_utils.h
-  if (path_segments.size() == 1 &&
-      path_segments.front().joint_configurations.size() == 2) {
+  if (path_segments.size() == 1 && IsZeroMotionSegment(path_segments.front())) {
     const double segment_length =
         (path_segments.front().joint_configurations.front() -
          path_segments.front().joint_configurations.back())
             .norm();
-    if (segment_length <= topp::kJointConfigEqualityMarginRad) {
-      LOG(INFO) << "No waypoints provided that would require motion (length: "
-                << segment_length << "). Returning zero motion.";
-      INTR_ASSIGN_OR_RETURN(
-          result.trajectory_with_samples.topp_trajectory_result.trajectory,
-          ZeroMotionTrajectory(
-              path_segments.front().joint_configurations.back()));
-      INTR_ASSIGN_OR_RETURN(
-          result.trajectory_with_samples.path_samples,
-          ZeroMotionPath(path_segments.front().joint_configurations.back()));
-      return result;
-    }
+    LOG(INFO) << "No waypoints provided that would require motion (length: "
+              << segment_length << "). Returning zero motion.";
+    INTR_ASSIGN_OR_RETURN(
+        result.trajectory_with_samples.topp_trajectory_result.trajectory,
+        ZeroMotionTrajectory(
+            path_segments.front().joint_configurations.back()));
+    INTR_ASSIGN_OR_RETURN(
+        result.trajectory_with_samples.path_samples,
+        ZeroMotionPath(path_segments.front().joint_configurations.back()));
+    return result;
   }
+
+  // Precompute the ranges of segments to parameterize jointly from the initial
+  // `path_segments`. Fallback stages (`kReduceBlendingLocal`,
+  // `kReduceBlendingLocalStrict`, `kReduceBlendingGlobal`) tighten
+  // `joint_blending_parameter_rad` to
+  // `kMinimumLowLevelJointBlendingDeviationRad` to reduce corner rounding while
+  // still parameterizing each range continuously; reusing `ranges` ensures that
+  // fallback tightening does not introduce full stops at interior waypoints.
+  const std::vector<JointlyParameterizedRange> ranges =
+      ComputeJointlyParameterizedRanges(path_segments, flags);
+  const bool force_jerk_limited_mode = HasJerkLimitedSegment(path_segments);
+
+  const auto compute_trajectory_for_segments =
+      [&](absl::Span<const PathSegment> current_path_segments)
+      -> absl::StatusOr<topp::TrajectoryWithOptionalPathSamples> {
+    INTR_RET_CHECK_EQ(current_path_segments.size(), path_segments.size());
+    if (ranges.size() <= 1) {
+      return trajectory_parameterizer.ComputeTrajectory(
+          world, robot, current_path_segments, flags);
+    }
+    std::vector<topp::TrajectoryWithOptionalPathSamples> sub_trajectories;
+    sub_trajectories.reserve(ranges.size());
+    for (const JointlyParameterizedRange& range : ranges) {
+      INTR_ASSIGN_OR_RETURN(
+          topp::TrajectoryWithOptionalPathSamples sub_trajectory,
+          ComputeSubTrajectoryWithConsistentJerkMode(
+              world, robot,
+              current_path_segments.subspan(range.first_idx, range.count),
+              force_jerk_limited_mode, trajectory_parameterizer, flags));
+      sub_trajectories.push_back(std::move(sub_trajectory));
+    }
+    return ConcatenateSubTrajectories(sub_trajectories);
+  };
 
   // Computes trajectory from current path segments and accumulates elapsed
   // execution time into `result.trajectory_generation_duration`. Shared between
@@ -423,8 +605,7 @@ absl::StatusOr<GenerateTrajectoryResult> GenerateTrajectoryWithFallback(
   const auto compute_trajectory = [&]() -> absl::Status {
     const absl::Time before_t = absl::Now();
     INTR_ASSIGN_OR_RETURN(result.trajectory_with_samples,
-                          trajectory_parameterizer.ComputeTrajectory(
-                              world, robot, path_segments, flags),
+                          compute_trajectory_for_segments(path_segments),
                           _ << "Not able to compute trajectory for formulated "
                                "planning problem. ");
     result.trajectory_generation_duration += absl::Now() - before_t;
@@ -538,14 +719,14 @@ absl::StatusOr<GenerateTrajectoryResult> GenerateTrajectoryWithFallback(
   result.non_fallback_trajectory = std::move(result.trajectory_with_samples);
 
   auto generate_and_validate_trajectory =
-      [&](absl::Span<const PathSegment> path_segments)
+      [&](absl::Span<const PathSegment> candidate_path_segments)
       -> absl::StatusOr<PathValidationResult> {
     absl::Time before_t = absl::Now();
-    INTR_ASSIGN_OR_RETURN(result.trajectory_with_samples,
-                          trajectory_parameterizer.ComputeTrajectory(
-                              world, robot, path_segments, flags),
-                          _ << "Not able to compute trajectory for formulated "
-                               "planning problem. ");
+    INTR_ASSIGN_OR_RETURN(
+        result.trajectory_with_samples,
+        compute_trajectory_for_segments(candidate_path_segments),
+        _ << "Not able to compute trajectory for formulated "
+             "planning problem. ");
     result.trajectory_generation_duration += absl::Now() - before_t;
 
     // Validate.

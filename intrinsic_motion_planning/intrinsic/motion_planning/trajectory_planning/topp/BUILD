@@ -265,6 +265,19 @@ cc_library(
     ],
 )
 
+cc_library(
+    name = "topp_selection_criteria",
+    srcs = ["topp_selection_criteria.cc"],
+    hdrs = ["topp_selection_criteria.h"],
+    deps = [
+        ":joint_optimization_options_cc_proto",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/path_planning:path_segment",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/types:span",
+    ],
+)
+
 proto_library(
     name = "piecewise_linear_squared_path_velocity_proto",
     srcs = ["piecewise_linear_squared_path_velocity.proto"],

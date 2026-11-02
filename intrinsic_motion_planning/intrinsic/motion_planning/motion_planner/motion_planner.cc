@@ -48,6 +48,7 @@
 #include "intrinsic/motion_planning/motion_planner/motion_planning_path_segment_type_utils.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planning_utils.h"
 #include "intrinsic/motion_planning/motion_planner/robot_specification.h"
+#include "intrinsic/motion_planning/motion_planner/trajectory_generation_utils.h"
 #include "intrinsic/motion_planning/motion_planner/trajectory_generation_with_fallback.h"
 #include "intrinsic/motion_planning/motion_planner/trajectory_parameterizer.h"
 #include "intrinsic/motion_planning/motion_planner/trajectory_segment.h"
@@ -97,7 +98,6 @@ using intrinsic_proto::motion_planning::v1::MotionSegment;
 using intrinsic_proto::motion_planning::v1::UniformGeometricConstraint;
 
 constexpr double kLowLevelJointBlendingDefaultDesiredTightness = 0.01;
-constexpr double kMinimumLowLevelJointBlendingDeviationRad = 1e-5;
 constexpr double kMinBlendTightness = 1e-4;
 constexpr double kDefaultTranslationalSamplingStepM = 0.002;
 constexpr double kDefaultRotationalSamplingStepRad = 0.005;
