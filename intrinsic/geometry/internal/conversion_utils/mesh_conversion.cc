@@ -16,6 +16,8 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
+#include <limits>
 #include <utility>
 #include <vector>
 
@@ -34,6 +36,8 @@
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/str_format.h"
 #include "intrinsic/geometry/internal/conversion_utils/to_epic.h"
 #include "intrinsic/geometry/internal/indexed_triangle_set_3/indexed_triangle_set_3.h"
 #include "intrinsic/geometry/internal/mesh/mesh.h"
@@ -398,14 +402,21 @@ std::vector<EpicIndexedTriangleSet3> FromCoacdMeshes(
   return output;
 }
 
-MeshoptBuffers ToMeshoptBuffers(const Mesh& mesh) {
+absl::StatusOr<MeshoptBuffers> ToMeshoptBuffers(const Mesh& mesh) {
   const size_t vertex_count = mesh.vertex_count();
   const size_t face_count = mesh.face_count();
+  constexpr double kMaxFloat = std::numeric_limits<float>::max();
 
   MeshoptBuffers buffers;
   buffers.vertex_positions.resize(vertex_count * 3);
   for (size_t i = 0; i < vertex_count; ++i) {
     const auto& v = mesh.vertex(i);
+    if (!v.allFinite() || v.cwiseAbs().maxCoeff() > kMaxFloat) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Mesh vertex %zu (%g, %g, %g) has coordinates that are non-finite "
+          "or outside float range.",
+          i, v.x(), v.y(), v.z()));
+    }
     buffers.vertex_positions[i * 3] = static_cast<float>(v.x());
     buffers.vertex_positions[i * 3 + 1] = static_cast<float>(v.y());
     buffers.vertex_positions[i * 3 + 2] = static_cast<float>(v.z());
@@ -414,9 +425,15 @@ MeshoptBuffers ToMeshoptBuffers(const Mesh& mesh) {
   buffers.indices.resize(face_count * 3);
   for (size_t i = 0; i < face_count; ++i) {
     const auto& f = mesh.face(i);
-    buffers.indices[i * 3] = static_cast<uint32_t>(f[0]);
-    buffers.indices[i * 3 + 1] = static_cast<uint32_t>(f[1]);
-    buffers.indices[i * 3 + 2] = static_cast<uint32_t>(f[2]);
+    for (int corner = 0; corner < 3; ++corner) {
+      if (f[corner] < 0 || static_cast<size_t>(f[corner]) >= vertex_count) {
+        return absl::InvalidArgumentError(absl::StrFormat(
+            "Mesh face %zu references out-of-bounds vertex index %d "
+            "(vertex_count=%zu).",
+            i, f[corner], vertex_count));
+      }
+      buffers.indices[i * 3 + corner] = static_cast<uint32_t>(f[corner]);
+    }
   }
 
   return buffers;

@@ -170,7 +170,12 @@ struct MeshoptBuffers {
 
 // Converts a Mesh to flat float vertex coordinates [x0, y0, z0, ...] and
 // uint32_t triangle indices for meshoptimizer.
-MeshoptBuffers ToMeshoptBuffers(const Mesh& mesh);
+//
+// Returns kInvalidArgument if any vertex coordinate is non-finite or outside
+// the finite float range, or if any face references a negative or
+// out-of-bounds vertex index, since these cannot be represented safely in the
+// meshoptimizer buffers.
+absl::StatusOr<MeshoptBuffers> ToMeshoptBuffers(const Mesh& mesh);
 
 // Converts flat float vertex coordinates and uint32_t triangle indices from
 // meshoptimizer back to a double-precision Mesh.
