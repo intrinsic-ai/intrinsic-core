@@ -37,7 +37,6 @@ go_library(
     name = "readeropener",
     srcs = ["readeropener.go"],
     importpath = "intrinsic/assets/services/readeropener",
-    visibility = ["//intrinsic/assets/services:__pkg__"],
 )
 
 go_library(
