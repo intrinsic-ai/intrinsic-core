@@ -16,7 +16,10 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/geometry:__subpackages__"])
+package(default_visibility = [
+    "//intrinsic/geometry:__subpackages__",
+    "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+])
 
 cc_library(
     name = "extract_all_point_3d",
@@ -70,10 +73,7 @@ cc_library(
     }),
     visibility = [
         "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/geometry/api:__pkg__",
         "//intrinsic/scene/service:__subpackages__",
-        "//intrinsic/world/collision/util:__pkg__",
-        "//intrinsic/world/util:__pkg__",
     ],
     deps = [
         "//intrinsic/geometry/internal/indexed_triangle_set_3",

@@ -19,6 +19,7 @@ load("//bazel:cc_macros.bzl", "cc_library")
 package(default_visibility = [
     "//intrinsic/geometry:__subpackages__",
     "//intrinsic/scene:__subpackages__",
+    "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
 ])
 
 cc_library(
@@ -33,6 +34,7 @@ cc_library(
         "//intrinsic/geometry:__subpackages__",
         "//intrinsic/geometry/api:__pkg__",
         "//intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
     ],
     deps = [

@@ -46,8 +46,6 @@ cc_library(
     srcs = ["scale_shape.cc"],
     hdrs = ["scale_shape.h"],
     visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/geometry/internal/util:__pkg__",
         "//intrinsic/scene/sdf:__pkg__",
         "//intrinsic/simulation/world:__pkg__",
         "//intrinsic/world:__subpackages__",
@@ -109,7 +107,6 @@ cc_library(
     srcs = ["gltf_helpers.cc"],
     hdrs = ["gltf_helpers.h"],
     visibility = [
-        "//intrinsic/geometry:__subpackages__",
         "//intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],

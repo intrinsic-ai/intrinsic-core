@@ -47,7 +47,6 @@ cc_library(
     srcs = ["validate_pts.cc"],
     hdrs = ["validate_pts.h"],
     visibility = [
-        "//intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [

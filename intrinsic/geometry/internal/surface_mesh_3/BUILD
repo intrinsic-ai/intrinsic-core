@@ -16,7 +16,10 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/geometry:__subpackages__"])
+package(default_visibility = [
+    "//intrinsic/geometry:__subpackages__",
+    "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+])
 
 cc_library(
     name = "surface_mesh_3d",
