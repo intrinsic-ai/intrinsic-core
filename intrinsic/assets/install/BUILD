@@ -77,9 +77,9 @@ go_library(
     srcs = ["localconv.go"],
     importpath = "intrinsic/assets/install/localconv",
     visibility = [
-        "//intrinsic/assets:__pkg__",
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/resources:__pkg__",
+        "//intrinsic_sdk/intrinsic/assets:__pkg__",
     ],
     deps = [
         "//intrinsic/assets/catalog/proto/v1:asset_catalog_internal_go_proto",

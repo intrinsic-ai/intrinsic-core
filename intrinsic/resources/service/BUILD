@@ -217,6 +217,7 @@ go_library(
         "//intrinsic/modified_solution:__subpackages__",
         "//intrinsic/skills/internal:__pkg__",
         "//intrinsic/skills/tools:__pkg__",
+        "//intrinsic_sdk/intrinsic/assets:__pkg__",
         "//intrinsic_sdk/intrinsic/skills/internal:__pkg__",
     ],
     deps = [

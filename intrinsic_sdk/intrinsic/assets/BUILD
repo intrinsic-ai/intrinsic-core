@@ -196,7 +196,6 @@ go_library(
     importpath = "intrinsic/assets/throttle",
     visibility = [
         ":__subpackages__",
-        "//intrinsic/assets:__pkg__",
         "//intrinsic/assets:__subpackages__",
     ],
     deps = [
@@ -295,9 +294,7 @@ go_library(
     importpath = "intrinsic/assets/ioutils",
     visibility = [
         ":__subpackages__",
-        "//intrinsic/assets:__pkg__",
-        "//intrinsic/assets:__subpackages__",
-        "//intrinsic/skills:__subpackages__",
+        "//intrinsic_sdk/intrinsic/assets:__subpackages__",
         "//intrinsic_sdk/intrinsic/skills:__subpackages__",
     ],
     deps = [
