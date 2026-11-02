@@ -71,7 +71,7 @@ go_proto_library(
     importpath = "intrinsic/assets/proto/installed_assets_go_proto",
     protos = [":installed_assets_proto"],
     visibility = [
-        "//intrinsic:intrinsic_internal",
+        "//intrinsic:public_api_users",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_go_proto",
