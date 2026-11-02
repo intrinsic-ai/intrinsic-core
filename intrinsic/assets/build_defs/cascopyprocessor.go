@@ -25,7 +25,7 @@ import (
 	"intrinsic/assets/referenceddata"
 	"intrinsic/storage/content_addressable_storage/pkg/crossproject"
 	"intrinsic/storage/content_addressable_storage/pkg/primordial"
-	"intrinsic/tools/inctl/util/gcpauth"
+	"intrinsic/tools/inctl/auth/auth"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -37,7 +37,7 @@ import (
 type CASClientFactory func(ctx context.Context, project string) (casgrpcpb.ContentAddressableStorageServiceClient, io.Closer, error)
 
 func defaultCASClientFactory(ctx context.Context, project string) (casgrpcpb.ContentAddressableStorageServiceClient, io.Closer, error) {
-	conn, err := gcpauth.AuthForCLICommands(ctx, project)
+	conn, err := auth.NewCloudConnection(ctx, auth.WithProject(project))
 	if err != nil {
 		return nil, nil, err
 	}

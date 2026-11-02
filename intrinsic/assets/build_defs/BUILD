@@ -25,8 +25,8 @@ go_library(
     deps = [
         "//intrinsic/storage/content_addressable_storage/pkg/crossproject",
         "//intrinsic/storage/content_addressable_storage/pkg/primordial",
-        "//intrinsic/tools/inctl/util:gcpauth",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
+        "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
         "@org_golang_google_grpc//codes:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",
