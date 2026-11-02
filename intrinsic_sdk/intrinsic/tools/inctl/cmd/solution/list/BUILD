@@ -19,8 +19,8 @@ go_library(
     srcs = ["list.go"],
     importpath = "intrinsic/tools/inctl/cmd/solution/list/list",
     visibility = [
-        "//intrinsic/tools:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution:__pkg__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",

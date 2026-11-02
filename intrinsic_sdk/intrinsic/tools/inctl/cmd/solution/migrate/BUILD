@@ -19,8 +19,8 @@ go_library(
     srcs = ["migrate.go"],
     importpath = "intrinsic/tools/inctl/cmd/solution/migrate/migrate",
     visibility = [
-        "//intrinsic/tools:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution:__pkg__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/solution_versions/proto/v1alpha1:motion_planner_service_migration_go_proto",
