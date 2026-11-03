@@ -18,10 +18,7 @@ go_library(
     name = "list",
     srcs = ["list.go"],
     importpath = "intrinsic/assets/inctl/instance/list",
-    visibility = [
-        "//intrinsic/assets:__subpackages__",
-        "//intrinsic_sdk/intrinsic/assets:__subpackages__",
-    ],
+    visibility = ["//intrinsic_sdk/intrinsic/assets:__subpackages__"],
     deps = [
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
