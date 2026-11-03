@@ -20,14 +20,11 @@ load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = [
-    "//intrinsic/apps:__subpackages__",
     "//intrinsic/assets/services:__subpackages__",
     "//intrinsic/executive:__subpackages__",
     "//intrinsic/frontend:__subpackages__",
-    "//intrinsic/manipulation:__subpackages__",
     "//intrinsic/resources:__subpackages__",
     "//intrinsic/skills:__subpackages__",
-    "//intrinsic/testing:__subpackages__",
     "//intrinsic_control/intrinsic/icon/skills:__subpackages__",
     "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
     "//intrinsic_runtime/intrinsic/proto_tools/registry:__subpackages__",
