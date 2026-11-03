@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package intrinsic_proto.motion_planning;
 
+import "intrinsic/icon/proto/cart_space.proto";
 import "intrinsic/icon/proto/joint_space.proto";
 import "intrinsic/math/proto/pose.proto";
 import "intrinsic/motion_planning/path_planning/path_segment.proto";
@@ -62,6 +63,12 @@ message MotionPlannerNonvolatileCacheKey {
 
   // Motion Planning proto version.
   string motion_planning_proto_version = 7;
+
+  // The Cartesian limits of the robot.
+  intrinsic_proto.icon.CartesianLimits cartesian_limits = 8;
+
+  // The Cartesian limits of frames attached to the robot.
+  map<string, intrinsic_proto.icon.CartesianLimits> frame_cartesian_limits = 9;
 }
 
 // The value type used for caching results from

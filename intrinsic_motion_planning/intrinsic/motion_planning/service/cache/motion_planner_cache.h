@@ -41,14 +41,15 @@
 namespace intrinsic {
 
 static const auto* const distance_cache_format =
-    new absl::ParsedFormat<'f', 'f', 'f', 'f', 'f', 'd', 'v', 'v', 'v', 'v',
-                           'v'>(
+    new absl::ParsedFormat<'f', 'f', 'f', 'f', 'f', 'f', 'd', 'v', 'v', 'v',
+                           'v', 'v'>(
         "MotionPlanningRequestCacheKeyDistance(diff_in_m_for_all_related_frame_"
         "poses = "
         "%.3f. diff_in_m_for_all_object_poses = %.3f."
         "max_diff_in_rad_for_starting_robot_configuration = %.3f. "
         "max_diff_in_rad_for_kinematic_objects = %.3f. "
         "max_diff_in_world_application_limits = %.3f. "
+        "max_diff_in_cartesian_limits = %.3f. "
         "num_of_objects_new_in_one_key = %d. "
         "world_collision_settings_are_same = %v. "
         "motion_segment_collision_settings_are_same "
@@ -159,7 +160,10 @@ struct MotionPlanningRequestCacheKeyDistance {
   double max_diff_in_rad_for_kinematic_objects;
   // The max absolute difference in any of the joint limit values of the two
   // keys.
-  double max_diff_in_world_application_limits;
+  double max_diff_in_world_application_limits = 0.0;
+  // The max absolute difference in any of the Cartesian limit values of the
+  // robot or its attached frames between the two keys.
+  double max_diff_in_cartesian_limits = 0.0;
   // The number of objects exists in only one key but not the other.
   int num_of_objects_new_in_one_key;
   // True if both keys have the same `world_collision_settings`.
@@ -204,6 +208,7 @@ struct MotionPlanningRequestCacheKeyDistance {
         0.001;
     const double max_diff_in_rad_for_kinematic_objects_threshold = 0.001;
     const double max_diff_in_world_application_limits_threshold = 0.0;
+    const double max_diff_in_cartesian_limits_threshold = 0.0;
     const double rotation_weight = 1.0;
     absl::Status Validate() const;
   };
@@ -227,6 +232,8 @@ struct MotionPlanningRequestCacheKeyDistance {
   //    max_diff_in_rad_for_starting_robot_configuration_threshold
   // * max_diff_in_world_application_limits <=
   //    max_diff_in_world_application_limits_threshold
+  // * max_diff_in_cartesian_limits <=
+  //    max_diff_in_cartesian_limits_threshold
   bool IsValidForCacheHit(const IsValidForCacheHitOptions& options) const;
 
   // Returns true if this distance qualifies as a fuzzy cache hit candidate
@@ -247,6 +254,7 @@ inline std::ostream& operator<<(
              distance.max_diff_in_rad_for_starting_robot_configuration,
              distance.max_diff_in_rad_for_kinematic_objects,
              distance.max_diff_in_world_application_limits,
+             distance.max_diff_in_cartesian_limits,
              distance.num_of_objects_new_in_one_key,
              distance.world_collision_settings_are_same,
              distance.motion_segment_collision_settings_are_same,

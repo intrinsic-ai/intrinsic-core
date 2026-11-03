@@ -16,6 +16,7 @@ syntax = "proto3";
 
 package intrinsic_proto.motion_planning;
 
+import "intrinsic/icon/proto/cart_space.proto";
 import "intrinsic/icon/proto/joint_space.proto";
 import "intrinsic/kinematics/types/joint_limits.proto";
 import "intrinsic/math/proto/pose.proto";
@@ -88,6 +89,10 @@ message MotionPlanningRequestCacheKey {
   intrinsic_proto.icon.JointVec starting_robot_configuration = 5;
   // The application joint limits of the robot.
   intrinsic_proto.JointLimits world_application_limits = 19;
+  // The Cartesian limits of the robot.
+  intrinsic_proto.icon.CartesianLimits cartesian_limits = 26;
+  // The Cartesian limits of frames attached to the robot.
+  map<string, intrinsic_proto.icon.CartesianLimits> frame_cartesian_limits = 27;
   // Collision settings of the world.
   intrinsic_proto.world.CollisionSettings world_collision_settings = 6;
   // Collision settings for each motion segment.

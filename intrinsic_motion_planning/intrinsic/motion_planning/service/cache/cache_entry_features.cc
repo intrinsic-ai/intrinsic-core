@@ -33,8 +33,10 @@
 #include "absl/types/span.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/geometry/api/affine_transform_of_geometry.h"
+#include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
+#include "intrinsic/motion_planning/motion_planner/robot_specification.h"
 #include "intrinsic/motion_planning/proto/motion_planner_service_proto_utils.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
 #include "intrinsic/motion_planning/service/cache/cache_key_normalization.h"
@@ -795,6 +797,18 @@ absl::StatusOr<MotionPlanningCacheEntryFeatures> ExtractCacheEntryFeatures(
       JointLimitsXd world_application_limits,
       robot->GetJointApplicationLimits(),
       _ << "Failed to get joint application limits for robot.");
+  INTR_ASSIGN_OR_RETURN(const CartesianLimits cartesian_limits,
+                        robot->GetCartesianLimits(),
+                        _ << "Failed to get Cartesian limits for robot.");
+  INTR_ASSIGN_OR_RETURN(
+      const std::vector<FrameCartesianPathLimits> frame_cartesian_limits_vec,
+      ResolveFrameCartesianPathLimits(object_world, *robot));
+  absl::flat_hash_map<std::string, CartesianLimits> frame_cartesian_limits;
+  for (const FrameCartesianPathLimits& frame_limit :
+       frame_cartesian_limits_vec) {
+    frame_cartesian_limits[absl::string_view(frame_limit.frame_name)] =
+        frame_limit.limits;
+  }
 
   INTR_ASSIGN_OR_RETURN(
       std::vector<CacheEntryKinematicActor> other_kinematic_actors,
@@ -832,6 +846,8 @@ absl::StatusOr<MotionPlanningCacheEntryFeatures> ExtractCacheEntryFeatures(
           std::move(geometry_features.serialized_geometry_ref_t_shape_aff),
       .starting_robot_configuration = std::move(starting_robot_configuration),
       .world_application_limits = std::move(world_application_limits),
+      .cartesian_limits = cartesian_limits,
+      .frame_cartesian_limits = std::move(frame_cartesian_limits),
       .world_collision_settings =
           std::move(collision_settings.world_collision_settings),
       .motion_segment_collision_settings =

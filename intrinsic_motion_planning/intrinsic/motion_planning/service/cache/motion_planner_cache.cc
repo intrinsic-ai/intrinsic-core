@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <cmath>
+#include <concepts>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -28,6 +29,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -40,7 +42,9 @@
 #include "google/protobuf/map.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/icon/proto/cart_space_conversion.h"
 #include "intrinsic/icon/proto/joint_space.pb.h"
+#include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/kinematics/types/joint_limits_xd.h"
 #include "intrinsic/logging/data_logger_client.h"
 #include "intrinsic/logging/proto/log_item.pb.h"
@@ -67,31 +71,47 @@ static double kMaxDiffRobotAttachmentInM = 1e-6;
 
 namespace {
 
-// Compute the distance between two joint limit vectors. Returns max double if
-// the limit vectors have different sizes or one component is unlimited and the
-// other is limited. This is almost the same as
+// Computes the absolute difference between two scalar limit bounds. Matching
+// infinite bounds (`+inf == +inf` or `-inf == -inf`) are considered equal and
+// return 0, whereas a finite bound compared against an infinite bound (or
+// `+inf` compared against `-inf`) returns `std::numeric_limits<T>::max()`.
+template <std::floating_point T>
+T ComputeDistanceForLimitScalar(T first_val, T second_val) {
+  // Handles identical finite bounds as well as matching infinite bounds
+  // (`+inf == +inf` or `-inf == -inf` when both keys are unlimited), which
+  // would otherwise evaluate to `NaN` under subtraction or trigger the
+  // single-sided infinity check below.
+  if (first_val == second_val) {
+    return T{0};
+  }
+  if (std::isinf(first_val) || std::isinf(second_val)) {
+    return std::numeric_limits<T>::max();
+  }
+  return std::abs(first_val - second_val);
+}
+
+// Computes the distance between two limit vectors as the largest absolute
+// difference across any dimension (i.e., the max / infinity norm). Returns max
+// scalar if the limit vectors have different sizes or one component is
+// unlimited and the other is limited. This is almost the same as
 // `ComputeJointConfigurationDistance()`, except it handles the case of values =
 // +/- inf. Note that this should never return inf, even if inputs have inf.
-double ComputeDistanceForJointLimitVec(
-    const eigenmath::VectorXd& first_limit_vec,
-    const eigenmath::VectorXd& second_limit_vec) {
-  double max_diff_for_limit_vec = 0.0;
+template <typename Derived>
+typename Derived::Scalar ComputeDistanceForLimitVec(
+    const Eigen::MatrixBase<Derived>& first_limit_vec,
+    const Eigen::MatrixBase<Derived>& second_limit_vec) {
+  using Scalar = Derived::Scalar;
+  Scalar max_diff_for_limit_vec{0};
   if (first_limit_vec.size() != second_limit_vec.size()) {
-    return std::numeric_limits<double>::max();
+    return std::numeric_limits<Scalar>::max();
   }
   if (first_limit_vec.size() == 0) {
-    return 0.0;
+    return Scalar{0};
   }
-  for (int ii = 0; ii < first_limit_vec.size(); ++ii) {
-    if (first_limit_vec(ii) == second_limit_vec(ii)) {
-      continue;
-    }
-    if (std::isinf(first_limit_vec(ii)) || std::isinf(second_limit_vec(ii))) {
-      return std::numeric_limits<double>::max();
-    }
-    max_diff_for_limit_vec =
-        std::max(max_diff_for_limit_vec,
-                 std::abs(first_limit_vec(ii) - second_limit_vec(ii)));
+  for (Eigen::Index i = 0; i < first_limit_vec.size(); ++i) {
+    max_diff_for_limit_vec = std::max(
+        max_diff_for_limit_vec,
+        ComputeDistanceForLimitScalar(first_limit_vec(i), second_limit_vec(i)));
   }
   return max_diff_for_limit_vec;
 }
@@ -104,37 +124,109 @@ double ComputeDistanceForJointLimits(const JointLimitsXd& first_joint_limits,
     return std::numeric_limits<double>::max();
   }
 
-  max_diff_in_joint_limits = std::max(
-      max_diff_in_joint_limits,
-      ComputeDistanceForJointLimitVec(first_joint_limits.min_position,
-                                      second_joint_limits.min_position));
-
-  max_diff_in_joint_limits = std::max(
-      max_diff_in_joint_limits,
-      ComputeDistanceForJointLimitVec(first_joint_limits.max_position,
-                                      second_joint_limits.max_position));
-
-  max_diff_in_joint_limits = std::max(
-      max_diff_in_joint_limits,
-      ComputeDistanceForJointLimitVec(first_joint_limits.max_velocity,
-                                      second_joint_limits.max_velocity));
-
-  max_diff_in_joint_limits = std::max(
-      max_diff_in_joint_limits,
-      ComputeDistanceForJointLimitVec(first_joint_limits.max_acceleration,
-                                      second_joint_limits.max_acceleration));
+  max_diff_in_joint_limits =
+      std::max(max_diff_in_joint_limits,
+               ComputeDistanceForLimitVec(first_joint_limits.min_position,
+                                          second_joint_limits.min_position));
 
   max_diff_in_joint_limits =
       std::max(max_diff_in_joint_limits,
-               ComputeDistanceForJointLimitVec(first_joint_limits.max_jerk,
-                                               second_joint_limits.max_jerk));
+               ComputeDistanceForLimitVec(first_joint_limits.max_position,
+                                          second_joint_limits.max_position));
 
   max_diff_in_joint_limits =
       std::max(max_diff_in_joint_limits,
-               ComputeDistanceForJointLimitVec(first_joint_limits.max_torque,
-                                               second_joint_limits.max_torque));
+               ComputeDistanceForLimitVec(first_joint_limits.max_velocity,
+                                          second_joint_limits.max_velocity));
+
+  max_diff_in_joint_limits = std::max(
+      max_diff_in_joint_limits,
+      ComputeDistanceForLimitVec(first_joint_limits.max_acceleration,
+                                 second_joint_limits.max_acceleration));
+
+  max_diff_in_joint_limits =
+      std::max(max_diff_in_joint_limits,
+               ComputeDistanceForLimitVec(first_joint_limits.max_jerk,
+                                          second_joint_limits.max_jerk));
+
+  max_diff_in_joint_limits =
+      std::max(max_diff_in_joint_limits,
+               ComputeDistanceForLimitVec(first_joint_limits.max_torque,
+                                          second_joint_limits.max_torque));
 
   return max_diff_in_joint_limits;
+}
+
+// Computes the distance between two sets of Cartesian limits as the maximum
+// distance across all translational (position, velocity, acceleration, jerk)
+// and rotational (velocity, acceleration, jerk) bounds.
+double ComputeDistanceForCartesianLimits(const CartesianLimits& first_limits,
+                                         const CartesianLimits& second_limits) {
+  double max_diff = 0.0;
+  max_diff = std::max(max_diff, ComputeDistanceForLimitVec(
+                                    first_limits.min_translational_position,
+                                    second_limits.min_translational_position));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitVec(
+                                    first_limits.max_translational_position,
+                                    second_limits.max_translational_position));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitVec(
+                                    first_limits.min_translational_velocity,
+                                    second_limits.min_translational_velocity));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitVec(
+                                    first_limits.max_translational_velocity,
+                                    second_limits.max_translational_velocity));
+  max_diff = std::max(
+      max_diff,
+      ComputeDistanceForLimitVec(first_limits.min_translational_acceleration,
+                                 second_limits.min_translational_acceleration));
+  max_diff = std::max(
+      max_diff,
+      ComputeDistanceForLimitVec(first_limits.max_translational_acceleration,
+                                 second_limits.max_translational_acceleration));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitVec(
+                                    first_limits.min_translational_jerk,
+                                    second_limits.min_translational_jerk));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitVec(
+                                    first_limits.max_translational_jerk,
+                                    second_limits.max_translational_jerk));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitScalar(
+                                    first_limits.max_rotational_velocity,
+                                    second_limits.max_rotational_velocity));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitScalar(
+                                    first_limits.max_rotational_acceleration,
+                                    second_limits.max_rotational_acceleration));
+  max_diff = std::max(max_diff, ComputeDistanceForLimitScalar(
+                                    first_limits.max_rotational_jerk,
+                                    second_limits.max_rotational_jerk));
+  return max_diff;
+}
+
+// Computes the maximum distance across all frames between two maps of per-frame
+// Cartesian limits. Frames present in only one map are compared against
+// `CartesianLimits::Unlimited()`, yielding 0 if the present entry is also
+// unlimited or `std::numeric_limits<double>::max()` if it has any finite bound.
+double ComputeDistanceForFrameCartesianLimits(
+    const absl::flat_hash_map<std::string, CartesianLimits>& first_frame_limits,
+    const absl::flat_hash_map<std::string, CartesianLimits>&
+        second_frame_limits) {
+  const CartesianLimits unlimited = CartesianLimits::Unlimited();
+  double max_diff = 0.0;
+  for (const auto& [frame_name, first_limits] : first_frame_limits) {
+    const auto it = second_frame_limits.find(frame_name);
+    const CartesianLimits& second_limits =
+        (it != second_frame_limits.end()) ? it->second : unlimited;
+    const double curr_diff =
+        ComputeDistanceForCartesianLimits(first_limits, second_limits);
+    max_diff = std::max(max_diff, curr_diff);
+  }
+  for (const auto& [frame_name, second_limits] : second_frame_limits) {
+    if (!first_frame_limits.contains(frame_name)) {
+      const double curr_diff =
+          ComputeDistanceForCartesianLimits(unlimited, second_limits);
+      max_diff = std::max(max_diff, curr_diff);
+    }
+  }
+  return max_diff;
 }
 
 // Computes a `MotionPlanningRequestCacheKeyDistance` comparing the query
@@ -185,6 +277,12 @@ ComputeCacheEntryFeaturesDistance(
   const double max_diff_in_world_application_limits =
       ComputeDistanceForJointLimits(query_features.world_application_limits,
                                     cached_features.world_application_limits);
+  const double max_diff_in_cartesian_limits = std::max(
+      ComputeDistanceForCartesianLimits(query_features.cartesian_limits,
+                                        cached_features.cartesian_limits),
+      ComputeDistanceForFrameCartesianLimits(
+          query_features.frame_cartesian_limits,
+          cached_features.frame_cartesian_limits));
 
   const bool motion_segment_collision_settings_are_same = absl::c_equal(
       query_features.motion_segment_collision_settings,
@@ -205,6 +303,7 @@ ComputeCacheEntryFeaturesDistance(
           kinematic_actors_distance.max_joint_diff,
       .max_diff_in_world_application_limits =
           max_diff_in_world_application_limits,
+      .max_diff_in_cartesian_limits = max_diff_in_cartesian_limits,
       .num_of_objects_new_in_one_key = total_num_objects_new_in_one_key,
       .world_collision_settings_are_same =
           pb_equals(query_features.world_collision_settings,
@@ -549,6 +648,9 @@ bool MotionPlanningRequestCacheKeyDistance::shorter_than(
     return max_diff_in_world_application_limits <
            other.max_diff_in_world_application_limits;
   }
+  if (max_diff_in_cartesian_limits != other.max_diff_in_cartesian_limits) {
+    return max_diff_in_cartesian_limits < other.max_diff_in_cartesian_limits;
+  }
 
   // Then compare boolean values. True means the distance is shorter.
   if (world_collision_settings_are_same !=
@@ -605,6 +707,10 @@ MotionPlanningRequestCacheKeyDistance::IsValidForCacheHitOptions::Validate()
     return absl::InvalidArgumentError(
         "max_diff_in_world_application_limits_threshold must be non-negative.");
   }
+  if (max_diff_in_cartesian_limits_threshold < 0.0) {
+    return absl::InvalidArgumentError(
+        "max_diff_in_cartesian_limits_threshold must be non-negative.");
+  }
   return absl::OkStatus();
 }
 
@@ -627,6 +733,12 @@ bool MotionPlanningRequestCacheKeyDistance::IsValidForFuzzyCacheHit(
       options.max_diff_in_world_application_limits_threshold) {
     LOG(INFO) << "max_diff_in_world_application_limits is "
               << max_diff_in_world_application_limits;
+    return false;
+  }
+  if (max_diff_in_cartesian_limits >
+      options.max_diff_in_cartesian_limits_threshold) {
+    LOG(INFO) << "max_diff_in_cartesian_limits is "
+              << max_diff_in_cartesian_limits;
     return false;
   }
   if (diff_in_m_for_all_related_frame_poses >=
@@ -716,6 +828,12 @@ bool MotionPlanningRequestCacheKeyDistance::IsValidForCacheHit(
               << max_diff_in_world_application_limits;
     return false;
   }
+  if (max_diff_in_cartesian_limits >
+      options.max_diff_in_cartesian_limits_threshold) {
+    LOG(INFO) << "max_diff_in_cartesian_limits is "
+              << max_diff_in_cartesian_limits;
+    return false;
+  }
   return true;
 }
 
@@ -798,6 +916,18 @@ void MotionPlanningRequestCacheKey::PopulateProtoFromCacheEntryFeatures(
       key_proto->mutable_starting_robot_configuration()->mutable_joints());
   *key_proto->mutable_world_application_limits() =
       intrinsic::ToProto(features.world_application_limits);
+  if (features.cartesian_limits != CartesianLimits::Unlimited()) {
+    *key_proto->mutable_cartesian_limits() =
+        intrinsic::icon::ToProto(features.cartesian_limits);
+  }
+  key_proto->clear_frame_cartesian_limits();
+  for (const auto& [frame_name, frame_limits] :
+       features.frame_cartesian_limits) {
+    if (frame_limits != CartesianLimits::Unlimited()) {
+      (*key_proto->mutable_frame_cartesian_limits())[frame_name] =
+          intrinsic::icon::ToProto(frame_limits);
+    }
+  }
   *key_proto->mutable_world_collision_settings() =
       features.world_collision_settings;
   *key_proto->mutable_motion_segment_collision_settings() = {
@@ -836,6 +966,17 @@ MotionPlanningRequestCacheKey::ExtractCacheEntryFeaturesFromProto(
   INTR_ASSIGN_OR_RETURN(JointLimitsXd world_application_limits,
                         ToJointLimitsXd(key_proto.world_application_limits()),
                         _ << "Failed to deserialize world application limits.");
+  CartesianLimits cartesian_limits = CartesianLimits::Unlimited();
+  if (key_proto.has_cartesian_limits()) {
+    INTR_ASSIGN_OR_RETURN(cartesian_limits, intrinsic::icon::FromProto(
+                                                key_proto.cartesian_limits()));
+  }
+  absl::flat_hash_map<std::string, CartesianLimits> frame_cartesian_limits;
+  for (const auto& [frame_name, frame_limits_proto] :
+       key_proto.frame_cartesian_limits()) {
+    INTR_ASSIGN_OR_RETURN(frame_cartesian_limits[frame_name],
+                          intrinsic::icon::FromProto(frame_limits_proto));
+  }
 
   return MotionPlanningCacheEntryFeatures{
       .poses_of_all_related_frames = std::move(related_frame_poses),
@@ -851,6 +992,8 @@ MotionPlanningRequestCacheKey::ExtractCacheEntryFeaturesFromProto(
       .starting_robot_configuration = RepeatedDoubleToVectorXd(
           key_proto.starting_robot_configuration().joints()),
       .world_application_limits = std::move(world_application_limits),
+      .cartesian_limits = cartesian_limits,
+      .frame_cartesian_limits = std::move(frame_cartesian_limits),
       .world_collision_settings = key_proto.world_collision_settings(),
       .motion_segment_collision_settings =
           {key_proto.motion_segment_collision_settings().begin(),

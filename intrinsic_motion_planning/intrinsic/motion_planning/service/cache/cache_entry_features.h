@@ -19,10 +19,12 @@
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/types/span.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/kinematics/types/joint_limits_xd.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
@@ -159,6 +161,10 @@ struct MotionPlanningCacheEntryFeatures {
   eigenmath::VectorXd starting_robot_configuration;
   // Joint application limits of the primary planning robot in the world.
   JointLimitsXd world_application_limits;
+  // The Cartesian limits of the primary planning robot in the world.
+  CartesianLimits cartesian_limits = CartesianLimits::Unlimited();
+  // The Cartesian limits of frames attached to the robot.
+  absl::flat_hash_map<std::string, CartesianLimits> frame_cartesian_limits;
   // Effective world collision settings (with `disable_collision_checking` set
   // if all segments disable collision checking).
   intrinsic_proto::world::CollisionSettings world_collision_settings;

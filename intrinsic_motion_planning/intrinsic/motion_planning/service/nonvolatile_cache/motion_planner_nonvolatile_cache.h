@@ -30,6 +30,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
@@ -85,6 +86,13 @@ struct MotionPlannerNonvolatileCacheKey {
 
   // Motion Planning proto version.
   const std::string motion_planning_proto_version;
+
+  // The Cartesian limits of the robot.
+  const CartesianLimits cartesian_limits = CartesianLimits::Unlimited();
+
+  // The Cartesian limits of frames attached to the robot.
+  const absl::flat_hash_map<std::string, CartesianLimits>
+      frame_cartesian_limits;
 
   // Create a `MotionPlannerNonvolatileCacheKey` from the given set of input
   // arguments.

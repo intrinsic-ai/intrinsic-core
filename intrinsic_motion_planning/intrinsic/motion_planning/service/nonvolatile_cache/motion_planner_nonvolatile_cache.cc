@@ -41,10 +41,13 @@
 #include "grpcpp/client_context.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/icon/proto/cart_space_conversion.h"
 #include "intrinsic/icon/proto/joint_trajectory_conversion.h"
+#include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
+#include "intrinsic/motion_planning/motion_planner/robot_specification.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
 #include "intrinsic/motion_planning/proto/v1/motion_blending_parameter.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planning_limits.pb.h"
@@ -81,18 +84,28 @@ MotionPlannerNonvolatileCacheKey::Create(
         poses_of_all_related_transform_nodes.back()));
   }
 
+  INTR_ASSIGN_OR_RETURN(
+      const object_world::KinematicObject* robot,
+      object_world::GetKinematicObjectByReference(
+          object_world, robot_specification.robot_reference().object_id()));
   eigenmath::VectorXd starting_robot_configuration;
   if (robot_specification.has_start_configuration()) {
     // Extract the starting robot configuration.
     starting_robot_configuration = RepeatedDoubleToVectorXd(
         robot_specification.start_configuration().joints());
   } else {
-    INTR_ASSIGN_OR_RETURN(
-        const object_world::KinematicObject* robot,
-        object_world::GetKinematicObjectByReference(
-            object_world, robot_specification.robot_reference().object_id()));
     INTR_ASSIGN_OR_RETURN(starting_robot_configuration,
                           robot->GetJointPositions());
+  }
+  INTR_ASSIGN_OR_RETURN(const CartesianLimits cartesian_limits,
+                        robot->GetCartesianLimits());
+  INTR_ASSIGN_OR_RETURN(
+      const std::vector<FrameCartesianPathLimits> frame_cartesian_limits_vec,
+      ResolveFrameCartesianPathLimits(object_world, *robot));
+  absl::flat_hash_map<std::string, CartesianLimits> frame_cartesian_limits;
+  for (const FrameCartesianPathLimits& frame_limit :
+       frame_cartesian_limits_vec) {
+    frame_cartesian_limits[frame_limit.frame_name] = frame_limit.limits;
   }
 
   intrinsic_proto::motion_planning::v1::RobotSpecification
@@ -113,7 +126,9 @@ MotionPlannerNonvolatileCacheKey::Create(
       .uuid = std::string(uuid),
       .mps_asset_major_version = std::string(mps_asset_major_version),
       .motion_planning_proto_version =
-          std::string(motion_specification_file_descriptor->package())};
+          std::string(motion_specification_file_descriptor->package()),
+      .cartesian_limits = cartesian_limits,
+      .frame_cartesian_limits = frame_cartesian_limits};
 };
 
 bool MotionPlannerNonvolatileCacheKey::IsApproximate(
@@ -171,6 +186,32 @@ bool MotionPlannerNonvolatileCacheKey::IsApproximate(
     LOG(INFO) << "Robot specification mismatch between " << uuid << " and "
               << other_key.uuid;
     return false;
+  }
+  if (cartesian_limits != other_key.cartesian_limits) {
+    LOG(INFO) << "Cartesian limits mismatch between " << uuid << " and "
+              << other_key.uuid;
+    return false;
+  }
+  for (const auto& [frame_name, first_limits] : frame_cartesian_limits) {
+    auto it = other_key.frame_cartesian_limits.find(frame_name);
+    const CartesianLimits& second_limits =
+        (it != other_key.frame_cartesian_limits.end())
+            ? it->second
+            : CartesianLimits::Unlimited();
+    if (first_limits != second_limits) {
+      LOG(INFO) << "Frame Cartesian limits mismatch for frame " << frame_name
+                << " between " << uuid << " and " << other_key.uuid;
+      return false;
+    }
+  }
+  for (const auto& [frame_name, second_limits] :
+       other_key.frame_cartesian_limits) {
+    if (!frame_cartesian_limits.contains(frame_name) &&
+        second_limits != CartesianLimits::Unlimited()) {
+      LOG(INFO) << "Frame Cartesian limits mismatch for frame " << frame_name
+                << " between " << uuid << " and " << other_key.uuid;
+      return false;
+    }
   }
 
   // We only check the starting robot configuration if the first motion segment
@@ -253,6 +294,16 @@ intrinsic_proto::motion_planning::MotionPlannerNonvolatileCacheKey ToProto(
   VectorXdToRepeatedDouble(
       key.starting_robot_configuration,
       proto.mutable_starting_robot_configuration()->mutable_joints());
+  if (key.cartesian_limits != CartesianLimits::Unlimited()) {
+    *proto.mutable_cartesian_limits() =
+        intrinsic::icon::ToProto(key.cartesian_limits);
+  }
+  for (const auto& [frame_name, frame_limits] : key.frame_cartesian_limits) {
+    if (frame_limits != CartesianLimits::Unlimited()) {
+      (*proto.mutable_frame_cartesian_limits())[frame_name] =
+          intrinsic::icon::ToProto(frame_limits);
+    }
+  }
   return proto;
 }
 
@@ -279,6 +330,19 @@ absl::StatusOr<MotionPlannerNonvolatileCacheKey> FromProto(
         poses_of_transform_nodes_per_motion_segment);
   }
 
+  CartesianLimits cartesian_limits = CartesianLimits::Unlimited();
+  if (key_proto.has_cartesian_limits()) {
+    INTR_ASSIGN_OR_RETURN(cartesian_limits, intrinsic::icon::FromProto(
+                                                key_proto.cartesian_limits()));
+  }
+
+  absl::flat_hash_map<std::string, CartesianLimits> frame_cartesian_limits;
+  for (const auto& [frame_name, frame_limits_proto] :
+       key_proto.frame_cartesian_limits()) {
+    INTR_ASSIGN_OR_RETURN(frame_cartesian_limits[frame_name],
+                          intrinsic::icon::FromProto(frame_limits_proto));
+  }
+
   return MotionPlannerNonvolatileCacheKey{
       .motion_specification = key_proto.motion_specification(),
       .robot_specification = key_proto.robot_specification(),
@@ -290,6 +354,8 @@ absl::StatusOr<MotionPlannerNonvolatileCacheKey> FromProto(
       .mps_asset_major_version = key_proto.mps_asset_major_version(),
       .motion_planning_proto_version =
           key_proto.motion_planning_proto_version(),
+      .cartesian_limits = cartesian_limits,
+      .frame_cartesian_limits = frame_cartesian_limits,
   };
 }
 
