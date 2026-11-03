@@ -46,7 +46,6 @@ go_library(
     srcs = ["dialerutil.go"],
     importpath = "intrinsic/skills/tools/skill/cmd/dialerutil",
     visibility = [
-        "//intrinsic/skills:__subpackages__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
         "//intrinsic/tools/inctl/cmd/cluster:__pkg__",
         "//intrinsic/tools/inctl/cmd/logs:__pkg__",
