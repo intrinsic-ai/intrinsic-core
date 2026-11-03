@@ -25,7 +25,11 @@ import (
 	"os"
 	"time"
 
+	"github.com/bazelbuild/rules_go/go/runfiles"
+	log "github.com/golang/glog"
 	crversioned "github.com/googlecloudrobotics/core/src/go/pkg/client/versioned"
+	"github.com/pkg/errors"
+	"github.com/spf13/cobra"
 	"k8s.io/client-go/dynamic"
 	"k8s.io/client-go/kubernetes"
 
@@ -40,11 +44,6 @@ import (
 	"intrinsic/tools/inctl/cmd/lint"
 	"intrinsic/tools/inctl/util/traceutil"
 	"intrinsic/tools/internal/k8sclientutil"
-	"intrinsic/util/path_resolver/pathresolver"
-
-	log "github.com/golang/glog"
-	"github.com/pkg/errors"
-	"github.com/spf13/cobra"
 
 	apipb "intrinsic/kubernetes/workcell_spec/proto/transfer_go_proto"
 )
@@ -128,7 +127,7 @@ func chartStartCommand() *cobra.Command {
 			location := "local"
 			crcConfig := map[string]string{}
 
-			runfilesFS, err := pathresolver.ResolveRunfilesFsRoot()
+			runfilesFS, err := runfiles.New()
 			if err != nil {
 				return errors.Wrap(err, "failed to resolve runfiles fs root")
 			}

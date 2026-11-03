@@ -20,16 +20,15 @@ import (
 	"path"
 	"path/filepath"
 
-	"intrinsic/util/path_resolver/pathresolver"
-
+	"github.com/bazelbuild/rules_go/go/runfiles"
 	"github.com/pkg/errors"
 )
 
 // Resolve tries to find a binary adjacent to the currently-running binary
 // (eg when run from BinFS) or in runfiles (eg when using `bazel run`). `name` is
-// a relative path starting with `google3/` (as for runfiles.Path()). If the
-// file is not found next to the current binary, it looks in the runfiles. It
-// returns an absolute path to the located binary, or an error.
+// an rlocation path (as for runfiles.Rlocation()). If the file is not found next
+// to the current binary, it looks in the runfiles. It returns an absolute path
+// to the located binary, or an error.
 func Resolve(name string) (string, error) {
 	return ResolveWithBinFsPath(name, filepath.Base(name))
 }
@@ -45,7 +44,7 @@ func ResolveWithBinFsPath(name string, binfs string) (string, error) {
 	if _, err := os.Stat(result); err == nil {
 		return result, nil
 	}
-	result, err = pathresolver.ResolveRunfilesPath(name)
+	result, err = runfiles.Rlocation(name)
 	if err != nil {
 		return "", err
 	}

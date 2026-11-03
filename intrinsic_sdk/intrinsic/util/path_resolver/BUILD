@@ -13,24 +13,8 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_library")
-load("//bazel:migration_locations.bzl", "GOOGLE3_OR_IOC_LOCATIONS")
 
 package(default_visibility = ["//visibility:public"])
-
-genrule(
-    name = "migration_locations_go_gen",
-    outs = ["migration_locations.go"],
-    cmd = """
-cat > $@ <<'EOF'
-package pathresolver
-
-var migrationLocations = []string{
-%s,
-}
-EOF
-""" % ",\n".join(['\t"%s"' % loc for loc in GOOGLE3_OR_IOC_LOCATIONS]),
-)
 
 cc_library(
     name = "path_resolver",
@@ -46,17 +30,5 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@bazel_tools//tools/cpp/runfiles",
         "@or_tools//ortools/base:path",
-    ],
-)
-
-go_library(
-    name = "pathresolver",  # Coding style suggests to avoid using underscores in package names: http://golang.org/doc/effective_go.html#package-names
-    srcs = [
-        "path_resolver.go",
-        ":migration_locations_go_gen",
-    ],
-    importpath = "intrinsic/util/path_resolver/pathresolver",
-    deps = [
-        "@io_bazel_rules_go//go/runfiles:go_default_library",
     ],
 )

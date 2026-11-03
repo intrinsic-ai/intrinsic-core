@@ -39,8 +39,8 @@ go_library(
     srcs = ["resolve.go"],
     importpath = "intrinsic/tools/inctl/util/resolve",
     deps = [
-        "//intrinsic_sdk/intrinsic/util/path_resolver:pathresolver",
         "@com_github_pkg_errors//:go_default_library",
+        "@io_bazel_rules_go//go/runfiles:go_default_library",
     ],
 )
 

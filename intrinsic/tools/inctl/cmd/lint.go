@@ -22,27 +22,28 @@ import (
 	"os/exec"
 	"strings"
 
-	"intrinsic/tools/inctl/util/resolve"
-	"intrinsic/util/go/set"
-	"intrinsic/util/path_resolver/pathresolver"
-
 	"dario.cat/mergo"
+	"github.com/bazelbuild/rules_go/go/runfiles"
 	"github.com/googlecloudrobotics/core/src/go/pkg/apis/apps/v1alpha1"
 	"github.com/pkg/errors"
 	"go.opencensus.io/trace"
 	kubeyaml "sigs.k8s.io/yaml"
+
+	"intrinsic/tools/inctl/util/resolve"
+	"intrinsic/util/go/set"
 )
 
 const (
-	linterPath = "intrinsic/kubernetes/lint_wrapped"
+	linterPath = "intrinsic-core/intrinsic/kubernetes/lint_wrapped"
 )
 
 func linterEnv() ([]string, error) {
 	// Set runfiles environment variables to allow the linter to find its runfiles.
-	result, err := pathresolver.Env()
+	r, err := runfiles.New()
 	if err != nil {
 		return nil, err
 	}
+	result := r.Env()
 
 	forwardVars := set.New[string](
 		"USER",
