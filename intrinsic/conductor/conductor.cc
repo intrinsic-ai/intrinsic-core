@@ -125,7 +125,11 @@ constexpr absl::Duration kSimResetTimeout = absl::Seconds(60);
 // can take a while.
 constexpr absl::Duration kSimControlTimeout = absl::Seconds(90);
 // ID of the edit world that is composed from the solution's resource set.
+// LINT.IfChange(init_world_id)
 constexpr absl::string_view kInitWorldId = "init_world";
+// LINT.ThenChange(
+//   //intrinsic/world/service/object_world_service.cc:published_world_ids
+// )
 
 std::unique_ptr<grpc::ClientContext> CreateClientContext(
     const acl::User* user, absl::Duration timeout = kDefaultGrpcTimeout) {

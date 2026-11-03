@@ -14,6 +14,8 @@
 
 #include "intrinsic/world/service/object_world_service.h"
 
+#include <algorithm>
+#include <array>
 #include <cstddef>
 #include <cstdint>
 #include <deque>
@@ -1695,6 +1697,31 @@ absl::StatusOr<intrinsic_proto::world::World> BuildWorldProto(
     const intrinsic_proto::world::WorldView& world_view,
     const intrinsic_proto::world::CollisionSettingsView&
         collision_settings_view) ABSL_EXCLUSIVE_LOCKS_REQUIRED(world_ptr.mtx);
+
+// IDs of the worlds whose state changes are published over pubsub. These are
+// the edit world, belief world and sim world of the conductor's execution
+// context.
+// LINT.IfChange(published_world_ids)
+constexpr std::array<absl::string_view, 3> kPublishedWorldIds = {
+    "init_world", "world", "sim_world"};
+// LINT.ThenChange(
+//   //intrinsic/conductor/conductor.cc:init_world_id,
+//   //intrinsic/conductor/execution_context.h:default_world_ids
+// )
+
+// Returns true if state changes of the world with the given id are published
+// over pubsub. Only the well-known solution worlds are published so that
+// temporary worlds (e.g., clones) do not create and tear down a publisher each.
+bool ShouldPublishWorldState(absl::string_view world_id) {
+  return std::ranges::find(kPublishedWorldIds, world_id) !=
+         kPublishedWorldIds.end();
+}
+
+// Returns the pubsub topic on which state changes of the given world are
+// published.
+std::string WorldStateTopic(absl::string_view world_id) {
+  return absl::StrCat("/world/", world_id, "/state");
+}
 
 }  // namespace
 
@@ -3618,7 +3645,7 @@ grpc::Status ObjectWorldService::SyncObject(
 
 absl::Status ObjectWorldService::CreatePublisherForWorld(
     absl::string_view world_id, const std::shared_ptr<WorldAndMutex>& world) {
-  std::string topic = absl::StrCat("/world/", world_id, "/state");
+  const std::string topic = WorldStateTopic(world_id);
   TopicConfig topic_config;
 
   INTR_ASSIGN_OR_RETURN(auto publisher,
@@ -3633,6 +3660,9 @@ absl::Status ObjectWorldService::CreatePublisherForWorld(
 
 void ObjectWorldService::DeletePublisherForWorld(
     absl::string_view world_id, const std::shared_ptr<WorldAndMutex>& world) {
+  if (world->publisher == nullptr) {
+    return;
+  }
   LOG(INFO) << "Dropping publisher for world \"" << world_id << "\".";
   world->publisher.reset();
 }
@@ -3640,7 +3670,7 @@ void ObjectWorldService::DeletePublisherForWorld(
 void ObjectWorldService::OnWorldChanged(
     absl::string_view world_id, const std::shared_ptr<WorldAndMutex>& world,
     bool has_state_change) {
-  if (!has_state_change) {
+  if (!has_state_change || !ShouldPublishWorldState(world_id)) {
     return;
   }
 

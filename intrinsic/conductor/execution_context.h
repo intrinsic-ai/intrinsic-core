@@ -102,8 +102,12 @@ class ExecutionContext {
   struct Opts {
     KeyValueStore* absl_nonnull kv_store;
     intrinsic_proto::config::OperationMode mode;
+    // LINT.IfChange(default_world_ids)
     std::string belief_world_id = "world";
     std::string sim_world_id = "sim_world";
+    // LINT.ThenChange(
+    //   //intrinsic/world/service/object_world_service.cc:published_world_ids
+    // )
     std::string staging_world_id = "";
     std::string edit_world_id = "";
     std::optional<intrinsic_proto::status::ExtendedStatus> edit_world_status =
