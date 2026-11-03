@@ -24,7 +24,15 @@ option go_package = "intrinsic/motion_planning/trajectory_planning/topp/joint_op
 // * activate_cartesian_velocity_constraints = false
 // * activate_cartesian_acceleration_constraints = false
 message CartesianOptimizationOptions {
+  // If true, enforces Cartesian velocity limits on both the target frame
+  // (`PathSample::cart_limits`) and any additional monitored frames
+  // (`PathSample::frame_cartesian_limits`). Frame limits in
+  // `frame_cartesian_limits` are ignored when this option is false.
   optional bool activate_cartesian_velocity_constraints = 1;
+
+  // If true, enforces Cartesian acceleration limits on the target frame
+  // (`PathSample::cart_limits`). Does not apply to additional monitored frames
+  // (`PathSample::frame_cartesian_limits`).
   optional bool activate_cartesian_acceleration_constraints = 2;
 
   reserved 3;

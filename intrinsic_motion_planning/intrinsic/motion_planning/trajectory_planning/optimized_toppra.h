@@ -75,7 +75,9 @@ class ToppRA {
   //    (torque) constraints are activated in the options. May be nullptr
   //    otherwise. It must outlive the solver.
   //  * `options`: Configuration options defining the active kinematic, dynamic,
-  //    and Cartesian constraints for the solver.
+  //    and Cartesian constraints for the solver. Per-frame Cartesian velocity
+  //    limits (`PathSample::frame_cartesian_limits`) are only applied when
+  //    `activate_cartesian_velocity_constraints` is enabled.
   explicit ToppRA(
       const kinematics::Chain* chain ABSL_ATTRIBUTE_LIFETIME_BOUND = nullptr,
       icon::RigidBodyInterface* dynamics ABSL_ATTRIBUTE_LIFETIME_BOUND =
@@ -94,7 +96,10 @@ class ToppRA {
   // Parameters:
   //  * path_samples: A span of consecutive path states containing positions,
   //    derivatives w.r.t the path parameter (`qp`, `qpp`), and applicable
-  //    limits at each discrete point.
+  //    limits at each discrete point. Note that additional monitored frame
+  //    limits (`PathSample::frame_cartesian_limits`) are only applied for
+  //    Cartesian velocity, and only when
+  //    `activate_cartesian_velocity_constraints` is enabled in `options`.
   //
   // Returns:
   //  * A `ToppTrajectoryResult` containing the time-parameterized joint
@@ -126,8 +131,10 @@ class ToppRA {
   // Parameters:
   //  * path_samples [INPUT]: Complete definition of the time-optimal path
   //    planning problem, including path values, derivatives up to third order
-  //    with respect to the path variable, joint/Cartesian limits, and tip
-  //    target transformations used for Cartesian constraints.
+  //    with respect to the path variable, joint/Cartesian limits (where
+  //    `frame_cartesian_limits` are only applied when Cartesian velocity
+  //    constraints are enabled in `options_`), and tip target transformations
+  //    used for Cartesian constraints.
   //
   // Returns `true` if a feasible reachability profile is found, `false`
   // otherwise. Note: This method computes accelerations over grid point

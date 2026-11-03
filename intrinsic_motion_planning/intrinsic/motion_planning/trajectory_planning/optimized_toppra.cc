@@ -466,6 +466,11 @@ absl::StatusOr<bool> ToppRA::TimeParametrizePath(
     INTR_RETURN_IF_ERROR(CwiseMinimumSquaredPathVelocity(
         /*b_joint_limits=*/absl::MakeSpan(x_bounds),
         /*b_cartesian_limits=*/cart_vel_bnd));
+    INTR_RETURN_IF_ERROR(
+        ApplyFrameCartesianVelocityLimitsToSquaredPathSpeedLimits(
+            path_samples,
+            data_.cartesian_constraints_dot_products->frame_jacobian_qp,
+            absl::MakeSpan(x_bounds)));
   }
 
   INTR_ASSIGN_OR_RETURN(data_.squared_path_velocities,

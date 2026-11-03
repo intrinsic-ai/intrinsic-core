@@ -23,7 +23,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "intrinsic/eigenmath/types.h"
@@ -64,12 +63,9 @@ absl::Status AreSymmetric(const CartesianLimits& cart_limits) {
     return absl::InvalidArgumentError(absl::StrCat(
         "The Cartesian velocity limits are not symmetric. The maximum "
         "translational velocity is ",
-        absl::string_view(
-            eigenmath::ToFixedString(cart_limits.max_translational_velocity)),
+        eigenmath::ToFixedString(cart_limits.max_translational_velocity),
         " and the minimum translational velocity is ",
-        absl::string_view(
-            eigenmath::ToFixedString(cart_limits.min_translational_velocity)),
-        "."));
+        eigenmath::ToFixedString(cart_limits.min_translational_velocity), "."));
   }
   return absl::OkStatus();
 }
@@ -113,6 +109,60 @@ ComputeJacobianTimeDerivativeVectorWithChain(
           kinematics::ReferenceFrame::kLocalRobotBaseAligned));
 
   return dJdt_times_dqdt;
+}
+
+// Upper bound on the squared path speed `(ds/dt)^2` imposed by `cart_limits`
+// translational and rotational velocity limits and the 6D twist per unit path
+// parameter `jac_qp` (`J * dq/ds`): since `v = (J * dq/ds) * (ds/dt)`,
+// `||v||^2 <= v_max^2` gives `(ds/dt)^2 <= v_max^2 / ||J * dq/ds||^2`.
+absl::StatusOr<double> ComputeSquaredPathSpeedLimitFromCartesianVelocityLimits(
+    const CartesianLimits& cart_limits, const eigenmath::Vector6d& jac_qp,
+    double max_bound_value) {
+  if (!std::isfinite(max_bound_value) || max_bound_value <= 0.0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "The value of max_bound_value should be finite and > 0.0, but got ",
+        max_bound_value, "."));
+  }
+  const double max_translational_velocity =
+      cart_limits.max_translational_velocity.minCoeff();
+  if (cart_limits.max_translational_velocity.hasNaN() ||
+      max_translational_velocity <= 0.0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "The minimum coefficient of max_translational_velocity should be > "
+        "0.0 and not NaN, but got ",
+        max_translational_velocity, "."));
+  }
+  if (std::isnan(cart_limits.max_rotational_velocity) ||
+      cart_limits.max_rotational_velocity <= 0.0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "The value of max_rotational_velocity should be > 0.0 and not NaN, "
+        "but got ",
+        cart_limits.max_rotational_velocity, "."));
+  }
+  INTR_RETURN_IF_ERROR(AreSymmetric(cart_limits));
+  constexpr double kNumericallyZeroMargin = 1e-9;
+  double max_squared_path_speed = max_bound_value;
+  const double translational_jac_qp_squared_norm =
+      jac_qp.head<3>().squaredNorm();
+  if (!WithinMargin(translational_jac_qp_squared_norm, 0.0,
+                    kNumericallyZeroMargin)) {
+    const double max_cart_trans_vel_squared =
+        IPow(max_translational_velocity, 2);
+    max_squared_path_speed =
+        std::min(max_squared_path_speed, max_cart_trans_vel_squared /
+                                             translational_jac_qp_squared_norm);
+  }
+
+  const double rotational_jac_qp_squared_norm = jac_qp.tail<3>().squaredNorm();
+  if (!WithinMargin(rotational_jac_qp_squared_norm, 0.0,
+                    kNumericallyZeroMargin)) {
+    const double max_cart_rot_vel_squared =
+        IPow(cart_limits.max_rotational_velocity, 2);
+    max_squared_path_speed =
+        std::min(max_squared_path_speed,
+                 max_cart_rot_vel_squared / rotational_jac_qp_squared_norm);
+  }
+  return max_squared_path_speed;
 }
 
 }  // namespace
@@ -160,36 +210,17 @@ CartesianVelocityLimitsToSquaredPathSpeedLimits(
   }
   const auto num_points = path_samples.size();
 
-  constexpr double kNumericallyZeroMargin = 1e-9;
   std::vector<double> squared_path_speed_limits;
   squared_path_speed_limits.reserve(num_points);
   for (size_t sample_id = 0; sample_id < num_points; sample_id++) {
     const PathSample& sample = path_samples[sample_id];
     const eigenmath::Vector6d& jac_qp = jacobian_qp[sample_id];
-    INTR_RETURN_IF_ERROR(AreSymmetric(sample.cart_limits))
-        << " Sample " << sample_id << ".";
-    // `max_x` stores the most constraining bound among the robot degrees of
-    // freedom for the squared path variable values.
-    double max_x = std::numeric_limits<double>::infinity();
-    double max_cart_trans_vel =
-        sample.cart_limits.max_translational_velocity.minCoeff();
-    if (!::intrinsic::WithinMargin(jac_qp.head<3>().squaredNorm(), 0.0,
-                                   kNumericallyZeroMargin)) {
-      const double limit_to_jac_qp_ratio =
-          ::intrinsic::IPow(max_cart_trans_vel, 2) /
-          jac_qp.head<3>().squaredNorm();
-      max_x = std::min(max_x, limit_to_jac_qp_ratio);
-    }
-
-    double max_cart_rot_vel = sample.cart_limits.max_rotational_velocity;
-    if (!::intrinsic::WithinMargin(jac_qp.tail<3>().squaredNorm(), 0.0,
-                                   kNumericallyZeroMargin)) {
-      const double limit_to_jac_qp_ratio =
-          ::intrinsic::IPow(max_cart_rot_vel, 2) /
-          jac_qp.tail<3>().squaredNorm();
-      max_x = std::min(max_x, limit_to_jac_qp_ratio);
-    }
-    squared_path_speed_limits.push_back(std::min(max_x, max_bound_value));
+    INTR_ASSIGN_OR_RETURN(
+        const double max_squared_path_speed,
+        ComputeSquaredPathSpeedLimitFromCartesianVelocityLimits(
+            sample.cart_limits, jac_qp, max_bound_value),
+        _ << "Sample " << sample_id << ".");
+    squared_path_speed_limits.push_back(max_squared_path_speed);
   }
   return squared_path_speed_limits;
 }
@@ -207,6 +238,60 @@ absl::Status CwiseMinimumSquaredPathVelocity(
                  b_cartesian_limits.begin(), b_joint_limits.begin(),
                  [](double a, double b) { return std::min(a, b); });
 
+  return absl::OkStatus();
+}
+
+absl::Status ApplyFrameCartesianVelocityLimitsToSquaredPathSpeedLimits(
+    absl::Span<const PathSample> path_samples,
+    absl::Span<const std::vector<eigenmath::Vector6d>> frame_jacobian_qp,
+    absl::Span<double> squared_path_speed_limits, double max_bound_value) {
+  if (path_samples.empty()) {
+    return absl::InvalidArgumentError("The path_samples vector is empty.");
+  }
+  if (path_samples.size() != squared_path_speed_limits.size()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "The size of `squared_path_speed_limits` (",
+        squared_path_speed_limits.size(), ") does not match `path_samples` (",
+        path_samples.size(), ")."));
+  }
+  const bool has_frame_limits = std::any_of(
+      path_samples.begin(), path_samples.end(), [](const PathSample& sample) {
+        return !sample.frame_cartesian_limits.empty();
+      });
+  if (!has_frame_limits) {
+    return absl::OkStatus();
+  }
+  if (path_samples.size() != frame_jacobian_qp.size()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "The size of `frame_jacobian_qp` (", frame_jacobian_qp.size(),
+        ") does not match `path_samples` (", path_samples.size(), ")."));
+  }
+
+  for (size_t sample_id = 0; sample_id < path_samples.size(); ++sample_id) {
+    const PathSample& sample = path_samples[sample_id];
+    if (sample.frame_cartesian_limits.size() !=
+        frame_jacobian_qp[sample_id].size()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("The size of `frame_jacobian_qp[", sample_id, "]` (",
+                       frame_jacobian_qp[sample_id].size(),
+                       ") does not match `frame_cartesian_limits` (",
+                       sample.frame_cartesian_limits.size(), ")."));
+    }
+    for (size_t frame_id = 0; frame_id < sample.frame_cartesian_limits.size();
+         ++frame_id) {
+      const FrameCartesianPathLimits& frame_limit =
+          sample.frame_cartesian_limits[frame_id];
+      INTR_ASSIGN_OR_RETURN(
+          const double frame_max_squared_path_speed,
+          ComputeSquaredPathSpeedLimitFromCartesianVelocityLimits(
+              frame_limit.limits, frame_jacobian_qp[sample_id][frame_id],
+              max_bound_value),
+          _ << absl::StrCat("Frame ", frame_limit.frame_name, " at sample ",
+                            sample_id, "."));
+      squared_path_speed_limits[sample_id] = std::min(
+          squared_path_speed_limits[sample_id], frame_max_squared_path_speed);
+    }
+  }
   return absl::OkStatus();
 }
 
@@ -358,6 +443,12 @@ ComputeCartesianConstraintsDotProducts(
       .resize(num_samples);
   for (size_t i = 0; i < num_samples; i++) {
     const PathSample& sample = path_samples[i];
+    if (!sample.frame_cartesian_limits.empty()) {
+      return absl::UnimplementedError(
+          "Frame Cartesian limits are not supported with RigidBodyInterface "
+          "because it does not support resolving link names to ElementIds. Use "
+          "the kinematics::Chain overload instead.");
+    }
     INTRINSIC_RT_ASSIGN_OR_RETURN(
         const eigenmath::Matrix6Nd jacobian,
         rigid_body_interface->ComputeJacobian(
@@ -467,6 +558,36 @@ ComputeCartesianConstraintsDotProducts(
     cartesian_constraints_dot_products
         .jacobian_qpp_plus_jacobian_derivative_qp[i] =
         J * qpp + dJdt_times_dqdt;
+
+    const std::vector<FrameCartesianPathLimits>& frame_limits =
+        path_samples[i].frame_cartesian_limits;
+    if (frame_limits.empty()) {
+      continue;
+    }
+    if (cartesian_constraints_dot_products.frame_jacobian_qp.empty()) {
+      cartesian_constraints_dot_products.frame_jacobian_qp.resize(num_samples);
+    }
+    cartesian_constraints_dot_products.frame_jacobian_qp[i].reserve(
+        frame_limits.size());
+    for (const FrameCartesianPathLimits& frame_limit : frame_limits) {
+      const icon::RealtimeStatusOr<kinematics::ElementId> link_id_or =
+          chain.FindElementIdByName(frame_limit.parent_link_name);
+      if (!link_id_or.ok()) {
+        return absl::InvalidArgumentError(absl::StrCat(
+            "Parent link '", frame_limit.parent_link_name,
+            "' for constrained frame '", frame_limit.frame_name,
+            "' not found in kinematic chain: ", link_id_or.status().message()));
+      }
+      // Compute the geometric Jacobian of the frame at its offset from the
+      // parent link and project the path derivative `qp` (dq/ds) into a
+      // 6D twist per unit path parameter.
+      INTRINSIC_RT_ASSIGN_OR_RETURN(
+          const eigenmath::Matrix6Nd frame_jacobian,
+          state.ComputeJacobian(*link_id_or,
+                                frame_limit.parent_link_t_frame.translation()));
+      const eigenmath::Vector6d jac_qp = frame_jacobian * qp;
+      cartesian_constraints_dot_products.frame_jacobian_qp[i].push_back(jac_qp);
+    }
   }
   return cartesian_constraints_dot_products;
 }
@@ -648,6 +769,18 @@ absl::StatusOr<std::vector<PathSample>> ScaleDynamicLimitsBySafetyMargins(
         ", jerk=", margins.jerk, "."));
   }
 
+  const auto scale_cartesian_limits = [&margins](CartesianLimits& limits) {
+    limits.min_translational_velocity *= margins.velocity;
+    limits.max_translational_velocity *= margins.velocity;
+    limits.min_translational_acceleration *= margins.acceleration;
+    limits.max_translational_acceleration *= margins.acceleration;
+    limits.min_translational_jerk *= margins.jerk;
+    limits.max_translational_jerk *= margins.jerk;
+    limits.max_rotational_velocity *= margins.velocity;
+    limits.max_rotational_acceleration *= margins.acceleration;
+    limits.max_rotational_jerk *= margins.jerk;
+  };
+
   std::vector<PathSample> scaled_path_samples(path_samples.begin(),
                                               path_samples.end());
   for (PathSample& path_sample : scaled_path_samples) {
@@ -657,16 +790,12 @@ absl::StatusOr<std::vector<PathSample>> ScaleDynamicLimitsBySafetyMargins(
     scaled_joint_limits.max_jerk *= margins.jerk;
     scaled_joint_limits.max_torque *= margins.acceleration;
 
-    CartesianLimits& scaled_cart_limits = path_sample.cart_limits;
-    scaled_cart_limits.min_translational_velocity *= margins.velocity;
-    scaled_cart_limits.max_translational_velocity *= margins.velocity;
-    scaled_cart_limits.min_translational_acceleration *= margins.acceleration;
-    scaled_cart_limits.max_translational_acceleration *= margins.acceleration;
-    scaled_cart_limits.min_translational_jerk *= margins.jerk;
-    scaled_cart_limits.max_translational_jerk *= margins.jerk;
-    scaled_cart_limits.max_rotational_velocity *= margins.velocity;
-    scaled_cart_limits.max_rotational_acceleration *= margins.acceleration;
-    scaled_cart_limits.max_rotational_jerk *= margins.jerk;
+    scale_cartesian_limits(path_sample.cart_limits);
+
+    for (FrameCartesianPathLimits& frame_limits :
+         path_sample.frame_cartesian_limits) {
+      scale_cartesian_limits(frame_limits.limits);
+    }
   }
   return scaled_path_samples;
 }

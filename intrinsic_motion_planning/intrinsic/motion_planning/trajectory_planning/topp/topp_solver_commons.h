@@ -153,6 +153,18 @@ absl::Status CwiseMinimumSquaredPathVelocity(
     absl::Span<double> b_joint_limits,
     absl::Span<const double> b_cartesian_limits);
 
+// Converts the Cartesian velocity limits of all constrained frames in
+// `path_samples` into upper bounds on the squared path speed using the
+// precomputed `frame_jacobian_qp` (`J_frame * dq/ds`) and updates
+// `squared_path_speed_limits` in-place via component-wise minimum. If no
+// sample in `path_samples` has `frame_cartesian_limits`, returns immediately
+// with zero overhead.
+absl::Status ApplyFrameCartesianVelocityLimitsToSquaredPathSpeedLimits(
+    absl::Span<const PathSample> path_samples,
+    absl::Span<const std::vector<eigenmath::Vector6d>> frame_jacobian_qp,
+    absl::Span<double> squared_path_speed_limits,
+    double max_bound_value = kMaxBoundSquaredPathVelocity);
+
 // Validates that the input vector of `path_samples` is consistent and has the
 // required minimum number of path samples (which is algorithm dependent) is
 // satisfied. Returns an invalid argument error if:
@@ -226,6 +238,10 @@ ReconstructPathTimeStepsForEulerQuadraticModel(
 struct CartesianConstraintsDotProducts {
   std::vector<eigenmath::Vector6d> jacobian_qp;
   std::vector<eigenmath::Vector6d> jacobian_qpp_plus_jacobian_derivative_qp;
+  // For each sample `i`, stores `J_frame * qp` for each constrained frame in
+  // `path_samples[i].frame_cartesian_limits`. Left empty when no sample in
+  // `path_samples` has `frame_cartesian_limits`.
+  std::vector<std::vector<eigenmath::Vector6d>> frame_jacobian_qp;
 };
 
 // Pre-computes dot products to impose Cartesian velocity and acceleration
@@ -246,15 +262,19 @@ struct CartesianConstraintsDotProducts {
 // It fills out `jacobian_q_double_prime_plus_jacobian_derivative_q_prime`
 // and `jacobian_qp` based on the input `path_samples` (that provides joint
 // positions, joint velocities with respect to the path variable) for the
-// given model described by `rigid_body_interface`. The
-// `rigid_body_interface` implements derivatives analytically.
+// `rigid_body_interface` implements derivatives analytically. Note that
+// `frame_cartesian_limits` are not supported by this overload (returns
+// `absl::UnimplementedError` if non-empty) because `RigidBodyInterface` does
+// not expose link name lookup; use the `kinematics::Chain` overload instead.
 absl::StatusOr<CartesianConstraintsDotProducts>
 ComputeCartesianConstraintsDotProducts(
     absl::Span<const PathSample> path_samples,
     icon::RigidBodyInterface* rigid_body_interface);
 
 // Same as above, but uses a kinematics chain instead of a rigid body interface,
-// which allows to compute the Jacobian derivative only in a numerical fashion.
+// which allows to compute the Jacobian derivative only in a numerical fashion,
+// and also populates `frame_jacobian_qp` for any `frame_cartesian_limits` in
+// `path_samples`.
 absl::StatusOr<CartesianConstraintsDotProducts>
 ComputeCartesianConstraintsDotProducts(
     absl::Span<const PathSample> path_samples, const kinematics::Chain& chain);
