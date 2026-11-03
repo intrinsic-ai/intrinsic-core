@@ -54,6 +54,7 @@
 #include "intrinsic/geometry/api/exact_geometry.h"
 #include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/api/geometry_fingerprint.h"
+#include "intrinsic/geometry/api/is_convex.h"
 #include "intrinsic/geometry/api/renderable_generation.h"
 #include "intrinsic/geometry/internal/legacy/mesh/io/save_mesh_to_stl_file.h"
 #include "intrinsic/geometry/internal/util/scale_shape.h"
@@ -177,6 +178,12 @@ using EntityIdToScopedNameBimap = boost::bimap<EntityId, std::string>;
 
 constexpr absl::string_view kDioInputTopicPrefix = "dio_in_";
 constexpr absl::string_view kDioOutputTopicPrefix = "dio_out_";
+
+// Convex decomposition parameters for collision meshes that are already
+// convex. A single hull represents a convex mesh, and a coarse voxelization
+// keeps the decomposition computed by Gazebo on world load cheap.
+constexpr uint32_t kConvexMeshMaxConvexHulls = 1;
+constexpr uint32_t kConvexMeshVoxelResolution = 10000;
 
 // The list of primitive types supported by Gazebo that we can export.
 constexpr std::array<ShapeType, 5> kPrimitiveTypesSupportedByGazebo = {
@@ -1500,7 +1507,29 @@ absl::StatusOr<GeneratedLinkInfo> WorldEntityToLink(
               "WorldToSdfConverter/WorldEntityToLink/WriteCollisionGeometry",
               parent_span);
 
+          // Convex decomposition is computed by Gazebo when loading the world
+          // and is expensive. For a convex mesh, a fine-grained decomposition
+          // does not improve the collision geometry, so a single hull at a
+          // coarse voxel resolution is requested instead. Convex
+          // decomposition is still requested (rather than a plain mesh) so
+          // that the physics engine represents the mesh as a convex hull
+          // shape, which is more stable and efficient than a triangle mesh.
+          bool is_convex_mesh = false;
           if (shape.HasMesh()) {
+            if (absl::GetFlag(FLAGS_enable_convex_decomposition)) {
+              // Failing to determine convexity falls back to the full convex
+              // decomposition, which is always correct.
+              if (const absl::StatusOr<bool> is_convex = IsConvex(geo);
+                  is_convex.ok()) {
+                collision_geo_span.AddAttribute("is_convex", *is_convex);
+                is_convex_mesh = *is_convex;
+              } else {
+                LOG(WARNING) << "Failed to determine convexity of collision "
+                                "geometry for link '"
+                             << link_name << "': " << is_convex.status();
+                collision_geo_span.AddAttribute("is_convex_error", true);
+              }
+            }
             INTR_ASSIGN_OR_RETURN(auto fingerprint, GenerateFingerprint(geo));
             mesh_filename = absl::StrCat(fingerprint, ".stl");
             const std::string full_mesh_path =
@@ -1530,20 +1559,29 @@ absl::StatusOr<GeneratedLinkInfo> WorldEntityToLink(
 
           collision_geo_span.AddAttribute("mesh_filename", mesh_filename);
           if (absl::GetFlag(FLAGS_enable_convex_decomposition)) {
+            const std::optional<uint32_t> voxel_resolution =
+                geo.GetExactGeometry()
+                    .options()
+                    .simulation_convex_decomposition_resolution;
             absl::StrAppend(&collision_str,
                             "<mesh optimization='convex_decomposition'>");
             absl::StrAppend(&collision_str, "<convex_decomposition>");
-            absl::StrAppend(&collision_str, "<max_convex_hulls>",
-                            absl::GetFlag(FLAGS_sim_max_convex_hulls),
-                            "</max_convex_hulls>");
-            if (geo.GetExactGeometry()
-                    .options()
-                    .simulation_convex_decomposition_resolution.has_value()) {
-              absl::StrAppend(&collision_str, "<voxel_resolution>",
-                              *geo.GetExactGeometry()
-                                   .options()
-                                   .simulation_convex_decomposition_resolution,
+            if (is_convex_mesh) {
+              absl::StrAppend(&collision_str, "<max_convex_hulls>",
+                              kConvexMeshMaxConvexHulls, "</max_convex_hulls>",
+                              "<voxel_resolution>",
+                              std::min(voxel_resolution.value_or(
+                                           kConvexMeshVoxelResolution),
+                                       kConvexMeshVoxelResolution),
                               "</voxel_resolution>");
+            } else {
+              absl::StrAppend(&collision_str, "<max_convex_hulls>",
+                              absl::GetFlag(FLAGS_sim_max_convex_hulls),
+                              "</max_convex_hulls>");
+              if (voxel_resolution.has_value()) {
+                absl::StrAppend(&collision_str, "<voxel_resolution>",
+                                *voxel_resolution, "</voxel_resolution>");
+              }
             }
             absl::StrAppend(&collision_str, "</convex_decomposition>");
           } else {

@@ -19,6 +19,35 @@ load("//bazel:cc_macros.bzl", "cc_library")
 package(default_visibility = ["//intrinsic:intrinsic_internal"])
 
 cc_library(
+    name = "is_convex",
+    srcs = ["is_convex.cc"],
+    hdrs = ["is_convex.h"],
+    copts = ["-fexceptions"] + select({
+        "@platforms//cpu:x86_32": ["-frounding-math"],
+        "@platforms//cpu:x86_64": ["-frounding-math"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//intrinsic/geometry/internal/conversion_utils:extract_all_point_3d",
+        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel",
+        "//intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
+        "//intrinsic/geometry/internal/surface_mesh_3:unary_predicates",
+        "//intrinsic/geometry/internal/util:cgal_utils",
+        "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
+        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/geometry/shapes",
+        "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@cgal",
+    ],
+)
+
+cc_library(
     name = "compute_convex_hull",
     srcs = ["compute_convex_hull.cc"],
     hdrs = ["compute_convex_hull.h"],

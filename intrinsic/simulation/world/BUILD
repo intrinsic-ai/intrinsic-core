@@ -80,6 +80,7 @@ cc_library(
         ":multi_camera_plugin_spec",
         ":sim_plugins",
         ":world_object_plugin",
+        "//intrinsic/geometry/api:is_convex",
         "//intrinsic/geometry/internal/legacy/mesh/io:save_mesh_to_stl_file",
         "//intrinsic/scene/sdf:convert_to_sdf",
         "//intrinsic/simulation/gazebo:gz_topic_info",
