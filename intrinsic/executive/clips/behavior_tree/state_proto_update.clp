@@ -53,6 +53,31 @@
   )
 )
 
+; Updates execution_time in the RunMetadata proto.
+;
+; Called whenever the duration of the operation's time-measurement changes (see
+; time_measurement.clp).
+;
+; Args:
+;   ?duration: Execution duration in seconds. Values <= 0.0 mean the operation
+;     has not started executing yet, was reset, or the duration could not be
+;     calculated. In that case the field is cleared.
+;   ?operation-name: Name of the operation
+(deffunction run-metadata-proto-update-execution-time (?duration ?operation-name)
+  (if (<= ?duration 0.0)
+    then
+      (run-metadata-proto-clear-field "execution_time" ?operation-name)
+    else
+      (bind ?duration-values (seconds-to-duration ?duration))
+      (run-metadata-proto-update-field "execution_time.seconds"
+                                       (nth$ 1 ?duration-values)
+                                       ?operation-name)
+      (run-metadata-proto-update-field "execution_time.nanos"
+                                       (nth$ 2 ?duration-values)
+                                       ?operation-name)
+  )
+)
+
 ; Clears decorators field in state proto if no decorators set.
 ;
 ; Args:

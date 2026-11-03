@@ -18,6 +18,11 @@
 )
 
 
+; ---------------------------- FORWARD DECLARATIONS ----------------------------
+
+; Defined in behavior_tree/state_proto_update.clp
+(deffunction run-metadata-proto-update-execution-time (?duration ?operation-name))
+
 ; --------------------------------- TEMPLATES ---------------------------------
 
 ; A time measurement is associated to a specific operation and updates itself
@@ -45,6 +50,7 @@
   (not (time-measurement (operation-name ?op-name)))
  =>
   (assert (time-measurement (operation-name ?op-name)))
+  (run-metadata-proto-update-execution-time 0.0 ?op-name)
 )
 
 (defrule time-measurement-retract
@@ -65,16 +71,15 @@
   ?tm <- (time-measurement (operation-name ?op-name)
            (last-updated $?last-updated&:(not (set-eq ?last-updated ?now))))
  =>
-  (modify ?tm (last-updated ?now)
-              (start-time (span-get-start-time ?span-id "Executive Run"))
-              (duration
-                (span-calculate-execution-duration
-                  ?span-id "Executive Run" "TREE-STARTED")))
-
-  (bind ?topic (str-cat "/executive/operations/" ?op-name "/execution_duration"))
   (bind ?dur-sec
     (span-calculate-execution-duration ?span-id "Executive Run"
                                        ?*TRACING-TREE-START-EVENT*))
+  (modify ?tm (last-updated ?now)
+              (start-time (span-get-start-time ?span-id "Executive Run"))
+              (duration ?dur-sec))
+  (run-metadata-proto-update-execution-time ?dur-sec ?op-name)
+
+  (bind ?topic (str-cat "/executive/operations/" ?op-name "/execution_duration"))
   (bind ?duration-values (seconds-to-duration ?dur-sec))
   (bind ?dur-proto (pb-create "google.protobuf.Duration"))
   (pb-set-field ?dur-proto "seconds" (nth$ 1 ?duration-values))
