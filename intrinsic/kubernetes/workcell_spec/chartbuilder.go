@@ -22,6 +22,7 @@ import (
 	"compress/gzip"
 	"io"
 	"os"
+	"path"
 	"path/filepath"
 	"regexp"
 	"strings"
@@ -76,6 +77,26 @@ func (cb *ChartBuilder) AddChartYaml(name, version string) error {
 	}
 
 	if err := cb.addEntry(header, data); err != nil {
+		return err
+	}
+
+	return nil
+}
+
+// AddFileFromReader adds a file with the given directory, filename, and content from r to the chart.
+func (cb *ChartBuilder) AddFileFromReader(dir, filename string, r io.Reader) error {
+	b, err := io.ReadAll(r)
+	if err != nil {
+		return errors.Wrap(err, "reading file content")
+	}
+
+	header := &tar.Header{
+		Name: path.Join(dir, filename),
+		Size: int64(len(b)),
+		Mode: 0o444,
+	}
+
+	if err := cb.addEntry(header, bytes.NewReader(b)); err != nil {
 		return err
 	}
 

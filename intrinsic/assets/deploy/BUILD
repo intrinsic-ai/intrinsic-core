@@ -35,9 +35,9 @@ go_library(
         "render.go",
         "renderutil.go",
     ],
-    data = [
-        ":resources.yaml",
-        ":skills.yaml",
+    embedsrcs = [
+        "resources.yaml",
+        "skills.yaml",
     ],
     importpath = "intrinsic/assets/deploy/render",
     visibility = [
@@ -62,7 +62,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets/services:servicevalidate",
         "//intrinsic_sdk/intrinsic/util/go:pointer",
         "//intrinsic_sdk/intrinsic/util/go:validate",
-        "//intrinsic_sdk/intrinsic/util/path_resolver:pathresolver",
         "//intrinsic_sdk/intrinsic/util/proto:names",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_googlecloudrobotics_core//src/go/pkg/apis/apps/v1alpha1:go_default_library",

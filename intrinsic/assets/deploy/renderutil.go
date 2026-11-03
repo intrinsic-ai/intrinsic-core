@@ -45,7 +45,6 @@ import (
 	"intrinsic/util/go/pointer"
 	"intrinsic/util/go/validate"
 	"intrinsic/util/go/xiter"
-	"intrinsic/util/path_resolver/pathresolver"
 	"intrinsic/util/proto/names"
 
 	iopb "intrinsic/assets/proto/installation_origin_go_proto"
@@ -62,6 +61,8 @@ import (
 	rvpb "intrinsic/resources/proto/resource_volume_go_proto"
 	rtcpb "intrinsic/resources/proto/runtime_context_go_proto"
 	sddpb "intrinsic/skills/catalog/proto/skill_deployment_data_go_proto"
+
+	_ "embed"
 )
 
 const (
@@ -126,19 +127,24 @@ const (
 	// data files story is fully fleshed out.
 	dataFilesVolumeSizeLimit = "10Mi"
 
-	skillChartPath    = "intrinsic/assets/deploy/skills.yaml"
-	resourceChartPath = "intrinsic/assets/deploy/resources.yaml"
-
 	// SkillChartName is the name given to the Skills chart.
 	SkillChartName = "skills"
 	// skillChartVersion is the version given to the Skills chart.
 	skillChartVersion = "0.0.1"
+	// skillChartTemplateFilename is the filename given to the embedded skills.yaml
+	// template inside the generated Helm chart's templates/ directory so Helm
+	// renders it as a Kubernetes manifest.
+	skillChartTemplateFilename = "skills.yaml"
 	// skillNamespace is the namespace for Skill deployments.
 	skillNamespace = "skills"
 	// resourceChartVersion is the version given to the resources chart.
 	// Unclear if this should match the version of the parent.  I don't think
 	// it actually matters since it's not released.
 	resourceChartVersion = "0.0.1"
+	// resourceChartTemplateFilename is the filename given to the embedded resources.yaml
+	// template inside the generated Helm chart's templates/ directory so Helm
+	// renders it as a Kubernetes manifest.
+	resourceChartTemplateFilename = "resources.yaml"
 	// SkillInstallationOriginKey is the name of the key on skill config maps that denotes the
 	// installation origin of the skill.
 	// LINT.IfChange(skill_installation_origin_key)
@@ -1318,11 +1324,17 @@ func validateK8sResourceName(input ...string) error {
 	return nil
 }
 
+//go:embed skills.yaml
+var skillChartTemplate []byte
+
+//go:embed resources.yaml
+var resourceChartTemplate []byte
+
 // resourceChart creates a chart assignment from the provided options.
 func resourceChart(opts ResourceChartOptions) (*crcv1alpha1.ChartAssignment, error) {
-	inline, err := basicInlineChartFromRunfiles(resourceChartName, resourceChartVersion, resourceChartPath)
+	inline, err := basicInlineChart(resourceChartName, resourceChartVersion, resourceChartTemplateFilename, resourceChartTemplate)
 	if err != nil {
-		return nil, errors.Wrap(err, "basicInlineChartFromRunfiles")
+		return nil, errors.Wrap(err, "basicInlineChart")
 	}
 	values, err := resourceChartValues(opts)
 	if err != nil {
@@ -1532,20 +1544,16 @@ func requiresGRPCPort(rtr *rtrpb.ResourceTypeRuntime) bool {
 		sd.GetServiceStateConfig() != nil || sd.GetSupportsServiceState()
 }
 
-// basicInlineChartFromRunfiles creates a base64 encoded chart assignment that
+// basicInlineChart creates a base64 encoded chart assignment that
 // can be inlined in AssignedChart.  It does not specify any values
-func basicInlineChartFromRunfiles(name, version, path string) (string, error) {
+func basicInlineChart(name, version, filename string, content []byte) (string, error) {
 	var cd bytes.Buffer
 	cb, err := chartbuilder.New(&cd, name, version)
 	if err != nil {
 		return "", errors.Wrap(err, "chart builder")
 	}
 
-	rp, err := pathresolver.ResolveRunfilesOrLocalPath(path)
-	if err != nil {
-		return "", errors.Wrap(err, "resolve runfiles or local path")
-	}
-	if err := cb.AddFile("templates", rp); err != nil {
+	if err := cb.AddFileFromReader("templates", filename, bytes.NewReader(content)); err != nil {
 		return "", errors.Wrap(err, "template")
 	}
 
@@ -1559,9 +1567,9 @@ func basicInlineChartFromRunfiles(name, version, path string) (string, error) {
 
 // skillChart creates a chart assignment from the provided options.
 func skillChart(opts SkillChartOptions) (*crcv1alpha1.ChartAssignment, error) {
-	inline, err := basicInlineChartFromRunfiles(SkillChartName, skillChartVersion, skillChartPath)
+	inline, err := basicInlineChart(SkillChartName, skillChartVersion, skillChartTemplateFilename, skillChartTemplate)
 	if err != nil {
-		return nil, errors.Wrap(err, "basicInlineChartFromRunfiles")
+		return nil, errors.Wrap(err, "basicInlineChart")
 	}
 	values, err := skillChartValues(opts)
 	if err != nil {
