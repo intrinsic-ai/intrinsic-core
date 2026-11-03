@@ -2405,8 +2405,6 @@ ClipsExecutor::StartExecutionSpan() {
 
   RetrieveSolutionInfoAndWarn();
   if (solution_status_.has_value()) {
-    execution_span->SetAttribute("cluster_name",
-                                 solution_status_->cluster_name());
     execution_span->SetAttribute("platform_version",
                                  solution_status_->platform_version());
     execution_span->SetAttribute("solution_name", solution_status_->name());
