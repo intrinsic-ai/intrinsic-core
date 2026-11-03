@@ -365,39 +365,38 @@ EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_ORDER_IGNORE(
     PlanPath, MotionPlanningRequest, PathPlanningResponse);
 #undef EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_ORDER_IGNORE
 
-#define EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_IGNORE(        \
-    MethodName, RequestType, ResponseType, FieldIgnoreList)                    \
-  absl::StatusOr<ResponseType> MotionPlannerServiceBaseTest::MethodName(       \
-      const RequestType& request, const bool compare_against_mps_proxy) {      \
-    /* Execute RPC on a `MotionPlannerService` instance. */                    \
-    grpc::ClientContext mps_context;                                           \
-    ResponseType mps_response;                                                 \
-    auto mps_status = ToAbslStatus(motion_planner_service_stub_->MethodName(   \
-        &mps_context, request, &mps_response));                                \
-                                                                               \
-    if (compare_against_mps_proxy) {                                           \
-      /* Execute RPC on a `MotionPlannerServiceProxy` instance. */             \
-      grpc::ClientContext mps_proxy_context;                                   \
-      ResponseType mps_proxy_response;                                         \
-      auto mps_proxy_status =                                                  \
-          ToAbslStatus(motion_planner_service_proxy_stub_->MethodName(         \
-              &mps_proxy_context, request, &mps_proxy_response));              \
-                                                                               \
-      /* Testing to make sure that `MotionPlannerService` and                  \
-         `MotionPlannerServiceProxy` behaves the same when given the same      \
-         `request`. */                                                         \
-      if (!mps_status.ok()) {                                                  \
-        EXPECT_THAT(                                                           \
-            mps_proxy_status,                                                  \
-            StatusIs(mps_status.code(), HasSubstr(mps_status.message())));     \
-      } else {                                                                 \
-        EXPECT_THAT(                                                           \
-            mps_proxy_response,                                                \
-            IgnoringFieldPaths((FieldIgnoreList), EqualsProto(mps_response))); \
-      }                                                                        \
-    }                                                                          \
-    INTR_RETURN_IF_ERROR(mps_status);                                          \
-    return mps_response;                                                       \
+#define EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_IGNORE(      \
+    MethodName, RequestType, ResponseType, FieldIgnoreList)                  \
+  absl::StatusOr<ResponseType> MotionPlannerServiceBaseTest::MethodName(     \
+      const RequestType& request) {                                          \
+    /* Execute RPC on a `MotionPlannerService` instance. */                  \
+    grpc::ClientContext mps_context;                                         \
+    ResponseType mps_response;                                               \
+    auto mps_status = ToAbslStatus(motion_planner_service_stub_->MethodName( \
+        &mps_context, request, &mps_response));                              \
+                                                                             \
+    /* Execute RPC on a `MotionPlannerServiceProxy` instance. */             \
+    grpc::ClientContext mps_proxy_context;                                   \
+    ResponseType mps_proxy_response;                                         \
+    auto mps_proxy_status =                                                  \
+        ToAbslStatus(motion_planner_service_proxy_stub_->MethodName(         \
+            &mps_proxy_context, request, &mps_proxy_response));              \
+                                                                             \
+    /* Testing to make sure that `MotionPlannerService` and                  \
+       `MotionPlannerServiceProxy` behaves the same when given the same      \
+       `request`. */                                                         \
+    if (!mps_status.ok()) {                                                  \
+      EXPECT_THAT(                                                           \
+          mps_proxy_status,                                                  \
+          StatusIs(mps_status.code(), HasSubstr(mps_status.message())));     \
+    } else {                                                                 \
+      EXPECT_OK(mps_proxy_status);                                           \
+      EXPECT_THAT(                                                           \
+          mps_proxy_response,                                                \
+          IgnoringFieldPaths((FieldIgnoreList), EqualsProto(mps_response))); \
+    }                                                                        \
+    INTR_RETURN_IF_ERROR(mps_status);                                        \
+    return mps_response;                                                     \
   }
 
 EXECUTE_COMPARE_AND_RETURN_RPC_RESPONSE_SPECIFIED_FIELD_IGNORE(

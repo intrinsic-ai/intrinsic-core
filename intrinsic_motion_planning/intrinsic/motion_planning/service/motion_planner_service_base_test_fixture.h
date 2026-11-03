@@ -129,26 +129,21 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
                repeated_field_ordering_ignore_list = {
                });
   absl::StatusOr<intrinsic_proto::motion_planning::v1::IkResponse> ComputeIk(
-      const intrinsic_proto::motion_planning::v1::IkRequest& request,
-      bool compare_against_mps_proxy = true);
+      const intrinsic_proto::motion_planning::v1::IkRequest& request);
 
   absl::StatusOr<intrinsic_proto::motion_planning::v1::FkResponse> ComputeFk(
-      const intrinsic_proto::motion_planning::v1::FkRequest& request,
-      bool compare_against_mps_proxy = true);
+      const intrinsic_proto::motion_planning::v1::FkRequest& request);
 
   absl::StatusOr<intrinsic_proto::motion_planning::v1::CheckCollisionsResponse>
   CheckCollisions(
       const intrinsic_proto::motion_planning::v1::CheckCollisionsRequest&
-          request,
-      bool compare_against_mps_proxy = true);
+          request);
 
   absl::StatusOr<intrinsic_proto::motion_planning::v1::BatchCheckResponse>
   BatchCheck(
-      const intrinsic_proto::motion_planning::v1::BatchCheckRequest& request,
-      bool compare_against_mps_proxy = true);
+      const intrinsic_proto::motion_planning::v1::BatchCheckRequest& request);
   absl::StatusOr<google::protobuf::Empty> ClearCache(
-      const google::protobuf::Empty& request,
-      bool compare_against_mps_proxy = true);
+      const google::protobuf::Empty& request);
 
   absl::StatusOr<
       intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse>
