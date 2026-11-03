@@ -43,6 +43,12 @@ message CartesianLimits {
   double max_rotational_jerk = 11;
 }
 
+// Cartesian limits associated with specific named frames or links on a robot
+// (e.g., elbow speed limits), keyed by frame/link name.
+message FrameCartesianLimits {
+  map<string, CartesianLimits> limits_by_frame = 1;
+}
+
 // Frame/Pose/Transform Terminology:
 //
 // Pose: An abstract absolute 3D position and orientation.
