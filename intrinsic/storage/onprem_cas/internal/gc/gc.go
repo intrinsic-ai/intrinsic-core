@@ -22,6 +22,7 @@ import (
 	"path/filepath"
 	"time"
 
+	"intrinsic/storage/content_addressable_storage/pkg/idhandling"
 	"intrinsic/storage/onprem_cas/internal"
 )
 
@@ -39,6 +40,35 @@ func IdentifyPartialFiles(dir string) ([]string, error) {
 		}
 	}
 	return partials, nil
+}
+
+// IdentifyCorruptObjects scans the objects directory and returns paths of all files
+// whose size does not match the expectations for their digest (filename), e.g. 0-byte files for non-empty digests.
+func IdentifyCorruptObjects(dir string) ([]string, error) {
+	files, err := os.ReadDir(dir)
+	if err != nil {
+		return nil, err
+	}
+	var corrupt []string
+	for _, entry := range files {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		digest := entry.Name()
+		if err := idhandling.ValidateDigest(digest); err != nil {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			slog.Warn("GC: Failed to get file info for object; skipping", slog.String("file", digest), slog.Any("error", err))
+			continue
+		}
+		if err := idhandling.ValidateObjectSize(digest, info.Size()); err != nil {
+			slog.Warn("GC: Corrupt object identified", slog.String("file", digest), slog.Int64("size", info.Size()), slog.Any("error", err))
+			corrupt = append(corrupt, filepath.Join(dir, digest))
+		}
+	}
+	return corrupt, nil
 }
 
 // IdentifyInactiveObjects scans the objects directory and returns paths of all files

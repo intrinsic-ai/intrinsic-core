@@ -80,6 +80,22 @@ func (h *LocalCASHandler) Get(req *caspb.GetRequest, stream caspb.ContentAddress
 	}
 	defer f.Close()
 
+	fi, err := f.Stat()
+	if err != nil {
+		return statusErrorf(codes.Internal, "failed to stat object: %v", err)
+	}
+	if err := idhandling.ValidateObjectSize(digest, fi.Size()); err != nil {
+		slog.Error("Corrupt local CAS object size detected during Get, removing",
+			slog.String("digest", digest),
+			slog.Int64("size", fi.Size()),
+			slog.Any("error", err))
+		_ = f.Close()
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
+			slog.Warn("Failed to remove corrupt object", slog.String("path", path), slog.Any("error", removeErr))
+		}
+		return statusErrorf(codes.NotFound, "object %q is corrupt and was removed: %v", req.GetObjectId(), err)
+	}
+
 	for {
 		// allocate a buffer per chunk in case grpc or an interceptor
 		// accesses the chunk after stream.Send returned
@@ -172,9 +188,19 @@ func (h *LocalCASHandler) Create(stream caspb.ContentAddressableStorageService_C
 	slog.Debug("Linking partial file to final destination", slog.String("digest", digest),
 		slog.String("path_partial", partialPath), slog.String("path", finalPath))
 
-	// Link to final destination. If it already exists, that's fine.
+	// Link to final destination. If it already exists, check if it is corrupt or size-mismatched.
 	err = os.Link(partialPath, finalPath)
-	if err != nil && !errors.Is(err, fs.ErrExist) {
+	if errors.Is(err, fs.ErrExist) {
+		existingFi, statErr := os.Stat(finalPath)
+		if statErr != nil || existingFi.Size() != int64(totalSize) || idhandling.ValidateObjectSize(digest, existingFi.Size()) != nil {
+			slog.Warn("Existing object is corrupt or size mismatch; replacing with newly written file",
+				slog.String("digest", digest),
+				slog.Uint64("new_size", totalSize))
+			if renameErr := os.Rename(partialPath, finalPath); renameErr != nil {
+				return toGRPCError(renameErr, "failed to replace corrupt existing file")
+			}
+		}
+	} else if err != nil {
 		return toGRPCError(err, "failed to link partial file to final destination")
 	}
 	slog.Info("Local CAS: Create", slog.String("digest", digest), slog.Uint64("size", totalSize),
@@ -231,6 +257,17 @@ func (h *LocalCASHandler) Stat(ctx context.Context, req *caspb.StatRequest) (*ca
 			return nil, statusErrorf(codes.NotFound, "object %q not found", req.GetObjectId())
 		}
 		return nil, statusErrorf(codes.Internal, "failed to stat object: %v", err)
+	}
+
+	if err := idhandling.ValidateObjectSize(digest, fi.Size()); err != nil {
+		slog.Error("Corrupt local CAS object detected during Stat, removing",
+			slog.String("digest", digest),
+			slog.Int64("size", fi.Size()),
+			slog.Any("error", err))
+		if removeErr := os.Remove(path); removeErr != nil && !errors.Is(removeErr, fs.ErrNotExist) {
+			slog.Warn("Failed to remove corrupt object", slog.String("path", path), slog.Any("error", removeErr))
+		}
+		return nil, statusErrorf(codes.NotFound, "object %q is corrupt and was removed: %v", req.GetObjectId(), err)
 	}
 
 	res := &caspb.StatResponse{

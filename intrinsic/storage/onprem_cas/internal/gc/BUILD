@@ -20,6 +20,7 @@ go_library(
     importpath = "intrinsic/storage/onprem_cas/internal/gc",
     visibility = ["//intrinsic/storage/onprem_cas:__subpackages__"],
     deps = [
+        "//intrinsic/storage/content_addressable_storage/pkg/idhandling",
         "//intrinsic/storage/onprem_cas/internal",
     ],
 )

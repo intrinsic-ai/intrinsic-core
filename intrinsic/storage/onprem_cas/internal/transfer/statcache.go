@@ -22,6 +22,8 @@ import (
 	"path/filepath"
 	"sync"
 
+	"intrinsic/storage/content_addressable_storage/pkg/idhandling"
+
 	lru "github.com/hashicorp/golang-lru/v2"
 )
 
@@ -67,6 +69,15 @@ func statCacheFilePath(cacheDir string, d Digest) string {
 func (c *upstreamCache) Get(d Digest) (*upstreamStat, bool) {
 	// 1. Check in-memory LRU cache
 	if val, ok := c.lruCache.Get(d); ok {
+		if err := idhandling.ValidateObjectSize(string(d), int64(val.Size)); err != nil {
+			slog.Warn("Transfer: invalid cached stat size in LRU, removing", slog.String("digest", string(d)), slog.Uint64("size", val.Size), slog.Any("error", err))
+			c.lruCache.Remove(d)
+			if c.cacheDir != "" {
+				filePath := statCacheFilePath(c.cacheDir, d)
+				_ = os.Remove(filePath)
+			}
+			return nil, false
+		}
 		return val, true
 	}
 
@@ -90,6 +101,14 @@ func (c *upstreamCache) Get(d Digest) (*upstreamStat, bool) {
 		return nil, false
 	}
 
+	if err := idhandling.ValidateObjectSize(string(d), int64(stat.Size)); err != nil {
+		slog.Warn("Transfer: invalid cached stat size in file, removing", slog.String("path", filePath), slog.Uint64("size", stat.Size), slog.Any("error", err))
+		if delErr := os.Remove(filePath); delErr != nil && !os.IsNotExist(delErr) {
+			slog.Warn("Transfer: failed to delete invalid stat cache file", slog.String("path", filePath), slog.Any("error", delErr))
+		}
+		return nil, false
+	}
+
 	// 3. Add to in-memory LRU cache
 	c.lruCache.Add(d, &stat)
 	return &stat, true
@@ -97,6 +116,11 @@ func (c *upstreamCache) Get(d Digest) (*upstreamStat, bool) {
 
 // Add stores the upstream stat result in both the in-memory LRU cache and as a JSON file on disk.
 func (c *upstreamCache) Add(d Digest, val *upstreamStat) {
+	if val == nil || idhandling.ValidateObjectSize(string(d), int64(val.Size)) != nil {
+		slog.Warn("Transfer: refusing to cache invalid stat size", slog.String("digest", string(d)), slog.Any("val", val))
+		return
+	}
+
 	c.lruCache.Add(d, val)
 
 	if c.cacheDir == "" {

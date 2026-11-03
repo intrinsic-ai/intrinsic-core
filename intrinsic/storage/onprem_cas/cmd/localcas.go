@@ -66,6 +66,19 @@ func mainImpl() error {
 
 	var wg sync.WaitGroup
 
+	// Identify and delete corrupt objects synchronously before starting the server.
+	corrupt, err := gc.IdentifyCorruptObjects(*flagObjectsDir)
+	if err != nil {
+		slog.Warn("Failed to identify corrupt objects for cleanup", slog.Any("error", err))
+	} else if len(corrupt) > 0 {
+		slog.Info("GC: Identified corrupt objects for startup cleanup", slog.Int("count", len(corrupt)))
+		gcCtx, gcCancel := context.WithTimeout(ctx, maxGCDuration)
+		if gcErr := gc.DeleteFiles(gcCtx, corrupt); gcErr != nil {
+			slog.Error("Garbage collection of corrupt objects completed with error", slog.Any("error", gcErr))
+		}
+		gcCancel()
+	}
+
 	// Identify stale partial files synchronously before starting the server.
 	// This avoids race conditions where a concurrent GC deletes newly created
 	// partial files from fresh uploads.

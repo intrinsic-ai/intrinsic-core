@@ -88,14 +88,34 @@ func (s *dualStatter) statImpl(ctx context.Context, digest string) (*StatResult,
 		return nil, fmt.Errorf("local stat error: %w", err)
 	}
 	if err == nil { // NO error (object exists locally)
-		locally = true
-		size = uint64(max(0, statRes.Size))
+		if valErr := idhandling.ValidateObjectSize(digest, statRes.Size); valErr != nil {
+			slog.Warn("DualStatter: local object has invalid size, treating as missing and removing",
+				slog.String("digest", digest),
+				slog.Int64("size", statRes.Size),
+				slog.Any("error", valErr))
+			if _, delErr := s.localClient.Delete(ctx, &caspb.DeleteRequest{ObjectId: objectID}); delErr != nil && status.Code(delErr) != codes.NotFound {
+				slog.Warn("DualStatter: failed to delete corrupt local object", slog.String("digest", digest), slog.Any("error", delErr))
+			}
+		} else {
+			locally = true
+			size = uint64(max(0, statRes.Size))
+		}
 	}
 
 	// verify upstream existence (first in LRU cache)
 	upstream := false
 	if cached, ok := s.upstreamCache.Get(digest); ok { // FOUND in upstream cache
 		upstream = true
+		if locally && size != cached.Size {
+			slog.Warn("DualStatter: local object size does not match upstream cached size, removing local corrupt object",
+				slog.String("digest", digest),
+				slog.Uint64("local_size", size),
+				slog.Uint64("upstream_size", cached.Size))
+			if _, delErr := s.localClient.Delete(ctx, &caspb.DeleteRequest{ObjectId: objectID}); delErr != nil && status.Code(delErr) != codes.NotFound {
+				slog.Warn("DualStatter: failed to delete corrupt local object", slog.String("digest", digest), slog.Any("error", delErr))
+			}
+			locally = false
+		}
 		if !locally {
 			size = cached.Size
 		}
@@ -118,10 +138,21 @@ func (s *dualStatter) statImpl(ctx context.Context, digest string) (*StatResult,
 	// NO error, object was found upstream
 	if statErr == nil {
 		upstream = true
-		if !locally { // use size for upstream if not found locally before
-			size = uint64(max(0, statRes.Size))
+		upstreamSize := uint64(max(0, statRes.Size))
+		if locally && size != upstreamSize {
+			slog.Warn("DualStatter: local object size does not match upstream size, removing local corrupt object",
+				slog.String("digest", digest),
+				slog.Uint64("local_size", size),
+				slog.Uint64("upstream_size", upstreamSize))
+			if _, delErr := s.localClient.Delete(ctx, &caspb.DeleteRequest{ObjectId: objectID}); delErr != nil && status.Code(delErr) != codes.NotFound {
+				slog.Warn("DualStatter: failed to delete corrupt local object", slog.String("digest", digest), slog.Any("error", delErr))
+			}
+			locally = false
 		}
-		s.upstreamCache.Add(digest, &upstreamStat{Size: uint64(max(0, statRes.Size))})
+		if !locally { // use size for upstream if not found locally before
+			size = upstreamSize
+		}
+		s.upstreamCache.Add(digest, &upstreamStat{Size: upstreamSize})
 		// We only cache positive responses. We do not cache negative responses (NotFound)
 		// based on the assumption that upstream objects never disappear, and if an object
 		// is missing right now, it might be added later.

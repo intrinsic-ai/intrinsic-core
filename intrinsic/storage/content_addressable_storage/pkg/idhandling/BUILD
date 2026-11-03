@@ -21,5 +21,6 @@ go_library(
     visibility = [
         "//intrinsic/assets/install:__pkg__",
         "//intrinsic/storage/onprem_cas:__subpackages__",
+        "//intrinsic/storage/onprem_cas_preload:__subpackages__",
     ],
 )

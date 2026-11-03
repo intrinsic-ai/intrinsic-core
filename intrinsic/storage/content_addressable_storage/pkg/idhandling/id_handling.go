@@ -25,6 +25,9 @@ import (
 
 const schema = "intcas://"
 
+// EmptyDigest is the SHA-512 hex digest of an empty byte slice.
+const EmptyDigest = "cf83e1357eefb8bdf1542850d66d8007d620e4050b5715dc83f4a921d36ce9ce47d0d13c5d85f2b0ff8318d2877eec2f63b931bd47417a81a538327af927da3e"
+
 // NewHasher returns a new SHA-512 hasher for CAS objects.
 func NewHasher() hash.Hash {
 	return sha512.New()
@@ -78,6 +81,21 @@ func ValidateDigest(digest string) error {
 		if !((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f')) {
 			return fmt.Errorf("invalid digest hex: character %q at index %d is not a valid hex digit", c, i)
 		}
+	}
+	return nil
+}
+
+// ValidateObjectSize validates that the object size matches the expectations for the digest.
+// Specifically, a size of 0 is valid if and only if the digest equals EmptyDigest.
+func ValidateObjectSize(digest string, size int64) error {
+	if size < 0 {
+		return fmt.Errorf("invalid negative object size %d for digest %q", size, digest)
+	}
+	if size == 0 && digest != EmptyDigest {
+		return fmt.Errorf("invalid zero-byte object for non-empty digest %q", digest)
+	}
+	if digest == EmptyDigest && size != 0 {
+		return fmt.Errorf("invalid non-zero size %d for empty digest %q", size, digest)
 	}
 	return nil
 }
