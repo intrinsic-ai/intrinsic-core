@@ -146,7 +146,8 @@ PathSegment CreatePathSegment(
     const std::optional<std::multiset<intrinsic_proto::Rule>>&
         collision_rule_set,
     const double low_level_joint_blending_desired_tightness,
-    const Pose3d& tip_t_tool = Pose3d::Identity()
+    const Pose3d& tip_t_tool = Pose3d::Identity(),
+    const std::vector<FrameCartesianPathLimits>& frame_cartesian_limits = {}
 
     ,
     const absl::Span<const MotionEventAndJointConfigurationIndex>
@@ -168,6 +169,7 @@ PathSegment CreatePathSegment(
   segment.cartesian_limits = cart_limits;
   segment.collision_rule_set = collision_rule_set;
   segment.tip_t_target = tip_t_tool;
+  segment.frame_cartesian_limits = frame_cartesian_limits;
 
   segment.indexed_motion_events =
       std::vector<MotionEventAndJointConfigurationIndex>(
@@ -851,7 +853,8 @@ absl::StatusOr<std::vector<PathSegment>> PlanPathImpl(
     path_segments.push_back(CreatePathSegment(
         *planning_result, segment_path_limits, trajectory_segment.cart_limits,
         collision_rule_set, low_level_joint_blending_desired_tightness,
-        trajectory_segment.tip_t_moving_frame
+        trajectory_segment.tip_t_moving_frame,
+        trajectory_segment.frame_cartesian_limits
 
         ,
         motion_events_and_joint_configuration_indices

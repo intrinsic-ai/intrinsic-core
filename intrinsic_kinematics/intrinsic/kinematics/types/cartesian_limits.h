@@ -15,7 +15,11 @@
 #ifndef INTRINSIC_KINEMATICS_TYPES_CARTESIAN_LIMITS_H_
 #define INTRINSIC_KINEMATICS_TYPES_CARTESIAN_LIMITS_H_
 
+#include <cstddef>
+
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/icon/utils/fixed_string.h"
+#include "intrinsic/math/pose3.h"
 
 namespace intrinsic {
 
@@ -66,6 +70,43 @@ CartesianLimits CreateSimpleCartesianLimits(
     double max_translational_acceleration, double max_translational_jerk,
     double max_rotational_velocity, double max_rotational_acceleration,
     double max_rotational_jerk);
+
+// Holds Cartesian-space limits for a specific named coordinate frame after
+// being resolved against the robot's kinematic chain for trajectory time
+// parameterization (TOPP).
+//
+// This struct includes `parent_link_name` and `parent_link_t_frame` because the
+// kinematics chain (`kinematics::Chain`) used during trajectory optimization
+// only contains links and joints, not arbitrary attached world frames.
+// Resolving the ancestor link and static offset upfront allows TOPP to compute
+// the frame Jacobian directly with respect to the parent link.
+struct FrameCartesianPathLimits {
+ public:
+  static constexpr size_t kMaxFrameNameLength{100};
+
+  // The name of the constrained frame or link.
+  icon::FixedString<kMaxFrameNameLength> frame_name;
+  // The name of the parent link on the kinematic chain.
+  icon::FixedString<kMaxFrameNameLength> parent_link_name;
+  // The fixed pose of the constrained frame in the parent link frame
+  // (`base_t_frame = base_t_parent_link * parent_link_t_frame`).
+  Pose3d parent_link_t_frame = Pose3d::Identity();
+  // The Cartesian limits for this frame.
+  CartesianLimits limits;
+
+  // Returns true if all fields match (including when both instances have empty
+  // frame/parent link names). Uses `Pose3d::isApprox` to compare
+  // `parent_link_t_frame` and `CartesianLimits::operator==` (exact equality on
+  // finite values; note that `CartesianLimits::operator==` treats any two
+  // infinities as equal regardless of sign) to compare `limits`.
+  friend bool operator==(const FrameCartesianPathLimits& lhs,
+                         const FrameCartesianPathLimits& rhs) {
+    return lhs.frame_name == rhs.frame_name &&
+           lhs.parent_link_name == rhs.parent_link_name &&
+           lhs.parent_link_t_frame.isApprox(rhs.parent_link_t_frame) &&
+           lhs.limits == rhs.limits;
+  }
+};
 
 }  // namespace intrinsic
 

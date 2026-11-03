@@ -196,6 +196,7 @@ proto_library(
     # keep
     strip_import_prefix = "/intrinsic_motion_planning",
     deps = [
+        "//intrinsic_kinematics/intrinsic/kinematics/proto:frame_cartesian_limits_proto",
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_proto",
@@ -217,6 +218,7 @@ cc_library(
         ":path_sample_cc_proto",
         "//intrinsic_control/intrinsic/icon/proto:cart_space_conversion",
         "//intrinsic_control/intrinsic/icon/proto:eigen_conversion",
+        "//intrinsic_kinematics/intrinsic/kinematics/proto:frame_cartesian_limits_conversion",
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
         "//intrinsic_sdk/intrinsic/eigenmath",
@@ -462,6 +464,7 @@ go_proto_library(
     importpath = "intrinsic/motion_planning/trajectory_planning/topp/path_sample_go_proto",
     proto = ":path_sample_proto",
     deps = [
+        "//intrinsic_kinematics/intrinsic/kinematics/proto:frame_cartesian_limits_go_proto",
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_go_proto",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_go_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",

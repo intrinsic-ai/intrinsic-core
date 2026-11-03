@@ -15,6 +15,7 @@
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
 
 #include <set>
+#include <utility>
 #include <vector>
 
 #include "absl/status/statusor.h"
@@ -23,6 +24,7 @@
 #include "intrinsic/icon/proto/cart_space_conversion.h"
 #include "intrinsic/icon/proto/eigen_conversion.h"
 #include "intrinsic/icon/proto/joint_space.pb.h"
+#include "intrinsic/kinematics/proto/frame_cartesian_limits_conversion.h"
 #include "intrinsic/kinematics/types/joint_limits.h"
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.pb.h"
@@ -64,6 +66,12 @@ intrinsic_proto::motion_planning::PathSegment ToProto(
 
   *path_segment_proto.mutable_tip_t_target() =
       intrinsic::ToProto(path_segment.tip_t_target);
+
+  for (const FrameCartesianPathLimits& frame_limits :
+       path_segment.frame_cartesian_limits) {
+    *path_segment_proto.add_frame_cartesian_limits() =
+        intrinsic::ToProto(frame_limits);
+  }
 
 
   for (const MotionEventAndJointConfigurationIndex&
@@ -108,6 +116,13 @@ absl::StatusOr<PathSegment> FromProto(
   INTR_ASSIGN_OR_RETURN(
       path_segment.tip_t_target,
       intrinsic_proto::FromProto(path_segment_proto.tip_t_target()));
+
+  for (const intrinsic_proto::FrameCartesianPathLimits& frame_limits_proto :
+       path_segment_proto.frame_cartesian_limits()) {
+    INTR_ASSIGN_OR_RETURN(FrameCartesianPathLimits frame_limits,
+                          intrinsic::FromProto(frame_limits_proto));
+    path_segment.frame_cartesian_limits.push_back(std::move(frame_limits));
+  }
 
 
   for (const intrinsic_proto::motion_planning::

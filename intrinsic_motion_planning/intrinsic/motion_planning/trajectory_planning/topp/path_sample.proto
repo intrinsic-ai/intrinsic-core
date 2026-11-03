@@ -17,6 +17,7 @@ syntax = "proto3";
 package intrinsic_proto.topp;
 
 import "intrinsic/icon/proto/cart_space.proto";
+import "intrinsic/kinematics/proto/frame_cartesian_limits.proto";
 import "intrinsic/kinematics/types/joint_limits.proto";
 import "intrinsic/math/proto/pose.proto";
 
@@ -57,4 +58,9 @@ message PathSample {
 
   // The id of the path segment this sample belongs to.
   string segment_id = 9;
+
+  // Cartesian limits for additional monitored frames (e.g. elbow frame). If
+  // empty, no additional per-frame Cartesian limits are enforced (only
+  // `cart_limits` and `joint_limits` apply).
+  repeated intrinsic_proto.FrameCartesianPathLimits frame_cartesian_limits = 12;
 }

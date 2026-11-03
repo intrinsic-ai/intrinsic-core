@@ -107,6 +107,11 @@ struct PathPolylinePoint {
   // The transformation from tip to target frame associated with the point.
   Pose3d tip_t_target;
 
+  // Cartesian limits for additional monitored frames (e.g. elbow frame). If
+  // empty, no additional per-frame Cartesian limits are enforced (only
+  // `cartesian_limits` and `joint_limits` apply).
+  std::vector<FrameCartesianPathLimits> frame_cartesian_limits;
+
   // The ID(s) of the path segment(s) the point belongs to. A point might belong
   // to two path segments, e.g., if it is located right at their connection.
   FixedVector<std::string, 2> path_segment_ids;

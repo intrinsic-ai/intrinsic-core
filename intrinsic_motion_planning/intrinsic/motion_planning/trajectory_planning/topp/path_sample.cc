@@ -15,6 +15,7 @@
 #include "intrinsic/motion_planning/trajectory_planning/topp/path_sample.h"
 
 #include <cstddef>
+#include <utility>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -22,6 +23,7 @@
 #include "intrinsic/icon/proto/cart_space_conversion.h"
 #include "intrinsic/icon/proto/eigen_conversion.h"
 #include "intrinsic/icon/proto/joint_space.pb.h"
+#include "intrinsic/kinematics/proto/frame_cartesian_limits_conversion.h"
 #include "intrinsic/kinematics/types/joint_limits.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
@@ -54,6 +56,9 @@ absl::Status PathSample::SetSize(int size) {
 void PathSample::SetUnlimited() {
   joint_limits.SetUnlimited();
   cart_limits.SetUnlimited();
+  for (auto& frame_limit : frame_cartesian_limits) {
+    frame_limit.limits.SetUnlimited();
+  }
 }
 
 void PathSample::SetZero() {
@@ -82,6 +87,9 @@ bool PathSample::IsValid() const {
   if (s < 0) return false;
   if (s_c < 0) return false;
   if (!cart_limits.IsValid()) return false;
+  for (const auto& frame_limit : frame_cartesian_limits) {
+    if (!frame_limit.limits.IsValid()) return false;
+  }
   return joint_limits.IsValid();
 }
 
@@ -103,6 +111,11 @@ intrinsic_proto::topp::PathSample ToProto(const PathSample& path_sample) {
       intrinsic::icon::ToProto(path_sample.cart_limits);
   *path_sample_proto.mutable_tip_t_target() =
       intrinsic::ToProto(path_sample.tip_t_target);
+  for (const FrameCartesianPathLimits& frame_limits :
+       path_sample.frame_cartesian_limits) {
+    *path_sample_proto.add_frame_cartesian_limits() =
+        intrinsic::ToProto(frame_limits);
+  }
   path_sample_proto.set_segment_id(path_sample.segment_id);
   return path_sample_proto;
 }
@@ -134,6 +147,12 @@ absl::StatusOr<PathSample> FromProto(
   INTR_ASSIGN_OR_RETURN(
       path_sample.tip_t_target,
       intrinsic_proto::FromProto(path_sample_proto.tip_t_target()));
+  for (const intrinsic_proto::FrameCartesianPathLimits& frame_limits_proto :
+       path_sample_proto.frame_cartesian_limits()) {
+    INTR_ASSIGN_OR_RETURN(FrameCartesianPathLimits frame_limits,
+                          intrinsic::FromProto(frame_limits_proto));
+    path_sample.frame_cartesian_limits.push_back(std::move(frame_limits));
+  }
   path_sample.segment_id = path_sample_proto.segment_id();
 
   return path_sample;

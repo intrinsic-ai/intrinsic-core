@@ -15,7 +15,11 @@
 #ifndef INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_ROBOT_SPECIFICATION_H_
 #define INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_ROBOT_SPECIFICATION_H_
 
+#include <utility>
+#include <vector>
+
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/proto/joint_space.pb.h"
 #include "intrinsic/kinematics/types/cartesian_limits.h"
@@ -33,26 +37,62 @@
 #include "intrinsic/world/objects/object_world.h"
 
 namespace intrinsic {
+
+// Key in the robot's user data map that stores an
+// `intrinsic_proto::icon::FrameCartesianLimits` proto defining frame-specific
+// Cartesian limits.
+inline constexpr absl::string_view kFrameCartesianLimitsUserDataKey =
+    "frame_cartesian_limits";
+
 // Struct to help storing robot related information.
 struct RobotSpecification {
   const object_world::KinematicObject* robot;
   const CartesianLimits cart_limits;
   const JointLimits application_limits;
   const eigenmath::VectorNd start_configuration;
+  // Cartesian limits for additional monitored frames (e.g. elbow frame). If
+  // empty, no additional per-frame Cartesian limits are enforced (only
+  // `cart_limits` and `application_limits` apply).
+  const std::vector<FrameCartesianPathLimits> frame_cartesian_limits;
 
-  RobotSpecification(const object_world::KinematicObject* robot,
-                     const CartesianLimits& cart_limits,
-                     const JointLimits& application_limits,
-                     const eigenmath::VectorNd& start_configuration)
+  RobotSpecification(
+      const object_world::KinematicObject* robot,
+      const CartesianLimits& cart_limits, const JointLimits& application_limits,
+      const eigenmath::VectorNd& start_configuration,
+      std::vector<FrameCartesianPathLimits> frame_cartesian_limits = {})
       : robot(robot),
         cart_limits(cart_limits),
         application_limits(application_limits),
-        start_configuration(start_configuration) {}
+        start_configuration(start_configuration),
+        frame_cartesian_limits(std::move(frame_cartesian_limits)) {}
 
   static absl::StatusOr<RobotSpecification> Create(
       const object_world::ObjectWorld& object_world,
       const intrinsic_proto::motion_planning::v1::RobotSpecification&
           robot_specification);
 };
+
+// Resolves and validates frame-specific Cartesian limits from `robot`'s
+// `kFrameCartesianLimitsUserDataKey` user data against `object_world`.
+//
+// - Returns an empty vector if `robot` has no user data, if
+//   `kFrameCartesianLimitsUserDataKey` is absent, if `limits_by_frame` is
+//   empty, or if all configured frames resolve to
+//   `CartesianLimits::Unlimited()` (unlimited frames are validated and
+//   omitted).
+// - Returns the active resolved limits sorted lexicographically by
+//   `frame_name`.
+// - Returns `absl::NotFoundError` if a configured frame or link does not exist
+//   on `robot` or has no parent link on `robot`.
+// - Returns `absl::InvalidArgumentError` if the user-data proto fails to unpack
+//   as `intrinsic_proto::icon::FrameCartesianLimits`, if a frame or parent link
+//   name exceeds `FrameCartesianPathLimits::kMaxFrameNameLength`, if multiple
+//   links on `robot` share a requested name, if a frame is attached via a joint
+//   before reaching a parent link, or if a frame's `CartesianLimits` proto has
+//   invalid or unsupported limit values.
+absl::StatusOr<std::vector<FrameCartesianPathLimits>>
+ResolveFrameCartesianPathLimits(const object_world::ObjectWorld& object_world,
+                                const object_world::KinematicObject& robot);
+
 }  // namespace intrinsic
 #endif  // INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_ROBOT_SPECIFICATION_H_

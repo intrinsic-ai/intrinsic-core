@@ -91,6 +91,11 @@ struct PathSegment {
   // are applied.
   Pose3d tip_t_target = Pose3d::Identity();
 
+  // Cartesian limits for additional monitored frames (e.g. elbow frame). If
+  // empty, no additional per-frame Cartesian limits are enforced (only
+  // `cartesian_limits` on the target frame and `joint_limits` apply).
+  std::vector<FrameCartesianPathLimits> frame_cartesian_limits;
+
 
   // The motion events associated with the path segment.
   std::vector<MotionEventAndJointConfigurationIndex> indexed_motion_events;

@@ -1,0 +1,43 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto;
+
+import "intrinsic/icon/proto/cart_space.proto";
+import "intrinsic/math/proto/pose.proto";
+
+option go_package = "intrinsic/kinematics/proto/frame_cartesian_limits_go_proto";
+
+// Holds Cartesian-space limits for a specific named coordinate frame resolved
+// to its parent link and fixed transform for trajectory time parameterization
+// (TOPP).
+//
+// `parent_link_name` and `parent_link_t_frame` are required because the
+// kinematics chain (`kinematics::Chain`) used during trajectory optimization
+// only contains links and joints, not arbitrary attached world frames.
+// Resolving the ancestor link and static offset upfront allows TOPP to compute
+// the frame Jacobian directly with respect to the parent link.
+message FrameCartesianPathLimits {
+  // The name of the constrained frame or link.
+  string frame_name = 1;
+  // The name of the parent link on the kinematic chain.
+  string parent_link_name = 2;
+  // The fixed pose of the constrained frame in the parent link frame
+  // (`base_t_frame = base_t_parent_link * parent_link_t_frame`).
+  intrinsic_proto.Pose parent_link_t_frame = 3;
+  // The Cartesian limits for this frame.
+  intrinsic_proto.icon.CartesianLimits limits = 4;
+}

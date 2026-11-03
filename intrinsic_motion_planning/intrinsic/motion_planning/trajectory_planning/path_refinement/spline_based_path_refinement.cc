@@ -495,6 +495,8 @@ absl::StatusOr<SplineBasedPathRefinementResult> RefinePathBSpline(
     result_samples[i].joint_limits = polyline_samples[i].joint_limits;
     result_samples[i].cart_limits = polyline_samples[i].cart_limits;
     result_samples[i].tip_t_target = polyline_samples[i].tip_t_target;
+    result_samples[i].frame_cartesian_limits =
+        polyline_samples[i].frame_cartesian_limits;
     result_samples[i].segment_id = polyline_samples[i].segment_id;
   }
 

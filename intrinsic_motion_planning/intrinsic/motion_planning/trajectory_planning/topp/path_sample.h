@@ -18,6 +18,7 @@
 #include <cstddef>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -39,11 +40,13 @@ struct PathSample {
   // derivatives are set to zero. Clears all limit values to 0.
   absl::Status SetSize(int size);
 
-  // Sets each limit range to (-infinity, infinity).
+  // Sets each limit range in `joint_limits`, `cart_limits`, and all entries in
+  // `frame_cartesian_limits` to (-infinity, infinity).
   void SetUnlimited();
 
   // Sets path variables and derivatives to zero, and `tip_t_target` to the
-  // Identity transform. Joint and Cartesian limits are not set to zero.
+  // Identity transform. `joint_limits`, `cart_limits`, and
+  // `frame_cartesian_limits` are left unchanged.
   void SetZero();
 
   // Returns the number of elements of the joint position vector.
@@ -52,8 +55,9 @@ struct PathSample {
   // Returns true if all joint vectors have the same size.
   bool IsSizeConsistent() const;
 
-  // Returns false if size is inconsistent, if one of the limits is
-  // inconsistent, or if the path variable is < 0.0.
+  // Returns false if size is inconsistent, if `joint_limits`, `cart_limits`, or
+  // any entry in `frame_cartesian_limits` is invalid, or if a path variable
+  // (`s` or `s_c`) is < 0.0.
   bool IsValid() const;
 
   double s = 0.0;    // Path variable s (no need to be normalized).
@@ -70,6 +74,11 @@ struct PathSample {
   CartesianLimits cart_limits;  // Max Cartesian limits for this path sample.
   Pose3d tip_t_target =
       Pose3d::Identity();  // Offset between robot tip and target frame.
+  std::vector<FrameCartesianPathLimits>
+      frame_cartesian_limits;  // Cartesian limits for additional monitored
+                               // frames. If empty, no additional per-frame
+                               // Cartesian limits are enforced (only
+                               // `cart_limits` and `joint_limits` apply).
   std::string segment_id;  // The id of the path segment this sample belongs to.
 };
 

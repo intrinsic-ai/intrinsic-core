@@ -368,10 +368,12 @@ absl::StatusOr<TrajectorySegment> TrajectorySegment::Create(
                         ToFixedString(robot_specification.application_limits)));
   }
 
-  return TrajectorySegment{{motion_segment},    /*joint_samples=*/{},
-                           cart_limits,         joint_limits,
-                           blending_parameters, trajectory_type,
-                           planning_frames,     tip_t_moving_frame};
+  return TrajectorySegment{
+      {motion_segment},
+      /*joint_samples=*/{}, cart_limits,
+      joint_limits,         blending_parameters,
+      trajectory_type,      planning_frames,
+      tip_t_moving_frame,   robot_specification.frame_cartesian_limits};
 }
 
 absl::StatusOr<TrajectorySegment::Type>

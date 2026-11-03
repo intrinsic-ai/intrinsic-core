@@ -37,7 +37,10 @@
 #include "intrinsic/eigenmath/matchers.h"
 #include "intrinsic/eigenmath/so3.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/icon/proto/cart_space.pb.h"
 #include "intrinsic/icon/utils/realtime_status_matchers.h"
+#include "intrinsic/kinematics/proto/frame_cartesian_limits.pb.h"
+#include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/kinematics/types/check_joint_limits.h"
 #include "intrinsic/kinematics/types/joint_limits.h"
 #include "intrinsic/kinematics/types/joint_limits_xd.h"
@@ -48,6 +51,7 @@
 #include "intrinsic/motion_planning/motion_planner/motion_planner_flags.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planner_test_util.h"
 #include "intrinsic/motion_planning/motion_planner/motion_planner_topp_test_fixture.h"
+#include "intrinsic/motion_planning/motion_planner/robot_specification.h"
 #include "intrinsic/motion_planning/path_planning/kinematics_system_proxy_util.h"
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
 #include "intrinsic/motion_planning/proto/motion_specification_proto_utils.h"
@@ -68,6 +72,7 @@
 #include "intrinsic/world/entity_id.h"
 #include "intrinsic/world/objects/frame_internal.h"
 #include "intrinsic/world/objects/kinematic_object_internal.h"
+#include "intrinsic/world/objects/object_entity_filter.h"
 #include "intrinsic/world/objects/object_world.h"
 #include "intrinsic/world/objects/object_world_ids.h"
 #include "intrinsic/world/objects/object_world_proto_utils.h"
@@ -3745,6 +3750,81 @@ TEST_P(MotionPlannerTest, PathSegmentTypesAreSetCorrectly) {
               PathSegment::Type::kUndefined);
     EXPECT_EQ(planning_result.path_segments.back().type,
               PathSegment::Type::kUndefined);
+}
+
+TEST_P(MotionPlannerTest, PathSegmentFrameCartesianLimitsAreSetCorrectly) {
+  ASSERT_OK_AND_ASSIGN(const auto motion_planner,
+                       MotionPlanner::Create(motion_planner_flags_));
+  const eigenmath::Vector6d joint_configuration = {
+      1.27778, -1.58980, 1.81571, -1.78568, -1.57508, -0.28733};
+  ASSERT_OK(InitializeWorld(kUrTestParams,
+                            topp_test_params_.set_infinite_jerk_limits,
+                            joint_configuration));
+
+  constexpr absl::string_view kForearmLinkName = "forearm_link";
+  constexpr absl::string_view kElbowFrameName = "elbow_frame";
+  const Pose3d forearm_t_elbow(eigenmath::Vector3d(0.1, -0.2, 0.3));
+  ASSERT_OK(robot_->CreateChildFrame(
+      FrameName(kElbowFrameName),
+      world::ObjectEntityFilter::FromEntityNames({kForearmLinkName}),
+      forearm_t_elbow));
+  ASSERT_OK_AND_ASSIGN(
+      object_world::WorldObject::UserDataProtos* const user_data_protos,
+      robot_->GetMutableUserDataProtos());
+  intrinsic_proto::icon::FrameCartesianLimits frame_limits_proto;
+  (*frame_limits_proto.mutable_limits_by_frame())[kElbowFrameName] =
+      ParseTextProtoOrDie(R"pb(
+        max_translational_velocity: [ 0.4, 0.4, 0.4 ]
+      )pb");
+  ASSERT_TRUE((*user_data_protos)[kFrameCartesianLimitsUserDataKey].PackFrom(
+      frame_limits_proto));
+
+  const std::vector<Pose3d> waypoints = {
+      toPose3d("0, 0.5, 0.3, -0.2954, 0.0010, 0.9554, -0.0065"),
+      toPose3d("0.1, 0.6, 0.4, -0.2746, 0.1088, 0.8870, -0.3549")};
+
+  const MotionPlannerConfiguration motion_planner_config;
+  for (const Pose3d& waypoint : waypoints) {
+    auto* const motion_segment = motion_spec_.add_motion_segments();
+    *motion_segment->mutable_target()->mutable_cartesian_pose() =
+        CreatePoseEqualityGeometricConstraint(robot_->GetName(),
+                                              tip_frame_->GetName(), waypoint);
+    *motion_segment->mutable_cartesian_limits() =
+        CreateDynamicCartesianLimitsProto(
+            /*max_rot_vel*/ 1.0, /*max_rot_accel*/ 5.0,
+            /*max_trans_vel*/ 0.6, /*max_trans_accel*/ 2.0);
+  }
+
+  ASSERT_EQ(motion_spec_.motion_segments_size(), 2);
+  motion_spec_.mutable_motion_segments(0)->set_motion_type(
+      intrinsic_proto::motion_planning::v1::MotionSegment::ANY);
+  motion_spec_.mutable_motion_segments(1)->set_motion_type(
+      intrinsic_proto::motion_planning::v1::MotionSegment::LINEAR);
+
+  ASSERT_OK_AND_ASSIGN(
+      const MotionPlanner::PlanTrajectoryResult planning_result,
+      motion_planner->PlanTrajectory(*object_world_, robot_specification_,
+                                     motion_spec_, motion_planner_config,
+                                     run_time_flags_));
+
+  CartesianLimits expected_elbow_limits = CartesianLimits::Unlimited();
+  expected_elbow_limits.max_translational_velocity =
+      eigenmath::Vector3d(0.4, 0.4, 0.4);
+  expected_elbow_limits.min_translational_velocity =
+      eigenmath::Vector3d(-0.4, -0.4, -0.4);
+  const std::vector<FrameCartesianPathLimits> expected_frame_limits = {
+      FrameCartesianPathLimits{
+          .frame_name = kElbowFrameName,
+          .parent_link_name = kForearmLinkName,
+          .parent_link_t_frame = forearm_t_elbow,
+          .limits = expected_elbow_limits,
+      }};
+
+    ASSERT_THAT(planning_result.path_segments, SizeIs(2));
+
+  for (const PathSegment& segment : planning_result.path_segments) {
+    EXPECT_EQ(segment.frame_cartesian_limits, expected_frame_limits);
+  }
 }
 
 TEST_P(MotionPlannerTest, LowLevelJointBlendingsAreSetCorrectly) {

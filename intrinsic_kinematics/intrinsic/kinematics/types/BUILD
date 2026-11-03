@@ -128,7 +128,9 @@ cc_library(
     srcs = ["cartesian_limits.cc"],
     hdrs = ["cartesian_limits.h"],
     deps = [
+        "//intrinsic_control/intrinsic/icon/utils:fixed_string",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/math:pose3",
     ],
 )
 

@@ -16,6 +16,7 @@
 #define INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_TRAJECTORY_SEGMENT_H_
 
 #include <optional>
+#include <utility>
 #include <vector>
 
 #include "absl/log/log.h"
@@ -60,6 +61,10 @@ struct TrajectorySegment {
   const Type trajectory_type;
   const PlanningFrames planning_frames;
   const Pose3d tip_t_moving_frame;
+  // Cartesian limits for additional monitored frames (e.g. elbow frame). If
+  // empty, no additional per-frame Cartesian limits are enforced (only
+  // `cart_limits` and `joint_limits` apply).
+  const std::vector<FrameCartesianPathLimits> frame_cartesian_limits;
 
   static absl::StatusOr<TrajectorySegment> Create(
       const object_world::ObjectWorld& object_world,
@@ -88,7 +93,8 @@ struct TrajectorySegment {
           intrinsic_proto::motion_planning::v1::BlendingParameters>&
           blending_parameters,
       const Type& trajectory_type, const PlanningFrames& planning_frames,
-      const Pose3d& tip_t_moving_frame)
+      const Pose3d& tip_t_moving_frame,
+      std::vector<FrameCartesianPathLimits> frame_cartesian_limits = {})
       : motion_segments(motion_segments),
         joint_samples(joint_samples),
         cart_limits(cart_limits),
@@ -96,7 +102,8 @@ struct TrajectorySegment {
         blending_parameters(blending_parameters),
         trajectory_type(trajectory_type),
         planning_frames(planning_frames),
-        tip_t_moving_frame(tip_t_moving_frame) {}
+        tip_t_moving_frame(tip_t_moving_frame),
+        frame_cartesian_limits(std::move(frame_cartesian_limits)) {}
 };
 }  // namespace intrinsic
 

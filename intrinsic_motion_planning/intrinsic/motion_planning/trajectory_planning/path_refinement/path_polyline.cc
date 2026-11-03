@@ -59,7 +59,8 @@ constexpr double kDefaultPathVariableTolerance = 1e-4;
 // - The list of joint configurations is not empty.
 // - The number of joint configurations matches the number of joint blending
 //   parameters.
-// - Both the joint limits and Cartesian limits are valid.
+// - The joint limits, Cartesian limits, and all per-frame Cartesian limits in
+//   `frame_cartesian_limits` are valid.
 // - For each joint configuration:
 //   - The joint vector is non-empty and matches the dimension (size) of the
 //     first configuration.
@@ -91,6 +92,14 @@ absl::Status ValidatePathSegment(const PathSegment& segment) {
   if (!segment.cartesian_limits.IsValid()) {
     return absl::InvalidArgumentError(
         "Path segment Cartesian limits are invalid.");
+  }
+
+  for (const auto& frame_limits : segment.frame_cartesian_limits) {
+    if (!frame_limits.limits.IsValid()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Path segment Cartesian limits for frame '",
+                       frame_limits.frame_name, "' are invalid."));
+    }
   }
 
   for (int i = 0; i < segment.joint_configurations.size(); ++i) {
@@ -264,6 +273,56 @@ absl::StatusOr<CartesianLimits> TakeMostConservativeLimitsBetween(
   return cart_limits;
 }
 
+// Merges two spans of per-frame Cartesian limits `a` and `b`, taking the most
+// conservative limits for frames present in both spans and keeping frames
+// present in only one span.
+//
+// Specifically, it checks that:
+// - All frame limits in `a` and `b` are valid.
+// - Frames with the same `frame_name` in `a` and `b` have matching
+//   `parent_link_name` and `parent_link_t_frame`.
+//
+// Returns the merged frame limits, or `absl::InternalError` if validation
+// fails.
+absl::StatusOr<std::vector<FrameCartesianPathLimits>>
+TakeMostConservativeLimitsBetween(
+    absl::Span<const FrameCartesianPathLimits> a,
+    absl::Span<const FrameCartesianPathLimits> b) {
+  for (const FrameCartesianPathLimits& frame_a : a) {
+    if (!frame_a.limits.IsValid()) {
+      return absl::InternalError(
+          absl::StrCat("Invalid Cartesian limits for frame '",
+                       frame_a.frame_name, "' passed in first argument."));
+    }
+  }
+
+  std::vector<FrameCartesianPathLimits> merged(a.begin(), a.end());
+  for (const FrameCartesianPathLimits& frame_b : b) {
+    if (!frame_b.limits.IsValid()) {
+      return absl::InternalError(
+          absl::StrCat("Invalid Cartesian limits for frame '",
+                       frame_b.frame_name, "' passed in second argument."));
+    }
+    auto it = std::find_if(merged.begin(), merged.end(),
+                           [&](const FrameCartesianPathLimits& existing) {
+                             return existing.frame_name == frame_b.frame_name;
+                           });
+    if (it != merged.end()) {
+      if (it->parent_link_name != frame_b.parent_link_name ||
+          !it->parent_link_t_frame.isApprox(frame_b.parent_link_t_frame)) {
+        return absl::InternalError(
+            absl::StrCat("Inconsistent parent link or transform for frame '",
+                         frame_b.frame_name, "' between path segments."));
+      }
+      INTR_ASSIGN_OR_RETURN(it->limits, TakeMostConservativeLimitsBetween(
+                                            it->limits, frame_b.limits));
+    } else {
+      merged.push_back(frame_b);
+    }
+  }
+  return merged;
+}
+
 // Validates that all points in a path polyline have consistent and non-empty
 // joint configurations.
 //
@@ -409,9 +468,10 @@ absl::StatusOr<bool> IsCornerBlendingSegmentEnd(
 // segments are connected and removes duplicated points (at segment connection
 // or within the segment). When resolving duplicates, the least restrictive
 // blending deviation is considered. In case two consecutive path segments
-// present different joint/Cartesian limits, the most conservative limits are
-// considered for the point at the segment connection. Points at the connection
-// between two segments are assigned the IDs from both segments.
+// present different joint, Cartesian, or per-frame Cartesian limits
+// (`frame_cartesian_limits`), the most conservative limits are considered for
+// the point at the segment connection. Points at the connection between two
+// segments are assigned the IDs from both segments.
 // Extracts a sequence of `PathPolylinePoint`s from a list of `PathSegment`s.
 //
 // Specifically, it performs the following steps and checks:
@@ -427,8 +487,8 @@ absl::StatusOr<bool> IsCornerBlendingSegmentEnd(
 //   `kJointEqualityNumericalMarginRad` within a segment `i_wp > 0` so that
 //   closely spaced waypoints within a segment are preserved) by:
 //      - Keeping the largest (least restrictive) blending deviation.
-//      - Taking the most conservative joint and Cartesian limits (at segment
-//        connections).
+//      - Taking the most conservative joint, Cartesian, and per-frame Cartesian
+//        limits (`frame_cartesian_limits`) at segment connections.
 //      - Retaining the segment IDs of both connected segments.
 //      - Marking the point as blending if either of the coinciding points is on
 //        a blending segment.
@@ -512,8 +572,8 @@ absl::StatusOr<std::vector<PathPolylinePoint>> CreatePathPolylinePoints(
             std::max(polyline_points.back().blending_deviation_rad,
                      segment.joint_blending_parameter_rad[i_wp]);
         if (i_wp == 0) {
-          // At segments connection, take the most conservative joint and
-          // Cartesian limits.
+          // At segments connection, take the most conservative joint,
+          // Cartesian, and per-frame Cartesian limits.
           INTR_ASSIGN_OR_RETURN(
               polyline_points.back().joint_limits,
               TakeMostConservativeLimitsBetween(
@@ -522,6 +582,11 @@ absl::StatusOr<std::vector<PathPolylinePoint>> CreatePathPolylinePoints(
                                 TakeMostConservativeLimitsBetween(
                                     polyline_points.back().cartesian_limits,
                                     segment.cartesian_limits));
+          INTR_ASSIGN_OR_RETURN(
+              polyline_points.back().frame_cartesian_limits,
+              TakeMostConservativeLimitsBetween(
+                  polyline_points.back().frame_cartesian_limits,
+                  segment.frame_cartesian_limits));
           // Add (or replace) second segment ID to the point at segments
           // connection. In case of multiple trivial segments with only one
           // point, the connection point might already have two IDs.
@@ -541,6 +606,7 @@ absl::StatusOr<std::vector<PathPolylinePoint>> CreatePathPolylinePoints(
             .joint_limits = segment.joint_limits,
             .cartesian_limits = segment.cartesian_limits,
             .tip_t_target = segment.tip_t_target,
+            .frame_cartesian_limits = segment.frame_cartesian_limits,
             .path_segment_ids = {std::string(segment.GetUniqueId())},
         };
         polyline_points.push_back(std::move(point));
@@ -576,8 +642,9 @@ absl::StatusOr<std::vector<PathPolylinePoint>> CreatePathPolylinePoints(
 //   - Or, the corner is the start (for left insertion) or end (for right
 //   insertion) of a blending segment.
 // - Assigns zero blending deviation to the newly created points, and
-//   properly propagates the relevant joint limits, Cartesian limits, and
-//   segment IDs (handling segment switches).
+//   properly propagates the relevant joint limits, Cartesian limits,
+//   `tip_t_target`, `frame_cartesian_limits`, and segment IDs (handling segment
+//   switches).
 //
 // Returns a vector of `PathPolylinePoint`s with the added inner points, or an
 // error status.
@@ -648,6 +715,7 @@ absl::StatusOr<std::vector<PathPolylinePoint>> AddBlendingEndpoints(
         .joint_limits = ref_corner.joint_limits,
         .cartesian_limits = ref_corner.cartesian_limits,
         .tip_t_target = ref_corner.tip_t_target,
+        .frame_cartesian_limits = ref_corner.frame_cartesian_limits,
         .path_segment_ids = {std::string{segment_id}},
         .is_on_blending_segment = is_on_blending_segment,
     };
@@ -699,9 +767,9 @@ absl::StatusOr<std::vector<PathPolylinePoint>> AddBlendingEndpoints(
         (add_blending_endpoints_to_corner_not_on_blending_segment ||
          add_right_blending_endpoint_to_corner_on_blending_segment)) {
       // Add blending endpoint on `corner`'s right side. In case of a path
-      // segment switch at `corner`, the blending endpoint is given limits and
-      // tip_t_target from the next corner to obtain a correct switch of
-      // planning data.
+      // segment switch at `corner`, the blending endpoint is given limits
+      // (including `frame_cartesian_limits`) and `tip_t_target` from the next
+      // corner to obtain a correct switch of planning data.
       const bool path_segment_switch = corner.path_segment_ids.size() == 2;
       const PathPolylinePoint& ref_corner =
           path_segment_switch ? next_corner : corner;
@@ -1091,6 +1159,8 @@ absl::StatusOr<std::vector<PathSample>> PathPolyline::GetSamples(
         .joint_limits = points_[current_edge_start_point_index].joint_limits,
         .cart_limits = points_[current_edge_start_point_index].cartesian_limits,
         .tip_t_target = points_[current_edge_start_point_index].tip_t_target,
+        .frame_cartesian_limits =
+            points_[current_edge_start_point_index].frame_cartesian_limits,
         .segment_id =
             points_[current_edge_start_point_index].path_segment_ids.back(),
     });

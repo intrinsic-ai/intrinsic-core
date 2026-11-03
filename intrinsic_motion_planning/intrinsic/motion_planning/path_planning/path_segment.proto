@@ -18,6 +18,7 @@ package intrinsic_proto.motion_planning;
 
 import "intrinsic/icon/proto/cart_space.proto";
 import "intrinsic/icon/proto/joint_space.proto";
+import "intrinsic/kinematics/proto/frame_cartesian_limits.proto";
 import "intrinsic/kinematics/types/joint_limits.proto";
 import "intrinsic/math/proto/pose.proto";
 import "intrinsic/motion_planning/proto/v1/motion_events.proto"; 
@@ -87,4 +88,9 @@ message PathSegment {
 
   // The type of this specific path segment.
   Type type = 9;
+
+  // Cartesian limits for additional monitored frames (e.g. elbow frame). If
+  // empty, no additional per-frame Cartesian limits are enforced (only
+  // `cartesian_limits` on the target frame and `joint_limits` apply).
+  repeated intrinsic_proto.FrameCartesianPathLimits frame_cartesian_limits = 10;
 }
