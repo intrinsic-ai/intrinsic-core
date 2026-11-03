@@ -304,6 +304,8 @@ type assetInfo struct {
 type solutionState struct {
 	// app represents the current application stored in hot shared state.
 	app *apb.Application
+	// rtrs contain the list of resource type runtimes in the runtimedb.
+	rtrs []*rtrpb.ResourceTypeRuntime
 	// revisionToken marks the state from which app was retrieved, and must be
 	// used to update the application.
 	revisionToken string
@@ -835,7 +837,12 @@ func (s *installedAssetsService) summarizeState(ctx context.Context) (*solutionS
 		}
 	}
 
-	return &solutionState{app, revisionToken, installed, versions}, nil
+	rtrs, err := resourcetyperuntime.GetAll(ctx, s.rtrClient)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "failed to fetch current runtime types: %v", err)
+	}
+
+	return &solutionState{app, rtrs, revisionToken, installed, versions}, nil
 }
 
 // createWorld constructs a temporary new world using the object world updates
@@ -963,20 +970,6 @@ func (s *installedAssetsService) installAssets(
 	mustExist map[string]struct{},
 	setMetadata setMetadataFn,
 ) error {
-	currentRTRs, err := resourcetyperuntime.GetAll(ctx, s.rtrClient)
-	if err != nil {
-		return status.Errorf(codes.Internal, "failed to fetch current runtime types: %v", err)
-	}
-
-	// Combine current and new RTRs.
-	rtrs := make(map[string]*rtrpb.ResourceTypeRuntime)
-	for _, rtr := range currentRTRs {
-		rtrs[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
-	}
-	for rtr := range toInstall.Values() {
-		rtrs[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
-	}
-
 	state, err := s.summarizeState(ctx)
 	if err != nil {
 		return err
@@ -990,6 +983,15 @@ func (s *installedAssetsService) installAssets(
 	}
 	pruneReferencedAssets(state, toInstall, referencedToInstall)
 	actions := planActions(state, toInstall)
+
+	// Combine current and new RTRs.
+	rtrs := make(map[string]*rtrpb.ResourceTypeRuntime)
+	for _, rtr := range state.rtrs {
+		rtrs[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
+	}
+	for rtr := range toInstall.Values() {
+		rtrs[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
+	}
 
 	if err := validatePolicy(policy, actions, state, rtrs); err != nil {
 		return err
