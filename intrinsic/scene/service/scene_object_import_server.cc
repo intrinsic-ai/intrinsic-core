@@ -144,9 +144,9 @@ absl::Status RunSceneObjectImportServer(
   INTR_RETURN_IF_ERROR(usd::InitializeOpenUsdLibrary());
 
   INTR_ASSIGN_OR_RETURN(
-      auto scheduler,
-      longrunning::wrap_internal::WrapSchedulerWithPrefix(
-          "WorldImport", std::make_shared<longrunning::OperationScheduler>()));
+      auto scheduler, longrunning::wrap_internal::WrapSchedulerWithPrefix(
+                          "SceneObjectImport",
+                          std::make_shared<longrunning::OperationScheduler>()));
 
   INTR_ASSIGN_OR_RETURN(
       auto geometry_service_stub,
