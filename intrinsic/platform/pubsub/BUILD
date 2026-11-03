@@ -24,9 +24,6 @@ filegroup(
     srcs =
         ["fds_core.yaml"],
     visibility = [
-        "//intrinsic/kubernetes:__subpackages__",
-        "//intrinsic/manipulation:__subpackages__",
-        "//intrinsic/platform/pubsub:__subpackages__",
         "//intrinsic_perception:__subpackages__",
         "//intrinsic_runtime/kubernetes/intrinsic_base:__pkg__",
     ],

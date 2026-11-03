@@ -48,7 +48,9 @@ cc_library(
 cc_library(
     name = "rt_queue_buffer",
     hdrs = ["rt_queue_buffer.h"],
-    visibility = [":__pkg__"],
+    visibility = [
+        ":__pkg__",
+    ],
     deps = [
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/functional:function_ref",
