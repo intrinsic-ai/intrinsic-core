@@ -510,15 +510,16 @@ absl::StatusOr<intrinsic_proto::skills::Footprint> MoveRobot::GetFootprint(
     robot_object = robot;
   }
 
-  // Compute and store the motion plan.
-  INTR_RETURN_IF_ERROR(
-      ComputeAndStorePlan(context.context_id(), params, context.object_world(),
-                          context.motion_planner(), robot_object)
-          .status());
-
   intrinsic_proto::skills::Footprint out;
   INTR_ASSIGN_OR_RETURN(
       out, footprint.ToProto(&(context.geometry_library().Serializer())));
+
+  // Compute and store the motion plan.
+  INTR_ASSIGN_OR_RETURN(
+      const intrinsic_proto::skills::MoveRobotInternalData internal_data,
+      ComputeAndStorePlan(context.context_id(), params, context.object_world(),
+                          context.motion_planner(), robot_object));
+
   return out;
 }
 
