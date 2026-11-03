@@ -18,6 +18,25 @@
         <intrinsic:max_translational_jerk>60 60 60</intrinsic:max_translational_jerk>
         <intrinsic:max_rotational_jerk>40</intrinsic:max_rotational_jerk>
       </intrinsic:cartesian_limits>
+      <!-- In this frame the Cartesian speed is monitored by the robot controller.
+      Infinity corresponds to the unconstrained speed (non-collorative mode). -->
+      <intrinsic:user_data>
+      <![CDATA[
+        user_data {
+          key: "frame_cartesian_limits"
+          value {
+            [type.googleapis.com/intrinsic_proto.icon.FrameCartesianLimits] {
+              limits_by_frame {
+                key: "elbow_frame"
+                value {
+                  max_translational_velocity: [inf, inf, inf]
+                }
+              }
+            }
+          }
+        }
+      ]]>
+      </intrinsic:user_data>
 
       <link name='base_link'>
         <pose>0 0 0 0 0 0</pose>
@@ -309,6 +328,12 @@
           <mass>0.01</mass>
         </inertial>
       </link>
+      <!-- In this frame the Cartesian velocity is monitored. The offset is read
+      from the system variables $CF_LIM_GRP[1].$ELBOFST_X,
+      $CF_LIM_GRP[1].$ELBOFST_Y, and $CF_LIM_GRP[1].$ELBOFST_Z. -->
+      <frame name='elbow_frame' attached_to='link_3' intrinsic:create_entity='true'>
+        <pose>0.0 -0.218 0.0 0.0 0.0 0.0</pose>
+      </frame>
       <frame name='flange' attached_to='tool0' intrinsic:create_attachment_entity='true'/>
       <xacro:insert_block name='model_options'/>
     </model>

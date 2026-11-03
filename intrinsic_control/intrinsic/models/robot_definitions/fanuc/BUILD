@@ -341,6 +341,7 @@ sdf_scene_object(
     ],
     deps = [
         "@intrinsic_apis//intrinsic/icon/hal/proto/v1:digital_input_output_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
     ],
 )
 
@@ -361,6 +362,7 @@ sdf_scene_object(
     ],
     deps = [
         "@intrinsic_apis//intrinsic/icon/hal/proto/v1:digital_input_output_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
     ],
 )
 
@@ -381,6 +383,7 @@ sdf_scene_object(
     ],
     deps = [
         "@intrinsic_apis//intrinsic/icon/hal/proto/v1:digital_input_output_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
     ],
 )
 
@@ -401,5 +404,6 @@ sdf_scene_object(
     ],
     deps = [
         "@intrinsic_apis//intrinsic/icon/hal/proto/v1:digital_input_output_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
     ],
 )
