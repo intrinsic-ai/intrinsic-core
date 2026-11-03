@@ -44,7 +44,6 @@ go_library(
     srcs = ["gzffile.go"],
     importpath = "intrinsic/assets/scene_objects/gzffile",
     visibility = [
-        "//intrinsic/assets:__subpackages__",
         "//intrinsic_sdk/intrinsic/assets:__subpackages__",
     ],
     deps = [

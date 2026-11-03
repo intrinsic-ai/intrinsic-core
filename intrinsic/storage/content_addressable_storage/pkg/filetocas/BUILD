@@ -20,11 +20,10 @@ go_library(
     importpath = "intrinsic/storage/content_addressable_storage/pkg/filetocas",
     visibility = [
         "//intrinsic/assets:__subpackages__",
-        "//intrinsic/config:__pkg__",
-        "//intrinsic/tools/inctl/cmd:__pkg__",
         "//intrinsic/tools/inctl/util:__pkg__",
         "//intrinsic_sdk/intrinsic/assets/catalog:__pkg__",
         "//intrinsic_sdk/intrinsic/assets/inctl:__pkg__",
+        "//intrinsic_sdk/intrinsic/assets/scene_objects:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:__pkg__",
     ],
