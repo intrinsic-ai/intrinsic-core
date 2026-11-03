@@ -277,7 +277,7 @@ Before executing compliant insertion, surface following (`CartesianAdmittanceAct
   - **Strict derivative sign invariants**: In addition to requiring `min <= max`, validation enforces that every element of `min_translational_velocity`, `min_translational_acceleration`, and `min_translational_jerk` **must be <= 0.0**, every element of `max_translational_velocity`, `max_translational_acceleration`, and `max_translational_jerk` **must be >= 0.0**, and all rotational limits **must be >= 0.0**. Passing positive numbers for minimum velocity/acceleration/jerk bounds fails with `INVALID_ARGUMENT: Cartesian limits are invalid`.
   - When supplying `CartesianLimits` inside `CartesianJoggingFixedParams`, translational position bounds (`min_translational_position`, `max_translational_position`) are ignored by the controller; only velocity, acceleration, and jerk limits are enforced relative to `frames.jog_in_frame` (`JOG_IN_FRAME_BASE` or `JOG_IN_FRAME_TIP`).
 - **Stability bounds on `CartVec6` gains in `AgentBridgeCommand`**:
-  - When streaming `MotionUpdate` to `AgentBridgeCommand`, all components of the 6-DOF force feedback gain vector `wrench_feedback_gains_at_tip` (`intrinsic_proto.icon.CartVec6`) must lie within `[0.0, 0.95]` to prevent closed-loop force control instability, and all components of `pose_error_integrator_gain` must be `>= 0.0`.
+  - When streaming `MotionUpdate` to `AgentBridgeCommand`, all components of the 6-DOF force feedback gain vector `wrench_feedback_gains_at_tip` (`intrinsic_proto.icon.CartVec6`) must lie within `[0.0, 0.95]` to prevent closed-loop force control instability, and all components of `pose_error_integrator_gain_at_tip` must be `>= 0.0`.
 
 ### Inverse kinematics options
 
