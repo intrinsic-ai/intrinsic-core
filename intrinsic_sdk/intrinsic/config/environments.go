@@ -302,6 +302,12 @@ func AssetsProject(env string) string {
 	}
 }
 
+// AssetsProjectFromProject returns the assets project for the given project.
+// Accepts portal, accounts, assets, and compute projects.
+func AssetsProjectFromProject(project string) string {
+	return AssetsProject(FromAnyProject(project))
+}
+
 // Domain returns the domain name for a project. This covered both central projects as well as
 // compute projects where it maps to the www.endpoints.* domain.
 func Domain(project string) string {

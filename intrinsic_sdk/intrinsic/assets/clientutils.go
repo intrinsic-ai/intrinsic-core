@@ -19,7 +19,6 @@ import (
 	"context"
 	"fmt"
 	"io/fs"
-	"regexp"
 	"strings"
 
 	"intrinsic/assets/baseclientutils"
@@ -50,14 +49,6 @@ const (
 )
 
 var (
-	catalogAssetAddressRegex = regexp.MustCompile(`(^|/)assets[-]?([^\.]*)\.intrinsic\.ai`)
-
-	assetAddressToProjectSuffix = map[string]string{
-		"":    "prod",
-		"dev": "dev",
-		"qa":  "staging",
-	}
-
 	errNoInfoToAuthenticate = errors.New("GCP project or api-key is required for authentication, but neither could be determined (try providing `--org=<org>@<project>` to specify the project)")
 )
 
@@ -206,14 +197,13 @@ func ResolveCatalogProject(project string) string {
 }
 
 // GetAssetCatalogProject returns the AssetCatalog project that the specified project uses.
-func GetAssetCatalogProject(project string) (string, error) {
+func GetAssetCatalogProject(project string) string {
 	// Check whether this is an asset project.
 	if strings.HasPrefix(project, "intrinsic-assets-") {
-		return project, nil
+		return project
 	}
 
-	// No custom address and not an asset project, so the project is using the prod asset project.
-	return defaultCatalogProject, nil
+	return environments.AssetsProjectFromProject(project)
 }
 
 type resolveCatalogAddressOptions struct {
