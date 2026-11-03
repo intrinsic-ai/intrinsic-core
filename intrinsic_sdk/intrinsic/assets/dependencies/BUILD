@@ -114,8 +114,6 @@ cc_library(
     hdrs = ["platform.h"],
     visibility = [
         "//intrinsic:__subpackages__",
-        "//intrinsic/assets:__subpackages__",
-        "//intrinsic/assets/dependencies:__pkg__",
         "//intrinsic_sdk/intrinsic/assets:__subpackages__",
     ],
     deps = [
@@ -128,8 +126,6 @@ py_library(
     srcs = ["platform.py"],
     visibility = [
         "//intrinsic:__subpackages__",
-        "//intrinsic/assets:__subpackages__",
-        "//intrinsic/assets/dependencies:__pkg__",
         "//intrinsic_sdk/intrinsic/assets:__subpackages__",
     ],
 )

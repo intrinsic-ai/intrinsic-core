@@ -90,17 +90,14 @@ go_library(
 
 intrinsic_runtime_installed_asset(
     name = "runtime_installed_asset",
-    visibility = ["//intrinsic:__subpackages__"],
 )
 
 intrinsic_runtime_asset_instance(
     name = "runtime_asset_instance",
-    visibility = ["//intrinsic:__subpackages__"],
 )
 
 intrinsic_runtime_resource_instance(
     name = "runtime_resource_instance",
-    visibility = ["//intrinsic:__subpackages__"],
 )
 
 go_library(
@@ -112,7 +109,6 @@ go_library(
         ":runtime_resource_instance.pbtxt",
     ],
     importpath = "intrinsic/assets/dependencies/runtimeasset",
-    visibility = ["//intrinsic:__subpackages__"],
     deps = [
         "//intrinsic_sdk/intrinsic/assets/dependencies:platform",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_go_proto",
