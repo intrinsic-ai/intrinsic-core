@@ -26,15 +26,11 @@ go_library(
 
 go_library(
     name = "sequencelist",
-    srcs = [
-        "builder.go",
-        "sequencelist.go",
-    ],
+    srcs = ["sequencelist.go"],
     importpath = "intrinsic/frontend/solution_service/sequencelist",
     visibility = ["//intrinsic/frontend/solution_service:__subpackages__"],
     deps = [
         ":find",
-        "//intrinsic_sdk/intrinsic/executive/go:behaviortree",
         "//intrinsic_sdk/intrinsic/executive/proto:run_metadata_go_proto",
         "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:sequence_list_go_proto",
         "//intrinsic_sdk/intrinsic/logging/proto:log_item_go_proto",

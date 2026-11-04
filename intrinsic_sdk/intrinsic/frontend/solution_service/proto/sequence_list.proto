@@ -29,9 +29,19 @@ message CodeExecutionDetails {
   repeated string stdout = 1;
 }
 
+// A single action of a Process execution, i.e., one execution of a task node.
+//
+// Sequence list items form a tree. Items that run inside a Process call
+// reference the item of that call through `parent_id`.
 message SequenceListItem {
-  // Unique identifier for the sequence list item.
+  // Unique identifier for the sequence list item. An item with the same ID can
+  // appear again on a later page with an updated state. Clients should update
+  // the earlier item in place and keep its `start_time`.
   uint64 id = 1;
+
+  // The ID of the item of the Process call that this item runs in. 0 for items
+  // that do not run inside a Process call.
+  uint64 parent_id = 9;
 
   // The name of the node.
   string name = 2;
@@ -47,12 +57,15 @@ message SequenceListItem {
     CodeExecutionDetails code_execution_details = 5;
   }
 
-  // The acquisition time of the first log item for the action.
+  // The acquisition time of the first log item for the action on this page.
+  // For an item that appeared on an earlier page, the `start_time` of its first
+  // appearance is when the action started.
   google.protobuf.Timestamp start_time = 6;
 
-  // The acquisition time of the last log item for the action.
+  // The acquisition time of the last log item for the action. Only set once
+  // the action reached a final state.
   google.protobuf.Timestamp end_time = 7;
 
-  // Nested sequence list items for subprocesses.
-  repeated SequenceListItem children = 8;
+  // Not populated. Use `parent_id` to build the tree of items instead.
+  repeated SequenceListItem children = 8 [deprecated = true];
 }

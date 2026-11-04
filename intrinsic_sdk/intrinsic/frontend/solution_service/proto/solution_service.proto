@@ -181,10 +181,9 @@ message GetSequenceListRequest {
   // operation start time for the best results.
   google.protobuf.Timestamp executive_operation_start_time = 2;
 
-  // The maximum number of root items to return. The total number of items may
-  // be larger when counting child items. May return fewer root items. If
-  // unspecified, 20 items are returned. The maximum value is 50. Values larger
-  // than 50 will be coerced to 50.
+  // The maximum number of items to return. May return fewer items, even if
+  // there are more pages. If unspecified, at most 100 items are returned. The
+  // maximum value is 1000. Values larger than 1000 will be coerced to 1000.
   int32 page_size = 3;
 
   // Page token received from a previous `GetSequenceList` call. Provide this to
@@ -196,7 +195,9 @@ message GetSequenceListRequest {
 }
 
 message GetSequenceListResponse {
-  // The sequence list.
+  // The sequence list items that started or changed in the part of the
+  // execution covered by this page, in the order they started. Items that
+  // appeared on an earlier page can appear again with an updated state.
   repeated SequenceListItem items = 1;
 
   // A token that can be sent as `page_token` to retrieve the next page. If this

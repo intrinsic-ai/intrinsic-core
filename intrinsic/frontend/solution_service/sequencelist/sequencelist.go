@@ -18,312 +18,174 @@ package sequencelist
 
 import (
 	"context"
-	"errors"
-	"slices"
 
 	log "github.com/golang/glog"
 	"google.golang.org/protobuf/types/known/timestamppb"
 
-	"intrinsic/executive/go/behaviortree"
-	behaviortreepb "intrinsic/executive/proto/behavior_tree_go_proto"
+	btpb "intrinsic/executive/proto/behavior_tree_go_proto"
 	executivelogitemspb "intrinsic/executive/proto/log_items_go_proto"
 	runmetadatapb "intrinsic/executive/proto/run_metadata_go_proto"
-	sequencelistpb "intrinsic/frontend/solution_service/proto/sequence_list_go_proto"
+	slpb "intrinsic/frontend/solution_service/proto/sequence_list_go_proto"
 	"intrinsic/frontend/solution_service/sequencelist/find"
 	logitempb "intrinsic/logging/proto/log_item_go_proto"
 )
 
-// SequenceList is a partial or complete list of sequence list items.
-type SequenceList struct {
-	Items                    []*sequencelistpb.SequenceListItem
-	lastConsumedLogItemIndex int
-	totalLogItems            int
+type itemState struct {
+	item *slpb.SequenceListItem
+	// lastTime is the acquisition time of the last log item seen for the
+	// action.
+	lastTime *timestamppb.Timestamp
+	// resolved is true once the action's task node was found in a log item.
+	resolved bool
 }
 
-// NextUnconsumedLogItemIndex returns the 0-based index of the first log item in
-// the input batch that was NOT consumed by the built sequence list items.
-// Returns -1 if all log items were consumed or if no items were processed.
-func (s *SequenceList) NextUnconsumedLogItemIndex() int {
-	if s == nil || s.lastConsumedLogItemIndex < 0 || s.lastConsumedLogItemIndex >= s.totalLogItems-1 {
-		return -1
-	}
-	return s.lastConsumedLogItemIndex + 1
+// Builder collects sequence list items from executive operation log items.
+// Each item is one action of a Process execution, i.e., one execution of a
+// task node. Log items are added in batches in the order they were logged. The
+// builder does not keep references to log items after [Builder.Add] returns.
+type Builder struct {
+	items map[uint64]*itemState
+	order []uint64
+	// numResolved is the number of resolved entries in items.
+	numResolved int
 }
 
-type buildOptions struct {
-	maxRootItems int
+// NewBuilder creates an empty [Builder].
+func NewBuilder() *Builder {
+	return &Builder{items: make(map[uint64]*itemState)}
 }
 
-// BuildOption to allow customizing sequence list building.
-type BuildOption func(*buildOptions)
-
-// WithMaxRootItems controls how many root items the sequence list will contain
-// at most. The default of 0 (or any negative number) means that no limit is
-// applied.
-func WithMaxRootItems(maxRootItems int) BuildOption {
-	return func(opts *buildOptions) {
-		opts.maxRootItems = maxRootItems
-	}
-}
-
-// BuildSequenceList builds a sequence list from log items. The resulting items
-// are sorted by the start time of each action, i.e. the acquisition time of the
-// first log item for a certain action ID.
-func BuildSequenceList(ctx context.Context, items []*logitempb.LogItem, opts ...BuildOption) (*SequenceList, error) {
-	buildOpts := &buildOptions{}
-	for _, opt := range opts {
-		opt(buildOpts)
-	}
-
-	actions := make(map[uint64]*actionData)
-	var actionIDs []uint64
-
-	for i, item := range items {
-		actionID := item.GetContext().GetExecutivePlanActionId()
-		if actionID == 0 {
+// Add adds a batch of log items. Log items that are not associated with an
+// action are ignored. The details of each action are taken from the last log
+// item for the action in the batch.
+func (b *Builder) Add(ctx context.Context, items []*logitempb.LogItem) {
+	// The last log item per action in this batch. Only these are unpacked since
+	// each log item contains the full Process state, which can be large.
+	lastByActionID := make(map[uint64]*logitempb.LogItem)
+	// Action IDs in the order they first appear in this batch.
+	var touched []uint64
+	for _, item := range items {
+		id := item.GetContext().GetExecutivePlanActionId()
+		if id == 0 {
+			// For example log items about the operation as a whole.
 			continue
 		}
-
-		data, ok := actions[actionID]
+		state, ok := b.items[id]
 		if !ok {
-			data = &actionData{
-				id:        actionID,
-				startTime: item.GetMetadata().GetAcquisitionTime(),
+			state = &itemState{
+				item: &slpb.SequenceListItem{
+					Id:        id,
+					StartTime: item.GetMetadata().GetAcquisitionTime(),
+				},
 			}
-			actions[actionID] = data
-			actionIDs = append(actionIDs, actionID)
+			b.items[id] = state
+			b.order = append(b.order, id)
 		}
-
-		data.endTime = item.GetMetadata().GetAcquisitionTime()
-		data.latestOp = item.GetPayload().GetExecutiveOperation()
-		data.lastLogItemIdx = i
+		// The executive logs the action ID of the enclosing Process call as
+		// parent_skill_id. Only non-zero values are taken so that a log item
+		// without it cannot move the action to the top level.
+		if parentID := item.GetContext().GetParentSkillId(); parentID != 0 {
+			state.item.ParentId = parentID
+		}
+		state.lastTime = item.GetMetadata().GetAcquisitionTime()
+		if _, ok := lastByActionID[id]; !ok {
+			touched = append(touched, id)
+		}
+		lastByActionID[id] = item
 	}
 
-	// Sort action IDs by start time to maintain execution order.
-	slices.SortFunc(actionIDs, func(a, b uint64) int {
-		return actions[a].startTime.AsTime().Compare(actions[b].startTime.AsTime())
-	})
-
-	// Map to store tree_id -> parent action data slice
-	treeToParents := make(map[string][]*actionData)
-	idToItem := make(map[uint64]*sequencelistpb.SequenceListItem)
-
-	for _, id := range actionIDs {
-		data := actions[id]
-		item, calledTreeID := buildItem(ctx, data)
-		if item != nil {
-			idToItem[id] = item
-			if calledTreeID != "" {
-				treeToParents[calledTreeID] = append(treeToParents[calledTreeID], data)
-			}
+	for _, id := range touched {
+		state := b.items[id]
+		// Until its task node is found, an action has no name or state, so its
+		// item is not returned.
+		if updateFromOperation(ctx, state.item, lastByActionID[id].GetPayload().GetExecutiveOperation()) && !state.resolved {
+			state.resolved = true
+			b.numResolved++
 		}
-	}
-
-	var rootItems []*sequencelistpb.SequenceListItem
-	for _, id := range actionIDs {
-		item := idToItem[id]
-		if item == nil {
-			continue
-		}
-
-		data := actions[id]
-		nodeID := data.latestOp.GetBehaviorTreeContext().GetActionNodeIdentifier()
-		if nodeID == nil {
-			rootItems = append(rootItems, item)
-			continue
-		}
-
-		parentID, ok := findParentID(treeToParents, nodeID.GetTreeId(), data)
-		if ok {
-			parent := idToItem[parentID]
-			parent.Children = append(parent.Children, item)
+		// The executive logs every state change, so the last log item of a
+		// finished action is the one with its final state.
+		if isFinalState(state.item.GetState()) {
+			state.item.EndTime = state.lastTime
 		} else {
-			rootItems = append(rootItems, item)
+			state.item.EndTime = nil
 		}
 	}
-
-	actionLastIdx := make(map[uint64]int, len(actions))
-	for id, a := range actions {
-		actionLastIdx[id] = a.lastLogItemIdx
-	}
-
-	res := &SequenceList{
-		lastConsumedLogItemIndex: -1,
-		totalLogItems:            len(items),
-	}
-
-	if buildOpts.maxRootItems > 0 && len(rootItems) > buildOpts.maxRootItems {
-		res.Items = rootItems[:buildOpts.maxRootItems]
-	} else {
-		res.Items = rootItems
-	}
-
-	for _, root := range res.Items {
-		idx := maxLogItemIndex(root, actionLastIdx)
-		if idx > res.lastConsumedLogItemIndex {
-			res.lastConsumedLogItemIndex = idx
-		}
-	}
-
-	if res.lastConsumedLogItemIndex == -1 && len(items) > 0 {
-		res.lastConsumedLogItemIndex = len(items) - 1
-	}
-
-	return res, nil
 }
 
-func maxLogItemIndex(item *sequencelistpb.SequenceListItem, actionLastIdx map[uint64]int) int {
-	maxIdx := actionLastIdx[item.GetId()]
-	for _, child := range item.GetChildren() {
-		childMax := maxLogItemIndex(child, actionLastIdx)
-		if childMax > maxIdx {
-			maxIdx = childMax
-		}
-	}
-	return maxIdx
+// Len returns the number of items that [Builder.Items] returns.
+func (b *Builder) Len() int {
+	return b.numResolved
 }
 
-func findParentID(treeToParents map[string][]*actionData, treeID string, childData *actionData) (uint64, bool) {
-	parents := treeToParents[treeID]
-	if len(parents) == 0 {
-		return 0, false
+// Items returns the items of all resolved actions in the order they were first
+// seen.
+func (b *Builder) Items() []*slpb.SequenceListItem {
+	items := make([]*slpb.SequenceListItem, 0, b.numResolved)
+	for _, id := range b.order {
+		if state := b.items[id]; state.resolved {
+			items = append(items, state.item)
+		}
 	}
-	childStart := childData.startTime.AsTime()
-	for i := len(parents) - 1; i >= 0; i-- {
-		pData := parents[i]
-		if pData.id == childData.id {
-			continue
-		}
-		pStart := pData.startTime.AsTime()
-		if childStart.Before(pStart) {
-			continue
-		}
-		if pData.endTime != nil && childStart.After(pData.endTime.AsTime()) {
-			continue
-		}
-		return pData.id, true
-	}
-	return 0, false
+	return items
 }
 
-type actionData struct {
-	id             uint64
-	startTime      *timestamppb.Timestamp
-	endTime        *timestamppb.Timestamp
-	latestOp       *executivelogitemspb.LoggedOperation
-	lastLogItemIdx int
-}
-
-func buildItem(ctx context.Context, data *actionData) (*sequencelistpb.SequenceListItem, string) {
-	op := data.latestOp
-	if op == nil {
-		return nil, ""
-	}
-
-	rmAny := op.GetOperation().GetMetadata()
-	if rmAny == nil {
-		return nil, ""
-	}
-
-	var runMetadata runmetadatapb.RunMetadata
-	if err := rmAny.UnmarshalTo(&runMetadata); err != nil {
-		log.Errorf("failed to unmarshal run metadata: %v", err)
-		return nil, ""
-	}
-
-	bt := runMetadata.GetBehaviorTree()
-	if bt == nil {
-		return nil, ""
-	}
-
+// updateFromOperation updates the item with details about its task node from
+// the logged operation. Returns false if the task node could not be found.
+func updateFromOperation(ctx context.Context, item *slpb.SequenceListItem, op *executivelogitemspb.LoggedOperation) bool {
 	nodeID := op.GetBehaviorTreeContext().GetActionNodeIdentifier()
 	if nodeID == nil {
-		return nil, ""
+		return false
 	}
-
+	metadata := op.GetOperation().GetMetadata()
+	if metadata == nil {
+		return false
+	}
+	var runMetadata runmetadatapb.RunMetadata
+	if err := metadata.UnmarshalTo(&runMetadata); err != nil {
+		log.ErrorContextf(ctx, "Failed to unmarshal run metadata for action %d: %v", item.GetId(), err)
+		return false
+	}
+	// The run metadata holds the state of the whole Process at the time of the
+	// log item, including the trees of Process calls. The task node in it has
+	// the state of the action that the log item belongs to.
+	bt := runMetadata.GetBehaviorTree()
+	if bt == nil {
+		return false
+	}
 	node, err := find.Node(nodeID.GetTreeId(), nodeID.GetNodeId()).InBehaviorTree(ctx, bt)
 	if err != nil {
-		return nil, ""
+		return false
 	}
-
 	task := node.GetTask()
 	if task == nil {
-		return nil, ""
+		return false
 	}
 
-	item := &sequencelistpb.SequenceListItem{
-		Id:        data.id,
-		Name:      node.GetName(),
-		StartTime: data.startTime,
-		EndTime:   data.endTime,
-		State:     task.GetState(),
-	}
-
+	item.Name = node.GetName()
 	item.State = task.GetState()
+	item.Details = nil
 	switch t := task.GetTaskType().(type) {
-	case *behaviortreepb.BehaviorTree_TaskNode_CallBehavior:
-		item.Details = &sequencelistpb.SequenceListItem_SkillDetails{
-			SkillDetails: &sequencelistpb.SkillDetails{
-				SkillId: t.CallBehavior.GetSkillId(),
-			},
+	case *btpb.BehaviorTree_TaskNode_CallBehavior:
+		item.Details = &slpb.SequenceListItem_SkillDetails{
+			SkillDetails: &slpb.SkillDetails{SkillId: t.CallBehavior.GetSkillId()},
 		}
-	case *behaviortreepb.BehaviorTree_TaskNode_ExecuteCode:
-		item.Details = &sequencelistpb.SequenceListItem_CodeExecutionDetails{
-			CodeExecutionDetails: &sequencelistpb.CodeExecutionDetails{
-				Stdout: t.ExecuteCode.GetStdout(),
-			},
+	case *btpb.BehaviorTree_TaskNode_ExecuteCode:
+		item.Details = &slpb.SequenceListItem_CodeExecutionDetails{
+			CodeExecutionDetails: &slpb.CodeExecutionDetails{Stdout: t.ExecuteCode.GetStdout()},
 		}
 	}
-	var calledTreeID string
-	if sub := task.GetCalledTreeState(); sub != nil {
-		calledTreeID = sub.GetTreeId()
+	return true
+}
+
+// isFinalState returns whether an action in the state has finished. States such
+// as PROJECTED come before the action runs.
+func isFinalState(state btpb.BehaviorTree_TaskNode_State) bool {
+	switch state {
+	case btpb.BehaviorTree_TaskNode_SUCCEEDED,
+		btpb.BehaviorTree_TaskNode_FAILED,
+		btpb.BehaviorTree_TaskNode_CANCELED:
+		return true
+	default:
+		return false
 	}
-
-	return item, calledTreeID
-}
-
-type nodeFindingVisitor struct {
-	targetTreeID string
-	targetNodeID uint32
-}
-
-type nodeFound struct {
-	node *behaviortreepb.BehaviorTree_Node
-}
-
-func (e *nodeFound) Error() string {
-	return "node found"
-}
-
-func (f *nodeFindingVisitor) Visit(ctx context.Context, element behaviortree.VisitElement) error {
-	if node := element.Node(); node != nil && node.GetId() == f.targetNodeID {
-		// We must traverse up the ancestor chain to validate that this node is
-		// within the specified tree ID.
-		for ancestor := range element.Ancestors() {
-			if tree := ancestor.Tree(); tree != nil {
-				if tree.GetTreeId() == f.targetTreeID {
-					return &nodeFound{node}
-				}
-				// The first tree we encounter in the ancestor chain would need to hold
-				// the tree ID. If not, this is not the node we're looking for. We can
-				// skip further ancestors.
-				break
-			}
-		}
-	}
-	return nil
-}
-
-func findNode(ctx context.Context, tree *behaviortreepb.BehaviorTree, treeID string, nodeID uint32) *behaviortreepb.BehaviorTree_Node {
-	visitor := &nodeFindingVisitor{
-		targetTreeID: treeID,
-		targetNodeID: nodeID,
-	}
-	if err := behaviortree.Walk(ctx, tree, visitor, behaviortree.VisitCalledTreeState()); err != nil {
-		var nodeFoundErr *nodeFound
-		if errors.As(err, &nodeFoundErr) {
-			return nodeFoundErr.node
-		}
-	}
-	return nil
 }

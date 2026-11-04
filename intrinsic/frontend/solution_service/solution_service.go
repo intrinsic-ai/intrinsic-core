@@ -49,7 +49,6 @@ import (
 	"intrinsic/frontend/solution_service/sequencelist"
 	sigrpcpb "intrinsic/kubernetes/workcell_spec/proto/solution_internal_go_proto"
 	sipb "intrinsic/kubernetes/workcell_spec/proto/solution_internal_go_proto"
-	logitempb "intrinsic/logging/proto/log_item_go_proto"
 	loggerpb "intrinsic/logging/proto/logger_service_go_proto"
 	srgrpcpb "intrinsic/skills/proto/skill_registry_go_proto"
 	srpb "intrinsic/skills/proto/skill_registry_go_proto"
@@ -64,20 +63,31 @@ const (
 	maxBatchGetBehaviorTrees    = 50
 	maxBatchUpdateBehaviorTrees = 50
 
-	// Number of log items to fetch from the backend when retrieving them for a
-	// sequence list. Individual log items may be large, so while we can support
-	// relatively large sequence list pages, we cannot support equally large log
-	// item pages.
-	sequenceListLogItemPageSize int32 = 10
+	// Maximum number of log items to fetch from the logger in a single request
+	// when building a sequence list page. Each log item contains the full
+	// Process state and can be large, so while sequence list pages can be large,
+	// log item batches must stay small.
+	sequenceListLogItemBatchSize = 10
+
+	// Time after which GetSequenceList stops fetching more log items and returns
+	// a page with the items found so far. This keeps individual requests short
+	// for executions with large log items.
+	sequenceListTimeBudget = 5 * time.Second
 
 	executiveOperationEventSource = "executive.operation_state"
 	executiveOperationFilterLabel = "executive_operation_name"
 )
 
-var pageSizeValidator = pagesize.Validator{
+var behaviorTreesPageSizeValidator = pagesize.Validator{
 	// Page size values are based on the API documentation.
 	Default: 20,
 	Max:     50,
+}
+
+var sequenceListPageSizeValidator = pagesize.Validator{
+	// Page size values are based on the API documentation.
+	Default: 100,
+	Max:     1000,
 }
 
 // SolutionSaver saves the current state of the solution.
@@ -93,6 +103,7 @@ type Server struct {
 	iac      iagrpcpb.InstalledAssetsReaderClient
 	logger   loggerpb.DataLoggerClient
 	saver    SolutionSaver
+	now      func() time.Time
 }
 
 // Options specifies the configuration for a [Server].
@@ -114,6 +125,7 @@ func New(opts *Options) *Server {
 		iac:      opts.InstalledAssets,
 		logger:   opts.Logger,
 		saver:    opts.Saver,
+		now:      time.Now,
 	}
 }
 
@@ -280,7 +292,7 @@ func (s *Server) BatchGetBehaviorTrees(ctx context.Context, req *svcpb.BatchGetB
 }
 
 func (s *Server) ListBehaviorTrees(ctx context.Context, req *svcpb.ListBehaviorTreesRequest) (*svcpb.ListBehaviorTreesResponse, error) {
-	pageSize, err := pageSizeValidator.Run(int(req.GetPageSize()))
+	pageSize, err := behaviorTreesPageSizeValidator.Run(int(req.GetPageSize()))
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid page_size: %v", err)
 	}
@@ -507,14 +519,12 @@ func (s *Server) GetSequenceList(ctx context.Context, req *svcpb.GetSequenceList
 	if req.GetExecutiveOperationName() == "" {
 		return nil, status.Errorf(codes.InvalidArgument, "executive_operation_name must be specified")
 	}
-	pageSize, err := pageSizeValidator.Run(int(req.GetPageSize()))
+	pageSize, err := sequenceListPageSizeValidator.Run(int(req.GetPageSize()))
 	if err != nil {
 		return nil, status.Errorf(codes.InvalidArgument, "invalid page size: %v", err)
 	}
 
-	loggerReq := &loggerpb.GetLogItemsRequest{
-		MaxNumItems: proto.Int32(int32(pageSize)),
-	}
+	loggerReq := &loggerpb.GetLogItemsRequest{}
 	if req.GetPageToken() != "" {
 		pt, err := pagetoken.Deopacify(req.GetPageToken())
 		if err != nil {
@@ -527,11 +537,12 @@ func (s *Server) GetSequenceList(ctx context.Context, req *svcpb.GetSequenceList
 		if err := pagetoken.RecoverRequest(pt, ptReq); err != nil {
 			return nil, status.Errorf(codes.InvalidArgument, "invalid request in page_token: %v", err)
 		}
-		if ptReq.GetExecutiveOperationName() != req.GetExecutiveOperationName() {
+		if ptReq.GetExecutiveOperationName() != req.GetExecutiveOperationName() ||
+			!proto.Equal(ptReq.GetExecutiveOperationStartTime(), req.GetExecutiveOperationStartTime()) {
 			return nil, status.Error(codes.InvalidArgument, "page_token is invalid for the current request")
 		}
 		if pt.GetStartAfterId() == "" {
-			return nil, status.Errorf(codes.InvalidArgument, "missing cursor in page_token: %v", err)
+			return nil, status.Error(codes.InvalidArgument, "missing cursor in page_token")
 		}
 		cursor, err := base64.StdEncoding.DecodeString(pt.GetStartAfterId())
 		if err != nil {
@@ -544,163 +555,42 @@ func (s *Server) GetSequenceList(ctx context.Context, req *svcpb.GetSequenceList
 		loggerReq.Query = executiveOperationLogQuery(req.GetExecutiveOperationName(), req.GetExecutiveOperationStartTime())
 	}
 
-	startQuery := loggerReq.Query
-
-	var allLogItems []*logitempb.LogItem
-	var sequenceList *sequencelist.SequenceList
-	var lastNextCursor []byte
-
-	// Keep trying to build a sequence list with the desired number of root items
-	// until we succeed or have no log items to list anymore. There is no way to
-	// directly fetch the right number of log items for a certain number of
-	// sequence list items. Fetching partial root items also doesn't work since
-	// this would end up showing the same action for each page it appears on
-	// rather than combining it into a single item.
+	// Read log items in small batches until the page could overflow with the
+	// next batch, the time budget is used up, or there are no more log items.
+	// Each log item belongs to at most one action, so a batch adds at most as
+	// many items as it has log items. Batches keep the same size so that the
+	// logger is not queried for single log items near the end of a page. Actions
+	// that continue after this page show up again on a later page with their
+	// updated state.
+	batchSize := min(sequenceListLogItemBatchSize, pageSize)
+	loggerReq.MaxNumItems = proto.Int32(int32(batchSize))
+	builder := sequencelist.NewBuilder()
+	deadline := s.now().Add(sequenceListTimeBudget)
+	var nextCursor []byte
 	for {
-		loggerResp, err := s.logItems(ctx, loggerReq)
+		loggerResp, err := s.logger.GetLogItems(ctx, loggerReq)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to get log items: %v", err)
 		}
-
-		fetched := loggerResp.GetLogItems()
-		if len(fetched) == 0 {
+		builder.Add(ctx, loggerResp.GetLogItems())
+		nextCursor = loggerResp.GetNextPageCursor()
+		if nextCursor == nil || !s.now().Before(deadline) || pageSize-builder.Len() < batchSize {
 			break
 		}
-
-		allLogItems = append(allLogItems, fetched...)
-		lastNextCursor = loggerResp.GetNextPageCursor()
-
-		sequenceList, err = sequencelist.BuildSequenceList(ctx, allLogItems, sequencelist.WithMaxRootItems(pageSize))
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "failed to build sequence list: %v", err)
-		}
-
-		if lastNextCursor == nil {
-			break
-		}
-
-		if len(sequenceList.Items) >= pageSize {
-			// If the last root item has not reached a terminal state (e.g. SELECTED, RUNNING, PENDING),
-			// its execution and child items may extend into subsequent log batches. Continue fetching
-			// log items until the root item finishes or no more log items exist to avoid splitting an active
-			// root action across pages.
-			lastRoot := sequenceList.Items[pageSize-1]
-			if isTerminalTaskState(lastRoot.GetState()) {
-				break
-			}
-		}
-
 		loggerReq.Query = &loggerpb.GetLogItemsRequest_Cursor{
-			Cursor: lastNextCursor,
+			Cursor: nextCursor,
 		}
 	}
 
-	// If the logger returned no log items at all, initialize sequenceList to an empty struct.
-	// This avoids a nil pointer dereference and allows the response construction to fall
-	// through naturally (returning empty items and empty page token).
-	if sequenceList == nil {
-		sequenceList = &sequencelist.SequenceList{}
-	}
-
-	resp := &svcpb.GetSequenceListResponse{
-		Items: sequenceList.Items,
-	}
-
-	var nextPageCursor []byte
-	// Query a page with all items up to and including the last consumed log item
-	// to get a cursor that starts right after that item. We only need to query
-	// for a new cursor if there's unconsumed log items since the cursor we
-	// already have would start after those items and we would miss them.
-	if nextIdx := sequenceList.NextUnconsumedLogItemIndex(); nextIdx != -1 {
-		cursorReq := &loggerpb.GetLogItemsRequest{
-			MaxNumItems:  proto.Int32(int32(nextIdx)),
-			Query:        startQuery,
-			OnlyMetadata: proto.Bool(true),
-		}
-		cursorResp, err := s.logItems(ctx, cursorReq)
-		if err == nil && cursorResp.GetNextPageCursor() != nil {
-			nextPageCursor = cursorResp.GetNextPageCursor()
-		} else {
-			nextPageCursor = lastNextCursor
-		}
-	} else if lastNextCursor != nil {
-		nextPageCursor = lastNextCursor
-	}
-
-	if nextPageCursor != nil {
-		encodedCursor := base64.StdEncoding.EncodeToString(nextPageCursor)
-		npt, err := pagetoken.Opacify(req, encodedCursor, nil)
+	resp := &svcpb.GetSequenceListResponse{Items: builder.Items()}
+	if nextCursor != nil {
+		npt, err := pagetoken.Opacify(req, base64.StdEncoding.EncodeToString(nextCursor), nil)
 		if err != nil {
 			return nil, status.Errorf(codes.Internal, "failed to create next_page_token: %v", err)
 		}
 		resp.NextPageToken = npt
 	}
-
 	return resp, nil
-}
-
-// logItems returns log items for the provided request. Requests log items in
-// batches with size [sequenceListLogItemPageSize] to avoid size limits on log
-// item responses.
-//
-// Example:
-//
-//	req.MaxNumItems           = 27
-//	sequenceListLogItemPageSize = 10
-//	Requests:
-//		1. req.MaxNumItems = 10
-//		2. req.MaxNumItems = 10
-//		3. req.MaxNumItems = 7
-//	Response:
-//		len(resp.LogItems) <= 27
-func (s *Server) logItems(ctx context.Context, req *loggerpb.GetLogItemsRequest) (*loggerpb.GetLogItemsResponse, error) {
-	if req == nil || req.GetMaxNumItems() == 0 {
-		return nil, nil
-	}
-
-	// Honor MaxNumItems if it is smaller than sequenceListLogItemPageSize (e.g. when querying
-	// for an exact count of log items to retrieve a cursor at a specific action boundary).
-	batchSize := sequenceListLogItemPageSize
-	if req.GetMaxNumItems() > 0 && req.GetMaxNumItems() < batchSize {
-		batchSize = req.GetMaxNumItems()
-	}
-
-	initialReq := proto.Clone(req).(*loggerpb.GetLogItemsRequest)
-	initialReq.MaxNumItems = proto.Int32(batchSize)
-	resp, err := s.logger.GetLogItems(ctx, initialReq)
-	if err != nil {
-		return nil, err
-	}
-
-	remainder := req.GetMaxNumItems() - batchSize
-	logItems := resp.GetLogItems()
-	cursor := resp.GetNextPageCursor()
-
-	for {
-		if remainder <= 0 || cursor == nil {
-			break
-		}
-
-		curBatchSize := min(remainder, sequenceListLogItemPageSize)
-		resp, err := s.logger.GetLogItems(ctx, &loggerpb.GetLogItemsRequest{
-			MaxNumItems: proto.Int32(curBatchSize),
-			Query: &loggerpb.GetLogItemsRequest_Cursor{
-				Cursor: cursor,
-			},
-		})
-		if err != nil {
-			return nil, err
-		}
-
-		remainder = remainder - curBatchSize
-		logItems = append(logItems, resp.GetLogItems()...)
-		cursor = resp.GetNextPageCursor()
-	}
-
-	return &loggerpb.GetLogItemsResponse{
-		LogItems:       logItems,
-		NextPageCursor: cursor,
-	}, nil
 }
 
 func (s *Server) setBehaviorTreeUnsafe(ctx context.Context, bt *btpb.BehaviorTree, appRes *aspb.GetCurrentApplicationResponse) error {
@@ -768,18 +658,6 @@ func applyBasicView(bt *btpb.BehaviorTree) {
 	bt.Reset()
 	bt.Name = name
 	bt.TreeId = treeID
-}
-
-func isTerminalTaskState(state btpb.BehaviorTree_TaskNode_State) bool {
-	switch state {
-	case btpb.BehaviorTree_TaskNode_SUCCEEDED,
-		btpb.BehaviorTree_TaskNode_FAILED,
-		btpb.BehaviorTree_TaskNode_CANCELED,
-		btpb.BehaviorTree_TaskNode_PROJECTED:
-		return true
-	default:
-		return false
-	}
 }
 
 func executiveOperationLogQuery(operationName string, startTime *timestamppb.Timestamp) *loggerpb.GetLogItemsRequest_GetQuery {

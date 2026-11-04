@@ -31,7 +31,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_go_proto",
         "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:solution_service_go_proto",
         "//intrinsic_sdk/intrinsic/kubernetes/acl:clientcontext",
-        "//intrinsic_sdk/intrinsic/logging/proto:log_item_go_proto",
         "//intrinsic_sdk/intrinsic/logging/proto:logger_service_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
