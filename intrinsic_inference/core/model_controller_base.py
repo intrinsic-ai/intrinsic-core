@@ -56,18 +56,11 @@ class ModelControllerBase(abc.ABC):
   """Base class for controlling models.
 
   Handles state, thread safety, and backend-agnostic asset loading.
-  There are three core methods that have to be implemented by subclasses:
-    - **_load_model**: Load a model into the inference backend. The MlModel
-      proto object is provided to this method and should be used to load the
-      model into the backend so that it is ready to serve inference requests.
-    - **_unload_model**: Unload a model from the inference backend and clean up
-      it's compute and storage resource footprint inside the service.
-    - **_reload_model**: Reload a model from the inference backend. This method
-      should be implemented so that in cases where a load request for an
-      existing model is received, so that necessary updates are made in place
-      without the overhead of a full unload/load cycle. This would happen mostly
-      in cases when only parts of the model are updated.
-
+  There are two core methods that have to be implemented by subclasses:
+    - **_load_model_impl**: Loads a model into the inference backend, or updates
+      it in place if it is loaded already.
+    - **_unload_model_impl**: Unloads all versions of a model from the
+      inference backend. Must succeed if the model isn't loaded.
 
   Attributes:
     models: A mapping of model names to their loaded MlModel proto instances.
@@ -168,28 +161,23 @@ class ModelControllerBase(abc.ABC):
       states.update(self._model_states)
       return states
 
-  def _validate_backend_config(self, model_asset: ml_model_pb2.MlModel) -> None:
-    """Validates that the backend config is present.
-
-    Subclasses should override this for backend-specific validation.
-
-    Args:
-      model_asset: The model asset to validate.
-    """
-    # TODO(lhecht): Check against registry when implementing factory pattern for
-    #  model manager.
-    if not model_asset.HasField("backend_config"):
-      raise RuntimeError("No backend config specified in MlModel")
-
   @telemetry_base.trace_span("ModelController.load_model")
-  def _load_model(self, model_proto: ml_model_pb2.MlModel) -> None:
-    """Loads a model into the inference backend."""
-    self._model_assets_manager.create_model_asset(model_proto)
-    return self._load_model_impl(model_proto=model_proto)
+  def _load_model(
+      self,
+      loaded: ml_model_pb2.MlModel | None,
+      desired: ml_model_pb2.MlModel,
+  ) -> None:
+    """Loads `desired` into the inference backend, replacing `loaded` if set."""
+    if loaded is None:
+      self._model_assets_manager.create_model_asset(desired)
+    elif loaded.model_data != desired.model_data:
+      # Only changed files are downloaded, and config-only changes skip this.
+      self._model_assets_manager.update_model_asset(loaded, desired)
+    self._load_model_impl(model_proto=desired)
 
   @abc.abstractmethod
   def _load_model_impl(self, model_proto: ml_model_pb2.MlModel) -> None:
-    """Loads a model into the inference backend. Must be overridden."""
+    """Loads or updates a model in the inference backend. Must be overridden."""
 
   @telemetry_base.trace_span("ModelController.unload_model")
   def _unload_model(self, model_proto: ml_model_pb2.MlModel) -> None:
@@ -217,26 +205,9 @@ class ModelControllerBase(abc.ABC):
   def _unload_model_impl(self, model_proto: ml_model_pb2.MlModel) -> None:
     """Unloads a model from the inference backend. Must be overridden."""
 
-  def _is_backend_config_only_change(
-      self, old_model: ml_model_pb2.MlModel, new_model: ml_model_pb2.MlModel
-  ) -> bool:
-    """Checks whether only the backend configs are different."""
-    return (
-        not self._are_backend_config_equal(
-            old_model=old_model, new_model=new_model
-        )
-        and old_model.model_data == new_model.model_data
-    )
-
-  @abc.abstractmethod
-  def _are_backend_config_equal(
-      self, old_model: ml_model_pb2.MlModel, new_model: ml_model_pb2.MlModel
-  ) -> bool:
-    """Checks whether backend configs are equal. Must be overriden."""
-
   @telemetry_base.trace_span("ModelController.reload_model")
   def _reload_model(self, model_proto: ml_model_pb2.MlModel) -> None:
-    """Reloads a model from the inference backend."""
+    """Updates a loaded model in place."""
     model_name = model_proto.model_config.name
 
     with self._lock:
@@ -256,18 +227,7 @@ class ModelControllerBase(abc.ABC):
 
     if not old_model:
       logging.warning("No model found to reload. Loading as new model.")
-      return self._load_model(model_proto=model_proto)
-
-    if not self._is_backend_config_only_change(
-        old_model=old_model,
-        new_model=model_proto,
-    ):
-      self._model_assets_manager.update_model_asset(old_model, model_proto)
-    return self._reload_model_impl(model_proto=model_proto)
-
-  @abc.abstractmethod
-  def _reload_model_impl(self, model_proto: ml_model_pb2.MlModel) -> None:
-    """Reloads a model from the inference backend. Must be overridden."""
+    self._load_model(old_model, model_proto)
 
   def _get_reconciliation_diff(
       self,
@@ -337,7 +297,7 @@ class ModelControllerBase(abc.ABC):
       self, model_name: str, model_proto: ml_model_pb2.MlModel
   ) -> None:
     try:
-      self._load_model(model_proto)
+      self._load_model(None, model_proto)
       with self._lock:
         self._models[model_name] = model_proto
         self._model_states[model_name] = ModelAndState(
