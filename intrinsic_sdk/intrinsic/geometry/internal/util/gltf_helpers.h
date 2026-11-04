@@ -81,6 +81,17 @@ absl::StatusOr<std::string> SerializeGltfToGlb(const tinygltf::Model& model);
 // present.
 double GetGltfTransmissionFactor(const tinygltf::Material& mat);
 
+// Sets the transmissionFactor on `mat` via the KHR_materials_transmission
+// extension. Any existing KHR_materials_transmission extension on `mat` is
+// replaced entirely, so other properties it carried (e.g.
+// `transmissionTexture`) are discarded. Callers attaching `mat` to a
+// tinygltf::Model are responsible for declaring kKhrMaterialsTransmission in
+// `model.extensionsUsed` (e.g. via AddGltfExtensionUsed()).
+void SetGltfTransmissionFactor(tinygltf::Material& mat, double factor);
+
+// Appends `extension` to `model.extensionsUsed` if it is not already present.
+void AddGltfExtensionUsed(tinygltf::Model& model, absl::string_view extension);
+
 }  // namespace intrinsic::geo
 
 #endif  // INTRINSIC_GEOMETRY_INTERNAL_UTIL_GLTF_HELPERS_H_

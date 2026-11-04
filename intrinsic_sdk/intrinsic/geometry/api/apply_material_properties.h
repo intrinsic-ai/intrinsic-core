@@ -29,30 +29,40 @@
 
 namespace intrinsic::geo {
 
-// Validates that MaterialProperties fields (if set) are within valid ranges:
-// - base_color: red, green, blue in [0.0, 1.0]; alpha is not supported.
-// - metalness: in [0.0, 1.0].
-// - transmission: in [0.0, 1.0].
-// - roughness: in [0.0, 1.0].
+// Returns InvalidArgument if any set field of `material_properties` is not
+// finite or outside [0, 1], or if `base_color.alpha` is set to anything other
+// than 1, since alpha is not supported; transmission is used instead.
 absl::Status ValidateMaterialProperties(
     const intrinsic_proto::geometry::v1::MaterialProperties&
         material_properties);
 
-// Validates `material_properties` and converts it into a `tinygltf::Material`.
+// Validates `material_properties` and converts it into a tinygltf::Material,
+// including the KHR_materials_transmission extension. Unset fields use the
+// defaults of MaterialProperties.
 absl::StatusOr<tinygltf::Material> ToGltfMaterial(
     const intrinsic_proto::geometry::v1::MaterialProperties&
         material_properties);
 
+// Applies `material_properties` to `geo`, replacing all existing materials and
+// returning a new Renderable.
 absl::StatusOr<std::shared_ptr<const Renderable>> ApplyMaterialProperties(
     std::shared_ptr<const Renderable> geo,
     const intrinsic_proto::geometry::v1::MaterialProperties&
         material_properties);
 
+// Applies `material_properties` to `glb_bytes`, replacing all existing
+// materials and returning the updated GLB bytes.
+//
+// Textures, samplers, images, buffer data and extension declarations are kept,
+// even if only the replaced materials used them. In particular, an extension
+// listed in `extensionsRequired` stays required, so loaders that do not
+// support it still reject the result.
 absl::StatusOr<std::string> ApplyMaterialPropertiesToGlb(
     absl::string_view glb_bytes,
     const intrinsic_proto::geometry::v1::MaterialProperties&
         material_properties);
 
+// Applies `material` to all materials in `scene`.
 absl::Status ApplyMaterialToAiScene(aiScene& scene, const Material& material);
 
 }  // namespace intrinsic::geo

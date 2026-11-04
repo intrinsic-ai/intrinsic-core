@@ -42,6 +42,7 @@ cc_library(
     hdrs = ["apply_material_properties.h"],
     deps = [
         ":material",
+        ":material_properties",
         ":renderable",
         "//intrinsic_sdk/intrinsic/geometry/internal/util:gltf_helpers",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",

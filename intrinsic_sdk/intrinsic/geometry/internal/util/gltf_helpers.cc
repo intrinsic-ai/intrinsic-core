@@ -14,6 +14,7 @@
 
 #include "intrinsic/geometry/internal/util/gltf_helpers.h"
 
+#include <algorithm>
 #include <optional>
 #include <sstream>
 #include <string>
@@ -147,6 +148,19 @@ double GetGltfTransmissionFactor(const tinygltf::Material& mat) {
     return 0.0;
   }
   return GetGltfNumber(*factor).value_or(0.0);
+}
+
+void SetGltfTransmissionFactor(tinygltf::Material& mat, double factor) {
+  mat.extensions[std::string(kKhrMaterialsTransmission)] =
+      tinygltf::Value(tinygltf::Value::Object{
+          {std::string(kTransmissionFactorKey), tinygltf::Value(factor)}});
+}
+
+void AddGltfExtensionUsed(tinygltf::Model& model, absl::string_view extension) {
+  if (std::ranges::find(model.extensionsUsed, extension) ==
+      model.extensionsUsed.end()) {
+    model.extensionsUsed.emplace_back(extension);
+  }
 }
 
 }  // namespace intrinsic::geo
