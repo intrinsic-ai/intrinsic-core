@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@io_bazel_rules_go//go:def.bzl", "go_library")
-load("//bazel:go_macros.bzl", "go_binary")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 
 go_binary(
     name = "inbuild",

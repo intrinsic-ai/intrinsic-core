@@ -14,7 +14,7 @@
 
 # Protos for internal skill framework types.
 
-load("//bazel:go_macros.bzl", "go_proto_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 package(default_visibility = [
     "//visibility:public",

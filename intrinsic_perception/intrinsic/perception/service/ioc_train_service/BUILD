@@ -13,8 +13,8 @@
 # limitations under the License.
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
-load("//bazel:python_oci_image.bzl", "python_oci_image")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/bazel:python_oci_image.bzl", "python_oci_image")
 
 package(default_visibility = [
     "//intrinsic_perception/intrinsic/perception/service/ioc_train_service:__subpackages__",

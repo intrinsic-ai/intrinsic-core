@@ -18,7 +18,7 @@ load("@bazel_lib//lib:copy_file.bzl", "copy_file")
 load("@rules_oci//oci:defs.bzl", "oci_image", "oci_load")
 load("@rules_pkg//:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
-load("//bazel:go_macros.bzl", "go_binary")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 load("//intrinsic_sdk/intrinsic/httpjson/openapi:protoc_gen_openapi.bzl", "protoc_gen_openapi")
 load("//intrinsic_sdk/intrinsic/httpjson/private:gen_http_bridge.bzl", _gen_http_bridge = "gen_http_bridge")
 
@@ -118,7 +118,7 @@ def _intrinsic_http_image_impl(
     pkg_tar(
         name = tarbin_name,
         srcs = [":" + binfiles_name],
-        compressor = Label("//bazel:zstd"),
+        compressor = Label("//intrinsic_sdk/bazel:zstd"),
         compressor_args = "-3 -q",
         extension = "tar.zst",
     )

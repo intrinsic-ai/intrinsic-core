@@ -14,7 +14,7 @@
 
 # Tool to to wait for a set of services to be ready and accept connections
 
-load("//bazel:go_macros.bzl", "go_binary", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
 
 package(default_visibility = ["//visibility:public"])
 

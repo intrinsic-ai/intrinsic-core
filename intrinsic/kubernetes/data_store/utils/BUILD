@@ -14,7 +14,7 @@
 
 # This package contains utility functions and binaries for the data store implementation.
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
     name = "uriutils",

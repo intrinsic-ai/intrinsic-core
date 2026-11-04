@@ -17,7 +17,7 @@ Starlark macro to generate a container that runs a textproto-configured ICON mac
 """
 
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_test")
-load("//bazel:container.bzl", "container_image", "container_layer")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image", "container_layer")
 
 def icon_server(
         name,

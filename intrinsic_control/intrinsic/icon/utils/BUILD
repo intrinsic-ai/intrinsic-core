@@ -14,7 +14,7 @@
 
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_binary")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 
 package(default_visibility = [
     "//intrinsic_control/intrinsic/icon:rtcl_users",

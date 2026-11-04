@@ -14,7 +14,7 @@
 
 # Generic language utilities for golang.
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
     name = "pointer",

@@ -13,8 +13,8 @@
 # limitations under the License.
 
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
-load("//bazel:go_macros.bzl", "go_binary", "go_library", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library", "go_proto_library")
 
 package(default_visibility = [
     "//visibility:public",

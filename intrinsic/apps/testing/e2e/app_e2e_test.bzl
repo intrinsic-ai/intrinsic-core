@@ -14,7 +14,7 @@
 
 """Macros for e2e testing of Intrinsic apps."""
 
-load("//bazel:sh_macros.bzl", "sh_test")
+load("//intrinsic_sdk/bazel:sh_macros.bzl", "sh_test")
 load("//intrinsic/util/path_resolver:paths.bzl", "to_rlocation_path")
 load("//intrinsic/util/wrapped_executable:wrapped_executable.bzl", "wrapped_test")
 

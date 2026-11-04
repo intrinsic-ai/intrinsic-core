@@ -135,7 +135,7 @@ cc_library(
 
 config_setting(
     name = "use_host_glib_setting",
-    flag_values = {"//bazel:use_host_glib": "True"},
+    flag_values = {"//intrinsic_sdk/bazel:use_host_glib": "True"},
 )
 
 selects.config_setting_group(

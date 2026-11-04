@@ -98,7 +98,7 @@ Only `fileExistenceTests` are supported. `commandTests`, `fileContentTests`,
             doc = "Optional explicit list of layer tarballs / specs.",
         ),
         "_runner": attr.label(
-            default = Label("//bazel:container_structure_test_runner"),
+            default = Label("//intrinsic_sdk/bazel:container_structure_test_runner"),
             executable = True,
             cfg = "exec",
         ),

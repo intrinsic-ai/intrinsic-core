@@ -15,11 +15,11 @@
 load("@bazel_skylib//rules:expand_template.bzl", "expand_template")
 load("@rules_pkg//:mappings.bzl", "pkg_attributes", "pkg_files", "strip_prefix")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
-load("//bazel:container.bzl", "container_image")
-load("//bazel:go_macros.bzl", "go_binary")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load("//intrinsic_sdk/intrinsic/httpjson:intrinsic_http_image.bzl", "intrinsic_http_image")
 load("//intrinsic_sdk/intrinsic/httpjson/openapi:protoc_gen_openapi.bzl", "protoc_gen_openapi")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 
 # gazelle:ignore
 

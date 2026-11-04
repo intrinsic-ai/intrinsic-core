@@ -15,11 +15,11 @@
 # This package contains infrastructure for Kubernetes in Intrinsic's labs.
 
 load("@rules_python//python/entry_points:py_console_script_binary.bzl", "py_console_script_binary")
-load("//bazel:container.bzl", "container_image")
-load("//bazel:go_macros.bzl", "go_binary", "go_library")
 load("//bazel:python.bzl", "py_binary")
-load("//bazel:sh_macros.bzl", "sh_binary")
 load("//intrinsic/util/wrapped_executable:wrapped_executable.bzl", "wrapped_binary")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
+load("//intrinsic_sdk/bazel:sh_macros.bzl", "sh_binary")
 
 package(default_visibility = [":intrinsic_kubernetes_users"])
 

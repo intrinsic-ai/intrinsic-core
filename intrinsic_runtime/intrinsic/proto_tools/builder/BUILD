@@ -13,11 +13,11 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
-load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 load(
     "//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl",
     "proto_source_code_info_transitive_descriptor_set",
 )
+load("//intrinsic_sdk/bazel:cc_oci_image.bzl", "cc_oci_image")
 load(":well_known_proto_targets.bzl", "WELL_KNOWN_PROTO_TARGETS")
 
 proto_source_code_info_transitive_descriptor_set(

@@ -15,7 +15,7 @@
 """ Intrinsic package geometry/service. """
 
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
-load("//bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
 
 package(default_visibility = ["//intrinsic:intrinsic_internal"])
 

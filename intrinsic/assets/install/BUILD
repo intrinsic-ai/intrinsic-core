@@ -15,7 +15,7 @@
 # For libraries and services covering the installation of assets.  Initial
 # design was detailed in go/intrinsic-asset-install.
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
     name = "gather",

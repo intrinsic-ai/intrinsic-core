@@ -14,8 +14,8 @@
 
 # This package contains the protos which describe the API of the data store service.
 
-load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 package(default_visibility = [
     "//visibility:public",

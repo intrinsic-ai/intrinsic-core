@@ -13,8 +13,8 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_binary")
-load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 load("//intrinsic_sdk/intrinsic/util/proto/build_defs:proto_data.bzl", "proto_data")
+load("//intrinsic_sdk/bazel:cc_oci_image.bzl", "cc_oci_image")
 
 package(default_visibility = ["//visibility:public"])
 

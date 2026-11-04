@@ -19,9 +19,9 @@ load("@rules_cc//cc/common:cc_info.bzl", "CcInfo")
 load("@rules_python//python:py_binary.bzl", "py_binary")
 load("@rules_python//python:py_info.bzl", "PyInfo")
 load("//bazel:cc_macros.bzl", "cc_binary")
-load("//bazel:cc_oci_image.bzl", "cc_oci_image")
-load("//bazel:container.bzl", "container_image")
-load("//bazel:python_oci_image.bzl", "python_oci_image")
+load("//intrinsic_sdk/bazel:cc_oci_image.bzl", "cc_oci_image")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:python_oci_image.bzl", "python_oci_image")
 load("//intrinsic_sdk/intrinsic/assets/build_defs:asset.bzl", "AssetInfo", "AssetLocalInfo")
 load(
     "//intrinsic_sdk/intrinsic/skills/build_defs:manifest.bzl",

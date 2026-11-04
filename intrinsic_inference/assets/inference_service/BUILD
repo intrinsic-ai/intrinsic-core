@@ -13,9 +13,9 @@
 # limitations under the License.
 
 load("@rules_python//python:defs.bzl", "py_binary", "py_library")
-load("//bazel:container.bzl", "container_image")
-load("//bazel:python_oci_image.bzl", "python_oci_image")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:python_oci_image.bzl", "python_oci_image")
 
 py_library(
     name = "inference_service",

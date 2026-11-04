@@ -14,7 +14,7 @@
 
 # StatusBuilder to build Intrinsic platform error reports
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 package(
     default_visibility = ["//visibility:public"],

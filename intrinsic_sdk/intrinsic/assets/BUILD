@@ -15,8 +15,8 @@
 # Common code for assets.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_library")
 load("//bazel:python.bzl", "py_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
     name = "assetvalidate",

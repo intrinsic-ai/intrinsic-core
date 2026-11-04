@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_binary")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 
 package(
     default_visibility = ["//visibility:private"],

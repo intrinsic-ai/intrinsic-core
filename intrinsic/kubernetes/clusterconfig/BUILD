@@ -14,7 +14,7 @@
 
 # clusterconfig exposes read-only cluster settings
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = ["//intrinsic/kubernetes:__subpackages__"])
 

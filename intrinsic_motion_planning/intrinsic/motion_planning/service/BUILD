@@ -13,10 +13,10 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library", "cc_test")
-load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load("//intrinsic_sdk/intrinsic/httpjson:intrinsic_http_image.bzl", "intrinsic_http_image")
 load("//intrinsic_sdk/intrinsic/httpjson/openapi:protoc_gen_openapi.bzl", "protoc_gen_openapi")
+load("//intrinsic_sdk/bazel:cc_oci_image.bzl", "cc_oci_image")
 
 package(default_visibility = [
     "//visibility:public",

@@ -15,7 +15,7 @@
 # Modbus TCP C++ wrapper
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:container.bzl", "container_layer")
+load("//intrinsic_sdk/bazel:container.bzl", "container_layer")
 
 package(default_visibility = ["//intrinsic_hardware/intrinsic/hardware:__subpackages__"])
 

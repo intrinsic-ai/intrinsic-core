@@ -14,8 +14,8 @@
 
 load("@rules_oci//oci:defs.bzl", "oci_image")
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
-load("//bazel:cc_oci_image.bzl", "cc_oci_image")
-load("//bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:cc_oci_image.bzl", "cc_oci_image")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
 
 package(
     default_visibility = ["//visibility:public"],

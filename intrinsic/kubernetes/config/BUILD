@@ -14,7 +14,7 @@
 
 # Deployment configuration related libraries
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = ["//intrinsic/kubernetes:intrinsic_kubernetes_users"])
 

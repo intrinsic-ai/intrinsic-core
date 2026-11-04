@@ -14,7 +14,7 @@
 
 """Custom rules for creating World from SDF."""
 
-load("//bazel:sh_macros.bzl", "sh_test")
+load("//intrinsic_sdk/bazel:sh_macros.bzl", "sh_test")
 load("//bazel:xacro.bzl", "xacro_file")
 
 def _sdf_world_impl(ctx):

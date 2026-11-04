@@ -1,5 +1,5 @@
-load("//bazel:container.bzl", "container_image", "container_layer")
-load("//bazel:container_structure_test.bzl", "container_structure_test")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image", "container_layer")
+load("//intrinsic_sdk/bazel:container_structure_test.bzl", "container_structure_test")
 
 package(default_visibility = [
     "//intrinsic_runtime/kubernetes/intrinsic_base:__pkg__",

@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_binary", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
 
 # Starlark rules and macros for building scene object related targets.
 

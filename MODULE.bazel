@@ -243,7 +243,7 @@ use_repo(
 
 # LINT.IfChange(python_version)
 PYTHON_VERSION = "3.11"
-# LINT.ThenChange(//bazel/python_oci_image.bzl:python_version)
+# LINT.ThenChange(//intrinsic_sdk/bazel/python_oci_image.bzl:python_version)
 
 bazel_dep(name = "rules_python", version = "2.4.5")
 bazel_dep(name = "rules_python_gazelle_plugin", version = "2.4.5")  

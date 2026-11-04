@@ -14,9 +14,9 @@
 
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
-load("//bazel:cc_oci_image.bzl", "cc_oci_image")
 load("//bazel:protos.bzl", "proto_library")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/bazel:cc_oci_image.bzl", "cc_oci_image")
 
 package(default_visibility = [
     "//visibility:public",

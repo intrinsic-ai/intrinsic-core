@@ -15,7 +15,7 @@
 # This package contains a data store service implementation which is only a shim forwarding all
 # requests to Firestore.
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
     name = "firestoreshimtypes",

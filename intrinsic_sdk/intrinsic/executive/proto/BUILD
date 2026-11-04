@@ -16,9 +16,9 @@ load("@com_github_grpc_grpc//bazel:cc_grpc_library.bzl", "cc_grpc_library")
 load("@com_github_grpc_grpc//bazel:python_rules.bzl", "py_grpc_library")
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
-load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
 load("//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl", "proto_source_code_info_transitive_descriptor_set")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 package(default_visibility = ["//intrinsic:public_api_users"])
 
@@ -69,7 +69,7 @@ go_proto_library(
     compilers = [
         "@io_bazel_rules_go//proto:go_grpc_v2",
         "@io_bazel_rules_go//proto:go_proto",
-        "//bazel:go_gen_grpc_gateway",
+        "//intrinsic_sdk/bazel:go_gen_grpc_gateway",
     ],
     importpath = "intrinsic/executive/proto/executive_service_go_proto",
     protos = [":executive_service_proto"],

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:container.bzl", "container_image")
-load("//bazel:go_macros.bzl", "go_binary")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 
 go_binary(
     name = "skillregistryservice_main",

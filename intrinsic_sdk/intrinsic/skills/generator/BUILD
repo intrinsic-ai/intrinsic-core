@@ -14,12 +14,12 @@
 
 # Provides generators for creating skill source code.
 
-load("//bazel:go_macros.bzl", "go_binary", "go_library")
 load("//bazel:python.bzl", "py_library")
 load(
     "//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl",
     "proto_source_code_info_transitive_descriptor_set",
 )
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
 
 package(
     default_visibility = [

@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 # gazelle:ignore
 package(default_visibility = ["//visibility:public"])
@@ -45,7 +45,7 @@ go_proto_library(
     compilers = [
         "@io_bazel_rules_go//proto:go_grpc_v2",
         "@io_bazel_rules_go//proto:go_proto",
-        "//bazel:go_gen_grpc_gateway",
+        "//intrinsic_sdk/bazel:go_gen_grpc_gateway",
     ],
     importpath = "github.com/intrinsic-ai/insrc/incode/frontend/cloud/api/v1/clustermanager_api_go_proto",
     protos = [":clustermanager_api_proto"],

@@ -13,7 +13,7 @@
 # limitations under the License.
 
 # An acl engine using Authzed SpiceDB.
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = [
     "//visibility:public",

@@ -15,7 +15,7 @@
 # appstat is a utility that inspects a Kubernetes namespace and looks for common
 # errors.
 
-load("//bazel:go_macros.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
     name = "inspect",

@@ -13,13 +13,13 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_library")
 load(
     "//intrinsic/assets/dependencies/build_defs:runtime_asset.bzl",
     "intrinsic_runtime_asset_instance",
     "intrinsic_runtime_installed_asset",
     "intrinsic_runtime_resource_instance",
 )
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
     name = "resolver",

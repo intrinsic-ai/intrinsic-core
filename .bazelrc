@@ -86,7 +86,7 @@ common:docker --experimental_docker_image="docker://us-central1-docker.pkg.dev/i
 common:docker --spawn_strategy=docker --genrule_strategy=docker
 common:docker --experimental_docker_verbose
 common:docker --experimental_enable_docker_sandbox
-common:docker --host_platform=//bazel:linux_x86_64
+common:docker --host_platform=//intrinsic_sdk/bazel:linux_x86_64
 
 # Enable absl support in googletest. If this define is set, googletest's default
 # main function initializes absl, including the command line flag subsystem.
@@ -201,7 +201,7 @@ common --host_per_file_copt=google3/third_party/.*,third_party/.*@-Wno-everythin
 # insrc builds target Linux x86. Explicitly specifying this ensures we can
 # switch between --config=remote (RBE) and local builds without discarding the
 # analysis cache.
-common --host_platform=//bazel:linux_x86_64
+common --host_platform=//intrinsic_sdk/bazel:linux_x86_64
 
 # Opt out of 3P telemetry tracking.
 common --repo_env=DO_NOT_TRACK=1

@@ -14,9 +14,9 @@
 
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_proto_library")
 load("//bazel:protos.bzl", "proto_library")
 load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "cc_skill", "skill_manifest")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 proto_library(
     name = "homing_proto",

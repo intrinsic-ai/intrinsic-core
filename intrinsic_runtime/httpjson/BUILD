@@ -12,12 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:container.bzl", "container_image", "container_layer")
-load("//bazel:go_macros.bzl", "go_binary", "go_library")
 load(
     "//intrinsic_sdk/intrinsic/httpjson/openapi:protoc_gen_openapi.bzl",
     "protoc_gen_openapi",
 )
+load("//intrinsic_sdk/bazel:container.bzl", "container_image", "container_layer")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
 
 go_library(
     name = "arguments",

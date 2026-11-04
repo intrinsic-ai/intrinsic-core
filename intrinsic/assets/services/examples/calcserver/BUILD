@@ -12,13 +12,13 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:container.bzl", "container_image")
-load("//bazel:go_macros.bzl", "go_binary", "go_library")
 load("//bazel:python.bzl", "py_test")
 load("//intrinsic/apps/testing/e2e:app_e2e_test.bzl", "app_e2e_test")
 load("//intrinsic/assets/build_defs:solution.bzl", "intrinsic_solution")
 load("//intrinsic_sdk/intrinsic/assets/build_defs:asset.bzl", "intrinsic_asset_instance")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
 
 package(default_visibility = [
     "//visibility:public",

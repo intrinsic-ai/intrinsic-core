@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_binary")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 
 package(default_visibility = [
     "//visibility:public",

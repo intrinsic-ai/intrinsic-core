@@ -12,8 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:go_macros.bzl", "go_binary")
-load("//bazel:sh_macros.bzl", "sh_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
+load("//intrinsic_sdk/bazel:sh_macros.bzl", "sh_library")
 
 package(default_visibility = ["//visibility:public"])
 

@@ -14,7 +14,7 @@
 
 """Build rules for creating Hardware Module container images."""
 
-load("//bazel:container.bzl", "container_image", "container_layer")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image", "container_layer")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:hardware_module_binary.bzl", hardware_module_binary_macro = "hardware_module_binary")
 
 

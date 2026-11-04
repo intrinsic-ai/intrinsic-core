@@ -13,7 +13,7 @@
 # limitations under the License.
 
 load("@bazel_lib//lib:expand_template.bzl", "expand_template")
-load("//bazel:go_macros.bzl", "go_binary", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
 
 expand_template(
     name = "version",

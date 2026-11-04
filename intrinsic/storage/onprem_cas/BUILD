@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:container.bzl", "container_image")
+load("//intrinsic_sdk/bazel:container.bzl", "container_image")
 
 container_image(
     name = "local-cas-image",

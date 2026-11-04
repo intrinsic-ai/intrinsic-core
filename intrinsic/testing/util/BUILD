@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:sh_macros.bzl", "sh_library")
+load("//intrinsic_sdk/bazel:sh_macros.bzl", "sh_library")
 
 # Utility helper functions
 package(default_visibility = ["//visibility:public"])

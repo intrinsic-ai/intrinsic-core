@@ -13,8 +13,8 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:go_macros.bzl", "go_library")
 load("//bazel:python.bzl", "py_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 # Application, process and resource set describe all user-accessible configuration of a
 # solution.
