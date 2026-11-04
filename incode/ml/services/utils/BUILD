@@ -22,6 +22,7 @@ py_library(
     name = "otel_tracing",
     srcs = ["otel_tracing.py"],
     visibility = [
+        "//intrinsic_inference:__subpackages__",
         "//intrinsic_perception/intrinsic/perception/skills:__subpackages__",
         "//incode/ml:__subpackages__",
     ],
