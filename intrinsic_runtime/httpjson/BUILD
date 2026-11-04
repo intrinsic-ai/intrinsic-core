@@ -42,6 +42,7 @@ protoc_gen_openapi(
         "//intrinsic_sdk/intrinsic/executive/proto:executive_service_proto",
         "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:solution_service_proto",
         "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_proto",
+        "//intrinsic_sdk/intrinsic/logging/proto:logger_service",
         "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_configuration_proto",
