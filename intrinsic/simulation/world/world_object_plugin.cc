@@ -134,18 +134,33 @@ absl::StatusOr<ActuatedGripperPluginSpec> CreateActuatedGripperPluginSpec(
         "configure it as a pinch gripper resource instance. $1",
         object_name, joints_debug_str.str()));
   }
+  // Only links that belong to the gripper object itself may be used as the
+  // sticky link. GetRigidlyAttachedChildrenEntities() traverses the attachment
+  // tree across object boundaries and would otherwise also return links of
+  // child objects attached to the gripper fingers.
+  INTR_ASSIGN_OR_RETURN(
+      std::vector<LinkEntityId> gripper_links,
+      world.ValidateCollectionMembers<LinkEntityId>(
+          collections_entity_id, CollectionsComponent::kLinks));
   const auto populate_child_links_with_collision =
-      [&world](JointEntityId joint_id,
-               std::vector<AttachmentEntityId>& links_with_collision)
+      [&world, &gripper_links](
+          JointEntityId joint_id,
+          std::vector<AttachmentEntityId>& links_with_collision)
       -> absl::Status {
     INTR_ASSIGN_OR_RETURN(WorldHashSet<AttachmentEntityId> attached_links,
                           GetRigidlyAttachedChildrenEntities(world, joint_id));
-    for (auto child_id : attached_links) {
+    // Iterate over the gripper's own links (in collection order) instead of
+    // the unordered set of attached entities so that the candidate order, and
+    // therefore the chosen sticky link, is deterministic.
+    for (LinkEntityId link_id : gripper_links) {
+      if (!attached_links.contains(AttachmentEntityId(link_id))) {
+        continue;
+      }
       if (auto geom_comp =
-              world.GetComponentByEntityId<GeometryComponent>(child_id);
+              world.GetComponentByEntityId<GeometryComponent>(link_id);
           geom_comp.ok()) {
         if ((*geom_comp)->HasGeometry(kKindCollisionGeometry)) {
-          links_with_collision.push_back(child_id);
+          links_with_collision.push_back(link_id);
         }
       }
     }
@@ -164,7 +179,9 @@ absl::StatusOr<ActuatedGripperPluginSpec> CreateActuatedGripperPluginSpec(
         "Cannot find any gripper finger link with collision geometry for "
         "grasping when configuring world object $0 as a pinch gripper. Please "
         "revisit the gripper definition and add a collision geometry on at "
-        "least one of the gripper finger links.",
+        "least one of the gripper finger links. Note that only links of the "
+        "gripper object itself are considered; collision geometry on child "
+        "objects attached to the gripper fingers is not sufficient.",
         object_name));
   }
 
