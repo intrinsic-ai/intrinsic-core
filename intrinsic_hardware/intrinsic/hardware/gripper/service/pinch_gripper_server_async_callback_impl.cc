@@ -18,17 +18,20 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "intrinsic/assets/services/proto/v1/service_state.pb.h"
 #include "intrinsic/hardware/gripper/gripper.h"
 // `robotiq_gripper` is needed for registration with PinchGripperFactory.
 #include "intrinsic/hardware/gripper/robotiq/robotiq_gripper.h"  // IWYU pragma: keep
+#include "intrinsic/hardware/gripper/service/pinch_gripper_extended_status.h"
 #include "intrinsic/hardware/gripper/service/proto/generic_pinch_gripper_configs.pb.h"
 #include "intrinsic/hardware/gripper/service/proto/pinch_gripper_server.pb.h"
 // `wsg32_gripper` is needed for registration with PinchGripperFactory.
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
@@ -65,6 +68,12 @@ constexpr int kNumMaxGrippers = 1;
 constexpr absl::Duration kDefaultGripperHardwareExecutionWaitTime =
     absl::Seconds(5);
 
+// INVALID_ARGUMENT status with `message` carrying `kPinchGripperConfigInvalid`.
+absl::Status ConfigInvalidStatus(absl::string_view message) {
+  return WithPinchGripperServerStatus(absl::InvalidArgumentError(message),
+                                      kPinchGripperConfigInvalid, message);
+}
+
 }  // namespace
 
 PinchGripperServerAsyncCallbackImpl::PinchGripperServerAsyncCallbackImpl(
@@ -83,7 +92,9 @@ PinchGripperServerAsyncCallbackImpl::PinchGripperServerAsyncCallbackImpl(
 absl::StatusOr<PinchGripperInterface*>
 PinchGripperServerAsyncCallbackImpl::GetPinchGripper() const {
   if (pinch_gripper_ == nullptr) {
-    return absl::FailedPreconditionError("Gripper has not been initialized!");
+    return WithPinchGripperServerStatus(
+        absl::FailedPreconditionError("Gripper has not been initialized!"),
+        kPinchGripperNotInitialized, "Gripper has not been initialized!");
   }
   return pinch_gripper_.get();
 }
@@ -113,7 +124,7 @@ absl::Status PinchGripperServerAsyncCallbackImpl::CreatePinchGripperInternal(
   absl::MutexLock lock(mutex_);
   if (!GetPinchGripper().ok()) {
     if (pinch_gripper_type.empty()) {
-      return absl::InvalidArgumentError(
+      return ConfigInvalidStatus(
           "Cannot create a gripper because no pinch gripper type is "
           "specified.");
     }
@@ -125,26 +136,51 @@ absl::Status PinchGripperServerAsyncCallbackImpl::CreatePinchGripperInternal(
         return absl::InternalError("Failed to pack pinch gripper config.");
       }
     } else {
-      return absl::InvalidArgumentError(
+      return ConfigInvalidStatus(
           "Cannot create a gripper because no communication config "
           "is specified.");
     }
-    INTR_ASSIGN_OR_RETURN(
-        pinch_gripper_,
-        PinchGripperFactory::Create(pinch_gripper_type, any_config),
-        _.LogError());
+    absl::StatusOr<std::unique_ptr<PinchGripperInterface>> gripper =
+        PinchGripperFactory::Create(pinch_gripper_type, any_config);
+    if (!gripper.ok()) {
+      LOG(ERROR) << "PinchGripperFactory::Create failed for the '"
+                 << pinch_gripper_type << "' gripper: " << gripper.status();
+      // The driver rejects a configuration with INVALID_ARGUMENT; other
+      // failures (e.g. the gripper being unreachable) are passed through.
+      if (gripper.status().code() == absl::StatusCode::kInvalidArgument) {
+        return WithPinchGripperServerStatus(
+            gripper.status(), kPinchGripperConfigInvalid,
+            absl::StrCat("Cannot create the '", pinch_gripper_type,
+                         "' gripper: ", gripper.status().message()));
+      }
+      return gripper.status();
+    }
+
+    // Configure the gripper before storing it, so that a gripper whose
+    // physical configuration is invalid does not count as created. We are
+    // validating all SI unit configurations, for position, velocity, and
+    // effort. Hence we set all of `validate_si_position_config`,
+    // `validate_si_velocity_config`, and `validate_si_effort_config` to true.
+    if (const absl::Status configure_status = (*gripper)->Configure(
+            config.generic_pinch_gripper_config().physical_config(),
+            /* validate_si_position_config = */ true,
+            /* validate_si_velocity_config = */ true,
+            /* validate_si_effort_config = */ true);
+        !configure_status.ok()) {
+      LOG(ERROR) << "Configuring the '" << pinch_gripper_type
+                 << "' gripper failed: " << configure_status;
+      if (configure_status.code() == absl::StatusCode::kInvalidArgument) {
+        return WithPinchGripperServerStatus(
+            configure_status, kPinchGripperConfigInvalid,
+            absl::StrCat("Cannot configure the '", pinch_gripper_type,
+                         "' gripper: ", configure_status.message()));
+      }
+      return configure_status;
+    }
+    pinch_gripper_ = std::move(*gripper);
 
     LOG(INFO) << "Created a Pinch Gripper with gripper handle: "
               << gripper_handle;
-
-    // We are validating all SI unit configurations, for position, velocity,
-    // and effort. Hence we set all of `validate_si_position_config`,
-    // `validate_si_velocity_config`, and `validate_si_effort_config` to true.
-    INTR_RETURN_IF_ERROR(pinch_gripper_->Configure(
-        config.generic_pinch_gripper_config().physical_config(),
-        /* validate_si_position_config = */ true,
-        /* validate_si_velocity_config = */ true,
-        /* validate_si_effort_config = */ true));
 
     response->set_created_before(false);
 
@@ -222,9 +258,12 @@ absl::Status PinchGripperServerAsyncCallbackImpl::CommandPinchGripperInternal(
     execution_timeout = default_timeout_;
   }
   const absl::Time deadline = absl::Now() + execution_timeout;
-  INTR_ASSIGN_OR_RETURN(
-      *response->mutable_status(),
-      gripper->ExecuteCommand(request->command(), deadline, true));
+  auto gripper_status =
+      gripper->ExecuteCommand(request->command(), deadline, true);
+  if (!gripper_status.ok()) {
+    return PinchGripperCommandStatus(gripper_status.status());
+  }
+  *response->mutable_status() = std::move(*gripper_status);
 
   return absl::OkStatus();
 }

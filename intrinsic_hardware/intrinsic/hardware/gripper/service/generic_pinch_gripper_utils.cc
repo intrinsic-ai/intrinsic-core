@@ -20,6 +20,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "intrinsic/hardware/gripper/service/pinch_gripper_extended_status.h"
 
 namespace intrinsic::gripper {
 
@@ -55,8 +56,7 @@ absl::StatusOr<int64_t> ConvertSiToHardwareValue(
   // `hardware_out_maximum`.
   if (hardware_value > std::max(hardware_out_minimum, hardware_out_maximum) ||
       hardware_value < std::min(hardware_out_minimum, hardware_out_maximum)) {
-    return absl::InvalidArgumentError(
-        absl::StrFormat("Invalid Hardware Value: %d", hardware_value));
+    return PinchGripperCommandOutOfRangeStatus(hardware_value);
   }
   return hardware_value;
 }
@@ -96,8 +96,7 @@ absl::StatusOr<int64_t> ConvertPercentageToHardwareValue(
   // `hardware_out_maximum`.
   if (hardware_value > std::max(hardware_out_minimum, hardware_out_maximum) ||
       hardware_value < std::min(hardware_out_minimum, hardware_out_maximum)) {
-    return absl::InvalidArgumentError(
-        absl::StrFormat("Invalid Hardware Value: %d", hardware_value));
+    return PinchGripperCommandOutOfRangeStatus(hardware_value);
   }
   return hardware_value;
 }

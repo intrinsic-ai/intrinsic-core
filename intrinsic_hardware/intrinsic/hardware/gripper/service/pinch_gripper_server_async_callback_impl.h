@@ -28,6 +28,7 @@
 #include "grpcpp/support/status.h"
 #include "intrinsic/assets/services/proto/v1/service_state.pb.h"
 #include "intrinsic/hardware/gripper/gripper.h"
+#include "intrinsic/hardware/gripper/service/pinch_gripper_extended_status.h"
 #include "intrinsic/hardware/gripper/service/proto/pinch_gripper_server.grpc.pb.h"
 #include "intrinsic/hardware/gripper/service/proto/pinch_gripper_server.pb.h"
 #include "intrinsic/resources/health/health_state_machine.h"
@@ -131,8 +132,10 @@ class PinchGripperServerAsyncCallbackImpl final
       ::intrinsic_proto::gripper::GetPinchGripperStatusResponse* response)
       ABSL_LOCKS_EXCLUDED(mutex_);
 
+  // Returns OK if the gripper is enabled, otherwise a FAILED_PRECONDITION
+  // status carrying `kPinchGripperNotEnabled`.
   absl::Status RequireIsEnabled() const ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_) {
-    return state_machine_.IsEnabled();
+    return PinchGripperNotEnabledStatus(state_machine_.IsEnabled());
   }
 
   // Enables the underlying gripper.

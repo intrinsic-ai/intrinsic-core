@@ -27,6 +27,7 @@ cc_library(
     deps = [
         "//intrinsic/resources/health:health_state_machine",
         "//intrinsic/resources/health:operational_status",
+        "//intrinsic_hardware/intrinsic/hardware/gripper/service:pinch_gripper_extended_status",
         "//intrinsic_hardware/intrinsic/hardware/gripper/service/proto:pinch_gripper_server_cc_grpc_proto",
         "//intrinsic_hardware/intrinsic/hardware/gripper/service/proto:pinch_gripper_server_cc_proto",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",

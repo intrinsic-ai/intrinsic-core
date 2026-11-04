@@ -20,10 +20,25 @@ package(default_visibility = ["//visibility:public"])
 # Async server code (callback-based)
 
 cc_library(
+    name = "pinch_gripper_extended_status",
+    srcs = ["pinch_gripper_extended_status.cc"],
+    hdrs = ["pinch_gripper_extended_status.h"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+        "@intrinsic_apis//intrinsic/util/status:extended_status_cc_proto",
+    ],
+)
+
+cc_library(
     name = "pinch_gripper_server_async_callback_impl",
     srcs = ["pinch_gripper_server_async_callback_impl.cc"],
     hdrs = ["pinch_gripper_server_async_callback_impl.h"],
     deps = [
+        ":pinch_gripper_extended_status",
         "//intrinsic/resources/health:health_state_machine",
         "//intrinsic/resources/health:operational_status",
         "//intrinsic_hardware/intrinsic/hardware/gripper:gripper_interface",
@@ -121,6 +136,7 @@ cc_library(
     srcs = ["generic_pinch_gripper_utils.cc"],
     hdrs = ["generic_pinch_gripper_utils.h"],
     deps = [
+        ":pinch_gripper_extended_status",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",

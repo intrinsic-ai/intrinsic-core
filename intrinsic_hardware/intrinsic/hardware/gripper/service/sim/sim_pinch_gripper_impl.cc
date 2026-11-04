@@ -21,6 +21,7 @@
 #include "absl/synchronization/mutex.h"
 #include "grpcpp/client_context.h"
 #include "intrinsic/assets/services/proto/v1/service_state.pb.h"
+#include "intrinsic/hardware/gripper/service/pinch_gripper_extended_status.h"
 #include "intrinsic/hardware/gripper/service/proto/pinch_gripper_server.pb.h"
 #include "intrinsic/resources/health/operational_status.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
@@ -94,7 +95,8 @@ absl::Status SimPinchGripperImpl::CommandPinchGripper(
     CommandPinchGripperResponse* response) {
   absl::MutexLock lock(mutex_);
 
-  INTR_RETURN_IF_ERROR(state_machine_.IsEnabled());
+  INTR_RETURN_IF_ERROR(
+      PinchGripperNotEnabledStatus(state_machine_.IsEnabled()));
 
   LOG(INFO) << "Executing CommandPinchGripper request: " << request;
   // Forward the request to the simulated pinch gripper service.
