@@ -15,6 +15,27 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 cc_library(
+    name = "merge_scene_object_links",
+    srcs = ["merge_scene_object_links.cc"],
+    hdrs = ["merge_scene_object_links.h"],
+    visibility = ["//intrinsic/scene/service:__pkg__"],
+    deps = [
+        "//intrinsic/scene/processing/util:transform_util",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validation",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
+    ],
+)
+
+cc_library(
     name = "transform_imported_scene",
     srcs = ["transform_imported_scene.cc"],
     hdrs = ["transform_imported_scene.h"],

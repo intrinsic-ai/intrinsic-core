@@ -55,7 +55,8 @@ message ImportedSceneObjectInstance {
 // Specifies how an imported scene should be structured for scenes that could
 // contain multiple SceneObject.
 enum ImportStructure {
-  // Defaults to IMPORT_STRUCTURE_SINGLE
+  // Defaults to IMPORT_STRUCTURE_SINGLE_LINK for CAD file imports (and
+  // IMPORT_STRUCTURE_SINGLE for other formats).
   IMPORT_STRUCTURE_UNSPECIFIED = 0;
   // Imported scene will contain a single SceneObject and a single
   // ImportedSceneObjectInstance. The original scene graph hierarchy will be
@@ -66,4 +67,9 @@ enum ImportStructure {
   // preserved in the entities of each Scenebject. Assembly level structure will
   // be converted to equivalent instance parenting.
   IMPORT_STRUCTURE_MULTIPLE = 2;
+  // Imported scene will contain a single SceneObject and a single
+  // ImportedSceneObjectInstance, with all links merged into a single root link
+  // containing the original links as named geometries inside its
+  // GeometryComponent.
+  IMPORT_STRUCTURE_SINGLE_LINK = 3;
 }

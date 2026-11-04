@@ -42,6 +42,7 @@
 #include "intrinsic/geometry/proto/v1/geometry.pb.h"
 #include "intrinsic/geometry/proto/v1/material.pb.h"
 #include "intrinsic/longrunning/cc/operation_context.h"
+#include "intrinsic/scene/processing/merge_scene_object_links.h"
 #include "intrinsic/scene/processing/scale_imported_scene.h"
 #include "intrinsic/scene/processing/transform_imported_scene.h"
 #include "intrinsic/scene/service/geometry_client_with_cache.h"
@@ -607,6 +608,14 @@ absl::Status PostProcessImportedScene(
     INTR_RETURN_IF_ERROR(ApplyLengthUnitConversion(
         operation_context, imported_scene,
         config.length_unit_conversion().scale_factor(), geometry_client));
+  }
+
+  if (config.import_structure() ==
+      intrinsic_proto::scene_object::v1::IMPORT_STRUCTURE_SINGLE_LINK) {
+    for (auto& [_, so] :
+         *imported_scene.mutable_scene_objects()->mutable_objects()) {
+      INTR_ASSIGN_OR_RETURN(so, scene_object::MergeSceneObjectLinks(so));
+    }
   }
 
   if (config.has_geometry_operations()) {

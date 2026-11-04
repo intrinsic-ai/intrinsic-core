@@ -294,6 +294,7 @@ cc_library(
         "//intrinsic/geometry/compatibility:io",
         "//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "//intrinsic/longrunning/cc:operation_context",
+        "//intrinsic/scene/processing:merge_scene_object_links",
         "//intrinsic/scene/processing:scale_imported_scene",
         "//intrinsic/scene/processing:transform_imported_scene",
         "//intrinsic/scene/proto/v1:imported_scene_cc_proto",
