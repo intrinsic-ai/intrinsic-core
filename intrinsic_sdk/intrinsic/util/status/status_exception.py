@@ -63,6 +63,7 @@ class ExtendedStatusError(Exception, grpc.Status):
       *,
       title: str = "",
       user_message: str = "",
+      user_instructions: str = "",
       debug_message: str = "",
       timestamp: datetime.datetime | None = None,
       grpc_code: grpc.StatusCode | None = None,
@@ -76,6 +77,8 @@ class ExtendedStatusError(Exception, grpc.Status):
         of 75 characters if possible.
       user_message: if non-empty, set extended status user report message to
         this string.
+      user_instructions: if non-empty, set extended status user report recovery
+        instructions to this string.
       debug_message: if non-empty, set extended status debug report message to
         this string. Only set this in an environment where the data may be
         shared.
@@ -95,6 +98,8 @@ class ExtendedStatusError(Exception, grpc.Status):
       self.set_title(title)
     if user_message:
       self.set_user_message(user_message)
+    if user_instructions:
+      self.set_user_instructions(user_instructions)
     if debug_message:
       self.set_debug_message(debug_message)
     self.set_timestamp(timestamp or datetime.datetime.now())
@@ -228,6 +233,19 @@ class ExtendedStatusError(Exception, grpc.Status):
       self
     """
     self._extended_status.user_report.message = message
+    return self
+
+  def set_user_instructions(self, instructions: str) -> ExtendedStatusError:
+    """Sets user report recovery instructions.
+
+    Args:
+      instructions: human-readable instructions telling users of the component
+        how to recover from the error.
+
+    Returns:
+      self
+    """
+    self._extended_status.user_report.instructions = instructions
     return self
 
   @property

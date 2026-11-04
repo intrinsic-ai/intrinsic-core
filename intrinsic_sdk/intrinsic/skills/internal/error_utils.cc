@@ -85,6 +85,9 @@ std::string EllipsizeString(absl::string_view s) {
 // - if component not set, sets skill id
 // - if component set that doesn't match skill ID wraps ES
 // - if timestamp not set, sets it to "now"
+// - if title not set, sets it from `status_specs` (or falls back to
+//   message/code)
+// - if `user_report.instructions` are not set, sets them from `status_specs`
 // - if log_context provided and non set already set it
 absl::Status UpdateExtendedStatusOnError(
     absl::Status status, absl::string_view skill_id, absl::string_view op_name,
@@ -130,16 +133,27 @@ absl::Status UpdateExtendedStatusOnError(
     *es.mutable_timestamp() = GetCurrentTimeProto();
   }
 
-  if (es.title().empty()) {
+  // Only consult the manifest's status specs when something is missing; a
+  // fully populated status skips the lookup.
+  const bool needs_title = es.title().empty();
+  const bool needs_instructions = es.user_report().instructions().empty();
+  if (needs_title || needs_instructions) {
     absl::StatusOr<intrinsic_proto::assets::StatusSpec> status_spec =
         status_specs.GetSpecForCode(es.status_code().code());
-    if (status_spec.ok()) {
-      es.set_title(status_spec->title());
-    } else if (es.has_user_report() && !es.user_report().message().empty()) {
-      es.set_title(EllipsizeString(es.user_report().message()));
-    } else if (es.has_status_code()) {
-      es.set_title(absl::StrFormat("%s:%d", es.status_code().component(),
-                                   es.status_code().code()));
+    if (needs_title) {
+      if (status_spec.ok()) {
+        es.set_title(status_spec->title());
+      } else if (es.has_user_report() && !es.user_report().message().empty()) {
+        es.set_title(EllipsizeString(es.user_report().message()));
+      } else if (es.has_status_code()) {
+        es.set_title(absl::StrFormat("%s:%d", es.status_code().component(),
+                                     es.status_code().code()));
+      }
+    }
+    if (needs_instructions && status_spec.ok() &&
+        !status_spec->recovery_instructions().empty()) {
+      es.mutable_user_report()->set_instructions(
+          status_spec->recovery_instructions());
     }
   }
 

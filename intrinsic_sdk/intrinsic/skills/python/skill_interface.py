@@ -56,8 +56,10 @@ class SkillError(status_exception.ExtendedStatusError):
   errors).
 
   Specify the error codes you raise in the skill's manifest in the status_info
-  field. It is preferred to add a title to the manifest, then you can leave this
-  out when raising the exception.
+  field. It is preferred to add a title and recovery_instructions to the
+  manifest, then you can leave these out when raising the exception (or pass
+  `instructions` to override the manifest's recovery instructions with
+  runtime-specific guidance).
 
   The message becomes the user report message, it will be directly visible
   to the user. Pass an internal report message if you want to give more in-depth
@@ -82,9 +84,13 @@ class SkillError(status_exception.ExtendedStatusError):
       message: str,
       *,
       title: str | None = None,
+      instructions: str | None = None,
       debug_message: str | None = None,
   ):
     """Creates a skill error.
+
+    An empty string passed for `title`, `instructions` or `debug_message` is
+    treated the same as not passing the argument.
 
     Args:
       code: Numeric error code.
@@ -94,6 +100,10 @@ class SkillError(status_exception.ExtendedStatusError):
         on the user report.
       title: Optional title, if not given, will use title provided for the given
         code in the skill's manifest (preferred).
+      instructions: Optional user recovery instructions. If not given, will use
+        recovery_instructions provided for the given code in the skill's
+        manifest (preferred unless runtime-specific recovery instructions can be
+        given).
       debug_message: Set a message with additional information. This will be not
         be immediately displayed when showing the error. Provide in internal
         environments.
@@ -101,14 +111,11 @@ class SkillError(status_exception.ExtendedStatusError):
     super().__init__(
         component='',  # will be automatically set by skill framework
         code=code,
+        title=title or '',
         user_message=message,
+        user_instructions=instructions or '',
+        debug_message=debug_message or '',
     )
-
-    if title is not None:
-      self.set_title(title)
-
-    if debug_message is not None:
-      self.set_debug_message(debug_message)
 
 
 class SkillCancelledError(SkillError):

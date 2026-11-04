@@ -72,6 +72,9 @@ intrinsic_proto::skills::SkillErrorInfo GetErrorInfo(
 // - if component not set, sets skill id
 // - if component set that doesn't match skill ID wraps ES
 // - if timestamp not set, sets it to "now"
+// - if title not set, sets it from `status_specs` (or falls back to
+//   message/code)
+// - if `user_report.instructions` are not set, sets them from `status_specs`
 // - if log_context provided and non set already set it
 // If no extended status is found, will convert the legacy status.
 ::google::rpc::Status CreateSkillError(

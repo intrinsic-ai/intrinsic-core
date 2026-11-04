@@ -1077,44 +1077,43 @@ def _handle_skill_error(
     new_es_proto.context.add().CopyFrom(es_proto)
     es_proto = new_es_proto
 
-  if log_context is not None:
-    # If the extended status has no log context set, yet, add it
-    if not es_proto.HasField('related_to') or not es_proto.related_to.HasField(
-        'log_context'
-    ):
-      es_proto.related_to.log_context.CopyFrom(log_context)
+  # If the extended status has no log context set, yet, add it
+  if log_context is not None and (
+      not es_proto.HasField('related_to')
+      or not es_proto.related_to.HasField('log_context')
+  ):
+    es_proto.related_to.log_context.CopyFrom(log_context)
 
-    # Set timestamp to now if none set
-    if not es_proto.HasField('timestamp'):
-      es_proto.timestamp.GetCurrentTime()
+  # Set timestamp to now if none set
+  if not es_proto.HasField('timestamp'):
+    es_proto.timestamp.GetCurrentTime()
 
-    if not es_proto.title:
-      if (
-          es_proto.HasField('status_code')
-          and es_proto.status_code.code in status_specs.specs
-      ):
-        es_proto.title = status_specs.specs[es_proto.status_code.code].title
-      elif es_proto.HasField('user_report') and es_proto.user_report.message:
-        es_proto.title = textwrap.shorten(
-            es_proto.user_report.message,
-            EXTENDED_STATUS_TITLE_SHORTEN_TO_LENGTH,
-            placeholder='...',
-        )
-      elif es_proto.HasField('status_code'):
-        es_proto.title = (
-            f'{es_proto.status_code.component}:{es_proto.status_code.code}'
-        )
+  spec = status_specs.specs.get(es_proto.status_code.code)
+  if not es_proto.title:
+    if spec is not None:
+      es_proto.title = spec.title
+    elif es_proto.HasField('user_report') and es_proto.user_report.message:
+      es_proto.title = textwrap.shorten(
+          es_proto.user_report.message,
+          EXTENDED_STATUS_TITLE_SHORTEN_TO_LENGTH,
+          placeholder='...',
+      )
+    elif es_proto.HasField('status_code'):
+      es_proto.title = (
+          f'{es_proto.status_code.component}:{es_proto.status_code.code}'
+      )
 
-    if log_context is not None:
-      # If the extended status has no log context set, yet, add it
-      if not es_proto.HasField(
-          'related_to'
-      ) or not es_proto.related_to.HasField('log_context'):
-        es_proto.related_to.log_context.CopyFrom(log_context)
+  # Set recovery instructions from the manifest if none set on the error
+  if (
+      spec is not None
+      and spec.recovery_instructions
+      and not es_proto.user_report.instructions
+  ):
+    es_proto.user_report.instructions = spec.recovery_instructions
 
-    status_any = any_pb2.Any()
-    status_any.Pack(es_proto)
-    details.append(status_any)
+  status_any = any_pb2.Any()
+  status_any.Pack(es_proto)
+  details.append(status_any)
 
   return status_pb2.Status(
       code=status.StatusCodeAsInt(code),
