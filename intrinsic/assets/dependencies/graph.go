@@ -457,12 +457,12 @@ func validateReferences(sc *SolutionContext, asset *AssetContext, opts *validate
 
 		ref := asset.References[refID]
 		target, ok := sc.Assets[refID]
-		// The Asset isn't available in the Solution.
+		// The Asset isn't installed in the Solution.
 		if !ok {
 			if len(ref.Usages) > 0 {
 				if err := opts.report.Add(dependencyerrors.Newf(
 					dependencyerrors.CodeErrMissingUsedAsset,
-					"Asset %q uses Asset %q, which is not available",
+					"Asset %q uses Asset %q, which is not installed",
 					asset.ID, refID,
 				)); err != nil {
 					return err
@@ -470,7 +470,7 @@ func validateReferences(sc *SolutionContext, asset *AssetContext, opts *validate
 			} else if ref.Declared {
 				if err := opts.report.Add(dependencyerrors.Newf(
 					dependencyerrors.CodeErrMissingReferencedAsset,
-					"Asset %q explicitly references Asset %q, which is not available",
+					"Asset %q explicitly references Asset %q, which is not installed",
 					asset.ID, refID,
 				)); err != nil {
 					return err
@@ -479,7 +479,7 @@ func validateReferences(sc *SolutionContext, asset *AssetContext, opts *validate
 		} else if ref.DeclaredVersion != "" && target.Version != "" && target.Version != ref.DeclaredVersion {
 			if err := opts.report.Add(dependencyerrors.Newf(
 				dependencyerrors.CodeErrReferencedAssetVersionMismatch,
-				"Asset %q references Asset %q at version %q, but version %q is available",
+				"Asset %q references Asset %q at version %q, but version %q is installed",
 				asset.ID, refID, ref.DeclaredVersion, target.Version,
 			)); err != nil {
 				return err
