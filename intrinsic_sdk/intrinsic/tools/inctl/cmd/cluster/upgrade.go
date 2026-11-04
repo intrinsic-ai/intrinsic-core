@@ -25,6 +25,7 @@ import (
 	"text/tabwriter"
 
 	"intrinsic/assets/clientutils"
+	"intrinsic/cloud/devicemanager/version"
 	"intrinsic/skills/tools/skill/cmd/dialerutil"
 	"intrinsic/tools/inctl/auth/auth"
 	"intrinsic/tools/inctl/util/orgutil"
@@ -35,8 +36,6 @@ import (
 	"google.golang.org/grpc/codes"
 	grpcstatus "google.golang.org/grpc/status"
 	fmpb "google.golang.org/protobuf/types/known/fieldmaskpb"
-
-	"github.com/intrinsic-ai/insrc/incode/cloud/devicemanager/version"
 
 	assetCataloggrpcpb "intrinsic/assets/catalog/proto/v1/asset_catalog_go_proto"
 	assetCatalogpb "intrinsic/assets/catalog/proto/v1/asset_catalog_go_proto"

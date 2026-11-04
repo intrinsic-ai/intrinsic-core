@@ -30,8 +30,8 @@ go_library(
     ],
     importpath = "intrinsic/tools/inctl/cmd/device/device",
     deps = [
-        "//incode/cloud/devicemanager/shared",
         "//incode/frontend/cloud/api/v1:clustermanager_api_go_proto",
+        "//intrinsic_sdk/intrinsic/cloud/devicemanager/shared",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",

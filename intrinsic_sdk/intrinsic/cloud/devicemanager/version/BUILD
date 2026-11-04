@@ -12,18 +12,16 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
-# gazelle:default_visibility //visibility:public
 package(default_visibility = ["//visibility:public"])
 
 go_library(
     name = "version",
     srcs = ["version.go"],
-    importpath = "github.com/intrinsic-ai/insrc/incode/cloud/devicemanager/version",
+    importpath = "intrinsic/cloud/devicemanager/version",
     visibility = [
         "//intrinsic/tools/inctl/cmd/cluster:__subpackages__",
-        "//incode/cloud/devicemanager:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/cluster:__subpackages__",
     ],
 )

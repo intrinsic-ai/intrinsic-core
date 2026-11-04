@@ -12,16 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# This folder provides all the files (mostly structs) shared between the cloud side of device management and the on-prem code.
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
-load("@io_bazel_rules_go//go:def.bzl", "go_library")
-
-package(default_visibility = [
-    "//visibility:public",
-])
+package(default_visibility = ["//visibility:public"])
 
 go_library(
     name = "shared",
     srcs = ["shared.go"],
-    importpath = "github.com/intrinsic-ai/insrc/incode/cloud/devicemanager/shared",
+    importpath = "intrinsic/cloud/devicemanager/shared",
 )

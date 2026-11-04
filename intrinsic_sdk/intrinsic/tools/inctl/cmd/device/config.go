@@ -24,11 +24,10 @@ import (
 	"strings"
 	"time"
 
+	"intrinsic/cloud/devicemanager/shared"
 	"intrinsic/tools/inctl/cmd/root"
 	"intrinsic/tools/inctl/util/orgutil"
 	"intrinsic/tools/inctl/util/printer"
-
-	"github.com/intrinsic-ai/insrc/incode/cloud/devicemanager/shared"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/codes"

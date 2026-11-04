@@ -69,7 +69,6 @@ go_proto_library(
         "//intrinsic/modified_solution:__subpackages__",
         "//intrinsic/solution_versions:__subpackages__",
         "//intrinsic/tools/inctl/cmd:__subpackages__",
-        "//incode/cloud/devicemanager:__subpackages__",
         "//incode/frontend:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__subpackages__",
     ],

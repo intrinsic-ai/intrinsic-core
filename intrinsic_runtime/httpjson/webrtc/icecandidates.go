@@ -27,9 +27,9 @@ import (
 	"strings"
 	"time"
 
-	pion "github.com/pion/webrtc/v4"
+	"intrinsic/cloud/devicemanager/shared"
 
-	"github.com/intrinsic-ai/insrc/incode/cloud/devicemanager/shared"
+	pion "github.com/pion/webrtc/v4"
 )
 
 // The internal DNS name for the xfa-config control plane service
