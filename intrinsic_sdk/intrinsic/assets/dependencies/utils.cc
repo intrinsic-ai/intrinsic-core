@@ -14,11 +14,15 @@
 
 #include "intrinsic/assets/dependencies/utils.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <functional>
 #include <memory>
 #include <string>
+#include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -26,6 +30,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "google/protobuf/descriptor.h"
 #include "grpc/grpc_security_constants.h"
 #include "grpcpp/channel.h"
@@ -46,10 +51,29 @@ namespace intrinsic::assets::dependencies {
 
 namespace {
 
+using ::intrinsic_proto::assets::v1::GrpcConnection;
 using ::intrinsic_proto::assets::v1::ResolvedDependency;
 
 char kIngressAddress[] =
     "istio-ingressgateway.app-ingress.svc.cluster.local:80";
+
+using ConnectionKey =
+    std::pair<std::string, std::vector<std::pair<std::string, std::string>>>;
+
+ConnectionKey MakeConnectionKey(const GrpcConnection& connection) {
+  std::vector<std::pair<std::string, std::string>> headers;
+  headers.reserve(connection.metadata_size());
+  for (const auto& metadata : connection.metadata()) {
+    headers.emplace_back(metadata.key(), metadata.value());
+  }
+  // Sort stably by header key so that headers with different keys are compared
+  // order-independently, while preserving the relative order of multiple values
+  // for the same key (which is significant in gRPC/HTTP2).
+  std::stable_sort(
+      headers.begin(), headers.end(),
+      [](const auto& a, const auto& b) { return a.first < b.first; });
+  return {connection.address(), std::move(headers)};
+}
 
 absl::StatusOr<const ResolvedDependency::Interface*> FindInterface(
     const ResolvedDependency& dep, absl::string_view iface) {
@@ -73,6 +97,32 @@ absl::StatusOr<const ResolvedDependency::Interface*> FindInterface(
   return &it->second;
 }
 
+absl::StatusOr<GrpcConnection> GetGrpcConnection(const ResolvedDependency& dep,
+                                                 absl::string_view iface) {
+  INTR_ASSIGN_OR_RETURN(const auto* iface_proto, FindInterface(dep, iface));
+  if (!iface_proto->has_grpc() || !iface_proto->grpc().has_connection()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Interface is not gRPC or no connection information is available: ",
+        iface));
+  }
+  return iface_proto->grpc().connection();
+}
+
+
+GrpcConnection GetGrpcConnectionWithRuntimeFallback(
+    const ResolvedDependency& dep, absl::string_view iface) {
+  if (auto conn_or = GetGrpcConnection(dep, iface); conn_or.ok()) {
+    return *std::move(conn_or);
+  }
+  GrpcConnection fallback;
+  fallback.set_address(kIngressAddress);
+  auto* metadata = fallback.add_metadata();
+  metadata->set_key("x-resource-instance-name");
+  metadata->set_value(platform::kRuntimeInstanceName);
+  return fallback;
+}
+
+
 std::unique_ptr<intrinsic_proto::data::v1::DataAssets::StubInterface>
 MakeDefaultDataAssetsClient() {
   return intrinsic_proto::data::v1::DataAssets::NewStub(::grpc::CreateChannel(
@@ -82,19 +132,70 @@ MakeDefaultDataAssetsClient() {
 
 }  // namespace
 
+namespace internal {
+
+absl::Status ConnectManyImpl(
+    const ResolvedDependency& dep, absl::Span<const absl::string_view> ifaces,
+    const ::grpc::ChannelArguments& channel_args,
+    absl::Span<std::shared_ptr<grpc::Channel>> channels) {
+  std::vector<GrpcConnection> connections;
+  connections.reserve(ifaces.size());
+  for (absl::string_view iface : ifaces) {
+    INTR_ASSIGN_OR_RETURN(GrpcConnection connection,
+                          GetGrpcConnection(dep, iface));
+    connections.push_back(std::move(connection));
+  }
+
+  absl::flat_hash_map<ConnectionKey, std::shared_ptr<grpc::Channel>>
+      channels_by_key;
+  for (size_t i = 0; i < ifaces.size(); ++i) {
+    LOG(INFO) << "Connecting to interface \"" << ifaces[i] << "\"";
+    const GrpcConnection& connection = connections[i];
+    ConnectionKey key = MakeConnectionKey(connection);
+    auto it = channels_by_key.find(key);
+    if (it == channels_by_key.end()) {
+      INTR_ASSIGN_OR_RETURN(auto channel,
+                            ::intrinsic::assets::instances::connect::Connect(
+                                connection, channel_args));
+      it = channels_by_key.emplace(std::move(key), std::move(channel)).first;
+    }
+    channels[i] = it->second;
+  }
+  return absl::OkStatus();
+}
+
+
+absl::Status ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnlyImpl(
+    const ResolvedDependency& dep, absl::Span<const absl::string_view> ifaces,
+    const ::grpc::ChannelArguments& channel_args,
+    absl::Span<std::shared_ptr<grpc::Channel>> channels) {
+  absl::flat_hash_map<ConnectionKey, std::shared_ptr<grpc::Channel>>
+      channels_by_key;
+  for (size_t i = 0; i < ifaces.size(); ++i) {
+    LOG(INFO) << "Connecting to interface \"" << ifaces[i] << "\"";
+    GrpcConnection connection =
+        GetGrpcConnectionWithRuntimeFallback(dep, ifaces[i]);
+    ConnectionKey key = MakeConnectionKey(connection);
+    auto it = channels_by_key.find(key);
+    if (it == channels_by_key.end()) {
+      INTR_ASSIGN_OR_RETURN(auto channel,
+                            ::intrinsic::assets::instances::connect::Connect(
+                                connection, channel_args));
+      it = channels_by_key.emplace(std::move(key), std::move(channel)).first;
+    }
+    channels[i] = it->second;
+  }
+  return absl::OkStatus();
+}
+
+
+}  // namespace internal
+
 absl::StatusOr<std::shared_ptr<grpc::Channel>> Connect(
     const ResolvedDependency& dep, absl::string_view iface,
     const ::grpc::ChannelArguments& channel_args) {
-  INTR_ASSIGN_OR_RETURN(const auto* iface_proto, FindInterface(dep, iface));
-  if (!iface_proto->has_grpc() || !iface_proto->grpc().has_connection()) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "Interface is not gRPC or no connection information is available: ",
-        iface));
-  }
-
-  LOG(INFO) << "Connecting to interface \"" << iface << "\"";
-  return ::intrinsic::assets::instances::connect::Connect(
-      iface_proto->grpc().connection(), channel_args);
+  INTR_ASSIGN_OR_RETURN(auto channels, ConnectMany(dep, {iface}, channel_args));
+  return std::move(channels[0]);
 }
 
 
@@ -102,24 +203,10 @@ absl::StatusOr<std::shared_ptr<grpc::Channel>>
 ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
     const ResolvedDependency& dep, absl::string_view iface,
     const ::grpc::ChannelArguments& channel_args) {
-  if (auto iface_proto_or = FindInterface(dep, iface); iface_proto_or.ok()) {
-    const auto* iface_proto = *iface_proto_or;
-    if (iface_proto->has_grpc() && iface_proto->grpc().has_connection()) {
-      return Connect(dep, iface, channel_args);
-    }
-  }
-
-  ResolvedDependency cloned = dep;
-  cloned.set_name(platform::kRuntimeInstanceName);
-  auto* connection = (*cloned.mutable_interfaces())[std::string(iface)]
-                         .mutable_grpc()
-                         ->mutable_connection();
-  connection->set_address(kIngressAddress);
-  connection->clear_metadata();
-  auto* metadata = connection->add_metadata();
-  metadata->set_key("x-resource-instance-name");
-  metadata->set_value(platform::kRuntimeInstanceName);
-  return Connect(cloned, iface, channel_args);
+  INTR_ASSIGN_OR_RETURN(
+      auto channels, ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnly(
+                         dep, {iface}, channel_args));
+  return std::move(channels[0]);
 }
 
 

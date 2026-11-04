@@ -15,12 +15,16 @@
 #ifndef INTRINSIC_ASSETS_DEPENDENCIES_UTILS_H_
 #define INTRINSIC_ASSETS_DEPENDENCIES_UTILS_H_
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "google/protobuf/any.pb.h"
 #include "google/protobuf/descriptor.h"
 #include "grpcpp/client_context.h"
@@ -29,6 +33,24 @@
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 
 namespace intrinsic::assets::dependencies {
+
+namespace internal {
+
+absl::Status ConnectManyImpl(
+    const intrinsic_proto::assets::v1::ResolvedDependency& dep,
+    absl::Span<const absl::string_view> ifaces,
+    const ::grpc::ChannelArguments& channel_args,
+    absl::Span<std::shared_ptr<grpc::Channel>> channels);
+
+
+absl::Status ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnlyImpl(
+    const intrinsic_proto::assets::v1::ResolvedDependency& dep,
+    absl::Span<const absl::string_view> ifaces,
+    const ::grpc::ChannelArguments& channel_args,
+    absl::Span<std::shared_ptr<grpc::Channel>> channels);
+
+
+}  // namespace internal
 
 // LINT.IfChange(utils)
 
@@ -41,6 +63,26 @@ absl::StatusOr<std::shared_ptr<grpc::Channel>> Connect(
     const intrinsic_proto::assets::v1::ResolvedDependency& dep,
     absl::string_view iface,
     const ::grpc::ChannelArguments& channel_args = ::grpc::ChannelArguments());
+
+// Creates gRPC channels for communicating with the providers of the specified
+// interfaces, in the same order as `ifaces`.
+//
+// The channels will be configured with any needed metadata for communicating
+// with the providers. Interfaces that share the exact same address and metadata
+// headers will share the same underlying `grpc::Channel` instance.
+template <size_t N>
+absl::StatusOr<std::array<std::shared_ptr<grpc::Channel>, N>> ConnectMany(
+    const intrinsic_proto::assets::v1::ResolvedDependency& dep,
+    const absl::string_view (&ifaces)[N],
+    const ::grpc::ChannelArguments& channel_args = ::grpc::ChannelArguments()) {
+  std::array<std::shared_ptr<grpc::Channel>, N> channels;
+  if (absl::Status s = internal::ConnectManyImpl(dep, ifaces, channel_args,
+                                                 absl::MakeSpan(channels));
+      !s.ok()) {
+    return s;
+  }
+  return channels;
+}
 
 
 // Creates a gRPC channel for communicating with the provider of the specified
@@ -57,6 +99,32 @@ ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
     const intrinsic_proto::assets::v1::ResolvedDependency& dep,
     absl::string_view iface,
     const ::grpc::ChannelArguments& channel_args = ::grpc::ChannelArguments());
+
+// Creates gRPC channels for communicating with the providers of the specified
+// interfaces, in the same order as `ifaces`.
+//
+// The channels will be configured with any needed metadata for communicating
+// with the providers. Interfaces that share the exact same address and metadata
+// headers will share the same underlying `grpc::Channel` instance.
+//
+// For any interface where the interface or its connection details are missing
+// from the resolved dependency, it falls back to using the runtime asset
+// instance connection details.
+template <size_t N>
+absl::StatusOr<std::array<std::shared_ptr<grpc::Channel>, N>>
+ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnly(
+    const intrinsic_proto::assets::v1::ResolvedDependency& dep,
+    const absl::string_view (&ifaces)[N],
+    const ::grpc::ChannelArguments& channel_args = ::grpc::ChannelArguments()) {
+  std::array<std::shared_ptr<grpc::Channel>, N> channels;
+  if (absl::Status s = internal::
+          ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnlyImpl(
+              dep, ifaces, channel_args, absl::MakeSpan(channels));
+      !s.ok()) {
+    return s;
+  }
+  return channels;
+}
 
 
 // Retrieves the payload for the specified data interface.

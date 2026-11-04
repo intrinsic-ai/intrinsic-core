@@ -26,6 +26,7 @@ from intrinsic.assets.data.proto.v1 import data_assets_pb2
 from intrinsic.assets.data.proto.v1 import data_assets_pb2_grpc
 from intrinsic.assets.dependencies import platform  
 from intrinsic.assets.instances.connect import connect as connect_module
+from intrinsic.assets.proto.v1 import grpc_connection_pb2
 from intrinsic.assets.proto.v1 import resolved_dependency_pb2
 from intrinsic.util.grpc import interceptor
 
@@ -60,6 +61,7 @@ def connect(
   Args:
     dep: The resolved dependency.
     iface: The interface to connect to.
+    grpc_options: Additional options for the gRPC channel.
 
   Returns:
     A gRPC channel to the provider of the specified interface.
@@ -69,16 +71,45 @@ def connect(
       resolved dependency.
     NotGRPCError: If the specified interface is not gRPC.
   """
-  iface_proto = _find_interface(dep, iface)
-  if not iface_proto.HasField("grpc") or not iface_proto.grpc.HasField(
-      "connection"
-  ):
-    raise NotGRPCError(
-        "Interface is not gRPC or no connection information is available:"
-        f" {iface}"
-    )
+  return connect_many(dep, [iface], grpc_options)[0]
 
-  return connect_module.connect(iface_proto.grpc.connection, grpc_options)
+
+def connect_many(
+    dep: resolved_dependency_pb2.ResolvedDependency,
+    ifaces: Sequence[str],
+    grpc_options: Sequence[tuple[str, Any]] | None = None,
+) -> list[grpc.Channel]:
+  """Creates gRPC channels to the providers of the specified interfaces.
+
+  The returned channels will be intercepted to include any needed metadata for
+  communicating with the providers. Interfaces that share the exact same address
+  and metadata headers will share the same underlying gRPC channel instance.
+
+  Args:
+    dep: The resolved dependency.
+    ifaces: The interfaces to connect to.
+    grpc_options: Additional options for the gRPC channels.
+
+  Returns:
+    A list of gRPC channels corresponding to `ifaces`.
+
+  Raises:
+    MissingInterfaceError: If any specified interface is not found in the
+      resolved dependency.
+    NotGRPCError: If any specified interface is not gRPC.
+  """
+  connections = [_get_grpc_connection(dep, iface) for iface in ifaces]
+  channels_by_key: dict[
+      tuple[str, tuple[tuple[str, str], ...]], grpc.Channel
+  ] = {}
+  channels: list[grpc.Channel] = []
+  for iface, connection in zip(ifaces, connections):
+    logging.info('Connecting to interface "%s"', iface)
+    key = _connection_key(connection)
+    if key not in channels_by_key:
+      channels_by_key[key] = connect_module.connect(connection, grpc_options)
+    channels.append(channels_by_key[key])
+  return channels
 
 
 
@@ -93,23 +124,48 @@ def connect_with_runtime_asset_fallback_for_asset_migration_only(
   dependency, it falls back to using the runtime asset instance connection
   details.
   """
-  try:
-    iface_proto = _find_interface(dep, iface)
-    if iface_proto.HasField("grpc") and iface_proto.grpc.HasField("connection"):
-      return connect(dep, iface, grpc_options)
-  except MissingInterfaceError:
-    pass
+  return connect_many_with_runtime_asset_fallback_for_asset_migration_only(
+      dep, [iface], grpc_options
+  )[0]
 
-  cloned = resolved_dependency_pb2.ResolvedDependency()
-  cloned.CopyFrom(dep)
-  cloned.name = platform.RUNTIME_INSTANCE_NAME
-  connection = cloned.interfaces[iface].grpc.connection
-  connection.address = _INGRESS_ADDRESS
-  del connection.metadata[:]
-  meta = connection.metadata.add()
-  meta.key = "x-resource-instance-name"
-  meta.value = platform.RUNTIME_INSTANCE_NAME
-  return connect(cloned, iface, grpc_options)
+
+def connect_many_with_runtime_asset_fallback_for_asset_migration_only(
+    dep: resolved_dependency_pb2.ResolvedDependency,
+    ifaces: Sequence[str],
+    grpc_options: Sequence[tuple[str, Any]] | None = None,
+) -> list[grpc.Channel]:
+  """Creates gRPC channels to the providers of the specified interfaces.
+
+  Interfaces that share the exact same address and metadata headers will share
+  the same underlying gRPC channel instance.
+
+  For any interface where the interface or its connection details are missing
+  from the resolved dependency, it falls back to using the runtime asset
+  instance connection details.
+  """
+  channels_by_key: dict[
+      tuple[str, tuple[tuple[str, str], ...]], grpc.Channel
+  ] = {}
+  channels: list[grpc.Channel] = []
+  for iface in ifaces:
+    try:
+      connection = _get_grpc_connection(dep, iface)
+    except (MissingInterfaceError, NotGRPCError):
+      connection = grpc_connection_pb2.GrpcConnection(
+          address=_INGRESS_ADDRESS,
+          metadata=[
+              grpc_connection_pb2.GrpcConnection.Metadata(
+                  key="x-resource-instance-name",
+                  value=platform.RUNTIME_INSTANCE_NAME,
+              )
+          ],
+      )
+    logging.info('Connecting to interface "%s"', iface)
+    key = _connection_key(connection)
+    if key not in channels_by_key:
+      channels_by_key[key] = connect_module.connect(connection, grpc_options)
+    channels.append(channels_by_key[key])
+  return channels
 
 
 
@@ -157,6 +213,35 @@ def get_data_payload(
     )
 
   return da.data
+
+
+def _get_grpc_connection(
+    dep: resolved_dependency_pb2.ResolvedDependency, iface: str
+) -> grpc_connection_pb2.GrpcConnection:
+  """Returns the GrpcConnection for the specified interface."""
+  iface_proto = _find_interface(dep, iface)
+  if not iface_proto.HasField("grpc") or not iface_proto.grpc.HasField(
+      "connection"
+  ):
+    raise NotGRPCError(
+        "Interface is not gRPC or no connection information is available:"
+        f" {iface}"
+    )
+  return iface_proto.grpc.connection
+
+
+def _connection_key(
+    connection: grpc_connection_pb2.GrpcConnection,
+) -> tuple[str, tuple[tuple[str, str], ...]]:
+  """Returns a hashable key for deduplicating GrpcConnections."""
+  # Python's `sorted` is guaranteed to be stable, so sorting by key alone makes
+  # different keys order-independent while preserving the relative order of
+  # duplicate keys (which is significant in gRPC/HTTP2).
+  headers = sorted(
+      ((m.key, m.value) for m in connection.metadata),
+      key=lambda kv: kv[0],
+  )
+  return (connection.address, tuple(headers))
 
 
 def _find_interface(
