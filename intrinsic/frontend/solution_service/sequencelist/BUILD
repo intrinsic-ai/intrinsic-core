@@ -26,7 +26,10 @@ go_library(
 
 go_library(
     name = "sequencelist",
-    srcs = ["sequencelist.go"],
+    srcs = [
+        "builder.go",
+        "sequencelist.go",
+    ],
     importpath = "intrinsic/frontend/solution_service/sequencelist",
     visibility = ["//intrinsic/frontend/solution_service:__subpackages__"],
     deps = [
