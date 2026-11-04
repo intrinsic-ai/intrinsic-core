@@ -44,6 +44,96 @@ def _pinch_gripper_interface_uri() -> str:
   )
 
 
+# Message fragments of the EOAT gripper service (`HealthStateMachine::IsEnabled`)
+# and of the GPIO client (`GPIOClient::WriteInternal`) behind it; used to tell
+# apart failures that share a gRPC status code. Mirrors
+# gripper_skill_errors.cc, which the C++ gripper skills share.
+_NOT_ENABLED_MESSAGE_FRAGMENT: str = "is not enabled"
+# `GPIOClient::WriteInternal` wraps stream transport failures and an ABORTED
+# session status (e.g. ICON not enabled) into INTERNAL statuses whose messages
+# name "GPIO". Every other status of the GPIO server is forwarded verbatim
+# (PERMISSION_DENIED for signals claimed by another session, INVALID_ARGUMENT
+# for a value of the wrong type, the OPC UA server's INTERNAL write failures).
+# Those are deliberately left on GRIPPER_SERVICE_ERROR_CODE: none of the
+# specific codes fits a configuration or contention problem, and matching the
+# GPIO backends' message texts would not be robust. The user message carries
+# the server's text.
+# TODO(b/559844222): Classify by the ExtendedStatus codes the gripper services
+# attach (PRs #58961, #58963) instead of message fragments.
+_GPIO_MESSAGE_FRAGMENT: str = "GPIO"
+_SIGNALS_NOT_FOUND_WRITABLE_MESSAGE_FRAGMENT: str = "not found writable"
+
+
+def _gripper_service_error_code(
+    status_code: grpc.StatusCode | None, details: str
+) -> int:
+  """Maps a failed gripper service RPC to the most specific skill error code.
+
+  Classifies by gRPC status code first and by message second. Statuses that
+  match no specific code fall back to GRIPPER_SERVICE_ERROR_CODE.
+
+  Args:
+    status_code: The gRPC status code of the failed RPC, if known.
+    details: The status message of the failed RPC.
+
+  Returns:
+    One of the error codes declared in control_pinch_gripper_error_codes.py.
+  """
+  if status_code == grpc.StatusCode.FAILED_PRECONDITION:
+    if _NOT_ENABLED_MESSAGE_FRAGMENT in details:
+      return error_codes.GRIPPER_NOT_ENABLED_ERROR_CODE
+    return error_codes.GRIPPER_SERVICE_ERROR_CODE
+  if status_code == grpc.StatusCode.INTERNAL:
+    if _GPIO_MESSAGE_FRAGMENT in details:
+      # In simulation (`gazebo/plugins/gpio/gpio_service.cc`), an unknown signal
+      # aborts the write stream with `"Write signals failed with error
+      # NOT_FOUND: Signals [...] not found writable among N plugin(s)..."`,
+      # which `GPIOClient::WriteInternal` wraps into an INTERNAL status.
+      if _SIGNALS_NOT_FOUND_WRITABLE_MESSAGE_FRAGMENT in details:
+        return error_codes.GRIPPER_IO_SIGNALS_NOT_FOUND_ERROR_CODE
+      return error_codes.GRIPPER_IO_WRITE_FAILED_ERROR_CODE
+    return error_codes.GRIPPER_SERVICE_ERROR_CODE
+  if status_code == grpc.StatusCode.NOT_FOUND:
+    # The hardware GPIO service passes NOT_FOUND through for signal names it
+    # does not know, e.g. "Signal `x` was not found." (ICON).
+    return error_codes.GRIPPER_IO_SIGNALS_NOT_FOUND_ERROR_CODE
+  if status_code in (
+      grpc.StatusCode.UNAVAILABLE,
+      grpc.StatusCode.DEADLINE_EXCEEDED,
+  ):
+    return error_codes.GRIPPER_SERVICE_UNREACHABLE_ERROR_CODE
+  return error_codes.GRIPPER_SERVICE_ERROR_CODE
+
+
+def _gripper_service_error(e: grpc.RpcError) -> skl.SkillError:
+  """Wraps a failed gripper service RPC into the most specific SkillError.
+
+  The user message names the gRPC status code and, if the service sent one,
+  the status message; the full gRPC error stays in the debug message.
+
+  Args:
+    e: The error raised by the gripper service stub.
+
+  Returns:
+    The SkillError to raise in place of `e`.
+  """
+  if isinstance(e, grpc.Call):
+    status_code = e.code()
+    details = e.details() or ""
+  else:
+    status_code = None
+    details = str(e)
+  code_name = status_code.name if status_code is not None else "UNKNOWN"
+  message = f"Pinch gripper service RPC failed ({code_name})"
+  if details:
+    message += f": {details}"
+  return skl.SkillError(
+      _gripper_service_error_code(status_code, details),
+      message,
+      debug_message=str(e),
+  )
+
+
 class ControlPinchGripper(skl.Skill):
   """A skill that controls a pinch gripper."""
 
@@ -54,14 +144,26 @@ class ControlPinchGripper(skl.Skill):
   ) -> None:
     """Executes a given pinch gripper command and updates the world."""
     world = context.object_world
-    gripper_object = world.get_kinematic_object(
-        request.params.pinch_gripper.object.name
-    )
+    try:
+      gripper_object = world.get_kinematic_object(
+          request.params.pinch_gripper.object.name
+      )
+    except (ValueError, grpc.RpcError) as e:
+      raise skl.SkillError(
+          error_codes.PARAMETERIZATION_ERROR_CODE,
+          f"Parameter `pinch_gripper` must reference a kinematic object: {e}",
+      ) from e
 
-    channel = asset_utils.connect(
-        request.params.pinch_gripper,
-        _pinch_gripper_interface_uri(),
-    )
+    try:
+      channel = asset_utils.connect(
+          request.params.pinch_gripper,
+          _pinch_gripper_interface_uri(),
+      )
+    except (asset_utils.MissingInterfaceError, asset_utils.NotGRPCError) as e:
+      raise skl.SkillError(
+          error_codes.GRIPPER_SERVICE_ERROR_CODE,
+          f"Failed to connect to pinch gripper: {e}",
+      ) from e
     stub = eoat_service_pb2_grpc.PinchGripperStub(channel)
 
     command, expected_position = self._parse_params(
@@ -80,14 +182,7 @@ class ControlPinchGripper(skl.Skill):
             f"Command is not supported: {request.params}!",
         )
     except grpc.RpcError as e:
-      details = (
-          e.details() if hasattr(e, "details") and e.details() else None
-      ) or str(e)
-      raise skl.SkillError(
-          error_codes.GRIPPER_SERVICE_ERROR_CODE,
-          f"Pinch gripper service RPC failed: {details}",
-          debug_message=str(e),
-      ) from e
+      raise _gripper_service_error(e) from e
 
     logging.info("Move gripper joints to %s", expected_position)
 

@@ -18,4 +18,17 @@
 
 PARAMETERIZATION_ERROR_CODE: int = 10200
 
+# Fallback for failures of the gripper service that match no specific code.
 GRIPPER_SERVICE_ERROR_CODE: int = 10300
+
+# The gripper service refused the command because the gripper is not enabled.
+GRIPPER_NOT_ENABLED_ERROR_CODE: int = 10301
+
+# The gripper service failed to write its I/O (GPIO) signals.
+GRIPPER_IO_WRITE_FAILED_ERROR_CODE: int = 10302
+
+# The GPIO service does not know the gripper's I/O signals.
+GRIPPER_IO_SIGNALS_NOT_FOUND_ERROR_CODE: int = 10303
+
+# The gripper service cannot be reached.
+GRIPPER_SERVICE_UNREACHABLE_ERROR_CODE: int = 10304

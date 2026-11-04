@@ -24,6 +24,20 @@ display_name: "Control pinch gripper"
 vendor {
   display_name: "Intrinsic"
 }
+documentation {
+  description:
+    "Controls a pinch gripper.\n"
+    "\n"
+    "The skill sends a `grasp` or `release` command to a pinch gripper that "
+    "is controlled by an EOAT `PinchGripper` service and updates the belief "
+    "world to the commanded gripper state.\n"
+    "Precondition: the gripper must be enabled once using the "
+    "`ai.intrinsic.enable_gripper` skill.\n"
+    "After invoking this skill, if it results in grasping or releasing "
+    "an object, you must directly call `ai.intrinsic.attach_object_to_robot` "
+    "or `ai.intrinsic.detach_object` respectively, providing both the object "
+    "and gripper as arguments."
+}
 options {
   python_config {
     skill_module: "intrinsic.manipulation.skills.control_pinch_gripper"
@@ -43,7 +57,44 @@ status_info: [
   {
     code: 10300
     title: "Gripper Service Error"
-    recovery_instructions: "Check gripper hardware connection and service status."
+    recovery_instructions:
+      "Check the error message for the underlying gripper fault. If the "
+      "gripper faulted or lost its reset state, run "
+      "`ai.intrinsic.enable_gripper` to reset it; otherwise check the gripper "
+      "hardware connection and the service status."
+  },
+  {
+    code: 10301
+    title: "Gripper Not Enabled"
+    recovery_instructions:
+      "Run `ai.intrinsic.enable_gripper` first. If that fails, its error "
+      "message names the fault that prevents enabling the gripper."
+  },
+  {
+    code: 10302
+    title: "Gripper I/O Write Failed"
+    recovery_instructions:
+      "The gripper service could not write the gripper's I/O signals; the "
+      "error message names the cause. If the I/Os are controlled by the "
+      "real-time control service, clear its faults (for example in the robot "
+      "control UI or in File > Service Manager). Otherwise check that the I/O "
+      "(GPIO) service is running and that no other session has claimed the "
+      "signals. Then retry."
+  },
+  {
+    code: 10303
+    title: "Gripper I/O Signals Not Found"
+    recovery_instructions:
+      "Check that the I/O (GPIO) service the gripper service is configured "
+      "with is running and that the gripper service's signal names match the "
+      "signals it provides."
+  },
+  {
+    code: 10304
+    title: "Gripper Service Unreachable"
+    recovery_instructions:
+      "Check that the gripper service instance is running and healthy, for "
+      "example in File > Service Manager."
   }
 ]
 

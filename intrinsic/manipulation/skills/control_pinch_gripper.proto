@@ -24,6 +24,9 @@ import "intrinsic/world/proto/object_world_refs.proto";
 option go_package = "intrinsic/manipulation/skills/control_pinch_gripper_go_proto";
 
 message PinchGripperCommand {
+  // The pinch gripper resource to control. Requires a resource providing the
+  // `intrinsic_proto.eoat.PinchGripper` gRPC service interface and an object
+  // representation in the world.
   intrinsic_proto.assets.v1.ResolvedDependency pinch_gripper = 4
       [(intrinsic_proto.assets.field_metadata).dependency = {
         requires: "grpc://intrinsic_proto.eoat.PinchGripper"
