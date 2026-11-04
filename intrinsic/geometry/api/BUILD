@@ -216,32 +216,6 @@ cc_library(
 )
 
 cc_library(
-    name = "construct_isotropic_remeshing",
-    srcs = ["construct_isotropic_remeshing.cc"],
-    hdrs = ["construct_isotropic_remeshing.h"],
-    copts = ["-fexceptions"] + select({
-        "@platforms//cpu:x86_32": ["-frounding-math"],
-        "@platforms//cpu:x86_64": ["-frounding-math"],
-        "//conditions:default": [],
-    }),
-    deps = [
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
-        "//intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
-        "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
-        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
-        "//intrinsic_sdk/intrinsic/util/object_store:memoize",
-        "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings:str_format",
-        "@cgal",
-    ],
-)
-
-cc_library(
     name = "remesh_mesh",
     srcs = ["remesh_mesh.cc"],
     hdrs = ["remesh_mesh.h"],

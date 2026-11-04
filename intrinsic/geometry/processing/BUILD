@@ -54,7 +54,6 @@ cc_library(
         "//intrinsic/geometry/processing/processors:alpha_wrap_processor",
         "//intrinsic/geometry/processing/processors:coacd_processor",
         "//intrinsic/geometry/processing/processors:convex_hull_processor",
-        "//intrinsic/geometry/processing/processors:isotropic_remeshing_processor",
         "//intrinsic/geometry/processing/processors:mesh_simplification_processor",
         "//intrinsic/geometry/processing/processors:noop_processor",
         "//intrinsic/geometry/processing/processors:scale_processor",

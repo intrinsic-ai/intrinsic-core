@@ -97,29 +97,6 @@ cc_library(
 )
 
 cc_library(
-    name = "isotropic_remeshing_processor",
-    srcs = ["isotropic_remeshing_processor.cc"],
-    hdrs = ["isotropic_remeshing_processor.h"],
-    copts = ["-fexceptions"] + select({
-        "@platforms//cpu:x86_32": ["-frounding-math"],
-        "@platforms//cpu:x86_64": ["-frounding-math"],
-        "//conditions:default": [],
-    }),
-    deps = [
-        "//intrinsic/geometry/api:construct_isotropic_remeshing",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
-        "//intrinsic/longrunning/cc:operation_context",
-        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/memory",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings:str_format",
-    ],
-)
-
-cc_library(
     name = "scale_processor",
     srcs = ["scale_processor.cc"],
     hdrs = ["scale_processor.h"],

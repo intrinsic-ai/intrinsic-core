@@ -21,6 +21,11 @@ option go_package = "intrinsic/geometry/processing/pipeline_config_go_proto";
 // Configuration for a single step
 // Next tag: 9
 message PipelineStep {
+  // Field 5 was `IsotropicRemeshingProcessorConfig isotropic_remeshing`,
+  // replaced by `voxel_remeshing`.
+  reserved 5;
+  reserved "isotropic_remeshing";
+
   // Configuration that specifies which processor to use for this step.
   oneof config {
     // NoOpGeometryProcessor is for illustration only, please remove once we
@@ -35,9 +40,6 @@ message PipelineStep {
 
     // Config for Mesh Simplification
     MeshSimplificationProcessorConfig mesh_simplification = 4;
-
-    // Config for Isotropic Remeshing
-    IsotropicRemeshingProcessorConfig isotropic_remeshing = 5;
 
     // Config for Scaling
     ScaleProcessorConfig scale = 6;
@@ -82,14 +84,6 @@ message MeshSimplificationProcessorConfig {
 // Configuration data for the ConvexHullGeometryProcessor
 message ConvexHullProcessorConfig {
   // Nothing here.
-}
-
-// Configuration data for the IsotropicRemeshingGeometryProcessor
-message IsotropicRemeshingProcessorConfig {
-  // The edge reduction factor to use when processing the geometry, should be
-  // positive.
-  double edge_reduction_factor = 1;
-  int32 num_iterations = 2;
 }
 
 // Configuration data for the ScaleGeometryProcessor

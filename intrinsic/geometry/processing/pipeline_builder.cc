@@ -26,7 +26,6 @@
 #include "intrinsic/geometry/processing/processors/alpha_wrap_processor.h"
 #include "intrinsic/geometry/processing/processors/coacd_processor.h"
 #include "intrinsic/geometry/processing/processors/convex_hull_processor.h"
-#include "intrinsic/geometry/processing/processors/isotropic_remeshing_processor.h"
 #include "intrinsic/geometry/processing/processors/mesh_simplification_processor.h"
 #include "intrinsic/geometry/processing/processors/noop_processor.h"
 #include "intrinsic/geometry/processing/processors/scale_processor.h"
@@ -70,13 +69,6 @@ BuildGeometryPipeline(
         INTR_ASSIGN_OR_RETURN(auto processor,
                               MeshSimplificationGeometryProcessor::Create(
                                   step_config.mesh_simplification()));
-        processors.emplace_back(std::move(processor));
-        break;
-      }
-      case intrinsic_proto::geometry::PipelineStep::kIsotropicRemeshing: {
-        INTR_ASSIGN_OR_RETURN(auto processor,
-                              IsotropicRemeshingGeometryProcessor::Create(
-                                  step_config.isotropic_remeshing()));
         processors.emplace_back(std::move(processor));
         break;
       }
