@@ -113,10 +113,23 @@ cc_test(
 )
 
 cc_library(
+    name = "gripper_extended_status",
+    srcs = ["gripper_extended_status.cc"],
+    hdrs = ["gripper_extended_status.h"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+    ],
+)
+
+cc_library(
     name = "gripper_impl",
     hdrs = ["gripper_impl.h"],
     visibility = ["//visibility:private"],
     deps = [
+        ":gripper_extended_status",
         ":gripper_utils",
         "//intrinsic/resources/health:health_state_machine",
         "//intrinsic/resources/health:operational_status",
@@ -126,6 +139,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/synchronization",
         "@com_github_grpc_grpc//:grpc++",
@@ -140,8 +155,10 @@ cc_test(
     name = "gripper_impl_test",
     srcs = ["gripper_impl_test.cc"],
     deps = [
+        ":gripper_extended_status",
         ":gripper_impl",
         ":gripper_utils",
+        "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/status",
@@ -155,6 +172,7 @@ cc_test(
         "@intrinsic_apis//intrinsic/hardware/gpio/v1:signal_cc_proto",
         "@intrinsic_apis//intrinsic/hardware/gripper/eoat:eoat_service_cc_proto",
         "@intrinsic_apis//intrinsic/hardware/gripper/eoat:gripper_config_cc_proto",
+        "@intrinsic_apis//intrinsic/util/status:extended_status_cc_proto",
     ],
 )
 

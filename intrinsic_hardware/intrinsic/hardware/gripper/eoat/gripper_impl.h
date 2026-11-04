@@ -23,6 +23,8 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "grpcpp/support/status.h"
@@ -31,6 +33,7 @@
 #include "intrinsic/hardware/gpio/v1/gpio_service.grpc.pb.h"
 #include "intrinsic/hardware/gpio/v1/gpio_service.pb.h"
 #include "intrinsic/hardware/gripper/eoat/eoat_service.pb.h"
+#include "intrinsic/hardware/gripper/eoat/gripper_extended_status.h"
 #include "intrinsic/hardware/gripper/eoat/gripper_utils.h"
 #include "intrinsic/resources/health/health_state_machine.h"
 #include "intrinsic/resources/health/operational_status.h"
@@ -80,14 +83,16 @@ class GripperImpl {
 
   ::grpc::Status Grasp() ABSL_LOCKS_EXCLUDED(public_api_mutex_) {
     absl::MutexLock lock(public_api_mutex_);
-    INTR_RETURN_IF_ERROR_GRPC(ToAbslStatus(RequireIsEnabled()));
-    return ToGrpcStatus(gpio_client_.Write(config_.grasp().value_set()));
+    INTR_RETURN_IF_ERROR_GRPC(RequireIsEnabled());
+    return ToGrpcStatus(
+        GpioWriteStatus(gpio_client_.Write(config_.grasp().value_set())));
   }
 
   ::grpc::Status Release() ABSL_LOCKS_EXCLUDED(public_api_mutex_) {
     absl::MutexLock lock(public_api_mutex_);
-    INTR_RETURN_IF_ERROR_GRPC(ToAbslStatus(RequireIsEnabled()));
-    return ToGrpcStatus(gpio_client_.Write(config_.release().value_set()));
+    INTR_RETURN_IF_ERROR_GRPC(RequireIsEnabled());
+    return ToGrpcStatus(
+        GpioWriteStatus(gpio_client_.Write(config_.release().value_set())));
   }
 
   // Conditionally enables the `BlowOff` method for suction grippers.
@@ -97,12 +102,13 @@ class GripperImpl {
   ::grpc::Status BlowOff(const intrinsic_proto::eoat::BlowOffRequest& request)
       ABSL_LOCKS_EXCLUDED(public_api_mutex_) {
     absl::MutexLock lock(public_api_mutex_);
-    INTR_RETURN_IF_ERROR_GRPC(ToAbslStatus(RequireIsEnabled()));
+    INTR_RETURN_IF_ERROR_GRPC(RequireIsEnabled());
     if (request.turn_on()) {
-      return ToGrpcStatus(gpio_client_.Write(config_.blowoff_on().value_set()));
+      return ToGrpcStatus(GpioWriteStatus(
+          gpio_client_.Write(config_.blowoff_on().value_set())));
     } else {
-      return ToGrpcStatus(
-          gpio_client_.Write(config_.blowoff_off().value_set()));
+      return ToGrpcStatus(GpioWriteStatus(
+          gpio_client_.Write(config_.blowoff_off().value_set())));
     }
   }
 
@@ -110,11 +116,13 @@ class GripperImpl {
       intrinsic_proto::eoat::GrippingIndicatedResponse& response)
       ABSL_LOCKS_EXCLUDED(public_api_mutex_) {
     absl::MutexLock lock(public_api_mutex_);
-    INTR_RETURN_IF_ERROR_GRPC(ToAbslStatus(RequireIsEnabled()));
-    INTR_ASSIGN_OR_RETURN_GRPC(
-        auto status,
-        gpio_client_.ReadAndMatch(config_.gripping_indicated().value_set()));
-    response.set_indicated(status);
+    INTR_RETURN_IF_ERROR_GRPC(RequireIsEnabled());
+    const absl::StatusOr<bool> indicated =
+        gpio_client_.ReadAndMatch(config_.gripping_indicated().value_set());
+    if (!indicated.ok()) {
+      return ToGrpcStatus(GpioReadStatus(indicated.status()));
+    }
+    response.set_indicated(*indicated);
     return grpc::Status::OK;
   }
 
@@ -127,14 +135,22 @@ class GripperImpl {
   ::grpc::Status ClearFaults() ABSL_LOCKS_EXCLUDED(public_api_mutex_) {
     absl::MutexLock lock(public_api_mutex_);
 
-    auto clear_faults_action = [this]() {
-      return ToAbslStatus(this->ClearFaultsAction());
+    // The state machine replaces a failed action's status by its own, so the
+    // cause is captured here to report it in the extended status.
+    absl::Status clear_faults_result;
+    auto clear_faults_action = [this, &clear_faults_result]() {
+      clear_faults_result = ToAbslStatus(this->ClearFaultsAction());
+      return clear_faults_result;
     };
     auto disable_action = [this]() {
       return ToAbslStatus(this->DisableGripperAction());
     };
-    return ToGrpcStatus(state_machine_.ClearFaultsAndDisable(
-        clear_faults_action, disable_action));
+    const absl::Status status = state_machine_.ClearFaultsAndDisable(
+        clear_faults_action, disable_action);
+    if (!status.ok() && !clear_faults_result.ok()) {
+      return ToGrpcStatus(ClearFaultsStatus(status, clear_faults_result));
+    }
+    return ToGrpcStatus(status);
   }
 
   ::grpc::Status Enable() ABSL_LOCKS_EXCLUDED(public_api_mutex_) {
@@ -151,9 +167,10 @@ class GripperImpl {
   }
 
  private:
-  // Returns OK if the gripper is enabled. Not thread-safe.
-  ::grpc::Status RequireIsEnabled() const {
-    return ToGrpcStatus(state_machine_.IsEnabled());
+  // Returns OK if the gripper is enabled, otherwise a FAILED_PRECONDITION
+  // status carrying `kGripperNotEnabled`. Not thread-safe.
+  absl::Status RequireIsEnabled() const {
+    return NotEnabledStatus(state_machine_.IsEnabled());
   }
 
   // Action to clear the fault. Not thread safe.
