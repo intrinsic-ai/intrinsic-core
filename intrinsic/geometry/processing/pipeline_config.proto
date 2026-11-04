@@ -19,7 +19,7 @@ import "google/protobuf/duration.proto";
 option go_package = "intrinsic/geometry/processing/pipeline_config_go_proto";
 
 // Configuration for a single step
-// Next tag: 8
+// Next tag: 9
 message PipelineStep {
   // Configuration that specifies which processor to use for this step.
   oneof config {
@@ -44,6 +44,9 @@ message PipelineStep {
 
     // Config for CoACD
     CoacdProcessorConfig coacd = 7;
+
+    // Config for Voxel Remeshing (meshoptimizer)
+    VoxelRemeshingProcessorConfig voxel_remeshing = 8;
 
     // TODO(stoyang): Add more processors, e.g. make primitive in b/210496736.
   }
@@ -105,4 +108,16 @@ message CoacdProcessorConfig {
   double threshold = 1;
   // The max number of convex hulls to generate in the decomposition.
   int32 max_convex_hull = 2;
+}
+
+// Configuration data for the VoxelRemeshingGeometryProcessor
+message VoxelRemeshingProcessorConfig {
+  // Dimension of the internal voxel grid used by meshoptimizer's voxel remesher
+  // (`meshopt_remesh`). The largest axis of the input mesh's bounding box spans
+  // `resolution - 2` voxels (one empty padding voxel on each side). Must be in
+  // [4, 256], meshoptimizer's supported range (see `kMinVoxelRemeshResolution`
+  // / `kMaxVoxelRemeshResolution` in intrinsic/geometry/api/remesh_mesh.h);
+  // other values, including unset (0), are rejected. Higher values preserve
+  // finer detail at the cost of more output triangles, memory, and runtime.
+  int32 resolution = 1;
 }

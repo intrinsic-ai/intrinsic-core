@@ -159,3 +159,24 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
     ],
 )
+
+cc_library(
+    name = "voxel_remeshing_processor",
+    srcs = ["voxel_remeshing_processor.cc"],
+    hdrs = ["voxel_remeshing_processor.h"],
+    deps = [
+        "//intrinsic/geometry/api:remesh_mesh",
+        "//intrinsic/geometry/api:remesh_mesh_memoize",
+        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
+        "//intrinsic/geometry/processing:processor",
+        "//intrinsic/longrunning/cc:operation_context",
+        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/memory",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:str_format",
+    ],
+)

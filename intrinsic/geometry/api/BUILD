@@ -242,6 +242,48 @@ cc_library(
 )
 
 cc_library(
+    name = "remesh_mesh",
+    srcs = ["remesh_mesh.cc"],
+    hdrs = ["remesh_mesh.h"],
+    copts = ["-fexceptions"] + select({
+        "@platforms//cpu:x86_32": ["-frounding-math"],
+        "@platforms//cpu:x86_64": ["-frounding-math"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/geometry/api:axis_aligned_bounding_box_3d",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:str_format",
+        "@meshoptimizer",
+    ],
+)
+
+cc_library(
+    name = "remesh_mesh_memoize",
+    srcs = ["remesh_mesh_memoize.cc"],
+    hdrs = ["remesh_mesh_memoize.h"],
+    deps = [
+        ":remesh_mesh",
+        "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
+        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/util:demangle",
+        "//intrinsic_sdk/intrinsic/util/object_store:memoize",
+        "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:str_format",
+    ],
+)
+
+cc_library(
     name = "distance_stats",
     hdrs = ["distance_stats.h"],
     deps = [

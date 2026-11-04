@@ -30,6 +30,7 @@
 #include "intrinsic/geometry/processing/processors/mesh_simplification_processor.h"
 #include "intrinsic/geometry/processing/processors/noop_processor.h"
 #include "intrinsic/geometry/processing/processors/scale_processor.h"
+#include "intrinsic/geometry/processing/processors/voxel_remeshing_processor.h"
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic::geo {
@@ -88,6 +89,13 @@ BuildGeometryPipeline(
       case intrinsic_proto::geometry::PipelineStep::kCoacd: {
         INTR_ASSIGN_OR_RETURN(auto processor, CoacdGeometryProcessor::Create(
                                                   step_config.coacd()));
+        processors.emplace_back(std::move(processor));
+        break;
+      }
+      case intrinsic_proto::geometry::PipelineStep::kVoxelRemeshing: {
+        INTR_ASSIGN_OR_RETURN(auto processor,
+                              VoxelRemeshingGeometryProcessor::Create(
+                                  step_config.voxel_remeshing()));
         processors.emplace_back(std::move(processor));
         break;
       }
