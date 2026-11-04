@@ -19,8 +19,10 @@
 {{- $asset_catalog_address := "assets.intrinsic.ai:443" }}
 {{- if .Values.use_onprem_catalogs_for_testing_only }}
   {{- $asset_catalog_address = "istio-ingressgateway.app-ingress.svc.cluster.local:80" }}
-{{- else if .Values.feature_options.catalog_address }}
-  {{- $asset_catalog_address = .Values.feature_options.catalog_address }}
+{{- else if eq .Values.project "intrinsic-staging" }}
+  {{- $asset_catalog_address = "assets-qa.intrinsic.ai:443" }}
+{{- else if eq .Values.project "xfa-awesome-alpha" }}
+  {{- $asset_catalog_address = "assets-dev.intrinsic.ai:443" }}
 {{- end }}
 ---
 apiVersion: v1
