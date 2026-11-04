@@ -42,6 +42,7 @@ absl-py==2.1.0 \
     #   keras
     #   ml-collections
     #   mujoco
+    #   mujoco-warp
     #   optax
     #   orbax-checkpoint
     #   rouge-score
@@ -1175,6 +1176,7 @@ etils[epath, epy]==1.14.0 \
     #   clu
     #   grain
     #   mujoco
+    #   mujoco-warp
     #   orbax-checkpoint
     #   tensorflow-datasets
 execnet==2.1.2 \
@@ -3863,9 +3865,46 @@ msgspec==0.20.0 \
     --hash=sha256:f9a1697da2f85a751ac3cc6a97fceb8e937fc670947183fb2268edaf4016d1ee \
     --hash=sha256:fb1d934e435dd3a2b8cf4bbf47a8757100b4a1cfdc2afdf227541199885cdacb
     # via persist-cache
-mujoco==3.2.7 \
-    --hash=sha256:43c1cba5cb44d36840721166feb74600c193452f8510c0b249c4208cb534a171 \
-    --hash=sha256:6b4013466b45575d49dd3d8748d09985f7349003aef32687216d2b902ac7b138
+mujoco==3.17.0 \
+    --hash=sha256:0b399238a95c2a32167210ccacb82e16eaf39ca94676862a05f7c16ca313680a \
+    --hash=sha256:0fa2b5731e2bee273e52e93fd3349d0b2651d2cb95ee30da0e7c5c1af1e6f125 \
+    --hash=sha256:116e8ba08010bd7a5c761ff17073cadd2dd0475c55a93c484d72c83e5e802d1d \
+    --hash=sha256:17ab707e86b0a5da13582a5335d3ea585a5ac4cce2e814e15b203530d1bf16e3 \
+    --hash=sha256:242bf93b607fe575f395cb9aecadf0fd5efcd6d6eac760c74e4a402c4115e4b8 \
+    --hash=sha256:390c4820796e2b905f64f011ae3c307d686f8548a3571b7420da0001ee6faaf2 \
+    --hash=sha256:42371356efe53a5f5f73ed03fcb967bdf04048017f80e2fca01e71a360e42da2 \
+    --hash=sha256:4d90f764fe3c3b9730c237d3182fbce17c4f8509f0fb6d4fe2a3ad3bf1ba2c89 \
+    --hash=sha256:525e09a00ecd964f06582773d9eeb03bb0e5a1675edf296a6868024759b3b235 \
+    --hash=sha256:54e49ea1b8866f594502ff7c168bfbc2b951904d66eb3f927de8f51f2c288713 \
+    --hash=sha256:577ece167502cef0abbac28e76108aee7e1c223df6d1daff901a157f0691d3a0 \
+    --hash=sha256:5b9927d8b495fbec6d09fd31a4d7d599a90b7eddc22e958c11b7abebbace7c3d \
+    --hash=sha256:5e49c15905e7a39eaa1efb1cae809a81c5f5c2439467f23e7e6e383624d957be \
+    --hash=sha256:67f77ebfd03978462317cf3be66f7e03a1d30d5f938931494ad9807c35f75e5c \
+    --hash=sha256:6c324addca24a24a7b0beff2ec49300e9d4481fd8ccd611514ba7ea8e4a5e870 \
+    --hash=sha256:7890194fb1e1f91eb611e4f12525cf30d4e24f6d4d96254f1310b0dc1c933967 \
+    --hash=sha256:79d6e26066bf56ee276889e6a6d289d14b29981f69bfb0002384151086efe42f \
+    --hash=sha256:83856dd75b8d32468f9189d92d1e09ceae8312d8f795a79cba9778a76e4e9b7c \
+    --hash=sha256:8abf1acc3e60a5c136e57f806eddf09145d161f736117d09bf6c1251d3ef51b5 \
+    --hash=sha256:91a70ed9979c383ff1f5c03f25cc2e1280a8254c1a8e558d5dd7f4184f01efc9 \
+    --hash=sha256:982607e1083aa9ccd4ad763ff65d813b242347ed196d88cfc6fde9ea60337c72 \
+    --hash=sha256:ab52f6e566b1ec685a54ff8e4d984d3fdf721398abe83a8de5f73126cdb8e191 \
+    --hash=sha256:aea9b2f9095f226563d25ff62c3f5b3e5fa34b6c4166f34ea95fda8b72e4419f \
+    --hash=sha256:b09c50e08f5a7d699593b741048ab4121292f2b0e0c277e82ef3fdbc108c45e7 \
+    --hash=sha256:c5d5dcf009b8a1c90e58d2792b0eade2a6bc3161fb950c2d3de35cac65bcb902 \
+    --hash=sha256:c677ab789299db70ca3fffe96b44a424bdad516cc87cc2a83898140923c2e91e \
+    --hash=sha256:caf872fc1345b5ae1ae9cf970b833d050e79fef6f5f2c4f4fbaeab802072e2c4 \
+    --hash=sha256:cf339a29d224058158d06e1f34e07035988f871f4865c70739cb4a3904b5b641 \
+    --hash=sha256:d611c0284fe10229f462658186b0b74b6944d96f266f0045e926732c6eed7880 \
+    --hash=sha256:d66928d86a2d1b601bbaa4dc11db50214d17d5301bb8afd84721313b67ff0874 \
+    --hash=sha256:da3e131a5f5ec77805c582b1ee2da6dbed3b0e79c637db3a5bdb5c8a843f0b94 \
+    --hash=sha256:f33b610451b6752eeff270dfa9f9f8efda72a4fcd5ce64f8fc47f4bef467b557 \
+    --hash=sha256:fcccf54256f809e3e8d355a185aa51678882fc708684d77f301390a1632b2806
+    # via
+    #   -r requirements.in
+    #   mujoco-warp
+mujoco-warp==3.17.0 \
+    --hash=sha256:2a5391f9d4d7a4d0e2908e0be80ee77ad12dbf27c76a2b9724099441360b5de7 \
+    --hash=sha256:3c7d4a6c27e60c61679d3746c6fa32e55803d22dd2f3faf79bcc3b643d61ae0a
     # via -r requirements.in
 multidict==6.7.1 \
     --hash=sha256:026d264228bcd637d4e060844e39cdc60f86c479e463d49075dedc21b18fbbe0 \
@@ -4174,6 +4213,7 @@ numpy==1.26.4 \
     #   ml-dtypes
     #   mlflow
     #   mujoco
+    #   mujoco-warp
     #   nlopt
     #   onnx
     #   open3d
@@ -7930,7 +7970,9 @@ warp-lang==1.17.0 \
     --hash=sha256:5051271048da956a8b94e2db9771ce60ce9591a3ac5bb49037f3d6812d1eea00 \
     --hash=sha256:ca35c82242a7553046f09023bbe56750b5c3d9af72625bd1a905a56d3189771d \
     --hash=sha256:f2fec43afb81caa2190c0b7fa3aaf4d869f3599839f0c40b9ead84331f91e993
-    # via -r requirements.in
+    # via
+    #   -r requirements.in
+    #   mujoco-warp
 wasmtime==47.0.1 \
     --hash=sha256:0aeb53d4c8e682cccebbaac48882939b34e71a1243b622129de3e6834728044d \
     --hash=sha256:4e46a4a29092a2ac1001159d5673e2a23996f4474261c791401867b1630429f4 \
@@ -8079,6 +8121,7 @@ websockets==15.0.1 \
     #   google-adk
     #   google-antigravity
     #   google-genai
+    #   mujoco
 werkzeug==3.1.7 \
     --hash=sha256:4b314d81163a3e1a169b6a0be2a000a0e204e8873c5de6586f453c55688d422f \
     --hash=sha256:fb8c01fe6ab13b9b7cdb46892b99b1d66754e1d7ab8e542e865ec13f526b5351

@@ -130,7 +130,8 @@ mcp==1.27.2
 mmh3==5.1.0
 ml-collections==1.1.0
 mlflow==3.13.0
-mujoco==3.2.7
+mujoco==3.17.0
+mujoco-warp==3.17.0
 natsort==7.1.1
 nbconvert==7.16.6
 nbformat==5.10.4
