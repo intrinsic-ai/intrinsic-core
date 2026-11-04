@@ -49,16 +49,19 @@ class ModelAssetsManagerLocalRepo(
       repo_path: Local filesystem path where model assets will be stored.
     """
     super().__init__(repo_path)
-    self._repo_content: set[tuple[str, str]] = set()
+    # The previous listing, for logging new models and as a fallback if a scan
+    # fails.
+    self._last_listing: set[tuple[str, str]] = set()
 
-  def _list_repo_content(self) -> None:
+  def _list_repo_content(self) -> set[tuple[str, str]]:
+    """Scans the repo and returns its (model name, version) directories."""
     if not os.path.exists(self.repo_path):
       logging.warning(
           "Provided local repository %s does not exist.",
           self.repo_path,
       )
-      self._repo_content.clear()
-      return
+      self._last_listing = set()
+      return self._last_listing
 
     new_content = set()
     try:
@@ -75,21 +78,29 @@ class ModelAssetsManagerLocalRepo(
               new_content.add((model_name, model_version))
     except OSError as e:
       logging.error("Error scanning repository: %s", e)
-      return
+      return self._last_listing
 
     # Log new models.
     for model_name, model_version in new_content:
-      if (model_name, model_version) not in self._repo_content:
+      if (model_name, model_version) not in self._last_listing:
         logging.info(
             "Found new model %s, version %s", model_name, model_version
         )
 
-    self._repo_content = new_content
+    self._last_listing = new_content
+    return new_content
 
   def _find_model_in_repo(
       self, model_name: str, model_version: str
   ) -> str | None:
-    if (model_name, model_version) not in self._repo_content:
+    # Check if model exists in last repository scan.
+    if (model_name, model_version) in self._last_listing:
+      return f"{model_name}.{model_version}"
+
+    # Fallback to directly checking the disk in case the model wasn't present
+    # yet at the time of the last scan.
+    model_path = os.path.join(self.repo_path, model_name, model_version)
+    if not os.path.isdir(model_path):
       return None
     return f"{model_name}.{model_version}"
 
@@ -103,10 +114,9 @@ class ModelAssetsManagerLocalRepo(
       'name.version') to their corresponding MlModel proto instances.
     """
     model_assets: dict[str, ml_model_pb2.MlModel] = {}
-    self._list_repo_content()
-    for model, version in self._repo_content:
+    for model, version in self._list_repo_content():
       model_key = f"{model}.{version}"
-      logging.info("Found model %s, version %s", model, version)
+      logging.debug("Found model %s, version %s", model, version)
       model_asset = ml_model_pb2.MlModel()
       model_asset.model_config.name = model
       model_asset.model_config.version = version
@@ -114,7 +124,7 @@ class ModelAssetsManagerLocalRepo(
 
     return model_assets
 
-  def create_model_asset(self, ml_model: ml_model_pb2.MlModel) -> None:
+  def _create_model_asset_impl(self, ml_model: ml_model_pb2.MlModel) -> None:
     """Creates model-related files required for inference.
 
     Args:
@@ -130,27 +140,19 @@ class ModelAssetsManagerLocalRepo(
       raise ValueError(f"Model {model_name}.{model_version} does not exist.")
     # No Op.
 
-  def update_model_asset(
+  def _update_model_asset_impl(
       self, old_model: ml_model_pb2.MlModel, new_model: ml_model_pb2.MlModel
   ) -> None:
     """Updates model-related files for an existing model.
 
-    This method should perform differential updates, deleting files that are
-    no longer referenced and downloading new or changed files.
+    The files are managed by the user, so this only checks that the new model
+    exists. The old one might have been removed already.
 
     Args:
       old_model: The previously loaded MlModel proto.
       new_model: The new MlModel proto to update to.
     """
-    model_name = old_model.model_config.name
-    model_version = old_model.model_config.version
-    existing_model_version = self._find_model_in_repo(
-        model_name=model_name, model_version=model_version
-    )
-    if not existing_model_version:
-      raise ValueError(
-          f"Old model {model_name}.{model_version} does not exist."
-      )
+    del old_model  # Unused.
     model_name = new_model.model_config.name
     model_version = new_model.model_config.version
     existing_model_version = self._find_model_in_repo(
@@ -163,17 +165,12 @@ class ModelAssetsManagerLocalRepo(
     logging.info(f"Found model {model_name}.{model_version} to update.")
     # No Op.
 
-  def delete_model_asset(self, ml_model: ml_model_pb2.MlModel) -> None:
+  def _delete_model_asset_impl(self, ml_model: ml_model_pb2.MlModel) -> None:
     """Deletes model-related files of an existing model.
+
+    No-op, since the files are managed by the user and usually removed already.
 
     Args:
       model_asset: The MlModel proto of the model to delete.
     """
-    model_name = ml_model.model_config.name
-    model_version = ml_model.model_config.version
-    existing_model_version = self._find_model_in_repo(
-        model_name=model_name, model_version=model_version
-    )
-    if not existing_model_version:
-      raise ValueError(f"Model {model_name}.{model_version} does not exist.")
-    # No Op.
+    del ml_model  # Unused.

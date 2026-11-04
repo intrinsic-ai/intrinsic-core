@@ -123,6 +123,7 @@ class ModelAssetsManager(model_assets_manager_base.ModelAssetsManagerBase):
     # Internal cache to store the ReferencedData map for each model name,
     # enabling metadata preservation without exposing MlModelAsset externally.
     # The format is {pkg.name.version : {path_strings: referenced_data_objs}}
+    # No lock: dict ops are atomic and only one op per model uses its keys.
     self._referenced_data_cache: dict[
         str, dict[str, referenced_data_pb2.ReferencedData]
     ] = {}
@@ -282,7 +283,7 @@ class ModelAssetsManager(model_assets_manager_base.ModelAssetsManagerBase):
     for f in futures.as_completed(fs):
       f.result()
 
-  def create_model_asset(self, ml_model: ml_model_pb2.MlModel) -> None:
+  def _create_model_asset_impl(self, ml_model: ml_model_pb2.MlModel) -> None:
     """Creates the model asset on the local filesystem.
 
     Downloads and streams all referenced data files for the model from either
@@ -295,7 +296,22 @@ class ModelAssetsManager(model_assets_manager_base.ModelAssetsManagerBase):
     items_to_download = list(ml_model.model_data.items())
     self._download_data_items(ml_model, items_to_download)
 
-  def update_model_asset(
+  def _remove_empty_parents(self, path: str, stop_dir: str) -> None:
+    """Removes empty parent directories of a deleted file up to `stop_dir`.
+
+    This is a helper function intended to remove empty directories left behind
+    after deleting stale file references during a model update.
+    """
+    path = os.path.normpath(path)
+    stop_dir = os.path.normpath(stop_dir)
+    while path != stop_dir and path.startswith(stop_dir + os.sep):
+      try:
+        os.rmdir(path)
+      except OSError:
+        break
+      path = os.path.dirname(path)
+
+  def _update_model_asset_impl(
       self, old_model: ml_model_pb2.MlModel, new_model: ml_model_pb2.MlModel
   ) -> None:
     """Differentially updates the model asset on the local filesystem.
@@ -311,12 +327,13 @@ class ModelAssetsManager(model_assets_manager_base.ModelAssetsManagerBase):
     old_map = old_model.model_data
     new_map = new_model.model_data
     model_name = new_model.model_config.name
+    model_dir = os.path.join(self.repo_path, model_name)
 
     # Delete files that are no longer referenced.
     for key in old_map:
       if key in new_map:
         continue
-      output_file_path = os.path.join(self.repo_path, model_name, key)
+      output_file_path = os.path.join(model_dir, key)
       logging.info("Deleting unreferenced file: %s", output_file_path)
       try:
         os.remove(output_file_path)
@@ -328,18 +345,39 @@ class ModelAssetsManager(model_assets_manager_base.ModelAssetsManagerBase):
         )
       except (IsADirectoryError, PermissionError) as e:
         raise ValueError(f"{output_file_path} is not a file.") from e
+      self._remove_empty_parents(os.path.dirname(output_file_path), model_dir)
 
-    # Identify new or changed files.
+    # Identify new or changed files. The old referenced data is read before its
+    # cache entry is dropped.
+    old_ref_map = self._get_referenced_data_entry(old_model)
+    new_ref_map = self._get_referenced_data_entry(new_model)
+    old_cache_key = id_version_as_string(old_model.model_config)
+    new_cache_key = id_version_as_string(new_model.model_config)
+    if old_cache_key != new_cache_key:
+      self._referenced_data_cache.pop(old_cache_key, None)
     items_to_download = []
     for key, model_data_val in new_map.items():
-      if key not in old_map or old_map[key] != model_data_val:
+      # The MlModelData reference is usually the same file:// path for all
+      # versions, so the ReferencedData is compared as well. Its CAS reference,
+      # inlined bytes or digest change with the content.
+      if (
+          key not in old_map
+          or old_map[key] != model_data_val
+          or old_ref_map.get(key) != new_ref_map.get(key)
+          # Without referenced data, only a CAS reference proves that the
+          # content is unchanged.
+          or (
+              key not in new_ref_map
+              and not model_data_val.reference.startswith("intcas://")
+          )
+      ):
         items_to_download.append((key, model_data_val))
       else:
         logging.info("File for key '%s' is unchanged, skipping download.", key)
 
     self._download_data_items(new_model, items_to_download)
 
-  def delete_model_asset(self, ml_model: ml_model_pb2.MlModel) -> None:
+  def _delete_model_asset_impl(self, ml_model: ml_model_pb2.MlModel) -> None:
     """Deletes the model asset from the local filesystem.
 
     Removes the entire directory associated with the model from the local
