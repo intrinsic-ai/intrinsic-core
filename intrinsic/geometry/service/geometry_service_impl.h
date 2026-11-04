@@ -40,8 +40,9 @@ namespace intrinsic::geo {
 class GeometryServiceImpl
     : public intrinsic_proto::geometry::GeometryService::Service {
  public:
-  using MakeGeoLib = absl::AnyInvocable<std::unique_ptr<GeometryLibrary>(
-      grpc::ServerContext*, GeometryFingerprintCache&)>;
+  using MakeGeoLib =
+      absl::AnyInvocable<absl::StatusOr<std::unique_ptr<GeometryLibrary>>(
+          grpc::ServerContext*, GeometryFingerprintCache&)>;
 
   GeometryServiceImpl(
       std::shared_ptr<longrunning::OperationSchedulerInterface> scheduler,
@@ -122,6 +123,11 @@ class GeometryServiceImpl
   // the geometry.
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
   SaveAndUploadGeometry(grpc::ServerContext* context, Geometry&& geo);
+
+  // Creates a GeometryLibrary instance using `make_geo_lib_`, returning an
+  // error if the factory is unset, fails, or returns null.
+  absl::StatusOr<std::unique_ptr<GeometryLibrary>> MakeGeometryLibrary(
+      grpc::ServerContext* context);
 
   GeometryFingerprintCache geo_cache_;
 

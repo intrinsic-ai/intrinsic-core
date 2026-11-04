@@ -56,6 +56,7 @@
 #include "intrinsic/stats/tracing_utils.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_builder_grpc.h"
+#include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_macros_grpc.h"
 
 namespace intrinsic::geo {
@@ -149,7 +150,8 @@ GeometryServiceImpl::GeometryServiceImpl(
            << "No operation scheduler provided.";
   }
 
-  std::unique_ptr<GeometryLibrary> geo_lib = make_geo_lib_(context, geo_cache_);
+  INTR_ASSIGN_OR_RETURN_GRPC(const std::unique_ptr<GeometryLibrary> geo_lib,
+                             MakeGeometryLibrary(context), _.LogError());
   if (context->IsCancelled()) {
     return grpc::Status(grpc::StatusCode::CANCELLED, "Request cancelled.");
   }
@@ -223,8 +225,8 @@ GeometryServiceImpl::GeometryServiceImpl(
     }
 
     intrinsic_proto::geometry::GeometryProcessingResult result_proto;
-    std::unique_ptr<GeometryLibrary> geo_lib =
-        make_geo_lib_(nullptr, geo_cache_);
+    INTR_ASSIGN_OR_RETURN(const std::unique_ptr<GeometryLibrary> geo_lib,
+                          MakeGeometryLibrary(/*context=*/nullptr));
 
     for (const auto& geo : geometries) {
       INTR_ASSIGN_OR_RETURN_GRPC(*result_proto.add_processed_geometries(),
@@ -289,11 +291,29 @@ GeometryServiceImpl::GeometryServiceImpl(
   return grpc::Status::OK;
 }
 
+absl::StatusOr<std::unique_ptr<GeometryLibrary>>
+GeometryServiceImpl::MakeGeometryLibrary(grpc::ServerContext* context) {
+  if (!make_geo_lib_) {
+    return absl::FailedPreconditionError(
+        "Persistent geometry storage backend is not configured.");
+  }
+
+  INTR_ASSIGN_OR_RETURN(std::unique_ptr<GeometryLibrary> geo_lib,
+                        make_geo_lib_(context, geo_cache_));
+  if (geo_lib == nullptr) {
+    return absl::InternalError(
+        "Persistent geometry library factory returned null.");
+  }
+
+  return geo_lib;
+}
+
 absl::StatusOr<Geometry> GeometryServiceImpl::GetGeometry(
     grpc::ServerContext* context,
     const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs) {
   // TODO(b/459563840): Support cancellation of download.
-  std::unique_ptr<GeometryLibrary> geo_lib = make_geo_lib_(context, geo_cache_);
+  INTR_ASSIGN_OR_RETURN(const std::unique_ptr<GeometryLibrary> geo_lib,
+                        MakeGeometryLibrary(context));
   return geo_lib->Deserializer().GetGeometry(geo_storage_refs,
                                              GeometryOptions::Default());
 }
@@ -303,7 +323,8 @@ absl::StatusOr<Geometry> GeometryServiceImpl::GetGeometry(
     const intrinsic_proto::geometry::v1::GeometryStorageRefs&
         geo_storage_refs) {
   // TODO(b/459563840): Support cancellation of download.
-  std::unique_ptr<GeometryLibrary> geo_lib = make_geo_lib_(context, geo_cache_);
+  INTR_ASSIGN_OR_RETURN(const std::unique_ptr<GeometryLibrary> geo_lib,
+                        MakeGeometryLibrary(context));
   return geo_lib->Deserializer().GetGeometry(geo_storage_refs, std::nullopt);
 }
 
@@ -311,7 +332,8 @@ absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
 GeometryServiceImpl::SaveAndUploadGeometry(grpc::ServerContext* context,
                                            Geometry&& geo) {
   // TODO(b/459563840): Support cancellation of upload.
-  std::unique_ptr<GeometryLibrary> geo_lib = make_geo_lib_(context, geo_cache_);
+  INTR_ASSIGN_OR_RETURN(const std::unique_ptr<GeometryLibrary> geo_lib,
+                        MakeGeometryLibrary(context));
   return geo_lib->Serializer().SaveGeometryV1(std::move(geo));
 }
 
