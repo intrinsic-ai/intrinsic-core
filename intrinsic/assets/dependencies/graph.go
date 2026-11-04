@@ -531,7 +531,7 @@ func validateNode(sc *SolutionContext, node *node, opts *validateGraphOptions) e
 		if dep.on == "" {
 			if err := opts.report.Add(dependencyerrors.Newf(
 				dependencyerrors.CodeErrMissingDependencyTarget,
-				"%s has an unconfigured required dependency for this field in the configuration message: %q", dep.sourceDescription, dep.configPath,
+				"%s has an unconfigured required dependency for the %q input", dep.sourceDescription, dep.configPath,
 			)); err != nil {
 				return err
 			}
