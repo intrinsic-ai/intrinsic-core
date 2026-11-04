@@ -83,8 +83,11 @@ using ::intrinsic::usd::SupportedUsdExtensions;
 using ::intrinsic_proto::scene_object::v1::GeometryImportResolution;
 using ::intrinsic_proto::scene_object::v1::IMPORT_STRUCTURE_MULTIPLE;
 using ::intrinsic_proto::scene_object::v1::IMPORT_STRUCTURE_SINGLE;
+using ::intrinsic_proto::scene_object::v1::IMPORT_STRUCTURE_SINGLE_LINK;
+using ::intrinsic_proto::scene_object::v1::IMPORT_STRUCTURE_UNSPECIFIED;
 using ::intrinsic_proto::scene_object::v1::ImportedScene;
 using ::intrinsic_proto::scene_object::v1::ImportedSceneObjectInstance;
+using ::intrinsic_proto::scene_object::v1::ImportResultMetadata;
 using ::intrinsic_proto::scene_object::v1::ImportSceneConfig;
 using ::intrinsic_proto::scene_object::v1::ImportSceneObjectConfig;
 using ::intrinsic_proto::scene_object::v1::ImportSceneObjectRequest;
@@ -266,11 +269,13 @@ SceneObjectImporter::ImportSceneObject(const ImportSceneObjectRequest& request,
   // Note for CAD files, since the raw file could produce different results
   // based on the import resolution, we do not rely on the raw import cache when
   // the import resolution is specified as fine.
-  if (std::optional<SceneObject> cached_scene_object =
+  std::optional<ImportResultMetadata::SceneFileType> scene_file_type;
+  if (std::optional<ImportCache::CachedSceneObject> cached =
           cache_.GetSceneObject(file_hash);
-      cached_scene_object.has_value() && !fine_cad_import) {
+      cached.has_value() && !fine_cad_import) {
     imported_scene =
-        CreateSingleObjectImportedScene(std::move(*cached_scene_object));
+        CreateSingleObjectImportedScene(std::move(cached->scene_object));
+    scene_file_type = cached->scene_file_type;
   } else {
     if (request.file().file_type() == SceneFileData::ZIP_BUNDLE ||
         request.file().file_type() == SceneFileData::UNSPECIFIED) {
@@ -281,10 +286,12 @@ SceneObjectImporter::ImportSceneObject(const ImportSceneObjectRequest& request,
            .max_directory_depth = kMaxDirectoryDepth}))
           << "Failed to unzip scene file data ";
       INTR_ASSIGN_OR_RETURN(
-          imported_scene,
+          ImportedSceneWithFileType raw_import,
           ImportSceneFromDirectory(temp_path.path(), import_scene_config),
           _.With(remove_path_from_error)
               << "This ZIP file cannot be imported.");
+      imported_scene = std::move(raw_import.imported_scene);
+      scene_file_type = raw_import.scene_file_type;
     } else {
       const std::string stem = request.config().scene_object_name().empty()
                                    ? "imported_scene_object"
@@ -294,9 +301,11 @@ SceneObjectImporter::ImportSceneObject(const ImportSceneObjectRequest& request,
       const std::string temp_file = file::JoinPath(temp_path.path(), file_name);
       INTR_RETURN_IF_ERROR(
           file::SetContents(temp_file, file.data(), file::Defaults()));
-      INTR_ASSIGN_OR_RETURN(imported_scene,
+      INTR_ASSIGN_OR_RETURN(ImportedSceneWithFileType raw_import,
                             ImportSceneFromFile(temp_file, import_scene_config),
                             _.With(remove_path_from_error));
+      imported_scene = std::move(raw_import.imported_scene);
+      scene_file_type = raw_import.scene_file_type;
     }
 
     // Validate that only one scene object is imported.
@@ -311,8 +320,8 @@ SceneObjectImporter::ImportSceneObject(const ImportSceneObjectRequest& request,
     if (!fine_cad_import) {
       const SceneObject& new_scene_object =
           imported_scene.scene_objects().objects().begin()->second;
-      INTR_RETURN_IF_ERROR(
-          cache_.StoreSceneObject(file_hash, new_scene_object));
+      INTR_RETURN_IF_ERROR(cache_.StoreSceneObject(file_hash, new_scene_object,
+                                                   scene_file_type));
     } else {
       // Validate the imported scene objects explicitly when not caching.
       for (const auto& [_, scene_object] :
@@ -335,6 +344,14 @@ SceneObjectImporter::ImportSceneObject(const ImportSceneObjectRequest& request,
     return absl::CancelledError("Cancelled");
   }
   operation_context.AddProgress(0.5);
+
+  // Only an explicit LINK_STRUCTURE_SINGLE_LINK merges links. Unset or
+  // LINK_STRUCTURE_UNSPECIFIED keeps all imported links (the existing behavior
+  // of this API).
+  if (request.config().link_structure() ==
+      ImportSceneObjectConfig::LINK_STRUCTURE_SINGLE_LINK) {
+    import_scene_config.set_import_structure(IMPORT_STRUCTURE_SINGLE_LINK);
+  }
 
   INTR_RETURN_IF_ERROR(
       PostProcessImportedScene(operation_context, imported_scene,
@@ -429,19 +446,22 @@ absl::StatusOr<ImportSceneResult> SceneObjectImporter::ImportScene(
   // Note for CAD files, since the raw file could produce different results
   // based on the import resolution, we do not rely on the raw import cache
   // when the import resolution is specified as fine.
+  std::optional<ImportResultMetadata::SceneFileType> scene_file_type;
   if (!fine_cad_import) {
     if (import_multiple_objects) {
-      if (std::optional<ImportedScene> cached_scene =
+      if (std::optional<ImportCache::CachedImportedScene> cached =
               cache_.GetImportedScene(file_hash);
-          cached_scene.has_value()) {
-        imported_scene = std::move(*cached_scene);
+          cached.has_value()) {
+        imported_scene = std::move(cached->imported_scene);
+        scene_file_type = cached->scene_file_type;
       }
     } else {
-      if (std::optional<SceneObject> cached_scene_object =
+      if (std::optional<ImportCache::CachedSceneObject> cached =
               cache_.GetSceneObject(file_hash);
-          cached_scene_object.has_value()) {
+          cached.has_value()) {
         imported_scene =
-            CreateSingleObjectImportedScene(std::move(*cached_scene_object));
+            CreateSingleObjectImportedScene(std::move(cached->scene_object));
+        scene_file_type = cached->scene_file_type;
       }
     }
   }
@@ -469,10 +489,12 @@ absl::StatusOr<ImportSceneResult> SceneObjectImporter::ImportScene(
            .max_directory_depth = kMaxDirectoryDepth}))
           << "Failed to unzip scene file data ";
       INTR_ASSIGN_OR_RETURN(
-          imported_scene,
+          ImportedSceneWithFileType raw_import,
           ImportSceneFromDirectory(temp_path.path(), request.import_config()),
           _.With(remove_path_from_error)
               << "This ZIP file cannot be imported.");
+      imported_scene = std::move(raw_import.imported_scene);
+      scene_file_type = raw_import.scene_file_type;
     } else {
       const std::string stem =
           request.import_config().scene_object_name().empty()
@@ -485,23 +507,25 @@ absl::StatusOr<ImportSceneResult> SceneObjectImporter::ImportScene(
       INTR_RETURN_IF_ERROR(file::SetContents(
           temp_file, request.scene_file_data().data(), file::Defaults()));
       INTR_ASSIGN_OR_RETURN(
-          imported_scene,
+          ImportedSceneWithFileType raw_import,
           ImportSceneFromFile(temp_file, request.import_config()),
           _.With(remove_path_from_error));
+      imported_scene = std::move(raw_import.imported_scene);
+      scene_file_type = raw_import.scene_file_type;
     }
 
     // Cache based on the import structure.
     if (!fine_cad_import) {
       if (import_multiple_objects) {
-        INTR_RETURN_IF_ERROR(
-            cache_.StoreImportedScene(file_hash, imported_scene));
+        INTR_RETURN_IF_ERROR(cache_.StoreImportedScene(
+            file_hash, imported_scene, scene_file_type));
       } else {
         if (imported_scene.scene_objects().objects().empty()) {
           return absl::InternalError("Imported scene contains no objects.");
         }
         INTR_RETURN_IF_ERROR(cache_.StoreSceneObject(
-            file_hash,
-            imported_scene.scene_objects().objects().begin()->second));
+            file_hash, imported_scene.scene_objects().objects().begin()->second,
+            scene_file_type));
       }
     } else {
       // Validate the imported scene objects explicitly when not caching.
@@ -554,6 +578,10 @@ absl::StatusOr<ImportSceneResult> SceneObjectImporter::ImportScene(
                              options_.geometry_library->Deserializer()));
   *result.mutable_scene() = std::move(imported_scene);
   result.mutable_result_metadata()->set_file_token(file_hash);
+  if (scene_file_type.has_value() &&
+      *scene_file_type != ImportResultMetadata::SCENE_FILE_TYPE_UNSPECIFIED) {
+    result.mutable_result_metadata()->set_scene_file_type(*scene_file_type);
+  }
 
   operation_context.AddProgress(0.5);
   return result;
@@ -561,7 +589,8 @@ absl::StatusOr<ImportSceneResult> SceneObjectImporter::ImportScene(
 
 // Import scene object located from a directory. The directory could contain
 // arbitrary scene files that needs resolution.
-absl::StatusOr<ImportedScene> SceneObjectImporter::ImportSceneFromDirectory(
+absl::StatusOr<SceneObjectImporter::ImportedSceneWithFileType>
+SceneObjectImporter::ImportSceneFromDirectory(
     absl::string_view scene_file_directory,
     const ImportSceneConfig& import_config) {
   INTR_ASSIGN_OR_RETURN(const auto find_scene_file_result,
@@ -574,14 +603,22 @@ absl::StatusOr<ImportedScene> SceneObjectImporter::ImportSceneFromDirectory(
           auto sdf_object,
           SceneObjectFromSdfInDirectory(
               scene_file_directory, options_.geometry_library->Serializer()));
-      return CreateSingleObjectImportedScene(std::move(sdf_object));
+      return ImportedSceneWithFileType{
+          .imported_scene =
+              CreateSingleObjectImportedScene(std::move(sdf_object)),
+          .scene_file_type = ImportResultMetadata::SCENE_FILE_TYPE_SDF,
+      };
     }
     case SceneFileTypes::USD: {
       INTR_ASSIGN_OR_RETURN(
           auto scene_object,
           SceneObjectFromUsdFile(scene_file,
                                  options_.geometry_library->Serializer()));
-      return CreateSingleObjectImportedScene(std::move(scene_object));
+      return ImportedSceneWithFileType{
+          .imported_scene =
+              CreateSingleObjectImportedScene(std::move(scene_object)),
+          .scene_file_type = ImportResultMetadata::SCENE_FILE_TYPE_USD,
+      };
     }
     case SceneFileTypes::CAD: {
         return absl::UnimplementedError("CAD scene import is not supported.");
@@ -591,7 +628,11 @@ absl::StatusOr<ImportedScene> SceneObjectImporter::ImportSceneFromDirectory(
           auto scene_object,
           SceneObjectFromMeshFile(scene_file, std::nullopt,
                                   options_.geometry_library->Serializer()));
-      return CreateSingleObjectImportedScene(std::move(scene_object));
+      return ImportedSceneWithFileType{
+          .imported_scene =
+              CreateSingleObjectImportedScene(std::move(scene_object)),
+          .scene_file_type = ImportResultMetadata::SCENE_FILE_TYPE_MESH,
+      };
     }
   }
 
@@ -599,7 +640,8 @@ absl::StatusOr<ImportedScene> SceneObjectImporter::ImportSceneFromDirectory(
 }
 
 // Imports scene object from file.
-absl::StatusOr<ImportedScene> SceneObjectImporter::ImportSceneFromFile(
+absl::StatusOr<SceneObjectImporter::ImportedSceneWithFileType>
+SceneObjectImporter::ImportSceneFromFile(
     absl::string_view scene_file_path, const ImportSceneConfig& import_config) {
   INTR_RETURN_IF_ERROR(file::Exists(scene_file_path, file::Defaults()));
   const std::string ext =
@@ -609,13 +651,21 @@ absl::StatusOr<ImportedScene> SceneObjectImporter::ImportSceneFromFile(
         auto scene_object,
         SceneObjectFromMeshFile(scene_file_path, std::nullopt,
                                 options_.geometry_library->Serializer()));
-    return CreateSingleObjectImportedScene(std::move(scene_object));
+    return ImportedSceneWithFileType{
+        .imported_scene =
+            CreateSingleObjectImportedScene(std::move(scene_object)),
+        .scene_file_type = ImportResultMetadata::SCENE_FILE_TYPE_MESH,
+    };
   } else if (SupportedSdfExtensions().contains(ext)) {
     INTR_ASSIGN_OR_RETURN(
         auto scene_object,
         SceneObjectFromSdfFile(scene_file_path, SdfPathResolver,
                                options_.geometry_library->Serializer()));
-    return CreateSingleObjectImportedScene(std::move(scene_object));
+    return ImportedSceneWithFileType{
+        .imported_scene =
+            CreateSingleObjectImportedScene(std::move(scene_object)),
+        .scene_file_type = ImportResultMetadata::SCENE_FILE_TYPE_SDF,
+    };
   } else if (SupportedUsdExtensions().contains(ext)) {
     std::string file_contents;
     INTR_RETURN_IF_ERROR(
@@ -624,7 +674,11 @@ absl::StatusOr<ImportedScene> SceneObjectImporter::ImportSceneFromFile(
         auto scene_object,
         SceneObjectFromUsdFileData(scene_file_path, file_contents,
                                    options_.geometry_library->Serializer()));
-    return CreateSingleObjectImportedScene(std::move(scene_object));
+    return ImportedSceneWithFileType{
+        .imported_scene =
+            CreateSingleObjectImportedScene(std::move(scene_object)),
+        .scene_file_type = ImportResultMetadata::SCENE_FILE_TYPE_USD,
+    };
   }
 
   return absl::UnimplementedError(

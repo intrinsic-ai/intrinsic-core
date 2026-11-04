@@ -165,6 +165,15 @@ message TransformScene {
 // Metadata field that describes the result of a world import or scene object
 // import result.
 message ImportResultMetadata {
+  // High-level category of the imported scene file.
+  enum SceneFileType {
+    SCENE_FILE_TYPE_UNSPECIFIED = 0;
+    SCENE_FILE_TYPE_SDF = 1;
+    SCENE_FILE_TYPE_USD = 2;
+    SCENE_FILE_TYPE_CAD = 3;
+    SCENE_FILE_TYPE_MESH = 4;
+  }
+
   // Summary stats of the imported geometry. Use these key stats provided to
   // validate the imported geometry and evaluate imported geometry quality.
   repeated GeometryStats geometry_summary_stats = 1;
@@ -179,6 +188,10 @@ message ImportResultMetadata {
   // Map from the scene object name to the collision mesh stats aggregated over
   // all links.
   map<string, GeometryStats> scene_object_to_collision_stats = 4;
+
+  // The resolved high-level file type of the imported scene file (for example,
+  // the underlying file category extracted from a ZIP_BUNDLE).
+  optional SceneFileType scene_file_type = 5;
 }
 
 message InstantiateImportedSceneRequest {

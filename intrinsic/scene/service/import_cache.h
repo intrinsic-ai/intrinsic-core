@@ -23,6 +23,7 @@
 #include "absl/synchronization/mutex.h"
 #include "intrinsic/scene/proto/v1/imported_scene.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
+#include "intrinsic/scene/proto/v1/scene_object_internal.pb.h"
 #include "intrinsic/util/lru_cache.h"
 
 namespace intrinsic {
@@ -33,49 +34,67 @@ struct ImportCache {
   ImportCache();
   ~ImportCache();
 
-  std::optional<intrinsic_proto::scene_object::v1::SceneObject> GetSceneObject(
-      const std::string& hash);
+  // A cached SceneObject together with the resolved scene file type it was
+  // imported from, read atomically from a single cache entry.
+  struct CachedSceneObject {
+    intrinsic_proto::scene_object::v1::SceneObject scene_object;
+    std::optional<
+        intrinsic_proto::scene_object::v1::ImportResultMetadata::SceneFileType>
+        scene_file_type;
+  };
 
-  std::optional<intrinsic_proto::scene_object::v1::ImportedScene>
-  GetImportedScene(const std::string& hash);
+  // A cached ImportedScene together with the resolved scene file type it was
+  // imported from, read atomically from a single cache entry.
+  struct CachedImportedScene {
+    intrinsic_proto::scene_object::v1::ImportedScene imported_scene;
+    std::optional<
+        intrinsic_proto::scene_object::v1::ImportResultMetadata::SceneFileType>
+        scene_file_type;
+  };
+
+  std::optional<CachedSceneObject> GetSceneObject(const std::string& hash);
+
+  std::optional<CachedImportedScene> GetImportedScene(const std::string& hash);
 
   absl::Status StoreSceneObject(
       const std::string& hash,
-      intrinsic_proto::scene_object::v1::SceneObject scene_object);
+      intrinsic_proto::scene_object::v1::SceneObject scene_object,
+      std::optional<intrinsic_proto::scene_object::v1::ImportResultMetadata::
+                        SceneFileType>
+          scene_file_type = std::nullopt);
 
   absl::Status StoreImportedScene(
       const std::string& hash,
-      intrinsic_proto::scene_object::v1::ImportedScene imported_scene);
+      intrinsic_proto::scene_object::v1::ImportedScene imported_scene,
+      std::optional<intrinsic_proto::scene_object::v1::ImportResultMetadata::
+                        SceneFileType>
+          scene_file_type = std::nullopt);
 
  private:
+  struct Entry {
+    std::optional<intrinsic_proto::scene_object::v1::SceneObject> scene_object;
+    std::optional<intrinsic_proto::scene_object::v1::ImportedScene>
+        imported_scene;
+    std::optional<
+        intrinsic_proto::scene_object::v1::ImportResultMetadata::SceneFileType>
+        scene_file_type;
+  };
+
   // Adaptors for the difference between g3 and insrc. Remove after kiruna is
   // all finished.
-  std::pair<std::optional<intrinsic_proto::scene_object::v1::SceneObject>,
-            std::optional<intrinsic_proto::scene_object::v1::ImportedScene>>*
-  Lookup(const std::string& hash) ABSL_SHARED_LOCKS_REQUIRED(lru_cache_mutex);
+  Entry* Lookup(const std::string& hash)
+      ABSL_SHARED_LOCKS_REQUIRED(lru_cache_mutex);
 
-  void Release(
-      const std::string& hash,
-      std::pair<
-          std::optional<intrinsic_proto::scene_object::v1::SceneObject>,
-          std::optional<intrinsic_proto::scene_object::v1::ImportedScene>>*
-          value) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lru_cache_mutex);
+  void Release(const std::string& hash, Entry* value)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lru_cache_mutex);
 
-  void Insert(
-      const std::string& hash,
-      std::pair<
-          std::optional<intrinsic_proto::scene_object::v1::SceneObject>,
-          std::optional<intrinsic_proto::scene_object::v1::ImportedScene>>*
-          value) ABSL_EXCLUSIVE_LOCKS_REQUIRED(lru_cache_mutex);
+  void Insert(const std::string& hash, Entry* value)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(lru_cache_mutex);
 
   static constexpr int kRawImportCacheSize = 100;
   mutable absl::Mutex lru_cache_mutex;
-  intrinsic::LruCache<
-      std::string,
-      std::pair<
-          std::optional<intrinsic_proto::scene_object::v1::SceneObject>,
-          std::optional<intrinsic_proto::scene_object::v1::ImportedScene>>>
-      lru_cache ABSL_GUARDED_BY(lru_cache_mutex);
+  intrinsic::LruCache<std::string, Entry> lru_cache
+      ABSL_GUARDED_BY(lru_cache_mutex);
 };
 
 }  // namespace intrinsic

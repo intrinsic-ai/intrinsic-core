@@ -76,16 +76,21 @@ class SceneObjectImporter {
   ImportScene(
       const intrinsic_proto::scene_object::v1::ImportSceneRequest& request);
 
+  struct ImportedSceneWithFileType {
+    intrinsic_proto::scene_object::v1::ImportedScene imported_scene;
+    intrinsic_proto::scene_object::v1::ImportResultMetadata::SceneFileType
+        scene_file_type = intrinsic_proto::scene_object::v1::
+            ImportResultMetadata::SCENE_FILE_TYPE_UNSPECIFIED;
+  };
+
   // Imports a scene from a directory on disk.
-  absl::StatusOr<intrinsic_proto::scene_object::v1::ImportedScene>
-  ImportSceneFromDirectory(
+  absl::StatusOr<ImportedSceneWithFileType> ImportSceneFromDirectory(
       absl::string_view scene_file_directory,
       const intrinsic_proto::scene_object::v1::ImportSceneConfig&
           import_config);
 
   // Imports a scene from a file on disk.
-  absl::StatusOr<intrinsic_proto::scene_object::v1::ImportedScene>
-  ImportSceneFromFile(
+  absl::StatusOr<ImportedSceneWithFileType> ImportSceneFromFile(
       absl::string_view scene_file_path,
       const intrinsic_proto::scene_object::v1::ImportSceneConfig&
           import_config);

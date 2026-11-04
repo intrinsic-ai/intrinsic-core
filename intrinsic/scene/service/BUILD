@@ -361,6 +361,7 @@ cc_library(
     hdrs = ["import_cache.h"],
     deps = [
         "//intrinsic/scene/proto/v1:imported_scene_cc_proto",
+        "//intrinsic/scene/proto/v1:scene_object_internal_cc_proto",
         "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validation",
         "//intrinsic_sdk/intrinsic/util:lru_cache",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
