@@ -186,7 +186,10 @@ function teardown_all_tests() {
   pkill -f "port-forward.*5051:9090" || true
 
   if [[ "${E2E_DEBUG:-false}" != "true" ]] && [[ "${RUN_AS_SERVICE:-false}" != "true" ]]; then
-    inctl_app_stop
+    # Stopping the app is best-effort: the tests have already finished at this
+    # point and the VM gets scrubbed on return anyway, so a transient error
+    # here should not fail an otherwise passing test (b/577138078).
+    inctl_app_stop || ts_echo "WARNING: Failed to stop app (ignored)"
   else
     echo "Not stopping running app because E2E_DEBUG=true or RUN_AS_SERVICE=true was given."
   fi
