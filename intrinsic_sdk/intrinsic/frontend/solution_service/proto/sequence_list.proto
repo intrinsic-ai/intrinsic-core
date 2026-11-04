@@ -65,7 +65,4 @@ message SequenceListItem {
   // The acquisition time of the last log item for the action. Only set once
   // the action reached a final state.
   google.protobuf.Timestamp end_time = 7;
-
-  // Not populated. Use `parent_id` to build the tree of items instead.
-  repeated SequenceListItem children = 8 [deprecated = true];
 }

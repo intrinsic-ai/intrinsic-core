@@ -84,11 +84,14 @@ var behaviorTreesPageSizeValidator = pagesize.Validator{
 	Max:     50,
 }
 
+// LINT.IfChange(sequence_list_page_size)
 var sequenceListPageSizeValidator = pagesize.Validator{
 	// Page size values are based on the API documentation.
 	Default: 100,
 	Max:     1000,
 }
+
+// LINT.ThenChange(//intrinsic/frontend/onprem/executive/action_list.ts:sequence_list_page_size)
 
 // SolutionSaver saves the current state of the solution.
 type SolutionSaver interface {
