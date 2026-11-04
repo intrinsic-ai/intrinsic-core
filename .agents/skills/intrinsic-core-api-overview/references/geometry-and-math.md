@@ -19,7 +19,7 @@ This reference covers `intrinsic_proto.geometry.GeometryService` RPCs, content-a
 | `intrinsic_proto.geometry.GeometryService/CreateGeometry` | `intrinsic_proto.geometry.CreateGeometryRequest` -> `intrinsic_proto.geometry.GeometryWithMetadata` | Register new geometry data (`inline_geometry`, `primitive_set`, `obj_data`, `gltf_bytes`, or `stl_bytes`) in content-addressed storage (CAS) and return opaque v1 storage references (`response.geometry_storage_refs`). Call before creating or updating a world object with custom collision or visual geometry. |
 | `intrinsic_proto.geometry.GeometryService/GetGeometry` | `intrinsic_proto.geometry.GetGeometryRequest` -> `intrinsic_proto.geometry.GeometryWithMetadata` | Resolve an opaque `intrinsic_proto.geometry.v1.GeometryStorageRefs` into full computational geometry (`inline_geometry.exact_geometry`), including triangle mesh vertices, primitive shape sets, and point clouds. |
 | `intrinsic_proto.geometry.GeometryService/GetRenderable` | `intrinsic_proto.geometry.GetRenderableRequest` -> `intrinsic_proto.geometry.RenderableWithMetadata` | Retrieve binary GLB/GLTF rendering payloads (`renderable.glb_bytes`) for visualization clients at a specified level of detail (`lod_level`). If a pre-generated renderable is not cached in storage, the service dynamically synthesizes a GLB mesh from `exact_geometry_ref` on demand. |
-| `intrinsic_proto.geometry.GeometryService/ProcessGeometry` | `intrinsic_proto.geometry.ProcessGeometryRequest` -> `google.longrunning.Operation` | Execute asynchronous geometry processing pipelines (such as alpha wrapping, convex hull generation, mesh simplification, isotropic remeshing, uniform scaling, or CoACD convex decomposition). Unpacks operation metadata to `intrinsic_proto.geometry.GeometryProcessingStatus` and final response to `intrinsic_proto.geometry.GeometryProcessingResult`. |
+| `intrinsic_proto.geometry.GeometryService/ProcessGeometry` | `intrinsic_proto.geometry.ProcessGeometryRequest` -> `google.longrunning.Operation` | Execute asynchronous geometry processing pipelines (such as alpha wrapping, convex hull generation, mesh simplification, voxel remeshing, uniform scaling, or CoACD convex decomposition). Unpacks operation metadata to `intrinsic_proto.geometry.GeometryProcessingStatus` and final response to `intrinsic_proto.geometry.GeometryProcessingResult`. |
 | `google.longrunning.Operations/GetOperation` | `google.longrunning.GetOperationRequest` -> `google.longrunning.Operation` | Poll the status and completion result of an asynchronous `ProcessGeometry` operation (`"geometry/ProcessGeometry/<fingerprint>/<nanos>"`). |
 
 ## Core geometry and spatial math message decision matrix
@@ -307,7 +307,7 @@ All analytical shapes in `intrinsic_proto.geometry.v1.*` are centered at the loc
 
 ## Multi-`RPC` geometry processing sequences
 
-### Sequence 1: asynchronous geometry processing (`ProcessGeometry` with `alpha_wrap`, `convex_hull`, `mesh_simplification`, `isotropic_remeshing`, `coacd`, and `GetOperation` polling)
+### Sequence 1: asynchronous geometry processing (`ProcessGeometry` with `alpha_wrap`, `convex_hull`, `mesh_simplification`, `voxel_remeshing`, `coacd`, and `GetOperation` polling)
 
 Used when importing non-convex CAD meshes, millimeter-unit STLs, or raw point clouds that require scaling, surface remeshing, or convex decomposition before attaching them as collision geometry:
 
@@ -324,14 +324,14 @@ Client / Skill -> Operations/GetOperation(name) -> Operation(metadata: GeometryP
        - `alpha_wrap`: Watertight 3D alpha wrapping around noisy meshes or point clouds (`AlphaWrapProcessorConfig(alpha=...)`).
        - `convex_hull`: Single convex hull envelope (`ConvexHullProcessorConfig`).
        - `mesh_simplification`: Edge-collapse decimation within a geometric error bound (`MeshSimplificationProcessorConfig(max_hausdorff_distance=0.001)`).
-       - `isotropic_remeshing`: Uniform surface remeshing (`IsotropicRemeshingProcessorConfig(edge_reduction_factor=..., num_iterations=...)`).
+       - `voxel_remeshing`: Closed, uniformly tessellated surface rebuilt on a voxel grid (`VoxelRemeshingProcessorConfig(resolution=64)`, resolution in [4, 256]).
        - `coacd`: Approximate convex decomposition into multiple collision hulls (`CoacdProcessorConfig(threshold=0.05, max_convex_hull=16)`).
 2. **Poll long-running operation (`google.longrunning.Operations/GetOperation`)**:
    - Receive `google.longrunning.Operation` (`name = "geometry/ProcessGeometry/<fingerprint>/<nanos>"`) and poll `google.longrunning.Operations/GetOperation`.
    - Unpack `operation.metadata` into `intrinsic_proto.geometry.GeometryProcessingStatus` to monitor `progress` in [0.0, 1.0].
 3. **Extract processed geometries (`intrinsic_proto.geometry.GeometryProcessingResult`)**:
    - When `operation.done` is `True`, unpack `operation.response` into `intrinsic_proto.geometry.GeometryProcessingResult`:
-     - For single-output processors (`scale`, `alpha_wrap`, `convex_hull`, `mesh_simplification`, `isotropic_remeshing`), extract `result.processed_geometries[0]` (or `result.processed_geometry`).
+     - For single-output processors (`scale`, `alpha_wrap`, `convex_hull`, `mesh_simplification`, `voxel_remeshing`), extract `result.processed_geometries[0]` (or `result.processed_geometry`).
      - For multi-output processors (`coacd`), iterate over `result.processed_geometries` to attach each disjoint convex hull as a separate named entry inside `GeometryComponent.named_geometries["Intrinsic_Collision"].named_geometries` (or use `result.processed_geometry` for the fused union).
 
 ### Sequence 2: registering custom geometry and spawning a collision-enabled world object

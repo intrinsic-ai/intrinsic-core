@@ -104,7 +104,7 @@ Asynchronous geometry processing operations (alpha wrapping, convex decompositio
 - **Polling `ProcessGeometry` completion**: `intrinsic_proto.geometry.GeometryService/ProcessGeometry` returns a long-running operation whose name is prefixed with `geometry/` (`"geometry/ProcessGeometry/<fingerprint>/<nanos>"`). Always poll operation completion using `google.longrunning.Operations/GetOperation` in a retry loop. Calling `WaitOperation` through the central `operations:8080` proxy returns `StatusCode.NOT_FOUND` because C++ geometry processing does not support blocking wait streams.
 - **Exact field names in `GeometryProcessingPipelineConfig`**:
   - `AlphaWrapProcessorConfig(alpha=...)` (specifies absolute wrap size in meters; fields `relative_alpha` and `relative_offset` are legacy and unsupported).
-  - `IsotropicRemeshingProcessorConfig(edge_reduction_factor=..., num_iterations=...)` (parameterizes edge length reduction and smoothing iterations; `target_edge_length` is unsupported).
+  - `VoxelRemeshingProcessorConfig(resolution=...)` (voxel grid size along the largest axis, in [4, 256]; `IsotropicRemeshingProcessorConfig` has been removed).
   - `CoacdProcessorConfig(threshold=..., max_convex_hull=...)` (governs approximate convex decomposition).
 
 ## Spatial math primitives, `Pose3` constructors, and quaternion normalization
