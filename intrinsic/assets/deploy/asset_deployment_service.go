@@ -437,7 +437,7 @@ func (d *deploy) deleteResource(ctx context.Context, req *pb.DeleteResourceReque
 	// Treat all validation errors added to the report as warnings.
 	// This would have to be changed when we introduce different validation policies,
 	// such as STRICT, RELAXED, etc.
-	r := report.New(report.AsWarningIfType[error]())
+	r := report.New(report.WithSeverityRule(report.AllWarnings))
 	if err := d.validateDependencies(ctx, appClone, graph.WithReport(r), graph.WithOnlyReferencesTo(name)); err != nil {
 		log.ErrorContextf(ctx, "dependency validation failed during deletion of instance %q: %v", name, err)
 		return status.Errorf(codes.FailedPrecondition, "dependency validation failed during deletion of instance %q: %v", name, err)

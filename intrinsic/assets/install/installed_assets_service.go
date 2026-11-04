@@ -1117,7 +1117,7 @@ func (s *installedAssetsService) validateDependenciesAtInstall(ctx context.Conte
 		installedIDs = append(installedIDs, id)
 	}
 
-	r := report.New(report.AsWarningIfType[error]())
+	r := report.New(report.WithSeverityRule(report.AllWarnings))
 	valOpts := []graph.ValidateGraphOption{
 		graph.WithReport(r),
 	}

@@ -12,16 +12,29 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// Package report provides a mechanism to treat errors as warnings.
+// Package report provides a mechanism to collect validation errors and classify them by severity
+// as warnings, errors, or fatal errors.
 package report
 
 import (
-	"errors"
 	"fmt"
 
 	"intrinsic/util/status/extstatus"
 
 	espb "intrinsic/util/status/extended_status_go_proto"
+)
+
+// Severity classifies an error added to a [Report], and determines how [Report.Add] handles it.
+type Severity int32
+
+const (
+	// Warning is the severity of an error that does not fail the validation.
+	Warning Severity = iota
+	// Error is the severity of an error that fails the validation.
+	Error
+	// Fatal is the severity of an error that fails the validation and stops it.
+	// [Report.Add] returns errors with this severity.
+	Fatal
 )
 
 const (
@@ -35,6 +48,18 @@ const (
 	defaultStatusCode = 2000
 )
 
+// SeverityRule decides the [Severity] of an error.
+type SeverityRule func(error) Severity
+
+// allFatal is the default [SeverityRule]: every error has the [Fatal] severity.
+func allFatal(error) Severity { return Fatal }
+
+// AllErrors is a [SeverityRule] under which every error has the [Error] severity.
+func AllErrors(error) Severity { return Error }
+
+// AllWarnings is a [SeverityRule] under which every error has the [Warning] severity.
+func AllWarnings(error) Severity { return Warning }
+
 // ExtendedStatusConverter is implemented by error types that can define their own ExtendedStatus representation.
 //
 // When a Report is converted to an ExtendedStatus (via ToExtendedStatus), any errors implementing
@@ -46,118 +71,75 @@ type ExtendedStatusConverter interface {
 	ToExtendedStatus() *extstatus.ExtendedStatus
 }
 
-// warningRule defines a function that returns true if an error should be
-// collected as a warning rather than returned as an error.
-type warningRule func(error) bool
-
-// Report aggregates errors that are classified as warnings.
+// Report records the errors of a validation by [Severity], according to its [SeverityRule].
 //
-// Warning rules can be configured in the report. Errors matching these rules
-// are accumulated as warnings in the report when an error is added.
-// The caller can then inspect the report afterwards to check for warnings.
+// Errors with the [Warning] or [Error] severity are accumulated in the report when they are added,
+// while errors with the [Fatal] severity are returned to the caller. The caller can then inspect
+// the report afterwards to check for warnings and errors.
 type Report struct {
-	rules    []warningRule
+	rule     SeverityRule
 	warnings []error
+	errors   []error
 }
 
-// Option is a functional option to configure the Report.
+// Option is a functional option to configure the [Report].
 type Option func(*Report)
 
-// AsWarning creates a rule that treats specific error values (e.g., sentinel errors)
-// as warnings using errors.Is under the hood.
+// WithSeverityRule sets the [SeverityRule] that decides the [Severity] of each error. By default,
+// every error has the [Fatal] severity.
 //
 // Usage example:
 //
-//	r := report.New(report.AsWarning(ErrSentinel))
-func AsWarning(target error) Option {
-	return func(r *Report) {
-		r.rules = append(r.rules, func(err error) bool {
-			return errors.Is(err, target)
-		})
-	}
-}
-
-// AsWarningIf allows users to provide arbitrary logic to determine
-// if an error should be treated as a warning.
-//
-// Usage example:
-//
-//	r := report.New(report.AsWarningIf(func(err error) bool {
-//		return err.Error() == "warning"
+//	r := report.New(report.WithSeverityRule(func(err error) report.Severity {
+//		if errors.Is(err, ErrSentinel) {
+//			return report.Warning
+//		}
+//		return report.Fatal
 //	}))
-func AsWarningIf(fn func(error) bool) Option {
-	return func(r *Report) {
-		r.rules = append(r.rules, fn)
-	}
+func WithSeverityRule(rule SeverityRule) Option {
+	return func(r *Report) { r.rule = rule }
 }
 
-// AsWarningIfType creates a rule that treats all errors of type T as warnings using errors.As.
-//
-// Usage example:
-//
-//	r := report.New(report.AsWarningIfType[*CustomError]())
-func AsWarningIfType[T error]() Option {
-	return func(r *Report) {
-		r.rules = append(r.rules, func(err error) bool {
-			var t T
-			return errors.As(err, &t)
-		})
-	}
-}
-
-// AsWarningIfTypeAnd creates a generic rule that checks if an error is of a specific type T.
-// If it is, it executes the provided closure. If the closure
-// returns true, the error is collected as a warning.
-//
-// Usage example:
-//
-//	r := report.New(report.AsWarningIfTypeAnd(func(err *CustomError) bool {
-//		return err.Code == 404
-//	}))
-func AsWarningIfTypeAnd[T error](fn func(T) bool) Option {
-	return func(r *Report) {
-		r.rules = append(r.rules, func(err error) bool {
-			if target, ok := errors.AsType[T](err); ok {
-				return fn(target)
-			}
-			return false
-		})
-	}
-}
-
-// New creates a new Report with the provided warning rules.
+// New creates a new [Report] with the provided options.
 func New(opts ...Option) *Report {
-	r := &Report{}
+	r := &Report{rule: allFatal}
 	for _, opt := range opts {
 		opt(r)
 	}
 	return r
 }
 
-// Add evaluates an error. If the error is nil, it returns nil.
-// If the error matches a defined warning rule, it collects the error
-// into the internal warnings list and returns nil.
-// If it does not match any warning rule, it returns the error directly.
-func (r *Report) Add(err error) error {
-	if err == nil {
+// Add records an error with the [Severity] the [SeverityRule] gives it. A nil error is ignored. If
+// the rule says the error is [Fatal], it is not recorded but returned, and the validation must
+// return it.
+func (r *Report) Add(e error) error {
+	if e == nil {
 		return nil
 	}
-
-	for _, rule := range r.rules {
-		if rule(err) {
-			// Matched a rule, collect as a warning and return nil.
-			r.warnings = append(r.warnings, err)
-			return nil
-		}
+	// Default to allFatal if no rule is set, e.g. for a zero-value Report.
+	rule := r.rule
+	if rule == nil {
+		rule = allFatal
 	}
-
-	// Error didn't match any rule; it is an error.
-	return err
+	switch rule(e) {
+	case Error:
+		r.errors = append(r.errors, e)
+	case Warning:
+		r.warnings = append(r.warnings, e)
+	default:
+		return e
+	}
+	return nil
 }
 
 // Warnings returns the slice of all collected warning errors.
 func (r *Report) Warnings() []error {
 	return r.warnings
+}
+
+// Errors returns the slice of all errors recorded with the [Error] severity.
+func (r *Report) Errors() []error {
+	return r.errors
 }
 
 // ReportExtendedStatusOption is a functional option to configure the ExtendedStatus generation for Report.
@@ -190,19 +172,37 @@ func WithTitlePrefix(prefix string) ReportExtendedStatusOption {
 	}
 }
 
-// ToExtendedStatus converts all warnings in the report to a combined ExtendedStatus,
-// where each warning is included as a context in the returned ExtendedStatus.
+// ToExtendedStatus converts the recorded errors in the report to a combined
+// [extstatus.ExtendedStatus], where each error is included as a context in the returned
+// ExtendedStatus.
 //
-// For each warning, it determines its ExtendedStatus representation by checking:
-//   - If the error has an associated ExtendedStatus (e.g., created via extstatus.NewError or wrapped),
-//     it extracts the status directly using extstatus.FromError.
-//   - If the error implements ExtendedStatusConverter, it delegates conversion to the custom implementation.
-//   - Otherwise, it falls back to creating a default ExtendedStatus using the default component name,
-//     default status code, and the error's string message as the title.
+// If [Report.Errors] is non-empty, only those errors are included and warnings are omitted.
+// Otherwise, [Report.Warnings] are included. It returns nil if both are empty.
 //
-// The severity of the returned ExtendedStatus is set to the highest severity among all warnings.
+// For each error, it determines its ExtendedStatus representation by checking:
+//   - If the error has an associated ExtendedStatus (e.g., created via [extstatus.NewError]), it
+//     extracts the status directly using [extstatus.FromError]. Wrapped errors are not unwrapped,
+//     so a wrapped ExtendedStatus error falls back to the default conversion below.
+//   - If the error implements [ExtendedStatusConverter], it delegates conversion to the custom
+//     implementation.
+//   - Otherwise, it falls back to creating a default ExtendedStatus using the default component
+//     name, default status code, and the error's string message as the title.
+//
+// The returned ExtendedStatus takes the highest ExtendedStatus severity among the included errors.
 func (r *Report) ToExtendedStatus(opts ...ReportExtendedStatusOption) *extstatus.ExtendedStatus {
-	if r == nil || len(r.warnings) == 0 {
+	if r == nil {
+		return nil
+	}
+	if len(r.errors) > 0 {
+		return extendedStatus(r.errors, opts)
+	}
+	return extendedStatus(r.warnings, opts)
+}
+
+// extendedStatus converts errs to a combined [extstatus.ExtendedStatus], where each error is
+// included as a context. It returns nil if errs is empty.
+func extendedStatus(errs []error, opts []ReportExtendedStatusOption) *extstatus.ExtendedStatus {
+	if len(errs) == 0 {
 		return nil
 	}
 	o := &reportExtendedStatusOpts{
@@ -212,23 +212,23 @@ func (r *Report) ToExtendedStatus(opts ...ReportExtendedStatusOption) *extstatus
 	for _, opt := range opts {
 		opt(o)
 	}
-	contexts := make([]*extstatus.ExtendedStatus, 0, len(r.warnings))
+	contexts := make([]*extstatus.ExtendedStatus, 0, len(errs))
 	severity := espb.ExtendedStatus_DEFAULT
-	for _, w := range r.warnings {
+	for _, err := range errs {
 		var es *extstatus.ExtendedStatus
-		if e, ok := extstatus.FromError(w); ok {
+		if e, ok := extstatus.FromError(err); ok {
 			es = e
-		} else if converter, ok := w.(ExtendedStatusConverter); ok {
+		} else if converter, ok := err.(ExtendedStatusConverter); ok {
 			es = converter.ToExtendedStatus()
 		} else {
 			es = extstatus.New(defaultComponentName,
 				uint32(defaultStatusCode),
-				extstatus.WithTitle(w.Error()),
+				extstatus.WithTitle(err.Error()),
 			)
 		}
 		contexts = append(contexts, es)
 
-		// Keep track of the highest severity among all warnings.
+		// Keep track of the highest severity among all errors.
 		if s := es.Proto().GetSeverity(); s > severity {
 			severity = s
 		}
