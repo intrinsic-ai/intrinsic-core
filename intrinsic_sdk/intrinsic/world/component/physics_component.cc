@@ -15,6 +15,7 @@
 #include "intrinsic/world/component/physics_component.h"
 
 #include <memory>
+#include <optional>
 #include <utility>
 
 #include "absl/log/check.h"
@@ -44,8 +45,8 @@ class PhysicsComponentImpl : public PhysicsComponent {
         inertia_(inertia),
         friction_(friction.value_or(DefaultSurfaceFriction())),
         torsional_(torsional.value_or(DefaultTorsional())),
-        contact_kp_(contact_kp.value_or(DefaultContactKp())),
-        contact_kd_(contact_kd.value_or(DefaultContactKd())) {}
+        contact_kp_(contact_kp),
+        contact_kd_(contact_kd) {}
   absl::StatusOr<intrinsic_proto::world::PhysicsComponent> ToProto()
       const override;
   std::unique_ptr<PhysicsComponent> Clone() const override;
@@ -63,8 +64,8 @@ class PhysicsComponentImpl : public PhysicsComponent {
     return torsional_;
   }
 
-  double GetContactKp() const override { return contact_kp_; }
-  double GetContactKd() const override { return contact_kd_; }
+  std::optional<double> GetContactKp() const override { return contact_kp_; }
+  std::optional<double> GetContactKd() const override { return contact_kd_; }
   void SetMassKg(double mass_kg) override { mass_kg_ = mass_kg; }
   void SetThisTCenterOfMass(const Pose3d& this_t_center_of_mass) override {
     this_t_center_of_mass_ = this_t_center_of_mass;
@@ -80,8 +81,12 @@ class PhysicsComponentImpl : public PhysicsComponent {
       const intrinsic_proto::world::Torsional& torsional) override {
     torsional_ = torsional;
   }
-  void SetContactKp(double contact_kp) override { contact_kp_ = contact_kp; }
-  void SetContactKd(double contact_kd) override { contact_kd_ = contact_kd; }
+  void SetContactKp(std::optional<double> contact_kp) override {
+    contact_kp_ = contact_kp;
+  }
+  void SetContactKd(std::optional<double> contact_kd) override {
+    contact_kd_ = contact_kd;
+  }
 
   absl::Status UpdateFromProto(
       const intrinsic_proto::world::PhysicsComponent& proto) override;
@@ -92,8 +97,8 @@ class PhysicsComponentImpl : public PhysicsComponent {
   eigenmath::Matrix3d inertia_ = eigenmath::Matrix3d::Identity();
   intrinsic_proto::world::Friction friction_ = DefaultSurfaceFriction();
   intrinsic_proto::world::Torsional torsional_ = DefaultTorsional();
-  double contact_kp_ = DefaultContactKp();
-  double contact_kd_ = DefaultContactKd();
+  std::optional<double> contact_kp_;
+  std::optional<double> contact_kd_;
 };
 
 absl::StatusOr<intrinsic_proto::world::PhysicsComponent>
@@ -105,8 +110,12 @@ PhysicsComponentImpl::ToProto() const {
   *ret.mutable_inertia() = intrinsic::ToProto(inertia_);
   *ret.mutable_friction() = friction_;
   *ret.mutable_torsional() = torsional_;
-  ret.set_contact_kp(contact_kp_);
-  ret.set_contact_kd(contact_kd_);
+  if (contact_kp_.has_value()) {
+    ret.set_contact_kp(*contact_kp_);
+  }
+  if (contact_kd_.has_value()) {
+    ret.set_contact_kd(*contact_kd_);
+  }
   return ret;
 }
 
@@ -189,10 +198,6 @@ double PhysicsComponent::DefaultMassKg() {
   // Default is the density of water 1000 kg/m^3.
   return 1;
 }
-
-double PhysicsComponent::DefaultContactKp() { return 1e12; }
-
-double PhysicsComponent::DefaultContactKd() { return 1; }
 
 const intrinsic_proto::world::Friction&
 PhysicsComponent::DefaultSurfaceFriction() {

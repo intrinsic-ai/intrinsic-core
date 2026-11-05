@@ -1323,11 +1323,19 @@ absl::StatusOr<GeneratedLinkInfo> WorldEntityToLink(
       absl::StrAppend(&collision_surface, "<surface>");
       std::string contact = "<contact>";
       {
-        std::string ode =
-            absl::Substitute("<ode><kp>$0</kp><kd>$1</kd></ode>",
-                             FullPrecision(physics->GetContactKp()),
-                             FullPrecision(physics->GetContactKd()));
-        absl::StrAppend(&contact, ode);
+        if (physics->GetContactKp().has_value() ||
+            physics->GetContactKd().has_value()) {
+          std::string kp_kd;
+          if (physics->GetContactKp().has_value()) {
+            absl::StrAppend(&kp_kd, "<kp>",
+                            FullPrecision(*physics->GetContactKp()), "</kp>");
+          }
+          if (physics->GetContactKd().has_value()) {
+            absl::StrAppend(&kp_kd, "<kd>",
+                            FullPrecision(*physics->GetContactKd()), "</kd>");
+          }
+          absl::StrAppend(&contact, absl::Substitute("<ode>$0</ode>", kp_kd));
+        }
 
         // If this entity has a collision component, then we should use it to
         // see if we have a collision response

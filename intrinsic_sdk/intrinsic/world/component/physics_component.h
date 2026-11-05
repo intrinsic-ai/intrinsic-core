@@ -16,6 +16,7 @@
 #define INTRINSIC_WORLD_COMPONENT_PHYSICS_COMPONENT_H_
 
 #include <memory>
+#include <optional>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -70,16 +71,10 @@ class PhysicsComponent {
   static const intrinsic_proto::world::Torsional& DefaultTorsional();
 
   // Returns dynamically "stiffness"-equivalent coefficient for contact joints.
-  virtual double GetContactKp() const = 0;
-
-  // Returns the default "stiffness"-equivalent coefficient for contact joints.
-  static double DefaultContactKp();
+  virtual std::optional<double> GetContactKp() const = 0;
 
   // Returns dynamically "damping"-equivalent coefficient for contact joints.
-  virtual double GetContactKd() const = 0;
-
-  // Returns the default "damping"-equivalent coefficient for contact joints.
-  static double DefaultContactKd();
+  virtual std::optional<double> GetContactKd() const = 0;
 
   // Sets the entity's mass in kilograms.
   virtual void SetMassKg(double mass_kg) = 0;
@@ -99,10 +94,10 @@ class PhysicsComponent {
       const intrinsic_proto::world::Torsional& torsional) = 0;
 
   // Sets dynamically "stiffness"-equivalent coefficient for contact joints.
-  virtual void SetContactKp(double contact_kp) = 0;
+  virtual void SetContactKp(std::optional<double> contact_kp) = 0;
 
   // Sets dynamically "damping"-equivalent coefficient for contact joints.
-  virtual void SetContactKd(double contact_kd) = 0;
+  virtual void SetContactKd(std::optional<double> contact_kd) = 0;
 
   // Updates the component based on the given proto. This will do a full
   // override, if something is missing from this proto it will override any

@@ -86,10 +86,8 @@ absl::StatusOr<std::unique_ptr<PhysicsComponent>> PhysicsComponentFromSdfLink(
     physics_component->SetSurfaceFriction(
         parse_surface_result.friction.surface_friction.value_or(
             PhysicsComponent::DefaultSurfaceFriction()));
-    physics_component->SetContactKp(parse_surface_result.contact.kp.value_or(
-        PhysicsComponent::DefaultContactKp()));
-    physics_component->SetContactKd(parse_surface_result.contact.kd.value_or(
-        PhysicsComponent::DefaultContactKd()));
+    physics_component->SetContactKp(parse_surface_result.contact.kp);
+    physics_component->SetContactKd(parse_surface_result.contact.kd);
   }
   return physics_component;
 }
