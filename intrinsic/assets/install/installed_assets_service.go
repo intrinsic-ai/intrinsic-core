@@ -1125,7 +1125,7 @@ func (s *installedAssetsService) validateDependenciesAtInstall(ctx context.Conte
 		valOpts = append(valOpts, graph.WithOnlyReferencesTo(installedIDs...))
 	}
 
-	if err := graph.ValidateAll(ctx, sc, valOpts...); err != nil {
+	if err := graph.ValidateAll(sc, valOpts...); err != nil {
 		return nil, fmt.Errorf("dependency validation failed: %w", err)
 	}
 	var es *statuspb.ExtendedStatus

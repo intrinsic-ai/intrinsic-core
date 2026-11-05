@@ -1266,7 +1266,7 @@ func (s *DeployService) validateDependencies(ctx context.Context, app *apb.Appli
 		log.ErrorContextf(ctx, "failed to create solution context: %v", err)
 		return nil, nil
 	}
-	if err := graph.ValidateAll(ctx, sc, graph.WithReport(r)); err != nil {
+	if err := graph.ValidateAll(sc, graph.WithReport(r)); err != nil {
 		return nil, err
 	}
 	if len(r.Warnings()) > 0 {

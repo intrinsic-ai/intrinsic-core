@@ -174,7 +174,7 @@ func (s *Server) CheckSolutionValidity(ctx context.Context, request *aiipb.Check
 
 	// Treat all errors added to the report as warnings.
 	rep := report.New(report.WithSeverityRule(report.AllWarnings))
-	if err := graph.ValidateAll(ctx, sc, graph.WithReport(rep)); err != nil {
+	if err := graph.ValidateAll(sc, graph.WithReport(rep)); err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "validation failed: %v", err)
 	}
 	resp := &aiipb.CheckSolutionValidityResponse{}

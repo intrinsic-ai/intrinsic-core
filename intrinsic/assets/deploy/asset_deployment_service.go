@@ -498,7 +498,7 @@ func (d *deploy) validateDependencies(ctx context.Context, app *apppb.Applicatio
 	if err != nil {
 		return errors.Wrap(err, "failed to build solution context for validation")
 	}
-	return graph.ValidateAll(ctx, sc, opts...)
+	return graph.ValidateAll(sc, opts...)
 }
 
 func (d *deploy) updateResource(ctx context.Context, req *pb.UpdateResourceRequest) (*pb.Resource, error) {

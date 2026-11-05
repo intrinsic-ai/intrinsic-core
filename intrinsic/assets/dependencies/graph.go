@@ -16,7 +16,6 @@
 package graph
 
 import (
-	"context"
 	"fmt"
 	"maps"
 	"slices"
@@ -223,7 +222,7 @@ func WithOnlyReferencesTo(referencesTo ...string) ValidateGraphOption {
 // `name` is the Asset ID.
 //
 // The dependency graph is constructed from the Assets and instances present in the provided [SolutionContext].
-func ValidateNode(ctx context.Context, name string, sc *SolutionContext, options ...ValidateGraphOption) error {
+func ValidateNode(name string, sc *SolutionContext, options ...ValidateGraphOption) error {
 	opts := &validateGraphOptions{
 		report: report.New(),
 	}
@@ -233,7 +232,7 @@ func ValidateNode(ctx context.Context, name string, sc *SolutionContext, options
 	if err := sc.validateComponents(); err != nil {
 		return err
 	}
-	return validateNodesByName(ctx, []string{name}, sc, opts)
+	return validateNodesByName([]string{name}, sc, opts)
 }
 
 // ValidateAll validates all nodes in the dependency graph.
@@ -244,7 +243,7 @@ func ValidateNode(ctx context.Context, name string, sc *SolutionContext, options
 //
 // This function validates the dependencies of all Assets and Asset instances that are retrieved
 // from the [SolutionContext].
-func ValidateAll(ctx context.Context, sc *SolutionContext, options ...ValidateGraphOption) error {
+func ValidateAll(sc *SolutionContext, options ...ValidateGraphOption) error {
 	opts := &validateGraphOptions{
 		report: report.New(),
 	}
@@ -256,7 +255,7 @@ func ValidateAll(ctx context.Context, sc *SolutionContext, options ...ValidateGr
 		return err
 	}
 
-	if _, err := validateNodes(ctx, sc, nil, opts); err != nil {
+	if _, err := validateNodes(sc, nil, opts); err != nil {
 		return err
 	}
 	return nil
@@ -312,12 +311,12 @@ type node struct {
 // and then validates them.
 //
 // It returns an error if any node was not found or if validation failed.
-func validateNodesByName(ctx context.Context, nodes []string, sc *SolutionContext, opts *validateGraphOptions) error {
+func validateNodesByName(nodes []string, sc *SolutionContext, opts *validateGraphOptions) error {
 	nodeSet := make(map[string]bool)
 	for _, node := range nodes {
 		nodeSet[node] = true
 	}
-	found, err := validateNodes(ctx, sc, nodeSet, opts)
+	found, err := validateNodes(sc, nodeSet, opts)
 	if err != nil {
 		return err
 	}
@@ -346,7 +345,7 @@ func validateNodesByName(ctx context.Context, nodes []string, sc *SolutionContex
 //
 // If filter is non-nil, only nodes with names in the filter are validated.
 // It returns the set of node names that were found.
-func validateNodes(ctx context.Context, sc *SolutionContext, filter map[string]bool, opts *validateGraphOptions) (map[string]bool, error) {
+func validateNodes(sc *SolutionContext, filter map[string]bool, opts *validateGraphOptions) (map[string]bool, error) {
 	found := make(map[string]bool)
 
 	// Sort Asset IDs to ensure deterministic validation order
@@ -377,7 +376,7 @@ func validateNodes(ctx context.Context, sc *SolutionContext, filter map[string]b
 			return nil, err
 		}
 
-		node, err := nodeFromAsset(ctx, asset.ID, sc)
+		node, err := nodeFromAsset(asset.ID, sc)
 		if err != nil {
 			return nil, err
 		}
@@ -632,7 +631,7 @@ func nodeFromInstance(instanceName string, sc *SolutionContext) (*node, error) {
 
 // nodeFromAsset returns a graph node representing the given Asset. It collects all dependencies
 // based on the references. Returns `nil` and NOT error if the Asset does not have references.
-func nodeFromAsset(ctx context.Context, assetID string, sc *SolutionContext) (*node, error) {
+func nodeFromAsset(assetID string, sc *SolutionContext) (*node, error) {
 	asset, ok := sc.Assets[assetID]
 	if !ok {
 		return nil, fmt.Errorf("Asset %q not found in the solution context", assetID)
@@ -641,7 +640,7 @@ func nodeFromAsset(ctx context.Context, assetID string, sc *SolutionContext) (*n
 	if len(references) == 0 {
 		return nil, nil
 	}
-	deps, err := extractDependenciesFromReferences(ctx, references, sc, asset)
+	deps, err := extractDependenciesFromReferences(references, sc, asset)
 	if err != nil {
 		return nil, err
 	}
@@ -677,7 +676,7 @@ func collectDependencies(config *anypb.Any, fds *descriptorpb.FileDescriptorSet)
 }
 
 // extractDependenciesFromReferences collects dependent Assets from references.
-func extractDependenciesFromReferences(ctx context.Context, references map[string]ReferencedAsset, sc *SolutionContext, asset *AssetContext) ([]*dependency, error) {
+func extractDependenciesFromReferences(references map[string]ReferencedAsset, sc *SolutionContext, asset *AssetContext) ([]*dependency, error) {
 	if len(references) == 0 {
 		return nil, nil
 	}
