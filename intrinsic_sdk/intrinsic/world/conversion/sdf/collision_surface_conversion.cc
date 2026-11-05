@@ -122,14 +122,15 @@ absl::StatusOr<ParseContactResult> ParseContact(const ::sdf::Contact& contact) {
     return contact_result;
   }
   // TODO(b/184168467) TODO(b/168049879): Handle collision masks.
-  if (contact.Element()->HasElement("ode")) {
-    INTR_ASSIGN_OR_RETURN(auto ode, GetChildWithTag(contact.Element(), "ode"));
+  if (contact.Element()->HasElement("bullet")) {
+    INTR_ASSIGN_OR_RETURN(auto bullet,
+                          GetChildWithTag(contact.Element(), "bullet"));
 
-    if (auto kp = ParseChildAs<double>(ode, "kp"); kp.ok()) {
+    if (auto kp = ParseChildAs<double>(bullet, "kp"); kp.ok()) {
       contact_result.kp = *kp;
     }
 
-    if (auto kd = ParseChildAs<double>(ode, "kd"); kd.ok()) {
+    if (auto kd = ParseChildAs<double>(bullet, "kd"); kd.ok()) {
       contact_result.kd = *kd;
     }
   }

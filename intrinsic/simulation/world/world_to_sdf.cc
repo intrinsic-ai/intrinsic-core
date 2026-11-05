@@ -1334,7 +1334,8 @@ absl::StatusOr<GeneratedLinkInfo> WorldEntityToLink(
             absl::StrAppend(&kp_kd, "<kd>",
                             FullPrecision(*physics->GetContactKd()), "</kd>");
           }
-          absl::StrAppend(&contact, absl::Substitute("<ode>$0</ode>", kp_kd));
+          absl::StrAppend(&contact,
+                          absl::Substitute("<bullet>$0</bullet>", kp_kd));
         }
 
         // If this entity has a collision component, then we should use it to
