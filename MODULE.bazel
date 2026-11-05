@@ -624,7 +624,7 @@ bazel_dep(name = "roboticslibrary.rl", version = "0.0.0-20250723-5bbd773.bcr.4")
 # TODO(b/558286754): Bumping indirect dependency for Bazel 9 compatibility.
 # Another option is setting `--repo_env=ANDROID_HOME=` to disable loading it, but that risks
 # breaking downstream consumers.
-bazel_dep(name = "rules_android", version = "0.8.0")
+bazel_dep(name = "rules_android", version = "0.8.1")
 
 # TODO(b/489481888): Remove once grpc upgrades its transitive rules_apple
 # dependency from 3.16.0 to >= 4.x (grpc 1.81.1 in #58249 pulls in
