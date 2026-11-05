@@ -18,13 +18,12 @@
 #include <cmath>
 #include <optional>
 #include <string>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/math/pose3.h"
@@ -32,13 +31,13 @@
 #include "intrinsic/scene/conversion/user_data.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
+#include "intrinsic/scene/scene_object/scene_object_view.h"
 #include "intrinsic/scene/sdf/convert_to_sdf.h"
 #include "intrinsic/scene/sdf/custom_tags.h"
 #include "intrinsic/scene/sdf/sdf_sensor_pose.h"
 #include "intrinsic/scene/sdf/sdf_util.h"
 #include "intrinsic/scene/sdf/sim_spec_to_sdf.h"
 #include "intrinsic/scene/sdf/xml_utils.h"
-#include "intrinsic/scene/validate/scene_object_validation.h"
 #include "intrinsic/util/full_precision.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "tinyxml2.h"
@@ -49,6 +48,7 @@ namespace sdf {
 namespace {
 
 using ::intrinsic::FullPrecision;
+using ::intrinsic::scene_object::SceneObjectView;
 using ::intrinsic_proto::scene_object::v1::Entity;
 
 // Returns translation and normalized quaternion. An unset orientation maps to
@@ -147,10 +147,23 @@ absl::StatusOr<std::string> SensorToSdf(const Entity& entity) {
   return result;
 }
 
-absl::StatusOr<std::string> LinkToSdf(
-    const Entity& entity, const std::vector<const Entity*>& sensors,
-    const absl::flat_hash_map<std::string, const Entity*>& entity_map,
-    const SceneObjectToSdfOptions& options) {
+// Returns the SDF of all sensors that are children of the entity named `name`,
+// in order of entity name.
+absl::StatusOr<std::string> ChildSensorsToSdf(const SceneObjectView& view,
+                                              absl::string_view name) {
+  std::string result;
+  for (const Entity* child : view.GetChildren(name)) {
+    if (child->has_sensor()) {
+      INTR_ASSIGN_OR_RETURN(std::string sensor_sdf, SensorToSdf(*child));
+      absl::StrAppend(&result, sensor_sdf);
+    }
+  }
+  return result;
+}
+
+absl::StatusOr<std::string> LinkToSdf(const Entity& entity,
+                                      const SceneObjectView& view,
+                                      const SceneObjectToSdfOptions& options) {
   LinkProperties properties;
   properties.name = entity.name();
   properties.parent_name = entity.parent_name();
@@ -158,17 +171,9 @@ absl::StatusOr<std::string> LinkToSdf(
                         FromPoseProto(entity.parent_t_this()));
 
   std::string extra_joint_sdf;
-  if (!entity.parent_name().empty()) {
-    auto it = entity_map.find(entity.parent_name());
-    if (it == entity_map.end()) {
-      // Should never happen as SceneObject was validated.
-      return absl::InternalError(
-          absl::StrCat("Unable to find parent entity `", entity.parent_name(),
-                       "` for link: `", entity.name(), "`"));
-    }
-
+  if (const Entity* parent = view.GetParent(entity.name()); parent != nullptr) {
     // Inserts a fixed joint if the parent is a link.
-    if (it->second->has_link()) {
+    if (parent->has_link()) {
       intrinsic_proto::world::KinematicsComponent kinematics;
       kinematics.set_motion_type(
           intrinsic_proto::world::KinematicsComponent::MOTION_TYPE_FIXED);
@@ -188,8 +193,8 @@ absl::StatusOr<std::string> LinkToSdf(
     }
 
     // Uses outboard_t_child if the parent is a joint.
-    if (it->second->has_joint()) {
-      const auto& kinematics = it->second->joint().kinematics_component();
+    if (parent->has_joint()) {
+      const auto& kinematics = parent->joint().kinematics_component();
       if (kinematics.has_outboard_t_child() &&
           properties.parent_t_link.isApprox(Pose3d())) {
         INTR_ASSIGN_OR_RETURN(properties.parent_t_link,
@@ -198,12 +203,8 @@ absl::StatusOr<std::string> LinkToSdf(
     }
   }
 
-  for (const auto* sensor : sensors) {
-    if (sensor->has_sensor()) {
-      INTR_ASSIGN_OR_RETURN(std::string sensor_sdf, SensorToSdf(*sensor));
-      absl::StrAppend(&properties.sensors_sdf, sensor_sdf);
-    }
-  }
+  INTR_ASSIGN_OR_RETURN(properties.sensors_sdf,
+                        ChildSensorsToSdf(view, entity.name()));
 
   LinkOptions link_options;
   link_options.inertial_options.enable_auto_inertial = false;
@@ -219,30 +220,27 @@ absl::StatusOr<std::string> LinkToSdf(
   return extra_joint_sdf + link_sdf;
 }
 
-absl::StatusOr<std::string> JointToSdf(
-    const Entity& entity,
-    const absl::flat_hash_map<std::string, std::string>& joint_to_child,
-    const std::vector<const Entity*>& sensors) {
+absl::StatusOr<std::string> JointToSdf(const Entity& entity,
+                                       const SceneObjectView& view) {
   const auto& kinematics = entity.joint().kinematics_component();
 
   JointProperties properties;
   properties.joint_name = entity.name();
   properties.parent_name = entity.parent_name();
-  auto child_it = joint_to_child.find(entity.name());
-  if (child_it != joint_to_child.end()) {
-    properties.child_name = child_it->second;
+  // A joint is expected to have a single child link. If there are multiple,
+  // the first one in order of entity name is used.
+  const auto children = view.GetChildren(entity.name());
+  if (const auto child_link = std::ranges::find_if(
+          children, [](const Entity* child) { return child->has_link(); });
+      child_link != children.end()) {
+    properties.child_name = (*child_link)->name();
   }
 
   INTR_ASSIGN_OR_RETURN(properties.child_t_joint,
                         FromPoseProto(kinematics.parent_t_inboard()));
   properties.pose_relative_to = entity.parent_name();
-
-  for (const auto* sensor : sensors) {
-    if (sensor->has_sensor()) {
-      INTR_ASSIGN_OR_RETURN(std::string sensor_sdf, SensorToSdf(*sensor));
-      absl::StrAppend(&properties.sensors_sdf, sensor_sdf);
-    }
-  }
+  INTR_ASSIGN_OR_RETURN(properties.sensors_sdf,
+                        ChildSensorsToSdf(view, entity.name()));
 
   return JointSpecToString(kinematics, properties);
 }
@@ -337,62 +335,8 @@ absl::StatusOr<std::string> SceneObjectToSdf(
     return absl::InvalidArgumentError(
         "geometry_deserializer is required when save_geopath is set.");
   }
-  INTR_RETURN_IF_ERROR(scene_object::ValidateSceneObject(scene_object));
-
-  absl::flat_hash_map<std::string, const Entity*> entity_map;
-  for (const auto& entity : scene_object.entities()) {
-    entity_map[entity.name()] = &entity;
-  }
-
-  // Keeps track of parent entity to sensor mapping to emit `sensor` xml tag
-  // when writing out the parent entity xml tag.
-  absl::flat_hash_map<std::string, std::vector<const Entity*>>
-      parent_to_sensors;
-
-  // Keeps track of child entities of joints to emit `child` xml tag when
-  // writing out `joint` xml tag.
-  // A joint should only have one child entity.
-  absl::flat_hash_map<std::string, std::string> joint_to_child;
-
-  for (const auto& entity : scene_object.entities()) {
-    switch (entity.entity_type_case()) {
-      case Entity::kSensor: {
-        const auto& parent_name = entity.parent_name();
-        if (!parent_name.empty()) {
-          auto it = entity_map.find(parent_name);
-          if (it == entity_map.end()) {
-            // Should never happen given that we have already validated the
-            // SceneObject.
-            return absl::InternalError(
-                absl::StrCat("Failed to find entity with name: ", parent_name));
-          }
-          if (!it->second->has_joint() && !it->second->has_link()) {
-            return absl::InternalError(
-                "Sensor should only be parented to a link or a joint");
-          }
-          parent_to_sensors[parent_name].push_back(&entity);
-        }
-        break;
-      }
-      case Entity::kLink: {
-        const auto& parent_name = entity.parent_name();
-        if (!parent_name.empty()) {
-          auto it = entity_map.find(parent_name);
-          if (it == entity_map.end()) {
-            // Should never happen given that we have already validated the
-            // SceneObject.
-            return absl::InternalError(
-                absl::StrCat("Failed to find entity with name: ", parent_name));
-          } else if (it->second->has_joint()) {
-            joint_to_child[parent_name] = entity.name();
-          }
-        }
-        break;
-      }
-      default:
-        break;
-    }
-  }
+  INTR_ASSIGN_OR_RETURN(const SceneObjectView view,
+                        SceneObjectView::Create(scene_object));
 
   std::string sdf = "<?xml version='1.0'?>";
   absl::StrAppend(&sdf, "<sdf version='1.7' xmlns:intrinsic='intrinsic'>");
@@ -425,20 +369,19 @@ absl::StatusOr<std::string> SceneObjectToSdf(
                               kUserDataCustomElement, user_data_str);
   }
 
-  for (const auto& entity : scene_object.entities()) {
+  // Walks the entity tree in a canonical order so that the generated SDF is
+  // independent of the entity order in `scene_object`.
+  for (const Entity* entity_ptr : view.GetEntitiesInTreeOrder()) {
+    const Entity& entity = *entity_ptr;
     switch (entity.entity_type_case()) {
       case Entity::kLink: {
-        INTR_ASSIGN_OR_RETURN(
-            std::string link_sdf,
-            LinkToSdf(entity, parent_to_sensors[entity.name()], entity_map,
-                      options));
+        INTR_ASSIGN_OR_RETURN(std::string link_sdf,
+                              LinkToSdf(entity, view, options));
         absl::StrAppend(&sdf, link_sdf);
         break;
       }
       case Entity::kJoint: {
-        INTR_ASSIGN_OR_RETURN(std::string joint_sdf,
-                              JointToSdf(entity, joint_to_child,
-                                         parent_to_sensors[entity.name()]));
+        INTR_ASSIGN_OR_RETURN(std::string joint_sdf, JointToSdf(entity, view));
         absl::StrAppend(&sdf, joint_sdf);
         break;
       }
