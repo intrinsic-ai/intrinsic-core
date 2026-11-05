@@ -21,6 +21,8 @@ import (
 
 	"intrinsic/util/status/extstatus"
 
+	"google.golang.org/grpc/codes"
+
 	espb "intrinsic/util/status/extended_status_go_proto"
 )
 
@@ -148,6 +150,7 @@ type ReportExtendedStatusOption func(*reportExtendedStatusOpts)
 type reportExtendedStatusOpts struct {
 	code        uint32
 	component   string
+	grpcCode    *codes.Code
 	titlePrefix string
 }
 
@@ -169,6 +172,14 @@ func WithComponentName(name string) ReportExtendedStatusOption {
 func WithTitlePrefix(prefix string) ReportExtendedStatusOption {
 	return func(opts *reportExtendedStatusOpts) {
 		opts.titlePrefix = prefix
+	}
+}
+
+// WithGrpcCode sets the gRPC code used when the returned ExtendedStatus is converted to a gRPC
+// status, e.g. via [extstatus.ExtendedStatus.Err]. If not set, the [extstatus.New] default is used.
+func WithGrpcCode(code codes.Code) ReportExtendedStatusOption {
+	return func(opts *reportExtendedStatusOpts) {
+		opts.grpcCode = &code
 	}
 }
 
@@ -237,10 +248,13 @@ func extendedStatus(errs []error, opts []ReportExtendedStatusOption) *extstatus.
 	if o.titlePrefix != "" {
 		title = o.titlePrefix + ": " + title
 	}
-	return extstatus.New(o.component,
-		uint32(o.code),
+	esOpts := []extstatus.NewOption{
 		extstatus.WithSeverity(severity),
 		extstatus.WithTitle(title),
 		extstatus.WithContexts(contexts),
-	)
+	}
+	if o.grpcCode != nil {
+		esOpts = append(esOpts, extstatus.WithGrpcCode(*o.grpcCode))
+	}
+	return extstatus.New(o.component, uint32(o.code), esOpts...)
 }
