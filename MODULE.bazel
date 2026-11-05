@@ -443,7 +443,6 @@ use_repo(rules_rs_toolchains, "default_rust_toolchains", "rust_1_89_toolchains")
 
 register_toolchains("@rust_1_89_toolchains//...")
 
-
 #########
 # JS/TS #
 #########
@@ -489,7 +488,6 @@ pnpm = use_extension("@aspect_rules_js//npm:extensions.bzl", "pnpm", dev_depende
 
 js_rules = use_extension("//bazel:js_rules.bzl", "js_rules")
 use_repo(js_rules, "intrinsic_js_rules")
-
 
 ######################
 # Bazel dependencies #
