@@ -777,9 +777,12 @@ oci.pull(
 )
 oci.pull(
     name = "timescaledb",
-    digest = "sha256:19eb9276ee367411728e768217120e55300ac9c3bb5eadcf47aa5ded627f6db1",
-    image = "gcr.io/cloud-robotics-releases/timescaledb",
-    platforms = ["linux/amd64"],
+    digest = "sha256:5ef42f688483721ed7e315ec868c1cfb85e270a26e25a6413d1ace53111fa32d",
+    image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/timescale/timescaledb-ha",
+    platforms = [
+        "linux/amd64",
+        "linux/arm64",
+    ],
     tag = "pg14",
 )
 
@@ -909,6 +912,7 @@ use_repo(
     "terraform_base_linux_amd64",  
     "timescaledb",  
     "timescaledb_linux_amd64",  
+    "timescaledb_linux_arm64",  
     "torchserve-cpu",  
     "torchserve-cpu_linux_amd64",  
     "torchserve-gpu",  
