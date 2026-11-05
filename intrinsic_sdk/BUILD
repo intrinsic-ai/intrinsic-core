@@ -23,5 +23,6 @@ test_suite(
         "//intrinsic_sdk/intrinsic/math/python:quaternion_test",
         "//intrinsic_sdk/intrinsic/math/python:ros_proto_conversion_test",
         "//intrinsic_sdk/intrinsic/math/python:rotation3_test",
+        "//intrinsic_sdk/intrinsic/scene/sdf/testing:xml_matchers_test",
     ],
 )
