@@ -123,7 +123,8 @@ absl::StatusOr<CasRefsV1> UploadToCASV1(
         _ << "UploadToCAS failed to "
              "ContentAddressableStorageCreate() geometry");
   }
-  {
+  // Write out the renderable only if we need to keep it.
+  if (geometry.KeepRenderableForSerialization()) {
     INTR_ASSIGN_OR_RETURN(auto renderable, GetOrGenerateRenderable(geometry));
     const auto glb_contents = renderable->GetGLBString();
     auto cli_context = make_client_context();
