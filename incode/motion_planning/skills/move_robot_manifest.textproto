@@ -115,36 +115,30 @@ status_info: [
   {
     code: 10201
     title: "Collision Error"
-    recovery_instructions: "Check the error message for recovery instructions."
   },
 
   {
     code: 10301
     title: "Inverse Kinematics (IK) Error"
-    recovery_instructions: "Check the error message for recovery instructions."
   },
 
   {
     code: 10401
     title: "Generic Linear Cartesian Path Planning Error"
-    recovery_instructions: "Check the error message for recovery instructions."
   },
 
   {
     code: 10402
     title: "Linear Cartesian Path Planning Error: Fine Path Inverse Kinematics"
-    recovery_instructions: "Check the error message for recovery instructions."
   },
 
   {
     code: 10501
     title: "Joint Limit Error"
-    recovery_instructions: "Check the error message for recovery instructions."
   },
 
   {
     code: 10601
     title: "Generic Motion Planning Error"
-    recovery_instructions: "Check the error message for recovery instructions."
   }
 ]
