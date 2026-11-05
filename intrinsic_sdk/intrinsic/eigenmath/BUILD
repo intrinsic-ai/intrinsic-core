@@ -137,3 +137,37 @@ cc_library(
         "@com_gitlab_libeigen_eigen//:eigen",
     ],
 )
+
+cc_library(
+    name = "matchers",
+    testonly = True,
+    hdrs = ["matchers.h"],
+    deps = [
+        ":eigenmath",
+        ":type_checks",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/strings",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_gitlab_libeigen_eigen//:eigen",
+        "@com_google_googletest//:gtest",
+        "@com_google_protobuf//:protobuf",
+        "@gloop//gloop/util/gtl:iterator_adaptors",
+        "@intrinsic_apis//intrinsic/messages:messages_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "type_checks",
+    hdrs = [
+        "type_checks.h",
+    ],
+    deps = [
+        ":eigenmath",
+        ":pose2",
+        ":so2",
+        ":so3",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+    ],
+)

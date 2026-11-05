@@ -49,42 +49,8 @@ cc_library(
 )
 
 cc_library(
-    name = "matchers",
-    testonly = True,
-    hdrs = ["matchers.h"],
-    deps = [
-        ":type_checks",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/math:proto_conversion",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/strings",
-        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
-        "@com_gitlab_libeigen_eigen//:eigen",
-        "@com_google_googletest//:gtest",
-        "@com_google_protobuf//:protobuf",
-        "@gloop//gloop/util/gtl:iterator_adaptors",
-        "@intrinsic_apis//intrinsic/messages:messages_cc_proto",
-    ],
-)
-
-cc_library(
     name = "scalar_utils",
     hdrs = ["scalar_utils.h"],
-)
-
-cc_library(
-    name = "type_checks",
-    hdrs = [
-        "type_checks.h",
-    ],
-    deps = [
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:pose2",
-        "//intrinsic_sdk/intrinsic/eigenmath:so2",
-        "//intrinsic_sdk/intrinsic/eigenmath:so3",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-    ],
 )
 
 cc_library(

@@ -117,8 +117,8 @@ cc_library(
     deps = [
         ":is_approx_with_inf",
         ":to_fixed_string",
-        "//intrinsic/eigenmath:type_checks",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/eigenmath:type_checks",
         "@com_google_googletest//:gtest",
     ],
 )

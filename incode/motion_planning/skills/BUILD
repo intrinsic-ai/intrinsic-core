@@ -110,7 +110,6 @@ cc_test(
     deps = [
         ":preplan_motion",
         ":preplan_motion_cc_proto",
-        "//intrinsic/eigenmath:matchers",
         "//intrinsic/skills/apps:attach_object_to_robot_cc_proto",
         "//intrinsic/skills/apps:detach_object_cc_proto",
         "//intrinsic/skills/apps:update_world_cc_proto",
@@ -125,6 +124,7 @@ cc_test(
         "//intrinsic_motion_planning/intrinsic/motion_planning/service:motion_planner_service_proxy",
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:move_robot_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
