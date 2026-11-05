@@ -216,6 +216,7 @@ class ActuatedGripperPlugin final : public ::gz::sim::System,
   std::unique_ptr<FixedJointGripper> fixed_joint_gripper_;
 
   FRIEND_TEST(ActuatedGripperPluginTest, ValidConfigure);
+  FRIEND_TEST(ActuatedGripperPluginTest, ConfigureUsesJointPositionReset);
   FRIEND_TEST(ActuatedGripperPluginTest, InvalidConfigure);
   FRIEND_TEST(ActuatedGripperPluginTest, GraspWithoutContact);
   FRIEND_TEST(ActuatedGripperPluginTest, GraspAndRelease);

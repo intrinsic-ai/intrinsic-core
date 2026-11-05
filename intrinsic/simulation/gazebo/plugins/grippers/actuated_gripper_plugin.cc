@@ -44,6 +44,7 @@
 #include "gz/sim/components/JointAxis.hh"
 #include "gz/sim/components/JointForceCmd.hh"
 #include "gz/sim/components/JointPosition.hh"
+#include "gz/sim/components/JointPositionReset.hh"
 #include "gz/sim/components/JointVelocity.hh"
 #include "intrinsic/hardware/gripper/eoat/eoat_service.pb.h"
 #include "intrinsic/hardware/gripper/gripper.pb.h"
@@ -78,6 +79,7 @@ using ::gz::sim::components::ContactSensorData;
 using ::gz::sim::components::JointAxis;
 using ::gz::sim::components::JointForceCmd;
 using ::gz::sim::components::JointPosition;
+using ::gz::sim::components::JointPositionReset;
 using ::gz::sim::components::JointVelocity;
 
 namespace {
@@ -137,9 +139,16 @@ ActuatedGripperPlugin::ConfigureJoints(Entity gripper_entity,
   }
 
   for (auto& joint : joints) {
+    double initial_position = 0.0;
+    if (const auto* pos_reset =
+            ecm.Component<JointPositionReset>(joint.joint_entity);
+        pos_reset != nullptr && !pos_reset->Data().empty()) {
+      initial_position = pos_reset->Data()[0];
+    }
     CreateECMComponent<JointPosition>(joint.joint_entity,
                                       /*joint_dof_count=*/1, ecm);
-    GetECMComponentData<JointPosition>(joint.joint_entity, ecm)[0] = 0.0;
+    GetECMComponentData<JointPosition>(joint.joint_entity, ecm)[0] =
+        initial_position;
     CreateECMComponent<JointVelocity>(joint.joint_entity,
                                       /*joint_dof_count=*/1, ecm);
     GetECMComponentData<JointVelocity>(joint.joint_entity, ecm)[0] = 0.0;
@@ -192,6 +201,11 @@ void ActuatedGripperPlugin::Configure(
   // The gripper is assumed to be symmetric if it has multiple joints.
   // Therefore we may use just the first joint for status calculations.
   feedback_joint_entity_ = joints_[0].joint_entity;
+  {
+    absl::MutexLock lock(command_mutex_);
+    desired_position_ =
+        GetECMComponentData<JointPosition>(feedback_joint_entity_, ecm)[0];
+  }
   INTR_ASSIGN_OR_RETURN(
       std::tie(feedback_joint_lower_limit_, feedback_joint_upper_limit_),
       ValidateGripperJointLimits(feedback_joint_entity_, ecm),
