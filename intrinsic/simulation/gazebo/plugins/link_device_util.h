@@ -15,6 +15,9 @@
 #ifndef INTRINSIC_SIMULATION_GAZEBO_PLUGINS_LINK_DEVICE_UTIL_H_
 #define INTRINSIC_SIMULATION_GAZEBO_PLUGINS_LINK_DEVICE_UTIL_H_
 
+#include <vector>
+
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -53,6 +56,34 @@ absl::StatusOr<::gz::sim::Entity> AddDetachableJoint(
 // will remove the joint AFTER integrating for one more timestep.
 absl::Status RemoveDetachableJoint(::gz::sim::Entity joint,
                                    ::gz::sim::EntityComponentManager& ecm);
+
+// Returns the links that are rigidly attached as descendants of `root_link`,
+// i.e. that are reachable from `root_link` by traversing fixed `<joint>`s and
+// DetachableJoints from parent link to child link. `root_link` itself is
+// always part of the result. Non-fixed joints and ancestor links of
+// `root_link` are never traversed.
+//
+// - Joints in `exclude_joints` are not traversed. Note that joints whose
+//   removal has been requested but not yet processed by the ECM are still
+//   traversed; callers that requested such removals should list them here.
+// - Links in `stop_links` are not entered (neither they nor anything only
+//   reachable through them is part of the result). `root_link` is entered even
+//   if it is in `stop_links`.
+absl::flat_hash_set<::gz::sim::Entity> GetRigidlyAttachedLinks(
+    ::gz::sim::Entity root_link, const ::gz::sim::EntityComponentManager& ecm,
+    const absl::flat_hash_set<::gz::sim::Entity>& exclude_joints,
+    const absl::flat_hash_set<::gz::sim::Entity>& stop_links);
+
+// Returns a signature of the runtime rigid-attachment topology of the ECM: the
+// sorted entity ids of all DetachableJoints not in `exclude_joints`. Since
+// structural fixed `<joint>`s are created with their models and runtime
+// attachments/detachments always use DetachableJoints, two equal signatures
+// after initialization imply that GetRigidlyAttachedLinks() would return the
+// same result for the same arguments, so callers can cheaply detect when a
+// recomputation is necessary without scanning every joint in the world.
+std::vector<::gz::sim::Entity> GetRigidAttachmentTopologySignature(
+    const ::gz::sim::EntityComponentManager& ecm,
+    const absl::flat_hash_set<::gz::sim::Entity>& exclude_joints = {});
 
 }  // namespace simulation
 }  // namespace intrinsic

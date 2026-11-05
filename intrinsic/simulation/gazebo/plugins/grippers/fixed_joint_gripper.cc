@@ -84,13 +84,12 @@ std::string EntityName(Entity entity,
 constexpr int kVerboseLogIntervalSeconds = 5;
 }  // namespace
 
-FixedJointGripper::FixedJointGripper(
-    const std::string& plugin_name, const std::string& gripper_link_name,
-    double grasp_debounce_time_seconds, gz::sim::Link gripper_link,
-    std::vector<::gz::sim::Entity> collision_test_entities)
+FixedJointGripper::FixedJointGripper(const std::string& plugin_name,
+                                     const std::string& gripper_link_name,
+                                     double grasp_debounce_time_seconds,
+                                     gz::sim::Link gripper_link)
     : plugin_name_(plugin_name),
       gripper_link_(gripper_link),
-      collision_test_entities_(std::move(collision_test_entities)),
       gripper_link_name_(gripper_link_name),
       grasp_debounce_time_seconds_(grasp_debounce_time_seconds) {
   status_.set_grasp_status(GripperStatus::DETACHED);
@@ -103,11 +102,11 @@ bool FixedJointGripper::IsGrasping() const {
 }
 
 // The gripper link name is used to obtain the corresponding Link entity from
-// the ECM. We also obtain the collision entity associated with the test volume
-// that we use to determine which object the gripper is about to grasp. Finally,
-// we add a ContactSensorData component to the collision entity to indicate to
+// the ECM. The contact surface (collision entities of the gripper link and of
+// all links rigidly attached to it) is then computed; the ContactSensorData
+// component is added to those collision entities when needed to indicate to
 // the Physics System that it should populate contacts after the time
-// integration step for this entity.
+// integration step.
 absl::StatusOr<std::unique_ptr<FixedJointGripper>> FixedJointGripper::Create(
     const gz::sim::Entity& plugin_parent, absl::string_view plugin_name,
     absl::string_view gripper_link_name, double grasp_debounce_time_seconds,
@@ -124,14 +123,6 @@ absl::StatusOr<std::unique_ptr<FixedJointGripper>> FixedJointGripper::Create(
                << gripper_link_name << ". Gripper will not work for "
                << plugin_name;
   }
-  // add ContactSensorData component so that the Physics engine populates it
-  // with the contact information
-  std::vector<gz::sim::Entity> collision_test_entities =
-      gripper_link.Collisions(ecm);
-  if (collision_test_entities.empty()) {
-    LOG(ERROR) << "Gripper link " << gripper_link_name << " has no collisions."
-               << " Gripper will not work for " << plugin_name;
-  }
 
   // Add Interaction component so that we know this is a robot tip entity.
   // TODO(b/296597289): Move this to a separate annotation plugin.
@@ -142,10 +133,130 @@ absl::StatusOr<std::unique_ptr<FixedJointGripper>> FixedJointGripper::Create(
                << gripper_link_name;
   }
 
-  return std::make_unique<FixedJointGripper>(
+  auto gripper = std::make_unique<FixedJointGripper>(
       std::string(plugin_name), std::string(gripper_link_name),
-      grasp_debounce_time_seconds, gripper_link,
-      std::move(collision_test_entities));
+      grasp_debounce_time_seconds, gripper_link);
+  gripper->topology_signature_ = GetRigidAttachmentTopologySignature(ecm);
+  gripper->RefreshContactSurface(ecm);
+  if (gripper->collision_test_entities_.empty()) {
+    LOG(ERROR) << "Gripper link " << gripper_link_name
+               << " and its rigidly attached links have no collisions."
+               << " Gripper will not work for " << plugin_name
+               << " until a link with collisions is attached.";
+  }
+  return gripper;
+}
+
+absl::flat_hash_set<Entity> FixedJointGripper::ExcludedPayloadJoints() const {
+  absl::flat_hash_set<Entity> exclude_joints = released_payload_joints_;
+  if (detachable_joint_entity_ != kNullEntity) {
+    exclude_joints.insert(detachable_joint_entity_);
+  }
+  return exclude_joints;
+}
+
+void FixedJointGripper::MaybeRefreshContactSurface(
+    gz::sim::EntityComponentManager& ecm) {
+  // The payload joint may be removed by someone else, e.g. when the grasped
+  // object is deleted or when another system takes over the attachment (an
+  // object that was grasped becomes part of the gripper). Reset the grasp
+  // state in that case so that the gripper can grasp again.
+  if (detachable_joint_entity_ != kNullEntity &&
+      !ecm.HasEntity(detachable_joint_entity_)) {
+    LOG(INFO) << "Payload joint of gripper " << plugin_name_
+              << " was removed externally. Resetting grasp state.";
+    detachable_joint_entity_ = kNullEntity;
+    grasped_object_link_entity_ = kNullEntity;
+    status_.set_grasp_status(GripperStatus::DETACHED);
+  }
+  // Forget released payload joints once the ECM has processed their removal.
+  absl::erase_if(released_payload_joints_,
+                 [&ecm](Entity joint) { return !ecm.HasEntity(joint); });
+
+  std::vector<Entity> signature =
+      GetRigidAttachmentTopologySignature(ecm, ExcludedPayloadJoints());
+  if (signature != topology_signature_) {
+    topology_signature_ = std::move(signature);
+    RefreshContactSurface(ecm);
+  }
+}
+
+void FixedJointGripper::RefreshContactSurface(
+    gz::sim::EntityComponentManager& ecm) {
+  if (!gripper_link_.Valid(ecm)) {
+    return;
+  }
+
+  // Never traverse through this gripper's own payload joint: the grasped object
+  // is not part of the gripper. The same holds for payload joints whose removal
+  // was requested but not yet processed by the ECM.
+  const absl::flat_hash_set<Entity> exclude_joints = ExcludedPayloadJoints();
+  // Never enter other grippers' tip links: whatever is attached to them (e.g.
+  // their payload) belongs to them, even if they are rigidly connected to this
+  // gripper (e.g. two grippers on the same flange).
+  absl::flat_hash_set<Entity> stop_links;
+  ecm.Each<Interaction>(
+      [&](const Entity& entity, const Interaction* interaction) -> bool {
+        if (interaction->Data() == InteractionType::kRobotTip &&
+            entity != gripper_link_.Entity() &&
+            !tagged_tool_links_.contains(entity)) {
+          stop_links.insert(entity);
+        }
+        return true;
+      });
+
+  absl::flat_hash_set<Entity> attached_links = GetRigidlyAttachedLinks(
+      gripper_link_.Entity(), ecm, exclude_joints, stop_links);
+  attached_links.erase(gripper_link_.Entity());
+
+  // Tool links that are no longer attached.
+  for (Entity link : tool_link_entities_) {
+    if (attached_links.contains(link)) continue;
+    LOG(INFO) << "Link '" << EntityName(link, ecm)
+              << "' is no longer part of the contact surface of gripper "
+              << plugin_name_;
+    if (tagged_tool_links_.erase(link) > 0 && ecm.HasEntity(link)) {
+      ecm.RemoveComponent<Interaction>(link);
+    }
+  }
+  // Newly attached tool links. Mark them as robot tips (unless they already
+  // carry an Interaction component, e.g. from an ObjectInteractionModerator) so
+  // that floating objects in their proximity are simulated accurately.
+  for (Entity link : attached_links) {
+    if (tool_link_entities_.contains(link)) continue;
+    LOG(INFO) << "Link '" << EntityName(link, ecm)
+              << "' is now part of the contact surface of gripper "
+              << plugin_name_;
+    if (!ecm.EntityHasComponentType(link, Interaction::typeId)) {
+      if (ecm.CreateComponent(link, Interaction(InteractionType::kRobotTip)) !=
+          nullptr) {
+        tagged_tool_links_.insert(link);
+      }
+    }
+  }
+  tool_link_entities_ = std::move(attached_links);
+
+  // Recompute the monitored collisions. Contact sensor data is disabled on
+  // collisions that are no longer monitored and (if currently needed) enabled
+  // on the new set by UpdateContactSensorDataComponent().
+  std::vector<Entity> new_collisions = gripper_link_.Collisions(ecm);
+  for (Entity link : tool_link_entities_) {
+    std::vector<Entity> link_collisions = gz::sim::Link(link).Collisions(ecm);
+    new_collisions.insert(new_collisions.end(), link_collisions.begin(),
+                          link_collisions.end());
+  }
+  absl::flat_hash_set<Entity> new_collision_set(new_collisions.begin(),
+                                                new_collisions.end());
+  if (!absl::GetFlag(FLAGS_fixed_joint_gripper_keep_contact_sensor_data)) {
+    for (Entity collision : collision_test_entities_) {
+      if (!new_collision_set.contains(collision) && ecm.HasEntity(collision)) {
+        gz::sim::enableComponent<ContactSensorData>(ecm, collision,
+                                                    /*_enable=*/false);
+      }
+    }
+  }
+  collision_test_entities_ = std::move(new_collisions);
+  UpdateContactSensorDataComponent(ecm);
 }
 
 void FixedJointGripper::OnCommand(const GripperCommand& command_msg) {
@@ -182,6 +293,8 @@ void FixedJointGripper::OnCommand(const GripperCommand& command_msg) {
 }
 
 void FixedJointGripper::ProcessCommand(gz::sim::EntityComponentManager& ecm) {
+  MaybeRefreshContactSurface(ecm);
+
   if (command_.command() == GripperCommand::GRASP && !IsGrasping()) {
     if (grasped_object_link_entity_ != kNullEntity) {
       absl::StatusOr<Entity> detachable_joint = AddDetachableJoint(
@@ -220,6 +333,7 @@ void FixedJointGripper::ProcessCommand(gz::sim::EntityComponentManager& ecm) {
             << "Could not detach object " << grasped_object_name
             << " for gripper " << plugin_name_;
       } else {
+        released_payload_joints_.insert(detachable_joint_entity_);
         detachable_joint_entity_ = kNullEntity;
         grasped_object_link_entity_ = kNullEntity;
       }
@@ -273,21 +387,28 @@ void FixedJointGripper::UpdateGraspedObject(
       }
       auto& collision2 = contact_data.contact(i).collision2();
       if (collision2.id() != collision_entity) {
-        // safe to overwrite since only one of the parent links can be different
-        // from gripper_link_.
+        // Safe to overwrite since at least one of collision1 or collision2 is
+        // collision_entity.
         parent_link = ecm.ParentEntity(collision2.id());
       }
-      if (parent_link == gripper_link_.Entity()) {
-        LOG_EVERY_N_SEC(ERROR, kVerboseLogIntervalSeconds)
+      if (parent_link == gripper_link_.Entity() ||
+          tool_link_entities_.contains(parent_link)) {
+        // Contacts among the gripper link and its rigidly attached links (e.g.
+        // custom fingers) are not grasp candidates.
+        LOG_IF_EVERY_N_SEC(
+            ERROR,
+            parent_link == gripper_link_.Entity() &&
+                ecm.ParentEntity(collision_entity) == gripper_link_.Entity(),
+            kVerboseLogIntervalSeconds)
             << "Gripper link is in collision itself for " << plugin_name_;
-      } else {
-        const bool already_has_link = !colliding_links.empty();
-        LOG_IF_EVERY_N_SEC(INFO, already_has_link, kVerboseLogIntervalSeconds)
-            << "Gripper link is in collision with multiple links for "
-            << plugin_name_;
-
-        colliding_links.insert(parent_link);
+        continue;
       }
+      const bool already_has_link = !colliding_links.empty();
+      LOG_IF_EVERY_N_SEC(INFO, already_has_link, kVerboseLogIntervalSeconds)
+          << "Gripper link is in collision with multiple links for "
+          << plugin_name_;
+
+      colliding_links.insert(parent_link);
     }
   }
 

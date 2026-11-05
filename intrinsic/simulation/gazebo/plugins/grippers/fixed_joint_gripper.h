@@ -17,8 +17,10 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
@@ -33,13 +35,22 @@ namespace simulation {
 
 // An implementation of a Gripper in Gazebo that "welds" the grasped object to
 // the gripper with a fixed joint when commanded to grip.
+//
+// Contact surface: an object is considered graspable when it is in contact
+// with the gripper link *or with any link that is rigidly attached to the
+// gripper link* (e.g. custom fingers that are nested in the gripper model with
+// a fixed joint, or that were attached at run time with a DetachableJoint).
+// This "contact surface" is recomputed whenever the rigid-attachment topology
+// of the ECM changes, so fingers can be attached, removed and re-attached at
+// run time. The gripper's own payload joint and anything behind another
+// gripper's tip link are never part of the contact surface. The grasped object
+// is always welded to the gripper link itself.
 class FixedJointGripper {
  public:
   FixedJointGripper(const std::string& plugin_name,
                     const std::string& gripper_link_name,
                     double grasp_debounce_time_seconds,
-                    ::gz::sim::Link gripper_link,
-                    std::vector<::gz::sim::Entity> collision_test_entities);
+                    ::gz::sim::Link gripper_link);
 
   static absl::StatusOr<std::unique_ptr<FixedJointGripper>> Create(
       const ::gz::sim::Entity& plugin_parent, absl::string_view plugin_name,
@@ -60,11 +71,23 @@ class FixedJointGripper {
   // returns kNullEntity if no entity is currently grasped
   ::gz::sim::Entity GraspedLink() const;
 
+  // Links (other than the gripper link) that are currently part of the contact
+  // surface, e.g. attached custom fingers.
+  const absl::flat_hash_set<::gz::sim::Entity>& ToolLinks() const {
+    return tool_link_entities_;
+  }
+  // Collision entities that are currently monitored for contacts.
+  const std::vector<::gz::sim::Entity>& CollisionTestEntities() const {
+    return collision_test_entities_;
+  }
+
   // Processes command_ and update the joints and links related to the grasping
   // status. Intended to be called in PreUpdate. Depending on the last
   // received grip/release command and the current grasp
   // attached/detached state, we decide whether or not to join the gripper link
   // to the object last detected in the collision entity's contacts list.
+  // Also refreshes the contact surface if the rigid-attachment topology
+  // changed since the last call.
   void ProcessCommand(::gz::sim::EntityComponentManager& ecm);
 
   // Updates grasped_object_link_entity_ status related states. Intended to be
@@ -77,6 +100,7 @@ class FixedJointGripper {
   std::string plugin_name_;
 
   ::gz::sim::Link gripper_link_;
+  // Collisions of gripper_link_ and of all tool_link_entities_.
   std::vector<::gz::sim::Entity> collision_test_entities_;
   ::gz::sim::Entity detachable_joint_entity_ = ::gz::sim::kNullEntity;
   ::gz::sim::Entity grasped_object_link_entity_ = ::gz::sim::kNullEntity;
@@ -86,6 +110,31 @@ class FixedJointGripper {
  private:
   void UpdateContactSensorDataComponent(
       ::gz::sim::EntityComponentManager& ecm) const;
+
+  // Returns the set of payload joints owned by this gripper (active or pending
+  // removal) that must be excluded when computing the contact surface.
+  absl::flat_hash_set<::gz::sim::Entity> ExcludedPayloadJoints() const;
+
+  // Recomputes tool_link_entities_ and collision_test_entities_ from the
+  // current rigid-attachment topology of the ECM, and updates the
+  // ContactSensorData and Interaction components accordingly.
+  void RefreshContactSurface(::gz::sim::EntityComponentManager& ecm);
+  // Calls RefreshContactSurface() if the rigid-attachment topology changed
+  // since the last refresh, or if the payload joint was removed externally.
+  void MaybeRefreshContactSurface(::gz::sim::EntityComponentManager& ecm);
+
+  // Links rigidly attached as descendants of gripper_link_ (excluding
+  // gripper_link_ itself).
+  absl::flat_hash_set<::gz::sim::Entity> tool_link_entities_;
+  // Signature of the rigid-attachment topology at the last refresh.
+  std::vector<::gz::sim::Entity> topology_signature_;
+  // Payload joints whose removal this gripper requested but which the ECM has
+  // not yet removed. They must not be traversed when computing the contact
+  // surface.
+  absl::flat_hash_set<::gz::sim::Entity> released_payload_joints_;
+  // Tool links on which this gripper created the Interaction(kRobotTip)
+  // component (so that it can be removed again when the link is detached).
+  absl::flat_hash_set<::gz::sim::Entity> tagged_tool_links_;
 
   intrinsic_proto::simulation::gazebo::GripperCommand command_;
   intrinsic_proto::simulation::gazebo::GripperStatus status_;

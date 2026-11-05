@@ -567,6 +567,8 @@ cc_library(
     deps = [
         "//intrinsic_sdk/intrinsic/util/status:status_builder",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",

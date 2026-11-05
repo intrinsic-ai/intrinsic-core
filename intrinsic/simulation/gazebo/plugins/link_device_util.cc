@@ -14,20 +14,29 @@
 
 #include "intrinsic/simulation/gazebo/plugins/link_device_util.h"
 
+#include <algorithm>
+#include <deque>
 #include <string>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
 #include "gz/sim/Entity.hh"
 #include "gz/sim/Model.hh"
+#include "gz/sim/components/ChildLinkName.hh"
 #include "gz/sim/components/DetachableJoint.hh"
+#include "gz/sim/components/Joint.hh"
+#include "gz/sim/components/JointType.hh"
 #include "gz/sim/components/Link.hh"
 #include "gz/sim/components/Model.hh"
+#include "gz/sim/components/ParentLinkName.hh"
 #include "intrinsic/simulation/gazebo/plugins/util.h"
 #include "intrinsic/util/status/status_builder.h"
+#include "sdf/Joint.hh"
 
 namespace intrinsic {
 namespace simulation {
@@ -107,6 +116,118 @@ absl::Status RemoveDetachableJoint(GazeboEntity joint, GazeboECM& ecm) {
   }
   ecm.RequestRemoveEntity(joint);
   return absl::OkStatus();
+}
+
+namespace {
+
+// Resolves the parent or child link name of a fixed `<joint>` to a link entity.
+// Joint link names are relative to the model the joint belongs to and may be
+// scoped (e.g. "nested_model::link") when the joint connects to a nested model.
+// Returns kNullEntity if the name cannot be resolved (e.g. "world").
+GazeboEntity ResolveJointLink(absl::string_view link_name,
+                              GazeboEntity joint_model, const GazeboECM& ecm) {
+  if (link_name == "world" || joint_model == kNullEntity) {
+    return kNullEntity;
+  }
+  absl::StatusOr<GazeboEntity> link = GetLinkEntityFromRelativeScopedName(
+      link_name, kLinkDeviceLinkNameScopeSeparator, joint_model, ecm);
+  return link.ok() ? *link : kNullEntity;
+}
+
+// Collects directed parent -> child adjacency over rigid edges (fixed
+// `<joint>`s and DetachableJoints) in the ECM, excluding `exclude_joints`.
+absl::flat_hash_map<GazeboEntity, std::vector<GazeboEntity>>
+CollectRigidChildren(const GazeboECM& ecm,
+                     const absl::flat_hash_set<GazeboEntity>& exclude_joints) {
+  absl::flat_hash_map<GazeboEntity, std::vector<GazeboEntity>> children;
+  ecm.Each<::gz::sim::components::Joint, ::gz::sim::components::JointType,
+           ::gz::sim::components::ParentLinkName,
+           ::gz::sim::components::ChildLinkName>(
+      [&](const GazeboEntity& joint, const ::gz::sim::components::Joint*,
+          const ::gz::sim::components::JointType* type,
+          const ::gz::sim::components::ParentLinkName* parent_name,
+          const ::gz::sim::components::ChildLinkName* child_name) -> bool {
+        if (type->Data() != ::sdf::JointType::FIXED ||
+            exclude_joints.contains(joint)) {
+          return true;
+        }
+        const GazeboEntity joint_model = ecm.ParentEntity(joint);
+        const GazeboEntity parent =
+            ResolveJointLink(parent_name->Data(), joint_model, ecm);
+        const GazeboEntity child =
+            ResolveJointLink(child_name->Data(), joint_model, ecm);
+        if (parent != kNullEntity && child != kNullEntity) {
+          children[parent].push_back(child);
+        }
+        return true;
+      });
+  ecm.Each<::gz::sim::components::DetachableJoint>(
+      [&](const GazeboEntity& joint,
+          const ::gz::sim::components::DetachableJoint* component) -> bool {
+        if (exclude_joints.contains(joint)) {
+          return true;
+        }
+        const auto& info = component->Data();
+        if (info.parentLink != kNullEntity && info.childLink != kNullEntity) {
+          children[info.parentLink].push_back(info.childLink);
+        }
+        return true;
+      });
+  return children;
+}
+
+}  // namespace
+
+absl::flat_hash_set<GazeboEntity> GetRigidlyAttachedLinks(
+    GazeboEntity root_link, const GazeboECM& ecm,
+    const absl::flat_hash_set<GazeboEntity>& exclude_joints,
+    const absl::flat_hash_set<GazeboEntity>& stop_links) {
+  absl::flat_hash_set<GazeboEntity> attached;
+  if (root_link == kNullEntity) {
+    return attached;
+  }
+
+  // Directed parent -> child adjacency over rigid edges so traversal only
+  // visits descendant links mounted onto `root_link`, never ancestor links
+  // (such as the gripper base or robot arm).
+  const absl::flat_hash_map<GazeboEntity, std::vector<GazeboEntity>> children =
+      CollectRigidChildren(ecm, exclude_joints);
+
+  // Breadth first search from the root link.
+  std::deque<GazeboEntity> queue{root_link};
+  attached.insert(root_link);
+  while (!queue.empty()) {
+    const GazeboEntity current = queue.front();
+    queue.pop_front();
+    auto it = children.find(current);
+    if (it == children.end()) {
+      continue;
+    }
+    for (GazeboEntity next : it->second) {
+      if (attached.contains(next) || stop_links.contains(next)) {
+        continue;
+      }
+      attached.insert(next);
+      queue.push_back(next);
+    }
+  }
+  return attached;
+}
+
+std::vector<GazeboEntity> GetRigidAttachmentTopologySignature(
+    const GazeboECM& ecm,
+    const absl::flat_hash_set<GazeboEntity>& exclude_joints) {
+  std::vector<GazeboEntity> signature;
+  ecm.Each<::gz::sim::components::DetachableJoint>(
+      [&](const GazeboEntity& joint,
+          const ::gz::sim::components::DetachableJoint*) -> bool {
+        if (!exclude_joints.contains(joint)) {
+          signature.push_back(joint);
+        }
+        return true;
+      });
+  std::sort(signature.begin(), signature.end());
+  return signature;
 }
 
 }  // namespace simulation
