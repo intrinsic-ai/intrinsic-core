@@ -21,6 +21,7 @@
 #include <memory>
 #include <string>
 
+#include "absl/base/attributes.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
 #include "include/ur_client_library/comm/control_mode.h"
@@ -35,6 +36,58 @@ struct ErrorCode;
 }  // namespace urcl::primary_interface
 
 namespace intrinsic::icon {
+
+// Configuration options for initializing the Universal Robots driver.
+struct UrDriverConfig {
+  // IP address of the robot controller to connect to.
+  std::string robot_ip ABSL_REQUIRE_EXPLICIT_INIT;
+
+  // Path to the URScript file to be uploaded and executed on the robot
+  // controller.
+  std::string script_file ABSL_REQUIRE_EXPLICIT_INIT;
+
+  // Path to the recipe file defining RTDE output fields exported by the robot.
+  std::string output_recipe ABSL_REQUIRE_EXPLICIT_INIT;
+
+  // Path to the recipe file defining RTDE input fields accepted by the robot.
+  std::string input_recipe ABSL_REQUIRE_EXPLICIT_INIT;
+
+  // Callback function invoked when the robot program running state changes.
+  std::function<void(bool)> handle_program_state ABSL_REQUIRE_EXPLICIT_INIT;
+
+  // If true, the driver executes in headless mode directly uploading the script
+  // via the primary interface instead of relying on the PolyScope URCap.
+  bool headless_mode = true;
+
+  // Reverse port on the host used for low-latency bidirectional communication
+  // (control commands and keepalive signals from the robot).
+  uint32_t reverse_port = 7141;
+
+  // Port on the host that serves the URScript program to the robot controller.
+  uint32_t script_sender_port = 7142;
+
+  // Port on the host used to stream trajectory points to the robot.
+  uint32_t trajectory_port = 7143;
+
+  // Reverse port on the host used to send arbitrary script commands to the
+  // robot.
+  uint32_t script_command_port = 7144;
+
+  // Proportional servo gain [100, 2000] for position tracking in servoj calls.
+  int servoj_gain = 2000;
+
+  // Lookahead time [0.03, 0.2] seconds used by servoj to smooth trajectory
+  // tracking.
+  double servoj_lookahead_time = 0.1;
+
+  // Whether RTDE reads should be non-blocking. If false, reads block until
+  // a new RTDE synchronization package arrives from the robot.
+  bool non_blocking_read = false;
+
+  // Host IP address bound for reverse communication. If empty, the driver uses
+  // the local interface address connected to the robot controller.
+  std::string reverse_ip = "";
+};
 
 // Interface abstraction for the Universal Robots hardware driver backend.
 class UrDriverInterface {
@@ -59,14 +112,7 @@ class UrDriverInterface {
   virtual bool CommandCloseSafetyPopup() = 0;
 
   // Primary & RTDE Driver Interface
-  virtual absl::Status InitializeDriver(
-      absl::string_view robot_ip, absl::string_view script_file,
-      absl::string_view output_recipe, absl::string_view input_recipe,
-      std::function<void(bool)> handle_program_state, bool headless_mode,
-      uint32_t reverse_port, uint32_t script_sender_port, int servoj_gain,
-      double servoj_lookahead_time, bool non_blocking_read,
-      absl::string_view reverse_ip, uint32_t trajectory_port,
-      uint32_t script_command_port) = 0;
+  virtual absl::Status InitializeDriver(const UrDriverConfig& config) = 0;
 
   virtual void ResetDriver() = 0;
   virtual bool IsDriverValid() const = 0;

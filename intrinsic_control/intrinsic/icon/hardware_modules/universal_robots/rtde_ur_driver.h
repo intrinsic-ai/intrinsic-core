@@ -60,14 +60,7 @@ class RtdeUrDriver : public UrDriverInterface {
   bool CommandCloseSafetyPopup() override;
 
   // Primary & RTDE Driver Interface
-  absl::Status InitializeDriver(
-      absl::string_view robot_ip, absl::string_view script_file,
-      absl::string_view output_recipe, absl::string_view input_recipe,
-      std::function<void(bool)> handle_program_state, bool headless_mode,
-      uint32_t reverse_port, uint32_t script_sender_port, int servoj_gain,
-      double servoj_lookahead_time, bool non_blocking_read,
-      absl::string_view reverse_ip, uint32_t trajectory_port,
-      uint32_t script_command_port) override;
+  absl::Status InitializeDriver(const UrDriverConfig& config) override;
 
   void ResetDriver() override;
   bool IsDriverValid() const override;

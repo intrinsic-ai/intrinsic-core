@@ -860,23 +860,26 @@ absl::Status UniversalRobotsModule::ConnectToRobot(const Config& config) {
     }
 
     program_running_ = false;
-    INTR_RETURN_IF_ERROR(backend_->InitializeDriver(
-        /*robot_ip=*/config.robot_ip, /*script_file=*/config.script_file_path,
-        /*output_recipe_file=*/
-        PathResolver::ResolveRunfilesPath(config.output_recipe_path),
-        /*input_recipe_file=*/
-        PathResolver::ResolveRunfilesPath(config.input_recipe_path),
-        /*handle_program_state=*/
-        absl::bind_front(&UniversalRobotsModule::HandleRobotProgramState, this),
-        /*headless_mode=*/config.headless_mode,
-        /*reverse_port=*/config.reverse_port,
-        /*script_sender_port=*/config.script_sender_port,
-        /*servoj_gain=*/config.servoj_gain,
-        /*servoj_lookahead_time=*/config.servoj_lookahead_seconds,
-        /*non_blocking_read=*/config.non_blocking_read,
-        /*reverse_ip=*/config.reverse_ip,
-        /*trajectory_port=*/config.trajectory_port,
-        /*script_command_port=*/config.script_command_port));
+    const UrDriverConfig driver_config{
+        .robot_ip = config.robot_ip,
+        .script_file = config.script_file_path,
+        .output_recipe =
+            PathResolver::ResolveRunfilesPath(config.output_recipe_path),
+        .input_recipe =
+            PathResolver::ResolveRunfilesPath(config.input_recipe_path),
+        .handle_program_state = absl::bind_front(
+            &UniversalRobotsModule::HandleRobotProgramState, this),
+        .headless_mode = config.headless_mode,
+        .reverse_port = config.reverse_port,
+        .script_sender_port = config.script_sender_port,
+        .trajectory_port = config.trajectory_port,
+        .script_command_port = config.script_command_port,
+        .servoj_gain = config.servoj_gain,
+        .servoj_lookahead_time = config.servoj_lookahead_seconds,
+        .non_blocking_read = config.non_blocking_read,
+        .reverse_ip = config.reverse_ip,
+    };
+    INTR_RETURN_IF_ERROR(backend_->InitializeDriver(driver_config));
 
     if (!config.calibration_checksum.empty()) {
       if (!backend_->CheckCalibration(config.calibration_checksum)) {

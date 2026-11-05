@@ -137,22 +137,15 @@ bool RtdeUrDriver::CommandCloseSafetyPopup() {
   return dashboard_client_->commandCloseSafetyPopup();
 }
 
-absl::Status RtdeUrDriver::InitializeDriver(
-    absl::string_view robot_ip, absl::string_view script_file,
-    absl::string_view output_recipe, absl::string_view input_recipe,
-    std::function<void(bool)> handle_program_state, bool headless_mode,
-    uint32_t reverse_port, uint32_t script_sender_port, int servoj_gain,
-    double servoj_lookahead_time, bool non_blocking_read,
-    absl::string_view reverse_ip, uint32_t trajectory_port,
-    uint32_t script_command_port) {
+absl::Status RtdeUrDriver::InitializeDriver(const UrDriverConfig& config) {
   std::unique_ptr<urcl::ToolCommSetup> tool_comm_setup = nullptr;
   ur_driver_ = std::make_unique<urcl::UrDriver>(
-      std::string(robot_ip), std::string(script_file),
-      std::string(output_recipe), std::string(input_recipe),
-      std::move(handle_program_state), headless_mode,
-      std::move(tool_comm_setup), reverse_port, script_sender_port, servoj_gain,
-      servoj_lookahead_time, non_blocking_read, std::string(reverse_ip),
-      trajectory_port, script_command_port);
+      config.robot_ip, config.script_file, config.output_recipe,
+      config.input_recipe, config.handle_program_state, config.headless_mode,
+      std::move(tool_comm_setup), config.reverse_port,
+      config.script_sender_port, config.servoj_gain,
+      config.servoj_lookahead_time, config.non_blocking_read, config.reverse_ip,
+      config.trajectory_port, config.script_command_port);
   return absl::OkStatus();
 }
 
