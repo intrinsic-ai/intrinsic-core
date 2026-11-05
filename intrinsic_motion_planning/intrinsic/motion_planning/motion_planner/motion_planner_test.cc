@@ -2565,7 +2565,7 @@ TEST_P(MotionPlannerTest, CollisionCheckingIsEnabledByDefault) {
                   *object_world_, robot_specification_, motion_spec_,
                   motion_planner_config, run_time_flags_),
               StatusIs(absl::StatusCode::kNotFound,
-                       HasSubstr("Path is not fulfilling path constraints.")));
+                       HasSubstr("Path is in collision at configuration")));
 }
 
 // The following test attempts to plan a movement to a collision free
@@ -2596,7 +2596,7 @@ TEST_P(MotionPlannerTest, DisablingCollisionCheckingLocallyWorksForJointMove) {
                   *object_world_, robot_specification_, motion_spec_,
                   motion_planner_config, run_time_flags_),
               StatusIs(absl::StatusCode::kNotFound,
-                       HasSubstr("Path is not fulfilling path constraints.")));
+                       HasSubstr("Path is in collision at configuration")));
 
   // Disabling collision checking will lead to a successful motion plan.
   intrinsic_proto::world::CollisionSettings collision_settings;
@@ -3661,12 +3661,11 @@ TEST_P(MotionPlannerTest, LocalCollisionSettingsWorksForJointAndPlannedMove) {
       *motion_segment->mutable_collision_settings() = collision_margin_settings;
     }
     MotionPlannerConfiguration motion_planner_config;
-    EXPECT_THAT(
-        motion_planner->PlanTrajectory(*object_world_, robot_specification_,
-                                       motion_spec_, motion_planner_config,
-                                       run_time_flags_),
-        StatusIs(absl::StatusCode::kNotFound,
-                 HasSubstr("Path is not fulfilling path constraints.")));
+    EXPECT_THAT(motion_planner->PlanTrajectory(
+                    *object_world_, robot_specification_, motion_spec_,
+                    motion_planner_config, run_time_flags_),
+                StatusIs(absl::StatusCode::kNotFound,
+                         HasSubstr("Path is in collision at configuration")));
   }
 
   // Case 3: Setting a high collision margin in the first and zero margin in the
@@ -5168,12 +5167,11 @@ TEST_P(MotionPlannerTest, SettingPlannerStepSizeWorks) {
       *motion_segment->mutable_collision_settings() = collision_margin_settings;
     }
     MotionPlannerConfiguration motion_planner_config;
-    EXPECT_THAT(
-        motion_planner->PlanTrajectory(*object_world_, robot_specification_,
-                                       motion_spec_, motion_planner_config,
-                                       run_time_flags_),
-        StatusIs(absl::StatusCode::kNotFound,
-                 HasSubstr("Path is not fulfilling path constraints.")));
+    EXPECT_THAT(motion_planner->PlanTrajectory(
+                    *object_world_, robot_specification_, motion_spec_,
+                    motion_planner_config, run_time_flags_),
+                StatusIs(absl::StatusCode::kNotFound,
+                         HasSubstr("Path is in collision at configuration")));
   }
 
   // Test case: with path planning enabled and rrt spacing set, we are able to
