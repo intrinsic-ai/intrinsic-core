@@ -35,6 +35,8 @@
 #include "coal/collision.h"
 #include "coal/octree.h"
 #include "coal/shape/geometric_shapes.h"
+#include "intrinsic/geometry/api/axis_aligned_bounding_box_3d.h"
+#include "intrinsic/geometry/api/compute_axis_aligned_bounding_box_3d.h"
 #include "intrinsic/geometry/api/shape_factory.h"
 #include "intrinsic/geometry/internal/util/scale_shape.h"
 #include "intrinsic/util/eigen.h"
@@ -1164,8 +1166,104 @@ bool AreObjectsInCollision(const CollisionCheckerWorld& world,
               .empty();
 }
 
+namespace {
+
+// Computes a conservative axis-aligned bounding box enclosing `t_geo` in its
+// reference frame, i.e. it applies `t_geo.ref_t_shape()` to `t_geo.shape()` and
+// computes the AABB. If two geometries have non-overlapping bounding boxes,
+// `AreGeometriesInCollision()` is guaranteed to return false. Returns an empty
+// bounding box when `t_geo` contains no geometry.
+absl::StatusOr<geo::AxisAlignedBoundingBox3d> ComputeConservativeAABB(
+    const TransformedGeometry& t_geo) {
+  const ExactGeometry& exact_geo = t_geo.shape().GetExactGeometry();
+  // When analytical primitive shapes are available, compute their Coal AABBs
+  // directly in O(1) without touching `global_geo_cache`. Calling
+  // `ComputeAxisAlignedBoundingBox3d()` on curved primitives would instead scan
+  // their discretized fallback mesh, whose vertices are inscribed inside the
+  // true curved surface and could under-approximate grazing contacts.
+  if (!exact_geo.GetPrimitiveShapes().empty()) {
+    geo::AxisAlignedBoundingBox3d primitive_aabb;
+    bool all_primitives_converted = true;
+    for (const geo::TransformedPrimitiveShapePtr& t_shape_ptr :
+         exact_geo.GetPrimitiveShapes()) {
+      absl::StatusOr<CoalCollider> collider_or = MakeColliderFromIntrPrimitive(
+          t_geo.ref_t_shape(), t_shape_ptr, PhysicalEntityId(kInvalidEntityId));
+      if (!collider_or.ok()) {
+        // Shapes unsupported by `MakeColliderFromIntrPrimitive()` (such as
+        // `Frustum`) fall back to mesh collision in
+        // `AddCollidersFromTransformedGeometry()`, so fall through to the mesh
+        // AABB path below to match narrowphase behavior.
+        all_primitives_converted = false;
+        break;
+      }
+      collider_or->coal_obj.setTransform(
+          ToCoalTransform(collider_or->entity_t_collider));
+      collider_or->coal_obj.computeAABB();
+      const coal::AABB& coal_aabb = collider_or->coal_obj.getAABB();
+      primitive_aabb.ExtendBy(
+          geo::AxisAlignedBoundingBox3d(coal_aabb.min_, coal_aabb.max_));
+    }
+    if (all_primitives_converted) {
+      return primitive_aabb;
+    }
+  }
+
+  INTR_ASSIGN_OR_RETURN(const geo::AxisAlignedBoundingBox3d unpadded_local_aabb,
+                        ComputeAxisAlignedBoundingBox3d(t_geo.shape()),
+                        _ << "Failed to compute local AABB for geometry.");
+  // Return empty boxes immediately before padding or calling `GetCorners()`:
+  // an empty `AxisAlignedBoundingBox3d` stores `(min = +MAX, max = -MAX)`, so
+  // padding would overflow and `ExtendBy()` on its corners would invert it into
+  // `[-MAX, +MAX]`.
+  if (unpadded_local_aabb.IsEmpty()) {
+    return unpadded_local_aabb;
+  }
+
+  // `CreateScaledCoalGeoFromIntrPointCloud()` converts point clouds into an
+  // OctoMap `OcTree` with `kOctomapTreeResolution` voxels in the shape's local
+  // frame. An occupied voxel can reach up to one voxel beyond a point near the
+  // opposite face of its cell, so pad the local AABB by one voxel on every side
+  // before applying `ref_t_shape()`.
+  const geo::AxisAlignedBoundingBox3d local_aabb = [&]() {
+    if (!exact_geo.HasPointCloud()) {
+      return unpadded_local_aabb;
+    }
+    const eigenmath::Vector3d voxel_padding =
+        eigenmath::Vector3d::Constant(kOctomapTreeResolution);
+    return geo::AxisAlignedBoundingBox3d(
+        unpadded_local_aabb.GetMin() - voxel_padding,
+        unpadded_local_aabb.GetMax() + voxel_padding);
+  }();
+
+  // Use exact equality rather than fuzzy `isIdentity()`: skipping the corner
+  // transform on a nearly-identity `ref_t_shape()` could under-approximate the
+  // reference-frame AABB relative to narrowphase, while non-exact matrices
+  // safely fall through to the 8-corner loop below.
+  if (t_geo.ref_t_shape() == eigenmath::Matrix4d::Identity()) {
+    return local_aabb;
+  }
+
+  geo::AxisAlignedBoundingBox3d ref_aabb;
+  for (const eigenmath::Vector3d& corner : local_aabb.GetCorners()) {
+    const eigenmath::Vector3d ref_corner =
+        (t_geo.ref_t_shape() * corner.homogeneous()).head<3>();
+    ref_aabb.ExtendBy(ref_corner);
+  }
+  return ref_aabb;
+}
+
+}  // namespace
+
 bool AreGeometriesInCollision(const TransformedGeometry& left,
                               const TransformedGeometry& right) {
+  const absl::StatusOr<geo::AxisAlignedBoundingBox3d> left_aabb =
+      ComputeConservativeAABB(left);
+  const absl::StatusOr<geo::AxisAlignedBoundingBox3d> right_aabb =
+      ComputeConservativeAABB(right);
+  if (left_aabb.ok() && right_aabb.ok() && !left_aabb->DoOverlap(*right_aabb)) {
+    return false;
+  }
+
   std::vector<CoalCollider> colliders_1;
   std::vector<CoalCollider> colliders_2;
   CHECK_OK(AddCollidersFromTransformedGeometry(

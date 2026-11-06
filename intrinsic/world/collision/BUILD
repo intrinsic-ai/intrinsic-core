@@ -174,6 +174,8 @@ cc_library(
         "//intrinsic/world/collision/util:rule_set_util",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:affine_transform_of_geometry",
+        "//intrinsic_sdk/intrinsic/geometry/api:axis_aligned_bounding_box_3d",
+        "//intrinsic_sdk/intrinsic/geometry/api:compute_axis_aligned_bounding_box_3d",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:shape_factory",
         "//intrinsic_sdk/intrinsic/geometry/internal/util:scale_shape",
