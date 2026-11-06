@@ -39,7 +39,6 @@ cc_binary(
         "//intrinsic_sdk/intrinsic/platform/pubsub/zenoh_util:zenoh_handle",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings:string_view",
         "@com_github_nlohmann_json//:json",

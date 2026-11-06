@@ -12,15 +12,14 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include <atomic>
-#include <csignal>
+#include <signal.h>
+
 #include <cstddef>
 #include <cstdint>
-#include <memory>
+#include <cstdlib>
 #include <string>
 
 #include "absl/flags/flag.h"
-#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -37,164 +36,82 @@ ABSL_FLAG(std::string, zenoh_config, "",
           "JSON config file for Zenoh. If not provided, defaults to the config "
           "provided by GetZenohPeerConfig()");
 
-namespace {
-
-std::atomic<bool> g_shutdown_requested = false;
-static_assert(std::atomic<bool>::is_always_lock_free);
-
-}  // namespace
-
 namespace intrinsic {
 
 namespace {
 
 using ::nlohmann::json;
 
-class ZenohIntrospector {
- public:
-  ZenohIntrospector() {
-    introspection_callback_fptr_ = std::make_unique<imw_callback_functor_t>(
-        [this](const char* keyexpr, const void* blob, const size_t blob_len) {
-          this->introspection_callback(keyexpr, blob, blob_len);
-        });
+constexpr char kIntrospectionKeyExpr[] = "in/_introspection/sessions/*";
+
+template <typename ValueType>
+ValueType ExtractValue(const json& container, absl::string_view key,
+                       ValueType default_value) {
+  if (auto it = container.find(key); it != container.end()) {
+    if (const auto* val = it->get_ptr<const ValueType*>(); val != nullptr) {
+      return *val;
+    }
+    LOG(ERROR) << "Type mismatch for key '" << key << "'";
   }
-  ZenohIntrospector(const ZenohIntrospector&) = delete;
-  ZenohIntrospector& operator=(const ZenohIntrospector&) = delete;
-  ZenohIntrospector(ZenohIntrospector&&) = delete;
-  ZenohIntrospector& operator=(ZenohIntrospector&&) = delete;
+  return default_value;
+}
 
-  ~ZenohIntrospector() {
-    if (zenoh_init_complete_) {
-      Zenoh().imw_fini();
-    }
+int64_t RecordEndpointMetrics(const json& j, absl::string_view key,
+                              absl::string_view direction,
+                              absl::string_view hostname) {
+  auto it = j.find(key);
+  if (it == j.end() || !it->is_array()) {
+    return 0;
   }
+  for (const json& entry : *it) {
+    zenoh_introspection::RecordTopicMetrics(
+        direction, ExtractValue<std::string>(entry, "name", ""), hostname,
+        static_cast<int64_t>(ExtractValue<uint64_t>(entry, "bytes", 0)),
+        static_cast<int64_t>(ExtractValue<uint64_t>(entry, "messages", 0)));
+  }
+  return static_cast<int64_t>(it->size());
+}
 
-  bool init() {
-    std::string config_flag = absl::GetFlag(FLAGS_zenoh_config);
-    std::string config;
-    if (config_flag.empty()) {
-      config = intrinsic::GetZenohPeerConfig();
-    } else {
-      absl::Status status =
-          file::GetContents(config_flag, &config, file::Defaults());
-      if (!status.ok())
-        LOG(FATAL) << "Couldn't read the config file: " << config_flag;
-    }
-
-    if (config.empty()) {
-      LOG(FATAL) << "Empty Zenoh config";
-    }
-    const imw_ret_t init_ret = Zenoh().imw_init(config.c_str());
-    if (init_ret != IMW_OK) {
-      LOG(FATAL) << "Error from imw_init with config " << config;
-    }
-    zenoh_init_complete_ = true;
-
-    const imw_ret_t sub_ret = Zenoh().imw_create_subscription(
-        "in/_introspection/sessions/*", introspection_callback_s, "{}",
-        introspection_callback_fptr_.get());
-    if (sub_ret != IMW_OK) {
-      LOG(ERROR) << "Could not create Zenoh introspection subscriber";
-      return false;
-    }
-    return true;
+void IntrospectionCallback(const char* /*keyexpr*/, const void* blob,
+                           const size_t blob_len, void* /*user_context*/) {
+  if (blob == nullptr || blob_len == 0) {
+    LOG(ERROR) << "Received null or empty payload";
+    return;
+  }
+  json j =
+      json::parse(absl::string_view(static_cast<const char*>(blob), blob_len),
+                  nullptr, false);
+  if (j.is_discarded() || !j.is_object()) {
+    LOG(ERROR) << "JSON parse error or payload is not an object";
+    return;
   }
 
- private:
-  bool zenoh_init_complete_ = false;
-  std::unique_ptr<imw_callback_functor_t> introspection_callback_fptr_;
+  const std::string j_hostname = ExtractValue<std::string>(j, "hostname", "");
+  // Always record counts so sessions with zero publishers or subscribers are
+  // still reported.
+  zenoh_introspection::RecordNumPublishers(
+      j_hostname, RecordEndpointMetrics(j, "publishers", "pub", j_hostname));
+  zenoh_introspection::RecordNumSubscribers(
+      j_hostname, RecordEndpointMetrics(j, "subscriptions", "sub", j_hostname));
+}
 
-  template <typename ValueType>
-  ValueType extract_value(json& container, absl::string_view key,
-                          ValueType default_value) {
-    if (container.contains(key)) {
-      return container[key].get<ValueType>();
+std::string LoadZenohConfig() {
+  std::string config_flag = absl::GetFlag(FLAGS_zenoh_config);
+  std::string config;
+  if (config_flag.empty()) {
+    config = GetZenohPeerConfig();
+  } else {
+    if (absl::Status status =
+            file::GetContents(config_flag, &config, file::Defaults());
+        !status.ok()) {
+      LOG(FATAL) << "Couldn't read the config file " << config_flag << ": "
+                 << status;
     }
-
-    return default_value;
   }
-
-  void introspection_callback(const char* keyexpr, const void* blob,
-                              const size_t blob_len) {
-    const std::string json_payload(reinterpret_cast<const char*>(blob),
-                                   blob_len);
-    json j = json::parse(json_payload, nullptr, false);
-    if (j.is_discarded()) {
-      LOG(ERROR) << "JSON parse error";
-      return;
-    }
-
-    std::string j_hostname = extract_value<std::string>(j, "hostname", "");
-    std::string j_zid = extract_value<std::string>(j, "zenoh_id", "");
-    uint64_t num_publishers = 0;
-    uint64_t num_subscribers = 0;
-
-    if (j.contains("publishers") && !j["publishers"].is_null()) {
-      json j_pubs = j["publishers"];
-      num_publishers = j_pubs.size();
-      for (json::iterator it = j_pubs.begin(); it != j_pubs.end(); ++it) {
-        std::string j_pub_name = extract_value<std::string>(*it, "name", "");
-        uint64_t j_pub_messages = extract_value<uint64_t>(*it, "messages", 0);
-        uint64_t j_pub_bytes = extract_value<uint64_t>(*it, "bytes", 0);
-
-        zenoh_introspection::RecordTopicMetrics(
-            /*direction=*/"pub", j_pub_name, j_hostname,
-            static_cast<int64_t>(j_pub_bytes),
-            static_cast<int64_t>(j_pub_messages));
-      }
-    }
-
-    // Recording the number of publishers outside of the `if` statement above to
-    // make sure that we record clients with zero publishers.
-    zenoh_introspection::RecordNumPublishers(
-        j_hostname, static_cast<int64_t>(num_publishers));
-
-    if (j.contains("subscriptions") && !j["subscriptions"].is_null()) {
-      json j_subs = j["subscriptions"];
-      num_subscribers = j_subs.size();
-      for (json::iterator it = j_subs.begin(); it != j_subs.end(); ++it) {
-        std::string j_sub_name = extract_value<std::string>(*it, "name", "");
-        uint64_t j_sub_messages = extract_value<uint64_t>(*it, "messages", 0);
-        uint64_t j_sub_bytes = extract_value<uint64_t>(*it, "bytes", 0);
-
-        zenoh_introspection::RecordTopicMetrics(
-            /*direction=*/"sub", j_sub_name, j_hostname,
-            static_cast<int64_t>(j_sub_bytes),
-            static_cast<int64_t>(j_sub_messages));
-      }
-    }
-
-    // Recording the number of subscribers outside of the `if` statement above
-    // to make sure that we record clients with zero subscribers.
-    zenoh_introspection::RecordNumSubscribers(
-        j_hostname, static_cast<int64_t>(num_subscribers));
+  if (config.empty()) {
+    LOG(FATAL) << "Empty Zenoh config";
   }
-  static void introspection_callback_s(const char* keyexpr, const void* blob,
-                                       size_t blob_len, void* fptr) {
-    (*static_cast<imw_callback_functor_t*>(fptr))(keyexpr, blob, blob_len);
-  }
-};
-
-absl::Status MainImpl() {
-  ZenohIntrospector zenoh_introspector;
-  if (!zenoh_introspector.init()) {
-    return absl::FailedPreconditionError("Init failed");
-  }
-
-  std::signal(SIGINT, [](int) {
-    g_shutdown_requested = true;
-    g_shutdown_requested.notify_all();
-  });
-
-  std::signal(SIGTERM, [](int) {
-    g_shutdown_requested = true;
-    g_shutdown_requested.notify_all();
-  });
-
-  g_shutdown_requested.wait(false);
-
-  LOG(INFO) << "zenoh introspection is cleanly shutting down";
-  return absl::OkStatus();
+  return config;
 }
 
 }  // namespace
@@ -203,9 +120,48 @@ absl::Status MainImpl() {
 
 int main(int argc, char** argv) {
   InitIntrinsic(argv[0], argc, argv);
+
+  // InitIntrinsic initializes logging, handles --sleep, and spawns no threads.
+  // Block SIGINT and SIGTERM before any background threads are created so all
+  // threads inherit the signal mask and only sigwait() below handles them.
+  sigset_t sigset;
+  sigemptyset(&sigset);
+  sigaddset(&sigset, SIGINT);
+  sigaddset(&sigset, SIGTERM);
+  if (pthread_sigmask(SIG_BLOCK, &sigset, nullptr) != 0) {
+    LOG(FATAL) << "Failed to block SIGINT and SIGTERM";
+  }
+
   intrinsic::OpenCensusPlugin open_census(
       /*service_name=*/"zenoh_introspection", /*use_otel_metrics=*/true);
   intrinsic::zenoh_introspection::RegisterZenohIntrospectionMetrics();
-  QCHECK_OK(intrinsic::MainImpl());
-  return 0;
+
+  const std::string config = intrinsic::LoadZenohConfig();
+  if (intrinsic::Zenoh().imw_init(config.c_str()) != intrinsic::IMW_OK) {
+    LOG(FATAL) << "Error from imw_init with config " << config;
+  }
+
+  if (intrinsic::Zenoh().imw_create_subscription(
+          intrinsic::kIntrospectionKeyExpr, intrinsic::IntrospectionCallback,
+          "{}", nullptr) != intrinsic::IMW_OK) {
+    LOG(ERROR) << "Could not create Zenoh introspection subscriber";
+    intrinsic::Zenoh().imw_destroy_session_when_unused();
+    intrinsic::Zenoh().imw_fini();
+    return EXIT_FAILURE;
+  }
+
+  int sig = 0;
+  if (const int err = sigwait(&sigset, &sig); err != 0) {
+    LOG(ERROR) << "sigwait failed with error: " << err;
+  }
+
+  if (intrinsic::Zenoh().imw_destroy_subscription(
+          intrinsic::kIntrospectionKeyExpr, intrinsic::IntrospectionCallback,
+          nullptr) != intrinsic::IMW_OK) {
+    LOG(ERROR) << "Could not destroy Zenoh introspection subscriber";
+  }
+  intrinsic::Zenoh().imw_destroy_session_when_unused();
+  intrinsic::Zenoh().imw_fini();
+  LOG(INFO) << "zenoh introspection is cleanly shutting down";
+  return EXIT_SUCCESS;
 }
