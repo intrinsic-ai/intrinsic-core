@@ -61,3 +61,33 @@ go_proto_library(
         "@org_golang_google_genproto_googleapis_api//annotations",
     ],
 )
+
+proto_library(
+    name = "clustermigration_api_proto",
+    srcs = ["clustermigration_api.proto"],
+    deps = [
+        ":clustermanager_api_proto",
+        "@com_google_googleapis//google/api:annotations_proto",
+        "@com_google_googleapis//google/api:field_behavior_proto",
+        "@com_google_googleapis//google/longrunning:operations_proto",
+        "@com_google_protobuf//:timestamp_proto",
+        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
+    ],
+)
+
+go_proto_library(
+    name = "clustermigration_api_go_proto",
+    compilers = [
+        "@io_bazel_rules_go//proto:go_grpc_v2",
+        "@io_bazel_rules_go//proto:go_proto",
+        "//intrinsic_sdk/bazel:go_gen_grpc_gateway",
+    ],
+    importpath = "github.com/intrinsic-ai/insrc/incode/frontend/cloud/api/v1/clustermigration_api_go_proto",
+    protos = [":clustermigration_api_proto"],
+    deps = [
+        ":clustermanager_api_go_proto",
+        "@com_google_cloud_go_longrunning//autogen/longrunningpb",
+        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+    ],
+)

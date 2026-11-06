@@ -122,8 +122,7 @@ func makeOrgNotFound(inner error, org string) error {
 		for _, candidate := range orgs {
 			target := candidate
 			if !hasAt {
-				parts := strings.Split(candidate, "@")
-				target = parts[0]
+				target, _ = ParseOrg(candidate)
 			}
 			if editDistance(org, target) < 3 {
 				candidates = append(candidates, candidate)
@@ -219,18 +218,11 @@ func ResolveOrg(requestedOrg string) (auth.OrgInfo, error) {
 		return auth.OrgInfo{}, fmt.Errorf("list orgs: %w", err)
 	}
 
-	reqShort := requestedOrg
-	var reqProject string
-	if strings.Contains(requestedOrg, "@") {
-		parts := strings.Split(requestedOrg, "@")
-		reqShort = parts[0]
-		reqProject = parts[1]
-	}
-
+	reqShort, reqProject := ParseOrg(requestedOrg)
 	var matches []auth.OrgInfo
 	for _, candidate := range orgs {
-		parts := strings.Split(candidate, "@")
-		if parts[0] == reqShort {
+		candShort, _ := ParseOrg(candidate)
+		if candShort == reqShort {
 			info, err := authStore.ReadOrgInfo(candidate)
 			if err == nil {
 				if reqProject == "" || info.Project == reqProject {
@@ -251,6 +243,24 @@ func ResolveOrg(requestedOrg string) (auth.OrgInfo, error) {
 		return auth.OrgInfo{}, fmt.Errorf("organization %q is ambiguous. Please specify one of the following fully-qualified organizations: %s", requestedOrg, strings.Join(options, ", "))
 	}
 	return matches[0], nil
+}
+
+// ResolveOrgAndProject resolves an organization string (in the format "org@project"
+// or a stored short name "org") into its organization name and GCP project name.
+// If the project is not specified in the string, it is looked up in the local auth store.
+func ResolveOrgAndProject(org string) (orgName, projectName string, err error) {
+	orgName, projectName = ParseOrg(org)
+	if orgName == "" {
+		return "", "", fmt.Errorf("organization name is required")
+	}
+	if projectName != "" {
+		return orgName, projectName, nil
+	}
+	resolved, err := ResolveOrg(org)
+	if err != nil {
+		return "", "", err
+	}
+	return resolved.Organization, resolved.Project, nil
 }
 
 // preRunOrganizationOptional provides the organization/project flag handling as PersistentPreRunE
@@ -288,13 +298,13 @@ func validateProjectOrg(cmd *cobra.Command, vipr *viper.Viper, enableOrgExistsCh
 
 	// Cleanup the org parameter, it could be org@project.
 	// The full name is only required to lookup the correct project. So we can clean it up here
-	parts := strings.Split(org, "@")
+	orgName, projectName := ParseOrg(org)
 
-	orgFlag.Value.Set(parts[0])
-	vipr.Set(KeyOrganization, parts[0])
-	if len(parts) > 1 {
-		projectFlag.Value.Set(parts[1])
-		vipr.Set(KeyProject, parts[1])
+	orgFlag.Value.Set(orgName)
+	vipr.Set(KeyOrganization, orgName)
+	if projectName != "" {
+		projectFlag.Value.Set(projectName)
+		vipr.Set(KeyProject, projectName)
 	}
 
 	if !enableOrgExistsCheck() {
@@ -462,13 +472,19 @@ func QualifiedOrg(projectName, orgName string) string {
 	return fmt.Sprintf("%s@%s", orgName, projectName)
 }
 
+// ParseOrg splits an organization string in the format "org@project" or "org"
+// into the organization name and project name. Returns an empty project name if
+// no project is specified.
+func ParseOrg(org string) (orgName, projectName string) {
+	orgName, projectName, _ = strings.Cut(org, "@")
+	return orgName, projectName
+}
+
 // ProjectFromOrg extracts the project name from an organization string in the
 // format "org@project". Returns an empty string if no project is specified.
 func ProjectFromOrg(org string) string {
-	if idx := strings.Index(org, "@"); idx != -1 && idx+1 < len(org) {
-		return org[idx+1:]
-	}
-	return ""
+	_, project := ParseOrg(org)
+	return project
 }
 
 // GetProject determines the GCP project from flags, environment variables, or CLI arguments.

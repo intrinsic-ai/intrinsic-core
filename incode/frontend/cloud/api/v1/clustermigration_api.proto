@@ -1,0 +1,87 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.frontend.v1;
+
+import "google/api/annotations.proto";
+import "google/longrunning/operations.proto";
+import "google/protobuf/timestamp.proto";
+import "intrinsic/kubernetes/generator/proto/auth_options.proto";
+
+option go_package = "github.com/intrinsic-ai/insrc/incode/frontend/cloud/api/v1/clustermigration_api_go_proto";
+
+message MigrateClusterRequest {
+  string cluster_name = 1;
+  // The project the cluster is currently registered with.
+  string source_project = 2;
+  // The organization the cluster is currently registered with.
+  string source_organization_id = 3;
+  // The project the cluster should be migrated to.
+  // At this point, this needs to be distinct from the source project.
+  string target_project = 4;
+  // The organization the cluster should be migrated to.
+  string target_organization_id = 5;
+  // Do not share the device with the target organization, but keep it only
+  // available to the user invoking this RPC.
+  bool private_device = 6;
+  // Set the update mode to "ON" and keep the same OS and runtime versions after
+  // migration.
+  optional bool preserve_versions = 7;
+}
+
+enum MigrationStage {
+  MIGRATION_STAGE_UNSPECIFIED = 0;
+  MIGRATION_STAGE_WAITING_FOR_RECONNECT = 1;
+  MIGRATION_STAGE_COMPLETED = 2;
+  MIGRATION_STAGE_FAILED = 3;
+}
+
+message MigrateClusterMetadata {
+  string cluster_name = 1;
+  string source_project = 2;
+  string target_project = 3;
+  string target_organization_id = 4;
+  MigrationStage stage = 5;
+  google.protobuf.Timestamp start_time = 6;
+  google.protobuf.Timestamp update_time = 7;
+}
+
+service ClusterMigrationService {
+  option (intrinsic_proto.auth.service_options).auth_methods =
+      AUTH_METHOD_API_KEY;
+  option (intrinsic_proto.auth.backend_options).backend_service =
+      "clustermigrator";
+  option (intrinsic_proto.auth.backend_options).backend_port = 50051;
+
+  // Starts migrating a single-node cluster from source_project to
+  // target_project. Returns a google.longrunning.Operation whose metadata is
+  // MigrateClusterMetadata and whose response is Cluster.
+  rpc MigrateCluster(MigrateClusterRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      post: "/v1/project/*/org/*/clusters/{cluster_name}:migrate"
+      body: "*"
+    };
+  }
+
+  // Polls the status of an in-flight or completed cluster migration operation.
+  rpc GetOperation(google.longrunning.GetOperationRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      get: "/v1/project/*/org/*/clusterMigrations/{name=*}"
+    };
+  }
+}
