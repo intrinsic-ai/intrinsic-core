@@ -28,6 +28,14 @@ filegroup(
 )
 
 filegroup(
+    name = "ur16e",
+    srcs = [
+        "LICENSE",
+        "README.md",
+    ] + glob(["ur16e/**"]),
+)
+
+filegroup(
     name = "ur3e",
     srcs = [
         "LICENSE",

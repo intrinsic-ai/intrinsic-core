@@ -337,11 +337,18 @@ ur_hardware_device(
     is_core_variant = True,
 )
 
+ur_hardware_device(
+    name = "ur16e_hardware_module_core",
+    display_name = "UR16e",
+    is_core_variant = True,
+)
+
 filegroup(
     name = "universal_robots_core",
     srcs = [
         "README.md",
         ":ur10e_hardware_module_core",
+        ":ur16e_hardware_module_core",
         ":ur3e_hardware_module_core",
         ":ur5e_hardware_module_core",
     ],

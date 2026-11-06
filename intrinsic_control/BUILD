@@ -73,6 +73,7 @@ filegroup(
         "//intrinsic_control/intrinsic/models/robot_definitions/kuka:kr50_r2500_scene_object",
         "//intrinsic_control/intrinsic/models/robot_definitions/kuka:kr6_r900_2_scene_object",
         "//intrinsic_control/intrinsic/models/robot_definitions/ur:ur10e_scene_object",
+        "//intrinsic_control/intrinsic/models/robot_definitions/ur:ur16e_scene_object",
         "//intrinsic_control/intrinsic/models/robot_definitions/ur:ur3e_scene_object",
         "//intrinsic_control/intrinsic/models/robot_definitions/ur:ur5e_scene_object",
     ],

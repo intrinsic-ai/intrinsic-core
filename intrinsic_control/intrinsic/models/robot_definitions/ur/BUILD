@@ -132,3 +132,38 @@ sdf_scene_object(
         "@intrinsic_apis//intrinsic/icon/hal/proto/v1:digital_input_output_proto",
     ],
 )
+
+filegroup(
+    name = "ur16e",
+    srcs = [
+        "ur16e/ur16e.xacro",
+        "ur16e/ur16e_base.xacro",
+        ":plugins",
+    ],
+)
+
+xacro_file(
+    name = "ur16e_xacro",
+    src = "ur16e/ur16e.sdf.xacro",
+    out = "ur16e_world.sdf",
+    data = [":ur16e"],
+    visibility = ["//visibility:private"],
+)
+
+sdf_scene_object(
+    name = "ur16e_scene_object",
+    src = "ur16e_world.sdf",
+    sdf_assets = ["//third_party/universal_robots:ur16e"],
+    updates_pbtxts = [
+        "ur.named_configurations.pbtxt",
+        "ur16e/ur16e_limits.updates.pbtxt",
+    ],
+    visibility = [
+        "//intrinsic_control:__pkg__",
+        "//intrinsic_control/intrinsic/icon/hardware_modules:__subpackages__",
+        "//intrinsic_kinematics/intrinsic/kinematics:__pkg__",
+    ],
+    deps = [
+        "@intrinsic_apis//intrinsic/icon/hal/proto/v1:digital_input_output_proto",
+    ],
+)

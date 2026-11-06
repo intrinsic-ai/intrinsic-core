@@ -29,6 +29,7 @@ This directory contains the ICON Hardware Module (HWM) implementation for Univer
 | **UR3e** | `:ur3e_hardware_module_core` | `ai.intrinsic.ur3e_hardware_module_core` |
 | **UR5e** | `:ur5e_hardware_module_core` | `ai.intrinsic.ur5e_hardware_module_core` |
 | **UR10e** | `:ur10e_hardware_module_core` | `ai.intrinsic.ur10e_hardware_module_core` |
+| **UR16e** | `:ur16e_hardware_module_core` | `ai.intrinsic.ur16e_hardware_module_core` |
 
 ## Documentation
 
