@@ -78,6 +78,8 @@ namespace scene_object {
 
 namespace {
 
+using ::intrinsic::geo::SaveGeometryOptions;
+
 absl::Status ValidateGeneratedSceneObject(
     const intrinsic_proto::scene_object::v1::SceneObject& scene_object,
     const GeometryDeserializer& geolib,
@@ -140,12 +142,14 @@ class WriteOnlyMapAndOtherGeometryLibrary : public GeometryLibrary,
 
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry) override {
+  SaveGeometryV1(const Geometry& geometry,
+                 const SaveGeometryOptions& options) override {
     if (other_library_) {
-      INTR_RETURN_IF_ERROR(
-          other_library_->Serializer().SaveGeometryV1(geometry).status());
+      INTR_RETURN_IF_ERROR(other_library_->Serializer()
+                               .SaveGeometryV1(geometry, options)
+                               .status());
     }
-    return map_library_->Serializer().SaveGeometryV1(geometry);
+    return map_library_->Serializer().SaveGeometryV1(geometry, options);
   }
 
   MapGeometryLibrary& MapLibrary() { return *map_library_; }

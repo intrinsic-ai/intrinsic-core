@@ -334,7 +334,7 @@ GeometryServiceImpl::SaveAndUploadGeometry(grpc::ServerContext* context,
   // TODO(b/459563840): Support cancellation of upload.
   INTR_ASSIGN_OR_RETURN(const std::unique_ptr<GeometryLibrary> geo_lib,
                         MakeGeometryLibrary(context));
-  return geo_lib->Serializer().SaveGeometryV1(std::move(geo));
+  return geo_lib->Serializer().SaveGeometryV1(std::move(geo), {});
 }
 
 }  // namespace intrinsic::geo

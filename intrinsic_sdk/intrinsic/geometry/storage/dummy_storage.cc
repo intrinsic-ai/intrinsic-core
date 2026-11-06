@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "intrinsic/geometry/api/exact_geometry.h"
 #include "intrinsic/geometry/api/geometry.h"
@@ -73,7 +74,13 @@ class DummyGeometryLibrary : public GeometryLibrary,
 
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry) override {
+  SaveGeometryV1(const Geometry& geometry,
+                 const SaveGeometryOptions& options) override {
+    if (options.HasCustomKeys()) {
+      return absl::InvalidArgumentError(
+          "DummyGeometryLibrary is a stateless stub and does not accept custom "
+          "storage keys.");
+    }
     intrinsic_proto::geometry::v1::GeometryStorageRefs geo_storage_refs;
     INTR_ASSIGN_OR_RETURN(std::string exact_fingerprint,
                           GenerateFingerprint(geometry.GetExactGeometry()));

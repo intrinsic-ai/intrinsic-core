@@ -221,7 +221,7 @@ absl::StatusOr<intrinsic_proto::geometry::v1::Geometry> ToProto(
                           geometry_details::ToInlineGeometryProto(geo));
   } else {
     INTR_ASSIGN_OR_RETURN(auto geo_storage_refs,
-                          serializer->SaveGeometryV1(geo));
+                          serializer->SaveGeometryV1(geo, {}));
     *result.mutable_geo_ref() = geo_storage_refs;
   }
 

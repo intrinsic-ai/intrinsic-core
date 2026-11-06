@@ -725,7 +725,7 @@ absl::Status World::ToFile(GZFile* gzfile,
           geo_component->GetGeometry(geo_set_name, deserializer));
       for (const auto& [_, geo] : geos) {
         INTR_RETURN_IF_ERROR(
-            geolib->Serializer().SaveGeometryV1(geo.shape()).status());
+            geolib->Serializer().SaveGeometryV1(geo.shape(), {}).status());
       }
     }
   }

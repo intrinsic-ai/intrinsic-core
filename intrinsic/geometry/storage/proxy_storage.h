@@ -54,7 +54,8 @@ class ProxyStorageLibrary : public GeometryLibrary,
       const Geometry& geometry) override;
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry) override;
+  SaveGeometryV1(const Geometry& geometry,
+                 const SaveGeometryOptions& options) override;
 
  private:
   GeometryLibrary* storage_;

@@ -221,7 +221,7 @@ class GeometryServiceGeometryLibrary : public GeometryLibrary,
       return std::move(refs).value();
     }
 
-    INTR_RETURN_IF_ERROR(SaveGeometryV1(geometry).status());
+    INTR_RETURN_IF_ERROR(SaveGeometryV1(geometry, {}).status());
 
     GeometryStorageRefs v0_refs;
     v0_refs.set_fingerprint(hash_id);
@@ -231,7 +231,13 @@ class GeometryServiceGeometryLibrary : public GeometryLibrary,
   }
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry) override {
+  SaveGeometryV1(const Geometry& geometry,
+                 const SaveGeometryOptions& options) override {
+    if (options.HasCustomKeys()) {
+      return absl::InvalidArgumentError(
+          "GeometryServiceGeometryLibrary delegates to CAS-backed "
+          "CreateGeometry and does not accept custom storage keys.");
+    }
     INTR_ASSIGN_OR_RETURN(std::string hash_id, GenerateFingerprint(geometry));
     if (auto refs = cache_->GetGeometryStorageRefsV1(hash_id);
         refs.has_value()) {

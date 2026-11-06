@@ -270,7 +270,13 @@ class CasGeometryLibrary : public GeometryLibrary,
   }
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry) override {
+  SaveGeometryV1(const Geometry& geometry,
+                 const SaveGeometryOptions& options) override {
+    if (options.HasCustomKeys()) {
+      return absl::InvalidArgumentError(
+          "CasGeometryLibrary is content-addressed and does not accept custom "
+          "storage keys.");
+    }
     INTR_ASSIGN_OR_RETURN(const std::string fingerprint,
                           GenerateFingerprint(geometry));
     if (std::optional<intrinsic_proto::geometry::v1::GeometryStorageRefs> refs =
