@@ -87,7 +87,7 @@ func runCreateInvitation(cmd *cobra.Command, args []string) error {
 		return err
 	}
 	ctx := cmd.Context()
-	cl, err := newAccessControlV1Client(ctx)
+	cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 	if err != nil {
 		return err
 	}
@@ -130,7 +130,7 @@ var listInvitationsCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -206,7 +206,7 @@ var withdrawInvitation = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -248,7 +248,7 @@ var resendInvitation = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -301,7 +301,7 @@ var getInvitationCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}

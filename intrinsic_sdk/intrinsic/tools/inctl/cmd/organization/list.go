@@ -131,7 +131,7 @@ var listCmd = &cobra.Command{
 	Long:  listCmdHelp,
 	RunE: func(cmd *cobra.Command, args []string) error {
 		ctx := cmd.Context()
-		cl, err := newResourceManagerV1Client(ctx)
+		cl, err := accounts.NewResourceManagerV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}

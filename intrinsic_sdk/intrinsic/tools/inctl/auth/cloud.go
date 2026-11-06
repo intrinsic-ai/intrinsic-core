@@ -19,6 +19,7 @@ import (
 	"crypto/tls"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"os"
 	"strings"
@@ -36,6 +37,7 @@ import (
 // ConnectionOpts contains the options for creating a new gRPC connection to a cloud service.
 type ConnectionOpts struct {
 	env           string
+	address       string
 	project       string
 	targetProject string
 	org           string
@@ -45,6 +47,16 @@ type ConnectionOpts struct {
 
 	// callbacks
 	onIdentity func(u *identity.User)
+}
+
+// WithAddress sets the target service address or domain to use for the connection,
+// taking precedence over targetProject and project for the gRPC dial target.
+// If no port is specified, port 443 is assumed, and if no gRPC scheme is specified,
+// "dns:///" is prepended.
+func WithAddress(addr string) ConnectionOptsFunc {
+	return func(c *ConnectionOpts) {
+		c.address = addr
+	}
 }
 
 // WithProject sets the cloud-project to use for the connection.
@@ -147,6 +159,7 @@ type ErrorDetails struct {
 func (e *ErrorDetails) Error() string {
 	var values []string
 	for _, kv := range [][]string{
+		{"address", e.Opts.address},
 		{"project", e.Opts.project},
 		{"targetProject", e.Opts.targetProject},
 		{"org", e.Opts.org},
@@ -182,6 +195,8 @@ var ErrUnableToRetrieveToken = errors.New("unable to retrieve token")
 //     added to the request metadata.
 //   - WithProject: The project to use for the connection. This will read the API key from the configuration
 //     store for the given project and use it for the connection. No organization ID will be added to the request metadata.
+//   - WithAddress & WithEnv: Connects directly to a global service domain/address using credentials
+//     for the given environment without requiring a cloud project ID.
 //   - WithOrg & WithProject: Both can be set, in this case the API key of the organization will be used but
 //     the address will be resolved using the project provided. You can use this if you want to target
 //     a different project than the one associated with the organization. This can be  necessary for
@@ -253,8 +268,8 @@ func newOrLoadTokenSource(ctx context.Context, optsFuncs ...ConnectionOptsFunc) 
 	for _, f := range optsFuncs {
 		f(&opts)
 	}
-	if opts.project == "" && opts.org == "" {
-		return nil, nil, nil, nil, fmt.Errorf("either project or org must be set")
+	if opts.project == "" && opts.org == "" && opts.env == "" && opts.address == "" {
+		return nil, nil, nil, nil, fmt.Errorf("at least one of project, org, env, or address must be set")
 	}
 	if opts.cluster != "" {
 		opts.cluster = vmalias.ResolvePrint(opts.cluster, "")
@@ -271,14 +286,11 @@ func newOrLoadTokenSource(ctx context.Context, optsFuncs ...ConnectionOptsFunc) 
 		return nil, nil, nil, nil, errors.Join(err, errDetails)
 	}
 
-	// The environment is either passed via options by the caller
-	// or derived from the project name.
+	// The environment is either passed via options by the caller,
+	// or derived from the project or target domain.
 	// The environment is important because the ID tokens issued by the
 	// accounts service are tied to a specific environment.
-	env := opts.env
-	if env == "" {
-		env = environments.FromAnyProject(opts.project)
-	}
+	env := resolveEnv(&opts)
 	errDetails.Env = env
 
 	tkSource, err := newTokenSource(env, ak)
@@ -322,20 +334,56 @@ func newConnection(ctx context.Context, opts *ConnectionOpts, tkSource *cachedTo
 		grpc.WithTransportCredentials(credentials.NewTLS(&tls.Config{})),
 	}
 
-	project := opts.project
-	if opts.targetProject != "" {
-		project = opts.targetProject
+	var addr string
+	switch {
+	case opts.address != "":
+		addr = formatGRPCAddress(opts.address)
+	// TODO(b/410760339): Once all global service callers use WithAddress, targetProject
+	// and project only ever refer to compute projects and can format
+	// "www.endpoints." + project + ".cloud.goog" directly without environments.Domain.
+	case opts.targetProject != "":
+		addr = fmt.Sprintf("dns:///%s:443", environments.Domain(opts.targetProject))
+	case opts.project != "":
+		addr = fmt.Sprintf("dns:///%s:443", environments.Domain(opts.project))
+	default:
+		return nil, fmt.Errorf("either address, targetProject, or project must be set")
 	}
-	addr := fmt.Sprintf("dns:///%s:443", environments.Domain(project))
 
 	grpcOpts = append(grpcOpts, opts.opts...)
 
 	return grpc.NewClient(addr, grpcOpts...)
 }
 
+// TODO(b/410760339, b/530456416): Once inctl auth login persists Environment in OrgInfo
+// (and the local project->env index), read env from OrgInfo/index (defaulting to "prod")
+// instead of deriving it via environments.FromAnyProject.
+func resolveEnv(opts *ConnectionOpts) string {
+	if opts.env != "" {
+		return opts.env
+	}
+	if opts.targetProject != "" {
+		return environments.FromAnyProject(opts.targetProject)
+	}
+	if opts.project != "" {
+		return environments.FromAnyProject(opts.project)
+	}
+	return environments.Prod
+}
+
+func formatGRPCAddress(addr string) string {
+	if strings.Contains(addr, "://") && !strings.HasPrefix(addr, "dns:///") {
+		return addr
+	}
+	hostPort := strings.TrimPrefix(addr, "dns:///")
+	if _, _, err := net.SplitHostPort(hostPort); err != nil {
+		hostPort = net.JoinHostPort(hostPort, "443")
+	}
+	return "dns:///" + hostPort
+}
+
 // loadAPIKey loads the API key to use for the connection.
 // If WithAPIKey was set, it will be used. Otherwise, the API key will be loaded from the
-// configuration store for the given project or organization.
+// configuration store for the given environment, project, or organization.
 func loadAPIKey(opts *ConnectionOpts) (string, error) {
 	if opts.apiKey != "" {
 		return opts.apiKey, nil
@@ -347,24 +395,19 @@ func loadAPIKey(opts *ConnectionOpts) (string, error) {
 			if opts.project == "" {
 				opts.project = orgInfo.Project
 			}
+		} else if opts.project == "" {
+			if idx := strings.Index(opts.org, "@"); idx != -1 && idx+1 < len(opts.org) {
+				opts.project = opts.org[idx+1:]
+			}
 		}
 	}
 
-	var cfg *ProjectConfiguration
-	var err error
-
-	// If an explicit environment is provided, we prioritize loading the configuration
-	// specific to that environment. If there's no config for this environment,
-	// we fall back to the project's configuration. If no environment is specified,
-	// we rely entirely on the project's configuration.
+	// Prioritize loading the configuration for the resolved environment. If there's
+	// no config for this environment, fall back to the project's configuration.
 	// TODO: (b/530456416) remove fallback to project
-	if opts.env != "" {
-		cfg, err = DefaultStore.GetEnvConfiguration(opts.env)
-		if errors.Is(err, os.ErrNotExist) && opts.project != "" {
-			cfg, err = DefaultStore.GetProjectConfiguration(opts.project)
-		}
-	} else {
-		cfg, err = DefaultStore.GetConfiguration(opts.project)
+	cfg, err := DefaultStore.GetEnvConfiguration(resolveEnv(opts))
+	if errors.Is(err, os.ErrNotExist) && opts.project != "" {
+		cfg, err = DefaultStore.GetProjectConfiguration(opts.project)
 	}
 
 	if err != nil {

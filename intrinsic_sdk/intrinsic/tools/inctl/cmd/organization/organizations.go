@@ -80,7 +80,7 @@ var createCmd = &cobra.Command{
 		}
 
 		ctx := cmd.Context()
-		cl, err := newResourceManagerV1Client(ctx)
+		cl, err := accounts.NewResourceManagerV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -154,7 +154,7 @@ var deleteCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newResourceManagerV1Client(ctx)
+		cl, err := accounts.NewResourceManagerV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -210,7 +210,7 @@ var getCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newResourceManagerV1Client(ctx)
+		cl, err := accounts.NewResourceManagerV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}

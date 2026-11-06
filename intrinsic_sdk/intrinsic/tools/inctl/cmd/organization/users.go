@@ -109,7 +109,7 @@ var removeUser = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -154,7 +154,7 @@ var listMembersCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}

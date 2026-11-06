@@ -34,7 +34,9 @@ go_library(
         "@com_github_spf13_viper//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/kubernetes/accounts/service/api/accesscontrol/v1:accesscontrol_go_proto",
+        "@intrinsic_apis//intrinsic/kubernetes/accounts/service/api/invitations/v1:invitations_go_proto",
         "@intrinsic_apis//intrinsic/kubernetes/accounts/service/api/resourcemanager/v1:resourcemanager_go_proto",
+        "@intrinsic_apis//intrinsic/kubernetes/accounts/service/api/v1:discoveryapi_go_proto",
         "@org_golang_google_grpc//:go_default_library",
     ],
 )

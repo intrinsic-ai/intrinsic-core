@@ -30,6 +30,8 @@ import (
 	"os"
 	"time"
 
+	"intrinsic/config/environments"
+
 	backoff "github.com/cenkalti/backoff/v4"
 )
 
@@ -72,6 +74,29 @@ func (t *TokensServiceClient) Token(ctx context.Context, apiKey string) (string,
 		return "", fmt.Errorf("failed to get ID token: %v", err)
 	}
 	return resp.IDToken, nil
+}
+
+// ExchangeIDToken exchanges an API key for an ID token against the token exchange
+// service of the given environment.
+func ExchangeIDToken(ctx context.Context, cl *http.Client, env, apiKey string) (string, error) {
+	// Token exchange uses the HTTP/JSON gRPC-gateway (/api/v1/accountstokens:idtoken)
+	// hosted on the portal domain (flowstate*.intrinsic.ai), which proxies requests
+	// to AccountsTokensService in the accounts service.
+	// TODO(b/410760339): Eliminate environments.PortalDomain (and drop the environments
+	// import) once the environments package is removed by resolving the gateway domain
+	// directly inside inctl/auth.
+	portal := environments.PortalDomain(env)
+	if portal == "" {
+		return "", fmt.Errorf("unknown environment %q", env)
+	}
+	if cl == nil {
+		cl = http.DefaultClient
+	}
+	tsc, err := NewTokensServiceClient(cl, portal)
+	if err != nil {
+		return "", err
+	}
+	return tsc.Token(ctx, apiKey)
 }
 
 // GetIDToken exchanges an API key for an ID token using the accounts tokens service via HTTP.

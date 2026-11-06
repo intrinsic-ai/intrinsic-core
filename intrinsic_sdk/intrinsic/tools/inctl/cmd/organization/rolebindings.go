@@ -73,7 +73,7 @@ var grantRoleBindingCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -122,7 +122,7 @@ var revokeRoleBindingCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}
@@ -187,7 +187,7 @@ var listRoleBindingsCmd = &cobra.Command{
 		}
 		ctx := cmd.Context()
 		cOrg := addPrefix(org, "organizations/")
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}

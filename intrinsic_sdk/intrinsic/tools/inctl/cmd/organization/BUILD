@@ -17,7 +17,6 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 go_library(
     name = "organization",
     srcs = [
-        "connect.go",
         "invitations.go",
         "join.go",
         "list.go",
@@ -33,8 +32,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",
     ],
     deps = [
-        "//intrinsic_sdk/intrinsic/config:environments",
-        "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:cobrautil",

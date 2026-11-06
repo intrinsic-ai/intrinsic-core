@@ -54,7 +54,7 @@ var joinCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newInvitationsV1Client(ctx)
+		cl, err := accounts.NewInvitationsV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}

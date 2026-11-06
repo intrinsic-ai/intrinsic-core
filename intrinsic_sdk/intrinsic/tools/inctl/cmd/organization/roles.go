@@ -21,6 +21,7 @@ import (
 	"text/tabwriter"
 
 	"intrinsic/tools/inctl/cmd/root"
+	"intrinsic/tools/inctl/util/accounts/accounts"
 	"intrinsic/tools/inctl/util/cobrautil"
 	"intrinsic/tools/inctl/util/printer"
 
@@ -74,7 +75,7 @@ var listRolesCmd = &cobra.Command{
 			return err
 		}
 		ctx := cmd.Context()
-		cl, err := newAccessControlV1Client(ctx)
+		cl, err := accounts.NewAccessControlV1Client(ctx, vipr)
 		if err != nil {
 			return err
 		}

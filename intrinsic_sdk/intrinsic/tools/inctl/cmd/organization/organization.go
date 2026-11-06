@@ -24,6 +24,7 @@ import (
 	"intrinsic/tools/inctl/cmd/root"
 	"intrinsic/tools/inctl/util/cobrautil"
 	"intrinsic/tools/inctl/util/orgutil"
+	"intrinsic/tools/inctl/util/viperutil"
 
 	"github.com/spf13/viper"
 	"google.golang.org/protobuf/encoding/protojson"
@@ -52,6 +53,19 @@ func init() {
 	organizationCmd.Aliases = []string{"organizations"}
 	connectInit()
 	root.RootCmd.AddCommand(organizationCmd)
+}
+
+func connectInit() {
+	organizationCmd.PersistentFlags().BoolVar(&flagDebugRequests, "debug-requests", false, "If true, print the full request and response for each API call.")
+	_ = organizationCmd.PersistentFlags().MarkHidden("debug-requests")
+
+	// Register --org and --env flags.
+	// We are not using orgutil.Wrap here because that enforced org->project validation
+	// which we do not require here.
+	organizationCmd.PersistentFlags().String(orgutil.KeyOrganization, "", "The Intrinsic organization to use (can also be set via INTRINSIC_ORG env var).")
+	organizationCmd.PersistentFlags().String(orgutil.KeyEnvironment, "", "Auth environment to use (can also be set via INTRINSIC_ENV env var).")
+	// Bind --org and --env flags to INTRINSIC_ORG and INTRINSIC_ENV environment variables.
+	viperutil.BindFlags(vipr, organizationCmd.PersistentFlags(), viperutil.BindToListEnv(orgutil.KeyOrganization, orgutil.KeyEnvironment))
 }
 
 const (

@@ -28,15 +28,13 @@ import (
 
 	envs "intrinsic/config/environments"
 	"intrinsic/tools/inctl/auth/auth"
+	"intrinsic/tools/inctl/util/accounts/accounts"
 	"intrinsic/tools/inctl/util/agents"
 	"intrinsic/tools/inctl/util/orgutil"
 	"intrinsic/tools/inctl/util/viperutil"
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
-	"google.golang.org/grpc"
-
-	accdiscoverv1grpcpb "intrinsic/kubernetes/accounts/service/api/v1/discoveryapi_go_proto"
 
 	emptypb "google.golang.org/protobuf/types/known/emptypb"
 )
@@ -56,21 +54,6 @@ const (
 	// without the org and project flags, since the server returning
 	// an API key doesn't actually require an org or a project.
 	placeholderOrg = "-"
-
-	// discoveryRetryPolicy is the gRPC retry policy for AccountsDiscoveryService.
-	// It retries read-only discovery calls on UNAVAILABLE errors up to 5 times.
-	discoveryRetryPolicy = `{
-  "methodConfig": [{
-    "name": [{"service": "intrinsic_proto.accountsdiscovery.v1.AccountsDiscoveryService"}],
-    "retryPolicy": {
-      "maxAttempts": 5,
-      "initialBackoff": "1s",
-      "maxBackoff": "10s",
-      "backoffMultiplier": 2.0,
-      "retryableStatusCodes": ["UNAVAILABLE"]
-    }
-  }]
-}`
 )
 
 // Exposed for testing
@@ -172,20 +155,12 @@ func loadMockDiscovery(mockPath string) (map[string][]string, error) {
 
 // discoverOrganizations discovers orgs and projects the given API key has access to.
 func discoverOrganizations(ctx context.Context, apiKey, env string) (map[string][]string, error) {
-	accProject := envs.AccountsProjectFromEnv(env)
-	conn, err := auth.NewCloudConnection(
-		ctx,
-		auth.WithProject(accProject),
-		auth.WithAPIKey(apiKey),
-		auth.WithEnv(env),
-		auth.WithDialOptions(grpc.WithDefaultServiceConfig(discoveryRetryPolicy)),
-	)
+	client, closer, err := accounts.DialDiscoveryV1Client(ctx, env, apiKey)
 	if err != nil {
 		return nil, err
 	}
-	defer conn.Close()
+	defer closer.Close()
 
-	client := accdiscoverv1grpcpb.NewAccountsDiscoveryServiceClient(conn)
 	resp, err := client.ListOrganizations(ctx, &emptypb.Empty{})
 	if err != nil {
 		fmt.Println("Could not find the project for this token. Please restart the login process and make sure to provide the exact key shown by the portal.")
