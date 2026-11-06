@@ -284,7 +284,7 @@ func requestLease(ctx context.Context, duration time.Duration, leaseClient lease
 
 	retContext, err := getContext(ctx, opts, l)
 	if err != nil {
-		fmt.Printf("Failed to get context: %v\n", err)
+		fmt.Fprintf(opts.Stderr, "Failed to get context: %v\n", err)
 	}
 
 	return &leaseResult{lease: l, context: retContext}, nil

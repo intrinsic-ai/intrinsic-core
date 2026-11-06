@@ -34,6 +34,7 @@ import (
 
 	"github.com/spf13/cobra"
 	"github.com/spf13/viper"
+	"google.golang.org/grpc"
 
 	accdiscoverv1grpcpb "intrinsic/kubernetes/accounts/service/api/v1/discoveryapi_go_proto"
 
@@ -55,6 +56,21 @@ const (
 	// without the org and project flags, since the server returning
 	// an API key doesn't actually require an org or a project.
 	placeholderOrg = "-"
+
+	// discoveryRetryPolicy is the gRPC retry policy for AccountsDiscoveryService.
+	// It retries read-only discovery calls on UNAVAILABLE errors up to 5 times.
+	discoveryRetryPolicy = `{
+  "methodConfig": [{
+    "name": [{"service": "intrinsic_proto.accountsdiscovery.v1.AccountsDiscoveryService"}],
+    "retryPolicy": {
+      "maxAttempts": 5,
+      "initialBackoff": "1s",
+      "maxBackoff": "10s",
+      "backoffMultiplier": 2.0,
+      "retryableStatusCodes": ["UNAVAILABLE"]
+    }
+  }]
+}`
 )
 
 // Exposed for testing
@@ -157,7 +173,13 @@ func loadMockDiscovery(mockPath string) (map[string][]string, error) {
 // discoverOrganizations discovers orgs and projects the given API key has access to.
 func discoverOrganizations(ctx context.Context, apiKey, env string) (map[string][]string, error) {
 	accProject := envs.AccountsProjectFromEnv(env)
-	conn, err := auth.NewCloudConnection(ctx, auth.WithProject(accProject), auth.WithAPIKey(apiKey), auth.WithEnv(env))
+	conn, err := auth.NewCloudConnection(
+		ctx,
+		auth.WithProject(accProject),
+		auth.WithAPIKey(apiKey),
+		auth.WithEnv(env),
+		auth.WithDialOptions(grpc.WithDefaultServiceConfig(discoveryRetryPolicy)),
+	)
 	if err != nil {
 		return nil, err
 	}

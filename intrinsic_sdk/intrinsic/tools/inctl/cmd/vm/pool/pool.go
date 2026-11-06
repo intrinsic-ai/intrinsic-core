@@ -40,6 +40,29 @@ var (
 	PoolCmd = orgutil.WrapCmd(cobrautil.ParentOfNestedSubcommands("pool", "Create and manage pools of virtual machines"), viperLocal)
 )
 
+// poolRetryPolicy is the gRPC retry policy for VM pool services.
+// It retries on UNAVAILABLE errors up to 5 times.
+const poolRetryPolicy = `{
+  "methodConfig": [{
+    "name": [
+      {"service": "intrinsic_proto.vmpoolleaseapi.v1.VMPoolLeaseService"},` +
+	`
+      {"service": "intrinsic_proto.vmpoolapi.v1.VMPoolService"}
+    ],
+    "retryPolicy": {
+      "maxAttempts": 5,
+      "initialBackoff": "1s",
+      "maxBackoff": "10s",
+      "backoffMultiplier": 2.0,
+      "retryableStatusCodes": ["UNAVAILABLE"]
+    }
+  }]
+}`
+
+func withPoolRetry() auth.ConnectionOptsFunc {
+	return auth.WithDialOptions(grpc.WithDefaultServiceConfig(poolRetryPolicy))
+}
+
 const (
 	poolFlagDesc             = "The name of the VM pool."
 	runtimeFlagDesc          = "The intrinsic platform runtime version that the VMs should run. If not specified, the runtime version at the time of execution will be set. The runtime version should be in the form of 'intrinsic.platform.YYYYMMDD.RCXX'"
@@ -113,7 +136,7 @@ func newConn(ctx context.Context) (*grpc.ClientConn, error) {
 			fmt.Fprintf(os.Stderr, "Warning: Project %q has most probably no VM pool. You probably meant to target a compute/backend project like intrinsic-prod-us instead.", viperLocal.GetString(orgutil.KeyProject))
 		}
 	}
-	return auth.NewCloudConnection(ctx, auth.WithFlagValues(viperLocal))
+	return auth.NewCloudConnection(ctx, auth.WithFlagValues(viperLocal), withPoolRetry())
 }
 
 var newVmpoolsClient = func(ctx context.Context) (vmpoolsgrpcpb.VMPoolServiceClient, error) {

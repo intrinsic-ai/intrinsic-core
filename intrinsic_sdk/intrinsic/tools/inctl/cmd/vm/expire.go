@@ -52,7 +52,7 @@ var vmExpireInCmd = &cobra.Command{
 		span.AddAttributes(trace.StringAttribute("vm", args[0]))
 		span.AddAttributes(trace.StringAttribute("org", vmCmdFlags.GetFlagOrganization()))
 		defer span.End()
-		cl, err := newLeaseClient(ctx)
+		cl, err := newLeaseClient(ctx, withLeaseRetry())
 		if err != nil {
 			return err
 		}
