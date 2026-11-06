@@ -571,6 +571,11 @@ absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
       std::move(world_template_overrides), gazebo_service, pubsub, init_params);
 }
 
+std::string ObjectWorldServiceInterfaceUri() {
+  return absl::StrCat(assets::kGrpcUriPrefix,
+                      ObjectWorldService::service_full_name());
+}
+
 std::string GeometryServiceInterfaceUri() {
   return absl::StrCat(
       assets::kGrpcUriPrefix,
@@ -588,16 +593,18 @@ absl::StatusOr<std::unique_ptr<GazeboRunner>> InitGazeboWithWorldService(
     const simulation::SimulatorControlService::GazeboRunnerInitParams&
         init_params) {
   INTR_ASSIGN_OR_RETURN(
-      std::shared_ptr<ObjectWorldService::Stub> object_world_service_stub,
-      simulation::details::GetObjectWorldServiceStub(intrinsic_runtime_dep));
-  INTR_ASSIGN_OR_RETURN(
-      std::shared_ptr<grpc::Channel> geometry_service_channel,
+      (auto [geometry_service_channel, object_world_service_channel]),
       assets::dependencies::
-          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
-              intrinsic_runtime_dep, GeometryServiceInterfaceUri(),
+          ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnly(
+              intrinsic_runtime_dep,
+              {GeometryServiceInterfaceUri(), ObjectWorldServiceInterfaceUri()},
               connect::UnlimitedMessageSizeGrpcChannelArgs()));
   INTR_RETURN_IF_ERROR(connect::WaitForChannelReady(
       geometry_service_channel, kGeometryServiceConnectTimeout));
+  INTR_RETURN_IF_ERROR(connect::WaitForChannelReady(
+      object_world_service_channel, kGeometryServiceConnectTimeout));
+  std::shared_ptr<ObjectWorldService::Stub> object_world_service_stub =
+      ObjectWorldService::NewStub(std::move(object_world_service_channel));
   auto geom_service_library = GetGeometryServiceGeometryLibrary(
       intrinsic_proto::geometry::GeometryService::NewStub(
           std::move(geometry_service_channel)));

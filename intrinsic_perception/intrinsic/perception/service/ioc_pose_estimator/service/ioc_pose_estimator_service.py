@@ -325,15 +325,15 @@ class IocPoseEstimatorService(
     """
     self._config = config
 
-    installed_assets_channel = asset_utils.connect_with_runtime_asset_fallback_for_asset_migration_only(
-        self._config.intrinsic_runtime,
-        _installed_assets_interface_uri(),
-        grpc_options=_GRPC_OPTIONS,
-    )
-    operations_channel = asset_utils.connect_with_runtime_asset_fallback_for_asset_migration_only(
-        self._config.intrinsic_runtime,
-        _operations_interface_uri(),
-        grpc_options=_GRPC_OPTIONS,
+    installed_assets_channel, operations_channel = (
+        asset_utils.connect_many_with_runtime_asset_fallback_for_asset_migration_only(
+            self._config.intrinsic_runtime,
+            [
+                _installed_assets_interface_uri(),
+                _operations_interface_uri(),
+            ],
+            grpc_options=_GRPC_OPTIONS,
+        )
     )
     self._assets_client = installed_assets_client.InstalledAssetsClient(
         installed_assets_pb2_grpc.InstalledAssetsStub(installed_assets_channel),

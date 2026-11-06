@@ -14,6 +14,8 @@
 
 #include "intrinsic/icon/server/create_icon_main_loop.h"
 
+#include <array>
+#include <cstddef>
 #include <memory>
 #include <string>
 #include <string_view>
@@ -73,6 +75,24 @@ constexpr absl::string_view kObjectWorldServiceInterface =
 constexpr absl::Duration kNonRealtimeReadWriteTimeout = absl::Seconds(20);
 constexpr absl::Duration kServiceInitTimeout = absl::Seconds(180);
 constexpr absl::Duration kServiceRetryInterval = absl::Seconds(10);
+
+// Connects to `ifaces` of the Intrinsic runtime. If
+// `use_runtime_asset_fallback` is set, interfaces missing from
+// `intrinsic_runtime` fall back to the runtime via the ingress.
+template <size_t N>
+absl::StatusOr<std::array<std::shared_ptr<grpc::Channel>, N>> ConnectToRuntime(
+    const intrinsic_proto::assets::v1::ResolvedDependency& intrinsic_runtime,
+    const absl::string_view (&ifaces)[N], bool use_runtime_asset_fallback) {
+  if (use_runtime_asset_fallback) {
+    return intrinsic::assets::dependencies::
+        ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnly(
+            intrinsic_runtime, ifaces,
+            connect::UnlimitedMessageSizeGrpcChannelArgs());
+  }
+  return intrinsic::assets::dependencies::ConnectMany(
+      intrinsic_runtime, ifaces,
+      connect::UnlimitedMessageSizeGrpcChannelArgs());
+}
 
 }  // namespace
 
@@ -363,30 +383,50 @@ absl::StatusOr<ServiceCollection> CreateServiceCollectionFromProto(
     const Service::InitParameters& init_parameters,
     const intrinsic_proto::assets::v1::ResolvedDependency& intrinsic_runtime,
     bool use_runtime_asset_fallback) {
+  // Connect to ObjectWorldService and GeometryService when runtime asset
+  // fallback is enabled (when ICON is run as an Asset) or when explicitly
+  // configured, allowing standalone binaries to run without them.
+  const bool connect_world =
+      config.has_world_service_from_grpc() &&
+      (use_runtime_asset_fallback ||
+       intrinsic_runtime.interfaces().contains(kObjectWorldServiceInterface));
+  const bool connect_geometry =
+      use_runtime_asset_fallback ||
+      intrinsic_runtime.interfaces().contains(kGeometryServiceInterface);
+
+  std::shared_ptr<grpc::Channel> world_channel;
+  std::shared_ptr<grpc::Channel> geometry_channel;
+  if (connect_world && connect_geometry) {
+    INTR_ASSIGN_OR_RETURN((auto [g_channel, w_channel]),
+                          ConnectToRuntime(intrinsic_runtime,
+                                           {kGeometryServiceInterface,
+                                            kObjectWorldServiceInterface},
+                                           use_runtime_asset_fallback));
+    geometry_channel = std::move(g_channel);
+    world_channel = std::move(w_channel);
+  } else if (connect_world) {
+    INTR_ASSIGN_OR_RETURN(
+        (auto [w_channel]),
+        ConnectToRuntime(intrinsic_runtime, {kObjectWorldServiceInterface},
+                         use_runtime_asset_fallback));
+    world_channel = std::move(w_channel);
+  } else if (connect_geometry) {
+    INTR_ASSIGN_OR_RETURN(
+        (auto [g_channel]),
+        ConnectToRuntime(intrinsic_runtime, {kGeometryServiceInterface},
+                         use_runtime_asset_fallback));
+    geometry_channel = std::move(g_channel);
+  }
+
   WorldService* maybe_world_service_ptr = nullptr;
   std::unique_ptr<WorldFromGrpcService> maybe_world_from_grpc_service;
-  // Connect to ObjectWorldService when runtime asset fallback is enabled (when
-  // ICON is run as an Asset) or when explicitly configured, allowing standalone
-  // binaries to run without it.
-  if (config.has_world_service_from_grpc() &&
-      (use_runtime_asset_fallback ||
-       intrinsic_runtime.interfaces().contains(kObjectWorldServiceInterface))) {
-    absl::StatusOr<std::shared_ptr<grpc::Channel>> world_channel;
-    if (use_runtime_asset_fallback) {
-      world_channel = intrinsic::assets::dependencies::
-          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
-              intrinsic_runtime, kObjectWorldServiceInterface,
-              connect::UnlimitedMessageSizeGrpcChannelArgs());
-    } else {
-      world_channel = intrinsic::assets::dependencies::Connect(
-          intrinsic_runtime, kObjectWorldServiceInterface,
-          connect::UnlimitedMessageSizeGrpcChannelArgs());
-    }
-    INTR_ASSIGN_OR_RETURN(auto channel, world_channel);
+  if (world_channel != nullptr) {
     INTR_RETURN_IF_ERROR(intrinsic::connect::WaitForChannelReady(
-        channel, connect::kGrpcClientConnectDefaultTimeout));
+        world_channel, connect::kGrpcClientConnectDefaultTimeout))
+        << "While connecting to " << kObjectWorldServiceInterface;
     auto world_service_stub =
-        intrinsic_proto::world::ObjectWorldService::NewStub(std::move(channel));
+        intrinsic_proto::world::ObjectWorldService::NewStub(
+            std::move(world_channel));
     INTR_ASSIGN_OR_RETURN(
         maybe_world_from_grpc_service,
         WorldFromGrpcService::Create(
@@ -396,27 +436,13 @@ absl::StatusOr<ServiceCollection> CreateServiceCollectionFromProto(
   }
   std::unique_ptr<GeometryFromGeometryLibrary> geometry_from_geometry_library =
       nullptr;
-  // Connect to GeometryService when runtime asset fallback is enabled (when
-  // ICON is run as an Asset) or when explicitly configured, allowing standalone
-  // binaries to run without it.
-  if (use_runtime_asset_fallback ||
-      intrinsic_runtime.interfaces().contains(kGeometryServiceInterface)) {
-    absl::StatusOr<std::shared_ptr<grpc::Channel>> geometry_channel;
-    if (use_runtime_asset_fallback) {
-      geometry_channel = intrinsic::assets::dependencies::
-          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
-              intrinsic_runtime, kGeometryServiceInterface,
-              connect::UnlimitedMessageSizeGrpcChannelArgs());
-    } else {
-      geometry_channel = intrinsic::assets::dependencies::Connect(
-          intrinsic_runtime, kGeometryServiceInterface,
-          connect::UnlimitedMessageSizeGrpcChannelArgs());
-    }
-    INTR_ASSIGN_OR_RETURN(auto channel, geometry_channel);
+  if (geometry_channel != nullptr) {
     INTR_RETURN_IF_ERROR(intrinsic::connect::WaitForChannelReady(
-        channel, connect::kGrpcClientConnectDefaultTimeout));
+        geometry_channel, connect::kGrpcClientConnectDefaultTimeout))
+        << "While connecting to " << kGeometryServiceInterface;
     auto geometry_service_stub =
-        intrinsic_proto::geometry::GeometryService::NewStub(std::move(channel));
+        intrinsic_proto::geometry::GeometryService::NewStub(
+            std::move(geometry_channel));
     INTR_ASSIGN_OR_RETURN(
         geometry_from_geometry_library,
         GeometryFromGeometryLibrary::Create(std::move(geometry_service_stub)));

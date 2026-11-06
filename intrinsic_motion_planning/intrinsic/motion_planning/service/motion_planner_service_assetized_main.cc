@@ -123,31 +123,29 @@ int MainImpl() {
     }
   });
 
+  ASSIGN_OR_DIE(
+      auto runtime_channels,
+      intrinsic::assets::dependencies::
+          ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnly(
+              proto_config.intrinsic_runtime(),
+              {
+                  "grpc://intrinsic_proto.assets.v1.InstalledAssetsReader",
+                  "grpc://intrinsic_proto.data_logger.DataLogger",
+              },
+              connect::UnlimitedMessageSizeGrpcChannelArgs()));
+
   // Start the structured logging client and data logger.
   // Do not fail if the logger is unavailable.
-  std::shared_ptr<grpc::Channel> data_logger_channel = nullptr;
-  if (auto channel_or = intrinsic::assets::dependencies::
-          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
-              proto_config.intrinsic_runtime(),
-              "grpc://intrinsic_proto.data_logger.DataLogger",
-              connect::UnlimitedMessageSizeGrpcChannelArgs());
-      channel_or.ok()) {
-    data_logger_channel = *std::move(channel_or);
-    if (auto s = intrinsic::connect::WaitForChannelReady(
-            data_logger_channel, absl::GetFlag(FLAGS_grpc_connect_timeout));
-        !s.ok()) {
-      // TODO(b/540431451): Reconnect periodically in a background thread so
-      // transient startup failures do not permanently degrade structured
-      // logging functionality.
-      LOG(WARNING) << "Failed to connect to data logger: " << s;
-      data_logger_channel = nullptr;
-    }
-  } else {
+  auto [installed_assets_reader_channel, data_logger_channel] =
+      std::move(runtime_channels);
+  if (auto s = intrinsic::connect::WaitForChannelReady(
+          data_logger_channel, absl::GetFlag(FLAGS_grpc_connect_timeout));
+      !s.ok()) {
     // TODO(b/540431451): Reconnect periodically in a background thread so
     // transient startup failures do not permanently degrade structured
     // logging functionality.
-    LOG(WARNING) << "Failed to create data logger channel: "
-                 << channel_or.status();
+    LOG(WARNING) << "Failed to connect to data logger: " << s;
+    data_logger_channel = nullptr;
   }
 
   auto [logger_stub, logger_client] =
@@ -197,14 +195,6 @@ int MainImpl() {
             proto_config.cache_size(),
             absl::GetFlag(FLAGS_cas_grpc_service_address)));
   }
-
-  ASSIGN_OR_DIE(
-      std::shared_ptr<grpc::Channel> installed_assets_reader_channel,
-      intrinsic::assets::dependencies::
-          ConnectWithRuntimeAssetFallbackForAssetMigrationOnly(
-              proto_config.intrinsic_runtime(),
-              "grpc://intrinsic_proto.assets.v1.InstalledAssetsReader",
-              connect::UnlimitedMessageSizeGrpcChannelArgs()));
 
   QCHECK_OK(
       intrinsic::connect::WaitForChannelReady(installed_assets_reader_channel));

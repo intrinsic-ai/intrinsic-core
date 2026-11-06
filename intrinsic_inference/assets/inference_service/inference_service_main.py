@@ -90,10 +90,13 @@ def main(argv: Sequence[str]) -> None:
   if context.config.type_url:
     context.config.Unpack(service_config)
 
-  installed_assets_channel = (
-      utils.connect_with_runtime_asset_fallback_for_asset_migration_only(
+  installed_assets_channel, data_assets_channel = (
+      utils.connect_many_with_runtime_asset_fallback_for_asset_migration_only(
           service_config.intrinsic_runtime,
-          "grpc://intrinsic_proto.assets.v1.InstalledAssetsReader",
+          [
+              "grpc://intrinsic_proto.assets.v1.InstalledAssetsReader",
+              "grpc://intrinsic_proto.data.v1.DataAssets",
+          ],
           grpc_options=inference_service.GRPC_OPTIONS,
       )
   )
@@ -114,13 +117,6 @@ def main(argv: Sequence[str]) -> None:
       + [
           ("grpc.max_reconnect_backoff_ms", _TRITON_MAX_RECONNECT_BACKOFF_MS),
       ],
-  )
-  data_assets_channel = (
-      utils.connect_with_runtime_asset_fallback_for_asset_migration_only(
-          service_config.intrinsic_runtime,
-          "grpc://intrinsic_proto.data.v1.DataAssets",
-          grpc_options=inference_service.GRPC_OPTIONS,
-      )
   )
   cas_channel = grpc.insecure_channel(
       _CAS_ADDRESS,

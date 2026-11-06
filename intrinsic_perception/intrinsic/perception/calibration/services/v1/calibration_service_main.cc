@@ -66,21 +66,24 @@ absl::Status MainImpl() {
           context.config()),
       _ << "Unpacking CalibrationServiceConfig");
 
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<grpc::Channel> operations_channel,
-                        intrinsic::assets::dependencies::Connect(
-                            proto_config.intrinsic_runtime(),
-                            "grpc://google.longrunning.Operations",
-                            connect::UnlimitedMessageSizeGrpcChannelArgs()));
+  INTR_ASSIGN_OR_RETURN(
+      (auto [operations_channel, asset_instances_channel, data_logger_channel,
+             object_world_channel]),
+      intrinsic::assets::dependencies::ConnectMany(
+          proto_config.intrinsic_runtime(),
+          {
+              "grpc://google.longrunning.Operations",
+              "grpc://intrinsic_proto.assets.v1.AssetInstances",
+              "grpc://intrinsic_proto.data_logger.DataLogger",
+              "grpc://intrinsic_proto.world.ObjectWorldService",
+          },
+          connect::UnlimitedMessageSizeGrpcChannelArgs()));
+
   INTR_RETURN_IF_ERROR(intrinsic::connect::WaitForChannelReady(
       operations_channel, absl::GetFlag(FLAGS_grpc_client_connection_timeout)));
   auto operations_stub =
       google::longrunning::Operations::NewStub(operations_channel);
 
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<grpc::Channel> asset_instances_channel,
-                        intrinsic::assets::dependencies::Connect(
-                            proto_config.intrinsic_runtime(),
-                            "grpc://intrinsic_proto.assets.v1.AssetInstances",
-                            connect::UnlimitedMessageSizeGrpcChannelArgs()));
   INTR_RETURN_IF_ERROR(intrinsic::connect::WaitForChannelReady(
       asset_instances_channel,
       absl::GetFlag(FLAGS_grpc_client_connection_timeout)));
@@ -88,22 +91,12 @@ absl::Status MainImpl() {
       intrinsic_proto::assets::v1::AssetInstances::NewStub(
           asset_instances_channel);
 
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<grpc::Channel> object_world_channel,
-                        intrinsic::assets::dependencies::Connect(
-                            proto_config.intrinsic_runtime(),
-                            "grpc://intrinsic_proto.world.ObjectWorldService",
-                            connect::UnlimitedMessageSizeGrpcChannelArgs()));
   INTR_RETURN_IF_ERROR(intrinsic::connect::WaitForChannelReady(
       object_world_channel,
       absl::GetFlag(FLAGS_grpc_client_connection_timeout)));
   auto object_world_service_stub =
       intrinsic_proto::world::ObjectWorldService::NewStub(object_world_channel);
 
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<grpc::Channel> data_logger_channel,
-                        intrinsic::assets::dependencies::Connect(
-                            proto_config.intrinsic_runtime(),
-                            "grpc://intrinsic_proto.data_logger.DataLogger",
-                            connect::UnlimitedMessageSizeGrpcChannelArgs()));
   if (auto status = intrinsic::connect::WaitForChannelReady(
           data_logger_channel,
           absl::GetFlag(FLAGS_grpc_client_connection_timeout));
