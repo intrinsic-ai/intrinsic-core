@@ -27,10 +27,14 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "google/protobuf/any.pb.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/kinematics/types/joint_limits.h"
+#include "intrinsic/kinematics/types/joint_limits_xd.h"
+#include "intrinsic/motion_planning/motion_planner/motion_planning_error_utils.h"
 #include "intrinsic/motion_planning/path_planning/data_structures/path_planner_graph.h"
 #include "intrinsic/motion_planning/path_planning/data_structures/planner_graph.pb.h"
 #include "intrinsic/motion_planning/path_planning/kinematics_system_proxy.h"
@@ -40,6 +44,7 @@
 #include "intrinsic/motion_planning/path_planning/planners/validation.h"
 #include "intrinsic/motion_planning/path_planning/validators.h"
 #include "intrinsic/motion_planning/path_planning/validators_config.pb.h"
+#include "intrinsic/motion_planning/proto/v1/motion_planning_error.pb.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/eigen.h"
 #include "intrinsic/util/proto/parse_text_proto.h"
@@ -50,7 +55,11 @@
 namespace intrinsic {
 
 namespace {
+using ::intrinsic_proto::motion_planning::v1::ErrorContext;
 using VertexDescriptor = PathPlannerGraph::VertexDescriptor;
+
+constexpr absl::string_view kMotionPlanningErrorSuffix =
+    "JointInterpolationPathPlanner";
 
 proto::JointInterpolationPathPlannerConfig SetDefaults(
     const proto::JointInterpolationPathPlannerConfig& config) {
@@ -63,10 +72,11 @@ proto::JointInterpolationPathPlannerConfig SetDefaults(
   return out;
 }
 
-// Creates a status with a descriptive error message explaining why the
-// straight-line segment between `start` and `end` failed edge validation.
+// Creates a status with a descriptive error message and appropriate
+// `MotionPlanningError` payload explaining why the straight-line segment
+// between `start` and `end` failed edge validation.
 // - `proxy`: The kinematics system proxy used to evaluate configuration
-//   validity and collision debug details.
+//   validity, joint limits, and collision debug details.
 // - `start`: The starting joint configuration of the invalid segment.
 // - `end`: The ending joint configuration of the invalid segment.
 // - `invalid_config_info`: Details about the first invalid joint configuration
@@ -91,10 +101,6 @@ absl::Status CreateInvalidEdgeStatus(
   const std::string prefix = absl::StrFormat(
       "Unable to plan joint interpolation path from %s to %s. Reason: ",
       toString(start), toString(end));
-  // TODO(b/581850417): Attach structured `MotionPlanningError` payloads via
-  // `CreateStatusWithCollisionError` and `CreateStatusWithJointLimitError` once
-  // `GetUserFriendlyCollisionErrorMessage` handles
-  // `ErrorContext::STATE_IN_COLLISION`.
   if (config_status.collision_status == MarginPairConflictStatus::kInvalid) {
     const absl::StatusOr<std::string> collision_debug_str =
         proxy.PrintCollisionCheckingDebug(collision_debug);
@@ -113,20 +119,30 @@ absl::Status CreateInvalidEdgeStatus(
                             ? absl::StrCat(": ", *collision_debug_str)
                             : "."));
     constexpr int kMaxErrorMessageLength = 3500;
-    if (message.size() > kMaxErrorMessageLength) {
-      return absl::NotFoundError(absl::StrCat(
-          message.substr(0, kMaxErrorMessageLength), "... [",
-          message.size() - kMaxErrorMessageLength, " more characters]"));
-    }
-    return absl::NotFoundError(message);
+    return CreateStatusWithCollisionError(
+        message.size() > kMaxErrorMessageLength
+            ? absl::StrCat(message.substr(0, kMaxErrorMessageLength), "... [",
+                           message.size() - kMaxErrorMessageLength,
+                           " more characters]")
+            : message,
+        collision_debug, invalid_config, proxy, kMotionPlanningErrorSuffix,
+        absl::StatusCode::kNotFound, ErrorContext::STATE_IN_COLLISION);
   }
   if (config_status.within_limits_status ==
       WithinLimitsStatus::kViolatedLimits) {
-    return absl::NotFoundError(absl::StrCat(
-        prefix,
-        absl::StrFormat(
-            "Path is not within joint limits at configuration [%s] (in rad).",
-            toString(invalid_config))));
+    INTR_ASSIGN_OR_RETURN(
+        const JointLimits limits, ToJointLimits(proxy.GetJointLimits()),
+        _ << "Failed to convert joint limits for invalid configuration ["
+          << toString(invalid_config) << "] along edge.");
+    return CreateStatusWithJointLimitError(
+        absl::StrCat(
+            prefix,
+            absl::StrFormat(
+                "Path is not within joint limits at configuration [%s] (in "
+                "rad).",
+                toString(invalid_config))),
+        invalid_config, kMotionPlanningErrorSuffix,
+        ErrorContext::CONF_VALIDATION, absl::StatusCode::kNotFound, limits);
   }
   if (config_status.constraint_satisfaction_status ==
       ConstraintSatisfactionStatus::kViolatedConstraints) {

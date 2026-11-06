@@ -225,6 +225,10 @@ absl::StatusOr<std::string> GetUserFriendlyCollisionErrorMessage(
              intrinsic_proto::motion_planning::v1::ErrorContext::
                  GOAL_STATE_COLLISION) {
     error_message = "\nInvalid goal joint configuration. Collision reported:";
+  } else if (collision_error.error_context() ==
+             intrinsic_proto::motion_planning::v1::ErrorContext::
+                 STATE_IN_COLLISION) {
+    error_message = "\nInvalid joint configuration. Collision reported:";
   }
   if (collision_error.error_context() ==
       intrinsic_proto::motion_planning::v1::ErrorContext::IK_COLLISION) {
