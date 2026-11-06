@@ -269,6 +269,7 @@ cc_library(
     deps = [
         "@abseil-cpp//absl/base:log_severity",
         "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
     ],
 )

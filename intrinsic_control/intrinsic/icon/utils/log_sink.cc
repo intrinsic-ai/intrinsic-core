@@ -15,13 +15,12 @@
 #include "intrinsic/icon/utils/log_sink.h"
 
 #include <algorithm>
-#include <cinttypes>
 #include <cstdint>
 #include <cstdio>
 #include <cstring>
-#include <string>
 
 #include "absl/log/check.h"
+#include "absl/strings/str_format.h"
 #include "absl/time/time.h"
 
 namespace intrinsic::icon {
@@ -48,9 +47,8 @@ int LogEntryFormatToBuffer(char* buffer, int buffer_size,
 
   // Format wall timestamp.
   // Want: "0102 15:04:05.000000"
-  std::string wall =
-      absl::FormatTime("%m%d %H:%M:%E6S",
-                       absl::FromUnixNanos(entry.wall_timestamp_ns), timezone);
+  const absl::TimeZone::CivilInfo ci =
+      timezone.At(absl::FromUnixNanos(entry.wall_timestamp_ns));
 
   // Get the base of the filename.
   const char* base = strrchr(entry.filename, '/');
@@ -61,14 +59,16 @@ int LogEntryFormatToBuffer(char* buffer, int buffer_size,
   }
 
   static constexpr char kFormat[] =
-      "%c%s       0 %s:%d] %05" PRId64 ".%06d: %.*s\n";
+      "%c%02d%02d %02d:%02d:%02d.%06d       0 %s:%d] %05d.%06d: %.*s\n";
 
   int entry_msg_size =
       std::min(entry.msglen, static_cast<int>(sizeof(entry.msg)));
 
   int num_chars =
-      snprintf(buffer, buffer_size, kFormat, priority[0], wall.c_str(), base,
-               entry.line, sec, usec, entry_msg_size, entry.msg);
+      absl::SNPrintF(buffer, buffer_size, kFormat, priority[0], ci.cs.month(),
+                     ci.cs.day(), ci.cs.hour(), ci.cs.minute(), ci.cs.second(),
+                     absl::ToInt64Microseconds(ci.subsecond), base, entry.line,
+                     sec, usec, entry_msg_size, entry.msg);
   return std::min(num_chars, buffer_size - 1);
 }
 
