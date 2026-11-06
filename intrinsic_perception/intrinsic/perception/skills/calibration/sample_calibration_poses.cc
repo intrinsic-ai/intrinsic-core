@@ -82,7 +82,9 @@ constexpr int kNumTriedPosesPerRequestedSample = 10;
 // unreachable/out of limits planning failure.
 bool IsCollisionOrUnreachable(
     const intrinsic_proto::motion_planning::v1::MotionPlanningError& error) {
-  if (error.has_collision_error() || error.has_joint_limit_error()) {
+  if (error.has_collision_error() || error.has_joint_limit_error() ||
+      error.has_fine_path_ik_error() ||
+      error.has_linear_cartesian_path_planning_error()) {
     return true;
   }
   if (error.has_ik_error()) {
@@ -98,6 +100,12 @@ bool IsCollisionOrUnreachable(
 // Returns true if the status indicates a collision or unreachable/out of limits
 // planning failure.
 bool HasCollisionOrUnreachableError(const absl::Status& status) {
+  // Some PlanTrajectory failures (e.g., path planning timeouts or planners
+  // returning no solution) do not attach a MotionPlanningError payload, so
+  // they are not caught by the payload check below.
+  if (absl::IsDeadlineExceeded(status) || absl::IsNotFound(status)) {
+    return true;
+  }
   bool has_collision_or_unreachable_error = false;
   status.ForEachPayload(
       [&](absl::string_view type_url, const absl::Cord& payload) {
