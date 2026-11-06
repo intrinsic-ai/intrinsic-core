@@ -78,7 +78,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:imagetransfer",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "//intrinsic_sdk/intrinsic/assets:throttle",
-        "//intrinsic_sdk/intrinsic/assets/platformlevelswitch",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_go_proto",
         "//intrinsic_sdk/intrinsic/assets/scene_objects:gzfprocessor",
         "//intrinsic_sdk/intrinsic/assets/services:bundleimages",

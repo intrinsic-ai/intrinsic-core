@@ -27,7 +27,6 @@ import (
 	"intrinsic/assets/cmdutils"
 	"intrinsic/assets/idutils"
 	"intrinsic/assets/imagetransfer"
-	"intrinsic/assets/platformlevelswitch"
 	"intrinsic/assets/referenceddata"
 	"intrinsic/assets/scene_objects/gzfprocessor"
 	"intrinsic/assets/services/bundleimages"
@@ -108,10 +107,6 @@ func GetCommand() *cobra.Command {
 				return err
 			}
 
-			ctx, err = platformlevelswitch.AppendOrgToOutgoingContext(ctx, flags.GetFlagOrganization())
-			if err != nil {
-				return fmt.Errorf("failed to add org information to context: %w", err)
-			}
 			ctx, rawConn, _, err := clientutils.DialClusterFromInctl(ctx, flags)
 			if err != nil {
 				return err

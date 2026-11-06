@@ -812,6 +812,17 @@ func WithOrg(orgID string) Option {
 	}
 }
 
+// WithOptionalOrg scopes the organization identifier if orgID is non-empty,
+// or acts as a no-op if orgID is empty.
+func WithOptionalOrg(orgID string) Option {
+	return func(u *update) error {
+		if orgID == "" {
+			return nil
+		}
+		return WithOrg(orgID)(u)
+	}
+}
+
 // WithUserJWT scopes the user's JWT token.
 func WithUserJWT(jwt string) Option {
 	return func(u *update) error {

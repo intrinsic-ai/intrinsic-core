@@ -31,7 +31,6 @@ import (
 	"intrinsic/assets/cmdutils"
 	"intrinsic/assets/conversion/solutionconversion"
 	"intrinsic/assets/imagetransfer"
-	"intrinsic/assets/platformlevelswitch"
 	"intrinsic/assets/referenceddata"
 	"intrinsic/assets/scene_objects/gzfprocessor"
 	"intrinsic/assets/services/bundleimages"
@@ -285,11 +284,6 @@ $ bazel run //intrinsic/config:empty_application --\
 					"\n\tTentative Cloud Trace link (not guaranteed to work if you interrupt this run):\n\n\t%s\n\n",
 					introspection.CloudTraceURL(span.SpanContext().TraceID.String(), flags.GetFlagProject()),
 				)
-			}
-
-			ctx, err := platformlevelswitch.AppendOrgToOutgoingContext(ctx, flags.GetFlagOrganization())
-			if err != nil {
-				return errors.Wrap(err, "unable to setup the context")
 			}
 
 			log.InfoContextf(ctx, "Deploying to cluster")

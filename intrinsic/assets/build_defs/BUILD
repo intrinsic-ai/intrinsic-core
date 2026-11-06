@@ -56,7 +56,6 @@ go_binary(
         "//intrinsic_sdk/intrinsic/assets:throttle",
         "//intrinsic_sdk/intrinsic/assets/build_defs:asset_go_proto",
         "//intrinsic_sdk/intrinsic/assets/build_defs:assetprocessor",
-        "//intrinsic_sdk/intrinsic/assets/platformlevelswitch",
         "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_deployment_go_proto",
         "//intrinsic_sdk/intrinsic/assets/scene_objects:gzfprocessor",
         "//intrinsic_sdk/intrinsic/assets/services:bundleimages",
