@@ -15,10 +15,10 @@
 """Target asset resolution utilities for NVIDIA Pose Estimator.
 
 Extracts per-target SAM 3 text prompts, confidence thresholds
-(`IocPoseEstimatorParams`), and CAD meshes (`.ply`, `.obj`, `.glb`, `.gltf`,
-`.stl`) from installed `PerceptionModel` Data assets in CAS, applying any
-`target_t_mesh` transform, exporting normalized `.ply` files to local storage,
-and caching results by asset ID.
+(`FoundationPoseEstimatorParams`), and CAD meshes (`.ply`, `.obj`, `.glb`,
+`.gltf`, `.stl`) from installed `PerceptionModel` Data assets in CAS, applying
+any `target_t_mesh` transform, exporting normalized `.ply` files to local
+storage, and caching results by asset ID.
 """
 
 from __future__ import annotations
@@ -52,7 +52,7 @@ def extract_prompt_from_installed_asset(
 ) -> tuple[str | None, float | None]:
   """Extracts (text_prompt, confidence_threshold) from an InstalledAsset proto.
 
-  Reads IocPoseEstimatorParams from pose_estimation_config.inference_params.
+  Reads FoundationPoseEstimatorParams from pose_estimation_config.inference_params.
   This is shared across pose estimators whose assets may carry different (or
   no) inference params, so a missing or mismatched payload is not an error.
 
@@ -61,7 +61,7 @@ def extract_prompt_from_installed_asset(
 
   Returns:
     The configured text prompt and confidence threshold, each None when the
-    asset does not set them or does not carry IocPoseEstimatorParams.
+    asset does not set them or does not carry FoundationPoseEstimatorParams.
   """
   try:
     perception_model = model_asset_utils.unpack_perception_model(
@@ -76,7 +76,7 @@ def extract_prompt_from_installed_asset(
   if not pose_cfg.HasField("inference_params"):
     return None, None
 
-  params = ioc_pose_estimator_params_pb2.IocPoseEstimatorParams()
+  params = ioc_pose_estimator_params_pb2.FoundationPoseEstimatorParams()
   if not pose_cfg.inference_params.Unpack(params):
     return None, None
 

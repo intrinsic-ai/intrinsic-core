@@ -371,7 +371,7 @@ memory the service needs:
 - Sensor names are the stringified `sensor_config.id` (Orbbec: `"1"` RGB, `"2"`/`"3"` IR, `"4"`
   depth). An unset or unmatched selector falls back to choosing by pixel type.
 - The prompt and confidence threshold are taken from the request override first, then the target
-  asset's `IocPoseEstimatorParams`, then this config.
+  asset's `FoundationPoseEstimatorParams`, then this config.
 
 ---
 

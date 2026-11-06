@@ -200,7 +200,7 @@ def build_inference_config(
     config: Resolved service configuration protobuf (from
       `resolve_service_config`).
     sam3_confidence_threshold_override: Optional per-target or per-request SAM3
-      confidence threshold override (e.g. from `IocPoseEstimatorParams`).
+      confidence threshold override (e.g. from `FoundationPoseEstimatorParams`).
 
   Returns:
     A populated `InferenceConfig` dataclass for the inference pipeline.

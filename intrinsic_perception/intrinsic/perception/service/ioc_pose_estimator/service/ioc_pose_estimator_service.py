@@ -114,7 +114,7 @@ def _validate_and_extract_perception_model_params(
   confidence_threshold = _DEFAULT_CONFIDENCE_THRESHOLD
   visibility_threshold = _DEFAULT_VISIBILITY_THRESHOLD
 
-  params = ioc_pose_estimator_params_pb2.IocPoseEstimatorParams()
+  params = ioc_pose_estimator_params_pb2.FoundationPoseEstimatorParams()
   if perception_model.pose_estimation_config.inference_params.Unpack(params):
     if params.HasField("refinement_iters"):
       refinement_iterations = params.refinement_iters

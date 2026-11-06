@@ -18,8 +18,8 @@ package incode.perception.ioc.proto;
 
 option go_package = "intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto/ioc_pose_estimator_params_go_proto";
 
-// Hyperparameters and detection thresholds for the IOC Pose Estimator.
-message IocPoseEstimatorParams {
+// Inference parameters for the FoundationPose pipeline.
+message FoundationPoseEstimatorParams {
   // Number of refinement iterations for FoundationPose.
   optional int32 refinement_iters = 1;
 

@@ -179,11 +179,11 @@ class IocTrainService(train_service_pb2_grpc.TrainServiceServicer):
           "CreateTrainingJobRequest must include inference_params in"
           " pose_estimation_config."
       )
-    ioc_params = ioc_pose_estimator_params_pb2.IocPoseEstimatorParams()
+    ioc_params = ioc_pose_estimator_params_pb2.FoundationPoseEstimatorParams()
     if not request.pose_estimation_config.inference_params.Unpack(ioc_params):
       raise ValueError(
-          "inference_params must contain an IocPoseEstimatorParams message."
-          " Found type_url:"
+          "inference_params must contain a FoundationPoseEstimatorParams"
+          " message. Found type_url:"
           f" {request.pose_estimation_config.inference_params.type_url}"
       )
 

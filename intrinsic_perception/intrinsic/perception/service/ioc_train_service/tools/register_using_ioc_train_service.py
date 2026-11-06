@@ -135,7 +135,7 @@ def get_create_training_job_request(
   )
   pose_estimation_config.targets.append(target)
 
-  params = ioc_pose_estimator_params_pb2.IocPoseEstimatorParams()
+  params = ioc_pose_estimator_params_pb2.FoundationPoseEstimatorParams()
   if refinement_iters is not None:
     params.refinement_iters = refinement_iters
   if confidence_threshold is not None:
