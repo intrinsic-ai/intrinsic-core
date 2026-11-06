@@ -265,6 +265,15 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
       entity_names_to_parents;
   absl::flat_hash_set<absl::string_view> entity_names;
   std::map<std::string, int> joint_index_by_name;
+
+  // Maps each entity name to the index of its first occurrence, which allows
+  // O(1) parent lookups.
+  absl::flat_hash_map<absl::string_view, int> entities_by_name;
+  entities_by_name.reserve(object.entities_size());
+  for (int i = 0; i < object.entities_size(); ++i) {
+    entities_by_name.try_emplace(object.entities(i).name(), i);
+  }
+
   for (const Entity& e : object.entities()) {
     if (e.name().empty()) {
       return absl::InvalidArgumentError("Provided entity with no name!");
@@ -303,16 +312,14 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
     }
 
     if (!e.parent_name().empty()) {
-      const auto parent = absl::c_find_if(
-          object.entities(), [&](const Entity& potential_parent) {
-            return potential_parent.name() == e.parent_name();
-          });
-      if (parent == object.entities().end()) {
+      const auto parent_it = entities_by_name.find(e.parent_name());
+      if (parent_it == entities_by_name.end()) {
         return absl::InvalidArgumentError(
             absl::Substitute("Cannot find parent entity '$1' for entity '$0'",
                              e.name(), e.parent_name()));
       }
-      INTR_RETURN_IF_ERROR(ValidateParentType(e, *parent));
+      INTR_RETURN_IF_ERROR(
+          ValidateParentType(e, object.entities(parent_it->second)));
     }
 
     switch (e.entity_type_case()) {
