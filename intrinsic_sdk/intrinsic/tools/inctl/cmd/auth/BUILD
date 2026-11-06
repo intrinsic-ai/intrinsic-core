@@ -39,7 +39,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools/inctl/util/accounts",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_github_spf13_viper//:go_default_library",
-        "@intrinsic_apis//intrinsic/kubernetes/accounts/service/api/v1:discoveryapi_go_proto",
         "@org_golang_google_protobuf//types/known/emptypb",
         "@org_golang_x_exp//maps",
     ],
