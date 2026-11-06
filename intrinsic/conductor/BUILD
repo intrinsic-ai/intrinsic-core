@@ -20,10 +20,25 @@ package(default_visibility = [
 ])
 
 cc_library(
+    name = "retry",
+    srcs = ["retry.cc"],
+    hdrs = ["retry.h"],
+    visibility = ["//visibility:private"],
+    deps = [
+        "@abseil-cpp//absl/functional:function_ref",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+    ],
+)
+
+cc_library(
     name = "world",
     srcs = ["world.cc"],
     hdrs = ["world.h"],
     deps = [
+        ":retry",
         "//intrinsic/assets/proto/v1alpha1:asset_info_internal_cc_grpc",
         "//intrinsic/assets/proto/v1alpha1:asset_info_internal_cc_proto",
         "//intrinsic/conductor/proto:wrapper_bridge_cc_proto",
@@ -76,6 +91,7 @@ cc_library(
     deps = [
         ":execution_context",
         ":resource_world_wrapper_headers",
+        ":retry",
         ":save_scene_monitor",
         ":world",
         "//intrinsic/assets/proto/v1alpha1:asset_info_internal_cc_grpc",
@@ -102,6 +118,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/thread:util",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
         "@abseil-cpp//absl/functional:function_ref",
+        "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googleapis//google/longrunning:longrunning_cc_grpc",
         "@intrinsic_apis//intrinsic/assets/proto:asset_deployment_cc_grpc_proto",

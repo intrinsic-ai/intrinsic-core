@@ -32,6 +32,7 @@
 #include "absl/time/time.h"
 #include "intrinsic/assets/proto/v1alpha1/asset_info_internal.pb.h"
 #include "intrinsic/assets/scene_objects/proto/scene_object_manifest.pb.h"
+#include "intrinsic/conductor/retry.h"
 #include "intrinsic/conductor/world.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/executive/proto/run_metadata.pb.h"
@@ -195,44 +196,60 @@ absl::StatusOr<internal::UpdateWorldFromResourceSetResult> CreateInitWorld(
     intrinsic_proto::assets::v1alpha1::AssetInfoInternal::StubInterface&
         asset_info_internal,
     intrinsic_proto::world::ObjectWorldService::Service& world_service,
-    bool skip_invalid_world_updates, absl::FunctionRef<bool()> is_cancelled) {
-  // Creates world with retries to account for transient errors, e.g., related
-  // to downloading (or uploading) geos from CAS. Technically, we can introspect
-  // the error to only retry for transient errors but it seems safer to just
-  // retry (actual, permanent errors should be really cheap as far retry is
-  // concerned).
+    bool skip_invalid_world_updates, const RetryPolicy& retry_policy,
+    absl::FunctionRef<bool()> is_cancelled) {
+  // Retries transient errors to account for service unavailability.
   const std::string world_id = ec.EditWorldID();
-  constexpr int max_tries = 3;
-  const absl::Duration kRetryInitialWorldInterval = absl::Seconds(2);
-  UpdateWorldFromResourceSetResult update_result;
-  for (int i = 0; i < max_tries; ++i) {
-    if (i != 0) {
-      LOG(WARNING) << absl::Substitute(
-          "Got error updating world from resource set, retrying (attempt "
-          "$0/$1)...",
-          i + 1, max_tries);
-      absl::SleepFor(kRetryInitialWorldInterval);
-      if (is_cancelled()) {
-        return absl::CancelledError(absl::Substitute(
-            "cancelled while creating world $0 from resource set", world_id));
-      }
-    }
-
-    INTR_ASSIGN_OR_RETURN(
-        update_result,
+  const std::string what =
+      absl::StrCat("create world ", world_id, " from resource set");
+  for (int attempt = 1;; ++attempt) {
+    absl::StatusOr<UpdateWorldFromResourceSetResult> result =
         CreateOrUpdateWorld(world_id, asset_info_internal, world_service,
-                            skip_invalid_world_updates),
-        _ << "could not load resource set into world " << world_id);
-
-    if (update_result.skipped_updates_size() == 0 &&
-        update_result.skipped_scene_objects_size() == 0) {
-      break;
+                            skip_invalid_world_updates);
+    const bool retryable = result.ok()
+                               ? HasTransientSkippedErrors(*result)
+                               : IsTransientError(result.status().code());
+    if (!retryable || attempt >= retry_policy.max_attempts) {
+      INTR_RETURN_IF_ERROR(result.status())
+          << "could not load resource set into world " << world_id;
+      return *std::move(result);
     }
-
-    LOG(ERROR) << "Unable to construct world from resource set after " << i + 1
-               << " attempts";
+    const std::string reason =
+        result.ok() ? "skipped world updates or scene objects due to "
+                      "transient errors"
+                    : result.status().ToString();
+    if (!BackoffBeforeRetry(retry_policy, attempt + 1, what, reason,
+                            is_cancelled)) {
+      return absl::CancelledError(
+          absl::StrCat("cancelled while trying to ", what));
+    }
   }
-  return update_result;
+}
+
+// Starts the solution on the simulation service with retries.
+grpc::Status StartSimulation(SimulationService::StubInterface& sim_service,
+                             grpc::ServerContext* context,
+                             const SimStartSolutionRequest& request,
+                             const RetryPolicy& retry_policy,
+                             absl::FunctionRef<bool()> is_cancelled) {
+  for (int attempt = 1;; ++attempt) {
+    auto sim_context =
+        acl::NewClientContextWithDeadline(context, kDefaultGrpcTimeout);
+    sim_context->set_wait_for_ready(true);
+    SimStartSolutionResponse response;
+    grpc::Status status =
+        sim_service.StartSolution(sim_context.get(), request, &response);
+    if (!IsTransientError(static_cast<absl::StatusCode>(status.error_code())) ||
+        attempt >= retry_policy.max_attempts) {
+      return status;
+    }
+    if (!BackoffBeforeRetry(retry_policy, attempt + 1,
+                            "start the simulation service",
+                            status.error_message(), is_cancelled)) {
+      return grpc::Status(grpc::StatusCode::CANCELLED,
+                          "cancelled while starting the simulation service");
+    }
+  }
 }
 
 }  // namespace
@@ -331,7 +348,8 @@ ConductorImpl::~ConductorImpl() {
   CancelExecutionContextOperation(/*context=*/nullptr, /*wait=*/true);
 }
 
-absl::Status ConductorImpl::CreateSolutionWorldsIfValidExecutionContext() {
+absl::Status ConductorImpl::CreateSolutionWorldsIfValidExecutionContext(
+    const RetryPolicy& retry_policy) {
   absl::MutexLock lock(mu_);
   if (execution_context_ == nullptr) {
     LOG(INFO) << "No valid execution context found, skipping creation of "
@@ -358,7 +376,7 @@ absl::Status ConductorImpl::CreateSolutionWorldsIfValidExecutionContext() {
   // Skips invalid world updates so that the worlds are still created. Skipped
   // updates are reported through the edit world status.
   return ToAbslStatus(CreateWorldsFromSolution(
-      /*context=*/nullptr, /*skip_invalid_world_updates=*/true));
+      /*context=*/nullptr, /*skip_invalid_world_updates=*/true, retry_policy));
 }
 
 grpc::Status ConductorImpl::StartSolution(
@@ -397,19 +415,23 @@ grpc::Status ConductorImpl::StartSolution(
   INTR_RETURN_IF_ERROR_GRPC(ResetWorldService(worlds_to_not_delete));
 
   return CreateWorldsFromSolution(context,
-                                  request->skip_invalid_world_updates());
+                                  request->skip_invalid_world_updates(),
+                                  kStartSolutionInitRetryPolicy);
 }
 
 grpc::Status ConductorImpl::CreateWorldsFromSolution(
-    grpc::ServerContext* context, bool skip_invalid_world_updates) {
+    grpc::ServerContext* context, bool skip_invalid_world_updates,
+    const RetryPolicy& retry_policy) {
+  const auto is_cancelled = [context] {
+    return context != nullptr && context->IsCancelled();
+  };
+
   // Seeds the initial world from the solution document.
   INTR_ASSIGN_OR_RETURN_GRPC(
       UpdateWorldFromResourceSetResult update_result,
       CreateInitWorld(*execution_context_, *asset_info_internal_stub_,
-                      world_service_, skip_invalid_world_updates,
-                      /*is_cancelled=*/[context] {
-                        return context != nullptr && context->IsCancelled();
-                      }));
+                      world_service_, skip_invalid_world_updates, retry_policy,
+                      is_cancelled));
 
   // Pause the world updater before we clone into the belief world.
   INTR_RETURN_IF_ERROR_GRPC(PauseWorldUpdater())
@@ -495,11 +517,8 @@ grpc::Status ConductorImpl::CreateWorldsFromSolution(
   sim_env->set_simulator_world_state_updates_pubsub_topic_name(
       reset_response.sim_world_updates_topic_name());
 
-  auto ss_context =
-      acl::NewClientContextWithDeadline(context, kDefaultGrpcTimeout);
-  SimStartSolutionResponse ss_response;
-  grpc::Status ss_status = sim_service_stub_->StartSolution(
-      ss_context.get(), ss_request, &ss_response);
+  grpc::Status ss_status = StartSimulation(
+      *sim_service_stub_, context, ss_request, retry_policy, is_cancelled);
   if (!ss_status.ok()) {
     return resume_updater(
         StatusBuilderGrpc(ss_status).LogError()

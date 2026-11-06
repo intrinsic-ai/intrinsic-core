@@ -44,6 +44,12 @@ absl::StatusOr<internal::UpdateWorldFromResourceSetResult> CreateOrUpdateWorld(
     absl::Duration asset_info_internal_timeout =
         kDefaultAssetInfoInternalTimeout);
 
+// Returns true if any world update or scene object in `result` was skipped due
+// to a transient error (see IsTransientError), e.g., because a geometry could
+// not be fetched from CAS.
+bool HasTransientSkippedErrors(
+    const internal::UpdateWorldFromResourceSetResult& result);
+
 }  // namespace intrinsic::conductor
 
 #endif  // INTRINSIC_CONDUCTOR_WORLD_H_

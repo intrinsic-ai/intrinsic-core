@@ -14,6 +14,7 @@
 
 #include "intrinsic/conductor/world.h"
 
+#include <algorithm>
 #include <string>
 #include <utility>
 
@@ -33,6 +34,7 @@
 #include "intrinsic/assets/proto/v1alpha1/asset_info_internal.grpc.pb.h"
 #include "intrinsic/assets/proto/v1alpha1/asset_info_internal.pb.h"
 #include "intrinsic/conductor/proto/wrapper_bridge.pb.h"
+#include "intrinsic/conductor/retry.h"
 #include "intrinsic/resources/proto/geometric_resource_data.pb.h"
 #include "intrinsic/util/status/status.pb.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
@@ -169,6 +171,17 @@ absl::StatusOr<internal::UpdateWorldFromResourceSetResult> CreateOrUpdateWorld(
   }
 
   return result;
+}
+
+bool HasTransientSkippedErrors(
+    const internal::UpdateWorldFromResourceSetResult& result) {
+  const auto has_transient_error = [](const auto& skipped) {
+    return IsTransientError(
+        static_cast<absl::StatusCode>(skipped.error().code()));
+  };
+  return std::ranges::any_of(result.skipped_updates(), has_transient_error) ||
+         std::ranges::any_of(result.skipped_scene_objects(),
+                             has_transient_error);
 }
 
 }  // namespace intrinsic::conductor

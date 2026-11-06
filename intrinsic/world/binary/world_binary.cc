@@ -230,10 +230,16 @@ int main(int argc, char** argv) {
     }
   }
 
-  ASSIGN_OR_DIE(
-      auto resource_registry_client,
-      intrinsic::resources::CreateResourceRegistryClient(
-          absl::GetFlag(FLAGS_resource_registry_address), absl::Seconds(60)));
+  // Waits for the resource registry for as long as for other services instead
+  // of the default connection timeout (5s), so that the world binary does not
+  // crash (and restart with increasing backoff) if the resource registry is
+  // still starting, e.g., after a reboot.
+  ASSIGN_OR_DIE(auto resource_registry_client,
+                intrinsic::resources::CreateResourceRegistryClient(
+                    absl::GetFlag(FLAGS_resource_registry_address),
+                    /*timeout=*/absl::Seconds(60),
+                    /*connection_timeout=*/
+                    absl::GetFlag(FLAGS_grpc_client_connect_timeout)));
   intrinsic::icon::DefaultChannelFactory icon_channel_factory;
 
   intrinsic::TfEchoGuard tf_echo_guard;

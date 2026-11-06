@@ -25,6 +25,7 @@
 
 #include "absl/base/thread_annotations.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
 #include "google/longrunning/operations.grpc.pb.h"
 #include "intrinsic/assets/proto/asset_deployment.grpc.pb.h"
 #include "intrinsic/assets/proto/installed_assets.grpc.pb.h"
@@ -34,6 +35,7 @@
 #include "intrinsic/conductor/proto/conductor.grpc.pb.h"
 #include "intrinsic/conductor/proto/conductor.pb.h"
 #include "intrinsic/conductor/resource_world_wrapper.h"
+#include "intrinsic/conductor/retry.h"
 #include "intrinsic/conductor/save_scene_monitor.h"
 #include "intrinsic/kubernetes/acl/cc/client_context.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
@@ -133,6 +135,22 @@ struct ConductorOptions {
   std::unique_ptr<SaveSceneMonitor> save_scene_monitor;
 };
 
+// Retry policy for initializing the solution worlds in StartSolution, where the
+// dependent services are expected to be up and the client waits for the result.
+inline constexpr RetryPolicy kStartSolutionInitRetryPolicy;
+
+// Retry policy for initializing the solution worlds when recreating them on
+// startup. Dependent services may still be (re)starting, e.g., after a reboot,
+// so this retries for longer: 1s, 2s, 4s, 8s, 15s, 15s, 15s (~1 minute) of
+// backoff, in addition to the retries of the gRPC channel within every attempt.
+inline constexpr RetryPolicy kStartupInitRetryPolicy{
+    .max_attempts = 8,
+    .initial_backoff = absl::Seconds(1),
+    .max_backoff = absl::Seconds(15),
+};
+static_assert(kStartSolutionInitRetryPolicy.IsValid());
+static_assert(kStartupInitRetryPolicy.IsValid());
+
 inline grpc::Status ErrInvalidExecutionContext() {
   return grpc::Status(grpc::StatusCode::UNAVAILABLE,
                       "no execution context available: solution not started.");
@@ -162,8 +180,12 @@ class ConductorImpl final
   // Does nothing and returns OK if no valid execution context was found, i.e.,
   // if there is no execution context or any of its world IDs is empty.
   //
+  // Transient errors are retried according to `retry_policy` since dependent
+  // services may still be starting up.
+  //
   // Intended to be called once before the conductor starts serving requests.
-  absl::Status CreateSolutionWorldsIfValidExecutionContext()
+  absl::Status CreateSolutionWorldsIfValidExecutionContext(
+      const RetryPolicy& retry_policy = kStartupInitRetryPolicy)
       ABSL_LOCKS_EXCLUDED(mu_);
 
   grpc::Status StartSolution(
@@ -299,7 +321,8 @@ class ConductorImpl final
   // Constructs the default worlds (init_world and belief world) and connects to
   // the simulation service to initialize the sim_world.
   grpc::Status CreateWorldsFromSolution(grpc::ServerContext* context,
-                                        bool skip_invalid_world_updates)
+                                        bool skip_invalid_world_updates,
+                                        const RetryPolicy& retry_policy)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mu_);
 
   // Pauses the WorldUpdater. Note that every pause of the world updater
