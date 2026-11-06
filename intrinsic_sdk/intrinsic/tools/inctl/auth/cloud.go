@@ -425,8 +425,8 @@ func loadAPIKey(opts *ConnectionOpts) (string, error) {
 func newTokenSource(env, key string) (*cachedTokenSource, error) {
 	// This is portal and not accounts because we are using the grpc-http gateway for token requests.
 	fsAddr := environments.PortalDomain(env)
-	if fsAddr == "" { // default to prod if we cannot determine the environment
-		fsAddr = environments.PortalDomain(environments.Prod)
+	if fsAddr == "" {
+		return nil, fmt.Errorf("unknown environment %q", env)
 	}
 	factory := getSharedTokenSourceFactory()
 	tsc, err := factory.LoadOrNew(fsAddr, key)
