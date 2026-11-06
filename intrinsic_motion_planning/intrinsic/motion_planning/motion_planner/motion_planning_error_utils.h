@@ -225,5 +225,6 @@ absl::Status CreateStatusWithJointLimitError(
     absl::StatusCode error_type,
     std::optional<JointLimits> joint_limits = std::nullopt);
 
-#endif  // INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_MOTION_PLANNING_ERROR_UTILS_H_
 }  // namespace intrinsic
+
+#endif  // INTRINSIC_MOTION_PLANNING_MOTION_PLANNER_MOTION_PLANNING_ERROR_UTILS_H_
