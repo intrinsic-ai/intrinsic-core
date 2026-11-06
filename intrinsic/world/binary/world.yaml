@@ -52,8 +52,6 @@ spec:
             - --grpc_client_connect_timeout=5m
             - --opencensus_metrics_port=9101
             - --opencensus_tracing={{ .Values.opencensus_tracing }}
-            # worlds_path is used the locally save edited worlds for crash recovery.
-            - --worlds_path=/mnt/worlds
             {{- if .Values.feature_options.enable_world_service_on_change_pubsub }}
             - --enable_on_change_pubsub={{ .Values.feature_options.enable_world_service_on_change_pubsub }}
             {{- else }}
@@ -75,9 +73,6 @@ spec:
             {{ end }}
           securityContext:
             readOnlyRootFilesystem: true
-          volumeMounts:
-            - name: worlds
-              mountPath: /mnt/worlds
         - name: simulation-service
           image: {{ .Values.registry }}{{ .Values.images.simulation_service }}
           args:
@@ -113,28 +108,9 @@ spec:
         runAsUser: 65532
         runAsGroup: 65532
       volumes:
-        - name: worlds
-          persistentVolumeClaim:
-            claimName: world-storage-claim
         - name: simulation-tmp
           emptyDir:
             medium: Memory
----
-# TODO: anyone -- We don't really need to be using a persistent volume here. The
-# goal in the future is to remove this claim and to instead use a long-running
-# K/V store. Whenever we have something like that available for the entire on-prem
-# cluster, we should use that instead.
-apiVersion: v1
-kind: PersistentVolumeClaim
-metadata:
-  name: world-storage-claim
-spec:
-  accessModes:
-    - ReadWriteOnce
-  resources:
-    requests:
-      storage: 100Mi
-  storageClassName: local-path
 ---
 # TODO(b/566183116): temporary workaround for seamless updates for existing
 # deployments since Kubernetes does not allow changing an existing headless

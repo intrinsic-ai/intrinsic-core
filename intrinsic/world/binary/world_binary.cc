@@ -69,8 +69,6 @@ ABSL_FLAG(std::string, resource_registry_address, "",
           "address for the resource registry service");
 ABSL_FLAG(std::string, cas_service_address, "",
           "Address of the content-addressable storage (CAS) service.");
-ABSL_FLAG(std::string, worlds_path, "",
-          "location to use for reading and writing worlds");
 ABSL_FLAG(std::string, data_logger_grpc_service_address, "",
           "(optional) Address of the gRPC service to send logs to, in the form "
           "'host:port'.");
@@ -163,41 +161,22 @@ int main(int argc, char** argv) {
         return intrinsic::GetCasGeometryLibrary(cas_stub, nullptr, geo_cache);
       }).share();
 
+  // Worlds are kept in memory only, i.e., they are neither loaded from nor
+  // saved to disk. After a restart, the conductor recreates the solution
+  // worlds from a recovered execution context.
   std::shared_future<std::unique_ptr<intrinsic::WorldStorage>> world_storage =
       std::async(std::launch::async, [geo_lib] {
-        const std::string worlds_path = absl::GetFlag(FLAGS_worlds_path);
         std::vector<intrinsic::WorldStorage::InitWorld> init_worlds;
         init_worlds.push_back({.world_id = "world",
                                .world = intrinsic::World::CreateEmptyWorld()});
         init_worlds.push_back({.world_id = "init_world",
                                .world = intrinsic::World::CreateEmptyWorld()});
-
-        absl::StatusOr<std::unique_ptr<intrinsic::WorldStorage>> storage =
-            intrinsic::WorldStorage::Create(
-                worlds_path, PointerFromSharedFuture(geo_lib),
-                intrinsic::object_world::ObjectWorld::
-                    VerifyWorldCouldBeCompatible,
-                ShouldLoadWorlds::kYes, std::move(init_worlds));
-
-        if (!storage.ok()) {
-          // Failed to create worlds from the provided path. But continue using
-          // this path to store the worlds later. In the worst case, the saving
-          // operation will fail but that's not catastrophic.
-          LOG(ERROR) << "Error initializing world storage: " << storage.status()
-                     << ". Skip loading worlds.";
-          init_worlds = std::vector<intrinsic::WorldStorage::InitWorld>();
-          init_worlds.push_back(
-              {.world_id = "world",
-               .world = intrinsic::World::CreateEmptyWorld()});
-          init_worlds.push_back(
-              {.world_id = "init_world",
-               .world = intrinsic::World::CreateEmptyWorld()});
-          return intrinsic::WorldStorage::Create(
-                     worlds_path, PointerFromSharedFuture(geo_lib), {},
-                     ShouldLoadWorlds::kNo, std::move(init_worlds))
-              .value();
-        }
-        return std::move(*storage);
+        return intrinsic::WorldStorage::Create(
+                   /*worlds_path=*/"", PointerFromSharedFuture(geo_lib),
+                   intrinsic::object_world::ObjectWorld::
+                       VerifyWorldCouldBeCompatible,
+                   ShouldLoadWorlds::kNo, std::move(init_worlds))
+            .value();
       }).share();
 
   ASSIGN_OR_DIE(

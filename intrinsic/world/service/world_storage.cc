@@ -408,7 +408,7 @@ absl::Status WorldStorage::DeleteWorld(absl::string_view world_id) {
 
     // Drop the map entry for the given world id and return if we do not save
     // worlds to disk.
-    if (absl::GetFlag(FLAGS_save_worlds_to_disk)) {
+    if (ShouldSaveToDisk()) {
       LOG(INFO) << "Marking for deletion world with id: " << world_id;
       absl::MutexLock flush_lock(flush_mtx_);
       ids_to_delete_.emplace(world_id);
@@ -429,8 +429,8 @@ absl::Status WorldStorage::DeleteWorld(absl::string_view world_id) {
 
 void WorldStorage::MarkWorldForSaving(
     absl::string_view world_id, const std::shared_ptr<WorldAndMutex>& world) {
-  // Don't save or schedule worlds for saving if the flag disables it.
-  if (!absl::GetFlag(FLAGS_save_worlds_to_disk)) {
+  // Don't save or schedule worlds for saving if saving is disabled.
+  if (!ShouldSaveToDisk()) {
     return;
   }
 
@@ -449,9 +449,13 @@ void WorldStorage::MarkWorldAsChanged(
   MarkWorldForSaving(world_id, world);
 }
 
+bool WorldStorage::ShouldSaveToDisk() const {
+  return !worlds_path_.empty() && absl::GetFlag(FLAGS_save_worlds_to_disk);
+}
+
 void WorldStorage::FlushImpl() {
-  // Don't save worlds to disk if the flag disables it.
-  if (!absl::GetFlag(FLAGS_save_worlds_to_disk)) {
+  // Don't save worlds to disk if saving is disabled.
+  if (!ShouldSaveToDisk()) {
     return;
   }
 

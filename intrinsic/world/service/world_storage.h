@@ -66,6 +66,8 @@ class WorldStorage {
   // file takes precedence.
   // `load_worlds` controls whether to load worlds from the provided path. If
   // set to kNo, the provided path is only be used to save the worlds.
+  // If 'worlds_path' is empty, worlds are neither loaded from nor saved to
+  // disk and only live in memory.
   // Resource instances from 'resource_set_path' will be composed into the
   // initial worlds during creation.
   static absl::StatusOr<std::unique_ptr<WorldStorage>> Create(
@@ -204,6 +206,10 @@ class WorldStorage {
  private:
   // Returns the file path based on 'worlds_path_' for the given world_id.
   std::string GetProtoFilepathForWorldId(absl::string_view world_id) const;
+
+  // Returns true if worlds are persisted to disk, i.e., a worlds path is set
+  // and saving is enabled via flag.
+  bool ShouldSaveToDisk() const;
 
   // Performs a batch flush of all the pending saves
   void FlushImpl() ABSL_LOCKS_EXCLUDED(flush_mtx_, worlds_mtx_);
