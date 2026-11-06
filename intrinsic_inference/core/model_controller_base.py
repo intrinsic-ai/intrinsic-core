@@ -15,9 +15,11 @@
 """Base model controller handling backend-agnostic model loading."""
 
 import abc
+import collections
 from concurrent import futures
 import dataclasses
 import enum
+import re
 import threading
 
 from absl import logging
@@ -25,6 +27,23 @@ from absl import logging
 from intrinsic_inference.core import model_assets_manager_base
 from intrinsic_inference.core import telemetry_base
 from intrinsic_inference.core.v1 import ml_model_pb2
+
+
+def _version_key(model: ml_model_pb2.MlModel) -> list[str | int]:
+  """Returns a sort key that compares the numbers in versions numerically.
+
+  For example, 1.9.0 < 1.10.0. Splitting on numbers alternates text and
+  numbers, so numbers are only ever compared with numbers.
+
+  In Intrinsic Core, only a single version of an asset is installed at a time.
+  In other contexts, e.g. a local repo with several version directories, this
+  makes the choice of the served version deterministic.
+
+  Args:
+    model: The model whose version to sort by.
+  """
+  parts = re.split(r"(\d+)", model.model_config.version)
+  return [int(part) if i % 2 else part for i, part in enumerate(parts)]
 
 
 @enum.unique
@@ -77,7 +96,11 @@ class ModelControllerBase(abc.ABC):
     self._models: dict[str, ml_model_pb2.MlModel] = {}
     self._model_states: dict[str, ModelAndState] = {}
     self._lock = threading.Lock()
+    # Serializes reconciliations, so that an older listing of the installed
+    # models never overwrites a newer one. Also guards _ignored_versions.
     self._reconcile_lock = threading.Lock()
+    # The versions that _latest_versions() ignored last time, by model name.
+    self._ignored_versions: dict[str, list[str]] = {}
     self._executor: futures.ThreadPoolExecutor | None = None
     self._in_flight_futures: set[futures.Future[None]] = set()
     self.start()
@@ -129,26 +152,9 @@ class ModelControllerBase(abc.ABC):
       return dict(self._models)
 
   def get_model(self, model_name: str) -> ml_model_pb2.MlModel | None:
-    """Retrieves a loaded model by key or model name without copying the models dict."""
+    """Retrieves a loaded model by its model_config.name."""
     with self._lock:
-      if model_name in self._models:
-        return self._models[model_name]
-      candidates = []
-      for k, model_proto in self._models.items():
-        if (
-            model_proto.model_config.name == model_name
-            or k.startswith(f"{model_name}.")
-            or k.endswith(f".{model_name}")
-        ):
-          candidates.append((k, model_proto))
-      if candidates:
-        if len(candidates) > 1:
-          logging.warning(
-              "Model name did match more than one model, using %s",
-              candidates[0][0],
-          )
-        return candidates[0][1]
-      return None
+      return self._models.get(model_name)
 
   @property
   def model_states(self) -> dict[str, ModelAndState]:
@@ -170,7 +176,10 @@ class ModelControllerBase(abc.ABC):
     """Loads `desired` into the inference backend, replacing `loaded` if set."""
     if loaded is None:
       self._model_assets_manager.create_model_asset(desired)
-    elif loaded.model_data != desired.model_data:
+    elif (
+        loaded.model_data != desired.model_data
+        or loaded.model_config.version != desired.model_config.version
+    ):
       # Only changed files are downloaded, and config-only changes skip this.
       self._model_assets_manager.update_model_asset(loaded, desired)
     self._load_model_impl(model_proto=desired)
@@ -211,19 +220,7 @@ class ModelControllerBase(abc.ABC):
     model_name = model_proto.model_config.name
 
     with self._lock:
-      # Start with key lookup by name or name.version before falling
-      # back to prefix matching.
-      full_key = (
-          f"{model_proto.model_config.name}.{model_proto.model_config.version}"
-          if model_proto.model_config.version
-          else model_proto.model_config.name
-      )
-      old_model = self._models.get(model_name) or self._models.get(full_key)
-      if not old_model:
-        for key, model in self._models.items():
-          if key.startswith(model_name + "."):
-            old_model = model
-            break
+      old_model = self._models.get(model_name)
 
     if not old_model:
       logging.warning("No model found to reload. Loading as new model.")
@@ -273,6 +270,37 @@ class ModelControllerBase(abc.ABC):
         to_unload=models_to_unload,
         to_reload=models_to_reload,
     )
+
+  def _latest_versions(
+      self, installed: dict[str, ml_model_pb2.MlModel]
+  ) -> dict[str, ml_model_pb2.MlModel]:
+    """Returns the latest installed version by model name.
+
+    Versions of an asset share the backend model, so only one of them can be
+    served, e.g. if a local repo has more than one version directory. The
+    ignored versions are logged whenever they change. Requires
+    self._reconcile_lock.
+
+    Args:
+      installed: The installed models by asset key.
+    """
+    versions_by_name = collections.defaultdict(list)
+    for model in sorted(installed.values(), key=_version_key):
+      versions_by_name[model.model_config.name].append(model)
+    ignored = {
+        name: [m.model_config.version for m in models[:-1]]
+        for name, models in versions_by_name.items()
+        if len(models) > 1
+    }
+    if ignored != self._ignored_versions:
+      for name, versions in ignored.items():
+        logging.warning(
+            "Serving the latest version of model %s, ignoring versions %s",
+            name,
+            versions,
+        )
+      self._ignored_versions = ignored
+    return {name: models[-1] for name, models in versions_by_name.items()}
 
   def _async_unload_task(
       self, model_name: str, model_proto: ml_model_pb2.MlModel
@@ -408,9 +436,8 @@ class ModelControllerBase(abc.ABC):
     state of models loaded in the inference server backend.
     """
     with self._reconcile_lock:
-      new_models: dict[str, ml_model_pb2.MlModel] = (
-          self._model_assets_manager.list_model_assets()
-      )
+      installed = self._model_assets_manager.list_model_assets()
+      new_models = self._latest_versions(installed)
       with self._lock:
         current_models = dict(self._models)
         current_states = dict(self._model_states)
