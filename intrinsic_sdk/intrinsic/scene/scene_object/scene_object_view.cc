@@ -23,6 +23,8 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "intrinsic/math/pose3.h"
+#include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/scene/validate/scene_object_validation.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -209,6 +211,29 @@ std::vector<const SceneObjectView::Entity*> SceneObjectView::GetPathFromRoot(
     }
   }
   return path;
+}
+
+absl::flat_hash_map<absl::string_view, Pose3d> SceneObjectView::GetRootPoses()
+    const {
+  // `tree_order_` visits every parent before its children, so the parent's pose
+  // is always known when a child is reached.
+  std::vector<Pose3d> root_t_node(nodes_.size(), Pose3d::Identity());
+  absl::flat_hash_map<absl::string_view, Pose3d> root_poses;
+  root_poses.reserve(nodes_.size());
+  for (const Entity* entity : tree_order_) {
+    const int index = index_by_name_.at(entity->name());
+    const int parent_index = nodes_[index].parent_index;
+    if (parent_index >= 0) {
+      // Cannot fail: `Create()` validated every `parent_t_this`.
+      const Pose3d parent_t_entity =
+          entity->has_parent_t_this()
+              ? FromProtoNormalized(entity->parent_t_this()).value()
+              : Pose3d::Identity();
+      root_t_node[index] = root_t_node[parent_index] * parent_t_entity;
+    }
+    root_poses.emplace(entity->name(), root_t_node[index]);
+  }
+  return root_poses;
 }
 
 }  // namespace scene_object

@@ -21,11 +21,8 @@ cc_library(
     visibility = ["//intrinsic/scene/service:__pkg__"],
     deps = [
         "//intrinsic/scene/processing/util:transform_util",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/math:proto_conversion",
-        "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validation",
+        "//intrinsic_sdk/intrinsic/scene/scene_object:scene_object_view",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",

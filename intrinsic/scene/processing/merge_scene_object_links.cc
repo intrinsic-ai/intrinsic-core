@@ -14,22 +14,17 @@
 
 #include "intrinsic/scene/processing/merge_scene_object_links.h"
 
-#include <cstddef>
 #include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
-#include "intrinsic/math/pose3.h"
-#include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/scene/processing/util/transform_util.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
-#include "intrinsic/scene/validate/scene_object_validation.h"
+#include "intrinsic/scene/scene_object/scene_object_view.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/proto/geometry_component.pb.h"
 
@@ -40,59 +35,13 @@ namespace {
 using ::intrinsic_proto::scene_object::v1::Entity;
 using ::intrinsic_proto::scene_object::v1::SceneObject;
 
-// Computes the pose (`root_t_entity`) of every entity in a validated
-// `scene_object` relative to the root entity using a top-down traversal.
-absl::StatusOr<absl::flat_hash_map<std::string, Pose3d>>
-ResolveRootRelativePoses(const SceneObject& scene_object) {
-  absl::flat_hash_map<std::string, std::vector<const Entity*>>
-      children_by_parent;
-  absl::flat_hash_map<std::string, Pose3d> absolute_poses;
-  std::vector<const Entity*> entities_to_visit;
-
-  for (const Entity& entity : scene_object.entities()) {
-    if (entity.parent_name().empty()) {
-      absolute_poses[entity.name()] = Pose3d::Identity();
-      entities_to_visit.push_back(&entity);
-      continue;
-    }
-    children_by_parent[entity.parent_name()].push_back(&entity);
-  }
-
-  while (!entities_to_visit.empty()) {
-    const Entity* parent = entities_to_visit.back();
-    entities_to_visit.pop_back();
-    const Pose3d& root_t_parent = absolute_poses.at(parent->name());
-
-    const auto children_it = children_by_parent.find(parent->name());
-    if (children_it == children_by_parent.end()) {
-      continue;
-    }
-
-    for (const Entity* child : children_it->second) {
-      Pose3d parent_t_child = Pose3d::Identity();
-      if (child->has_parent_t_this()) {
-        INTR_ASSIGN_OR_RETURN(parent_t_child,
-                              FromProtoNormalized(child->parent_t_this()));
-      }
-      absolute_poses.try_emplace(child->name(), root_t_parent * parent_t_child);
-      entities_to_visit.push_back(child);
-    }
-  }
-
-  if (absolute_poses.size() !=
-      static_cast<size_t>(scene_object.entities_size())) {
-    return absl::InvalidArgumentError(
-        "Failed to resolve poses for all entities in scene object.");
-  }
-
-  return absolute_poses;
-}
-
 }  // namespace
 
 absl::StatusOr<SceneObject> MergeSceneObjectLinks(
     const SceneObject& scene_object) {
-  INTR_RETURN_IF_ERROR(ValidateSceneObject(scene_object));
+  // Validates `scene_object`.
+  INTR_ASSIGN_OR_RETURN(const SceneObjectView view,
+                        SceneObjectView::Create(scene_object));
 
   for (const auto& entity : scene_object.entities()) {
     if (!entity.has_link()) {
@@ -107,29 +56,15 @@ absl::StatusOr<SceneObject> MergeSceneObjectLinks(
     return scene_object;
   }
 
-  INTR_ASSIGN_OR_RETURN(const std::string root_entity_name,
-                        GetRootEntityName(scene_object));
-  const Entity* root_entity_ptr = nullptr;
-  for (const auto& entity : scene_object.entities()) {
-    if (entity.name() == root_entity_name) {
-      root_entity_ptr = &entity;
-      break;
-    }
-  }
-  if (root_entity_ptr == nullptr) {
-    return absl::InternalError(absl::Substitute(
-        "Root entity '$0' not found in scene object.", root_entity_name));
-  }
+  const Entity& root_entity = view.GetRootEntity();
+  const auto root_t_entities = view.GetRootPoses();
 
-  INTR_ASSIGN_OR_RETURN(const auto root_t_entities,
-                        ResolveRootRelativePoses(scene_object));
-
-  Entity merged_root_entity = *root_entity_ptr;
+  Entity merged_root_entity = root_entity;
 
   for (const auto& entity : scene_object.entities()) {
     // Geometries attached directly to the root entity are already in the root
     // link's coordinate frame and included in `merged_root_entity`.
-    if (entity.name() == root_entity_name) {
+    if (entity.name() == root_entity.name()) {
       continue;
     }
     if (!entity.link().has_geometry_component()) {

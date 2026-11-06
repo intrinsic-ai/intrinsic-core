@@ -15,7 +15,6 @@
 #include "intrinsic/scene/service/generate_import_metadata.h"
 
 #include <algorithm>
-#include <functional>
 #include <limits>
 #include <optional>
 #include <ranges>
@@ -38,13 +37,14 @@
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
+#include "intrinsic/scene/scene_object/scene_object_view.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/component/geometry_component.h"
 
 namespace intrinsic {
 namespace {
 
-using ::intrinsic_proto::scene_object::v1::Entity;
+using ::intrinsic::scene_object::SceneObjectView;
 using ::intrinsic_proto::scene_object::v1::GeometryStats;
 using ::intrinsic_proto::scene_object::v1::ImportedScene;
 using ::intrinsic_proto::scene_object::v1::ImportResultMetadata;
@@ -141,68 +141,6 @@ void AggregateStats(
   IncrementStats(scene_to_stats.at(scene_key), visual_stats);
 }
 
-absl::StatusOr<absl::flat_hash_map<std::string, Pose3d>> ResolveAbsolutePoses(
-    const SceneObject& scene_object) {
-  // Create a quick-lookup map so we can instantly find any entity by its name.
-  absl::flat_hash_map<std::string, const Entity*> entity_map;
-  for (const auto& entity : scene_object.entities()) {
-    entity_map[entity.name()] = &entity;
-  }
-
-  // Memoization cache: Maps an entity's name to its fully resolved absolute
-  // pose (root_T_entity).
-  absl::flat_hash_map<std::string, Pose3d> absolute_poses;
-
-  // Recursive helper to compute the absolute pose of an entity in the root
-  // frame. This function traverses the kinematic chain upwards and uses
-  // memoization to ensure that each entity's pose is calculated only once.
-  // We use the notation A_t_B to represent the transform of B relative to A.
-  // Use a generic lambda (auto& self) to achieve zero-overhead recursion.
-  const auto get_absolute_pose_helper =
-      [&](auto& self,
-          const std::string& entity_name) -> absl::StatusOr<Pose3d> {
-    if (auto it = absolute_poses.find(entity_name);
-        it != absolute_poses.end()) {
-      return it->second;
-    }
-
-    const auto entity_it = entity_map.find(entity_name);
-    if (entity_it == entity_map.end()) {
-      return absl::NotFoundError(
-          absl::StrCat("Entity not found: ", entity_name));
-    }
-    const Entity* entity = entity_it->second;
-
-    Pose3d parent_t_entity = Pose3d::Identity();
-    if (entity->has_parent_t_this()) {
-      INTR_ASSIGN_OR_RETURN(
-          parent_t_entity, intrinsic_proto::FromProto(entity->parent_t_this()));
-    }
-
-    if (entity->parent_name().empty()) {
-      return absolute_poses[entity_name] = Pose3d::Identity();
-    }
-
-    INTR_ASSIGN_OR_RETURN(const Pose3d root_t_parent,
-                          self(self, entity->parent_name()));
-
-    Pose3d root_t_entity = root_t_parent * parent_t_entity;
-    return absolute_poses[entity_name] = root_t_entity;
-  };
-
-  // Wrapper to hide the self-recursion.
-  auto get_absolute_pose = [&](const std::string& entity_name) {
-    return get_absolute_pose_helper(get_absolute_pose_helper, entity_name);
-  };
-
-  // Ensure every entity's absolute pose is resolved and cached.
-  for (const auto& entity : scene_object.entities()) {
-    INTR_RETURN_IF_ERROR(get_absolute_pose(entity.name()).status());
-  }
-
-  return absolute_poses;
-}
-
 }  // namespace
 
 absl::StatusOr<ImportResultMetadata> GenerateImportMetadata(
@@ -214,8 +152,9 @@ absl::StatusOr<ImportResultMetadata> GenerateImportMetadata(
   for (const auto& scene_object :
        std::views::values(scene.scene_objects().objects())) {
     // Pre-compute the absolute pose of every entity in the scene object.
-    INTR_ASSIGN_OR_RETURN(auto absolute_poses,
-                          ResolveAbsolutePoses(scene_object));
+    INTR_ASSIGN_OR_RETURN(const SceneObjectView view,
+                          SceneObjectView::Create(scene_object));
+    const auto absolute_poses = view.GetRootPoses();
 
     for (const auto& entity : scene_object.entities()) {
       if (!entity.has_link()) continue;

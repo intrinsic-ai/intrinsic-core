@@ -24,6 +24,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
+#include "intrinsic/math/pose3.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
 
@@ -119,6 +120,10 @@ class SceneObjectView {
   // `name` (both inclusive). Returns an empty vector if there is no entity
   // named `name`.
   std::vector<const Entity*> GetPathFromRoot(absl::string_view name) const;
+
+  // Returns the pose of every entity relative to the root entity keyed
+  // by entity name.
+  absl::flat_hash_map<absl::string_view, Pose3d> GetRootPoses() const;
 
  private:
   struct Node {

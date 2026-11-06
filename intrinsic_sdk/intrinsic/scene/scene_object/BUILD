@@ -22,6 +22,8 @@ cc_library(
         "//intrinsic:intrinsic_internal",
     ],
     deps = [
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validation",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
