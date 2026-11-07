@@ -144,7 +144,7 @@ func (s *dataAssetsService) GetDataAsset(ctx context.Context, req *daspb.GetData
 	}
 
 	// List all assets, then filter for the requested asset.
-	idvs, err := s.rtrClient.List(ctx)
+	idvs, _, err := s.rtrClient.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not list runtime info for assets: %v", err)
 	}

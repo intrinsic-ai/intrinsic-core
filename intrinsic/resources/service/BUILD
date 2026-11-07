@@ -227,6 +227,7 @@ go_library(
         "//intrinsic/resources/proto:runtime_db_go_proto",
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/util/grpc:statusutil",
+        "@com_github_cenkalti_backoff_v4//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
         "@org_golang_google_grpc//codes",
         "@org_golang_google_grpc//status",

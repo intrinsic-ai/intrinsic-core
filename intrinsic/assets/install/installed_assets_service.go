@@ -753,7 +753,7 @@ func (s *installedAssetsService) BatchGetInstalledAssets(ctx context.Context, re
 	}
 	req.View = view
 
-	allIDVs, err := s.rtrClient.List(ctx)
+	allIDVs, _, err := s.rtrClient.List(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("could not list runtime info for assets: %v", err)
 	}
@@ -804,7 +804,7 @@ func (s *installedAssetsService) BatchGetInstalledAssets(ctx context.Context, re
 // summarizeState gathers information about the current state of the solution
 // against which actions can be generated.
 func (s *installedAssetsService) summarizeState(ctx context.Context) (*solutionState, error) {
-	idvs, err := s.rtrClient.List(ctx)
+	idvs, _, err := s.rtrClient.List(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "unable to list assets: %v", err)
 	}
@@ -1632,7 +1632,7 @@ func (s *installedAssetsService) UpdateInstalledAsset(ctx context.Context, req *
 // uninstallAssets will remove the assets specified in the idsToDeleteSet from
 // the solution based on the provided policy.
 func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iapb.DeleteInstalledAssetsRequest_Policy, idsToDelete map[string]struct{}) error {
-	installed, err := s.rtrClient.List(ctx)
+	installed, _, err := s.rtrClient.List(ctx)
 	if err != nil {
 		return status.Errorf(codes.Internal, "unable to list assets: %v", err)
 	}

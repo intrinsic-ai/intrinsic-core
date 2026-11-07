@@ -21,11 +21,13 @@ import (
 	"slices"
 	"strings"
 	"sync"
+	"time"
 
 	"intrinsic/assets/idutils"
 	"intrinsic/resources/resourcefix"
 	"intrinsic/util/grpc/statusutil"
 
+	"github.com/cenkalti/backoff/v4"
 	log "github.com/golang/glog"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
@@ -42,17 +44,37 @@ const (
 	// Without chunk sizes, there were some instances such as b/475802627
 	// where the gRPC size limits were exceeded.
 	rtrChunkSize = 10
+	// Maximum number of times GetAll retries when the bucket is concurrently
+	// modified between List and BatchGet.
+	getAllMaxRetries     = 5
+	getAllInitialBackoff = 10 * time.Millisecond
 )
+
+// batchGetOptions holds optional parameters for BatchGet.
+type batchGetOptions struct {
+	revisionToken string
+}
+
+// BatchGetOption configures a BatchGet call.
+type BatchGetOption func(*batchGetOptions)
+
+// WithRevisionToken specifies a revision token returned by List to assert
+// that the bucket has not been modified before BatchGet reads the entries.
+func WithRevisionToken(token string) BatchGetOption {
+	return func(o *batchGetOptions) {
+		o.revisionToken = token
+	}
+}
 
 // Client contains functions to read/write ResourceTypeRuntime information.
 type Client interface {
 	Add(ctx context.Context, rt *rtrpb.ResourceTypeRuntime) error
 	Get(ctx context.Context, idVersion string) (*rtrpb.ResourceTypeRuntime, error)
-	List(ctx context.Context) ([]string, error)
+	List(ctx context.Context) ([]string, string, error)
 	Delete(ctx context.Context, idVersion string) error
 	Clear(ctx context.Context) error
 	BatchPut(ctx context.Context, rts []*rtrpb.ResourceTypeRuntime) error
-	BatchGet(ctx context.Context, idVersions []string) ([]*rtrpb.ResourceTypeRuntime, error)
+	BatchGet(ctx context.Context, idVersions []string, opts ...BatchGetOption) ([]*rtrpb.ResourceTypeRuntime, error)
 	BatchDelete(ctx context.Context, idVersions []string) error
 }
 
@@ -117,12 +139,12 @@ func (s *runtimeDBBackedClient) Get(ctx context.Context, idVersion string) (*rtr
 	return unmarshalled, nil
 }
 
-func (s *runtimeDBBackedClient) List(ctx context.Context) ([]string, error) {
+func (s *runtimeDBBackedClient) List(ctx context.Context) ([]string, string, error) {
 	resp, err := s.client.List(ctx, &rdbpb.ListRequest{Bucket: bucket})
 	if err != nil {
-		return nil, statusutil.Wrap(err, "could not retrieve all resource runtime infos: %v")
+		return nil, "", statusutil.Wrap(err, "could not retrieve all resource runtime infos: %v")
 	}
-	return resp.GetKeys(), nil
+	return resp.GetKeys(), resp.GetRevisionToken(), nil
 }
 
 func (s *runtimeDBBackedClient) Delete(ctx context.Context, idVersion string) error {
@@ -170,10 +192,15 @@ func (s *runtimeDBBackedClient) BatchPut(ctx context.Context, rts []*rtrpb.Resou
 	return nil
 }
 
-func (s *runtimeDBBackedClient) BatchGet(ctx context.Context, idVersions []string) ([]*rtrpb.ResourceTypeRuntime, error) {
+func (s *runtimeDBBackedClient) BatchGet(ctx context.Context, idVersions []string, opts ...BatchGetOption) ([]*rtrpb.ResourceTypeRuntime, error) {
+	o := &batchGetOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
 	resp, err := s.client.BatchGet(ctx, &rdbpb.BatchGetRequest{
-		Bucket: bucket,
-		Keys:   idVersions,
+		Bucket:        bucket,
+		Keys:          idVersions,
+		RevisionToken: o.revisionToken,
 	})
 	if err != nil {
 		return nil, statusutil.Wrap(err, "could not retrieve resource runtime info")
@@ -243,7 +270,7 @@ func (s *cachedRuntimeDBBackedClient) Get(ctx context.Context, idVersion string)
 	return rt, nil
 }
 
-func (s *cachedRuntimeDBBackedClient) List(ctx context.Context) ([]string, error) {
+func (s *cachedRuntimeDBBackedClient) List(ctx context.Context) ([]string, string, error) {
 	return s.backing.List(ctx)
 }
 
@@ -281,27 +308,32 @@ func (s *cachedRuntimeDBBackedClient) BatchPut(ctx context.Context, rts []*rtrpb
 	return nil
 }
 
-func (s *cachedRuntimeDBBackedClient) BatchGet(ctx context.Context, idVersions []string) ([]*rtrpb.ResourceTypeRuntime, error) {
+func (s *cachedRuntimeDBBackedClient) BatchGet(ctx context.Context, idVersions []string, opts ...BatchGetOption) ([]*rtrpb.ResourceTypeRuntime, error) {
 	if len(idVersions) == 0 {
 		return nil, nil
 	}
 
-	s.mu.RLock()
+	o := &batchGetOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
+
+	resultsMap := make(map[string]*rtrpb.ResourceTypeRuntime, len(idVersions))
 	var missingKeys []string
 	seenMissing := make(map[string]struct{})
+	s.mu.RLock()
 	for _, idv := range idVersions {
-		if _, ok := s.cache[idv]; !ok {
-			if _, seen := seenMissing[idv]; !seen {
-				seenMissing[idv] = struct{}{}
-				missingKeys = append(missingKeys, idv)
-			}
+		if rt, ok := s.cache[idv]; ok {
+			resultsMap[idv] = rt
+		} else if _, seen := seenMissing[idv]; !seen {
+			seenMissing[idv] = struct{}{}
+			missingKeys = append(missingKeys, idv)
 		}
 	}
 	s.mu.RUnlock()
 
-	fetchedMap := make(map[string]*rtrpb.ResourceTypeRuntime, len(missingKeys))
 	if len(missingKeys) > 0 {
-		fetched, err := s.backing.BatchGet(ctx, missingKeys)
+		fetched, err := s.backing.BatchGet(ctx, missingKeys, opts...)
 		if err != nil {
 			return nil, err
 		}
@@ -311,23 +343,18 @@ func (s *cachedRuntimeDBBackedClient) BatchGet(ctx context.Context, idVersions [
 		}
 		s.mu.Unlock()
 		for i, k := range missingKeys {
-			fetchedMap[k] = fetched[i]
+			resultsMap[k] = fetched[i]
+		}
+	} else if o.revisionToken != "" {
+		// Validate the revision token against the backing store even when all keys are cached.
+		if _, err := s.backing.BatchGet(ctx, nil, opts...); err != nil {
+			return nil, err
 		}
 	}
 
-	s.mu.RLock()
-	defer s.mu.RUnlock()
 	res := make([]*rtrpb.ResourceTypeRuntime, len(idVersions))
 	for i, idv := range idVersions {
-		if rt, ok := fetchedMap[idv]; ok {
-			res[i] = proto.Clone(rt).(*rtrpb.ResourceTypeRuntime)
-			continue
-		}
-		if rt, ok := s.cache[idv]; ok {
-			res[i] = proto.Clone(rt).(*rtrpb.ResourceTypeRuntime)
-			continue
-		}
-		return nil, statusutil.NewInternalError("id version %q not found in cache after fetch", idv)
+		res[i] = proto.Clone(resultsMap[idv]).(*rtrpb.ResourceTypeRuntime)
 	}
 	return res, nil
 }
@@ -378,7 +405,7 @@ func CreateCachedClient(client rdbgrpcpb.RuntimeDbClient) CachedClient {
 // This function errors if multiple versions of the same Asset are
 // installed in the solution.
 func GetFromID(ctx context.Context, client Client, id string) (*rtrpb.ResourceTypeRuntime, error) {
-	idvs, err := client.List(ctx)
+	idvs, _, err := client.List(ctx)
 	if err != nil {
 		return nil, statusutil.Wrap(err, "could not list runtime info for assets")
 	}
@@ -408,21 +435,33 @@ func GetFromID(ctx context.Context, client Client, id string) (*rtrpb.ResourceTy
 
 // GetAll gets `ResourceTypeRuntime` protos of all Assets in the runtime db.
 func GetAll(ctx context.Context, client Client) ([]*rtrpb.ResourceTypeRuntime, error) {
-	idvs, err := client.List(ctx)
-	if err != nil {
-		return nil, fmt.Errorf("could not list runtime info for assets: %v", err)
-	}
-
-	var rtrs []*rtrpb.ResourceTypeRuntime
-	if len(idvs) > 0 {
-		rtrs = make([]*rtrpb.ResourceTypeRuntime, 0, len(idvs))
-	}
-	for chunk := range slices.Chunk(idvs, rtrChunkSize) {
-		chunkRtrs, err := client.BatchGet(ctx, chunk)
+	b := backoff.WithContext(
+		backoff.WithMaxRetries(
+			backoff.NewExponentialBackOff(backoff.WithInitialInterval(getAllInitialBackoff)),
+			getAllMaxRetries,
+		),
+		ctx,
+	)
+	return backoff.RetryWithData(func() ([]*rtrpb.ResourceTypeRuntime, error) {
+		idvs, token, err := client.List(ctx)
 		if err != nil {
-			return nil, fmt.Errorf("could not get runtime info for assets: %v", err)
+			return nil, backoff.Permanent(fmt.Errorf("could not list runtime info for assets: %v", err))
 		}
-		rtrs = append(rtrs, chunkRtrs...)
-	}
-	return rtrs, nil
+
+		var rtrs []*rtrpb.ResourceTypeRuntime
+		if len(idvs) > 0 {
+			rtrs = make([]*rtrpb.ResourceTypeRuntime, 0, len(idvs))
+		}
+		for chunk := range slices.Chunk(idvs, rtrChunkSize) {
+			chunkRtrs, err := client.BatchGet(ctx, chunk, WithRevisionToken(token))
+			if status.Code(err) == codes.Aborted {
+				return nil, fmt.Errorf("could not get runtime info for assets: %v", err)
+			}
+			if err != nil {
+				return nil, backoff.Permanent(fmt.Errorf("could not get runtime info for assets: %v", err))
+			}
+			rtrs = append(rtrs, chunkRtrs...)
+		}
+		return rtrs, nil
+	}, b)
 }

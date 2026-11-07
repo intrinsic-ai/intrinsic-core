@@ -262,7 +262,7 @@ func (c *Client) CreateResourceInstance(ctx context.Context, opts *CreateResourc
 	// user request for a specific version with an installed version of the
 	// same id.
 	targetIDV := reqIDV
-	if idvs, err := c.rtrClient.List(ctx); err != nil {
+	if idvs, _, err := c.rtrClient.List(ctx); err != nil {
 		return false, fmt.Errorf("unable to list id versions: %w", err)
 	} else {
 		for _, idv := range idvs {

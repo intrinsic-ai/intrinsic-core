@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"os"
+	"strconv"
 	"strings"
 
 	bolt "go.etcd.io/bbolt"
@@ -30,6 +31,17 @@ import (
 
 	rdpb "intrinsic/resources/proto/runtime_db_go_proto"
 )
+
+func bucketToken(b *bolt.Bucket) string {
+	return strconv.FormatUint(b.Sequence(), 10)
+}
+
+func bumpBucketToken(b *bolt.Bucket) error {
+	if _, err := b.NextSequence(); err != nil {
+		return grpcstatus.Errorf(codes.Internal, "could not increment bucket sequence: %v", err)
+	}
+	return nil
+}
 
 // Server implements a DB backed by bolt-db.
 type Server struct {
@@ -61,7 +73,7 @@ func (s *Server) Put(ctx context.Context, request *rdpb.PutRequest) (*rdpb.PutRe
 		if err := b.Put([]byte(request.GetKey()), request.GetValue()); err != nil {
 			return grpcstatus.Errorf(codes.Internal, "could not put value with key %q", request.GetKey())
 		}
-		return nil
+		return bumpBucketToken(b)
 	})
 	if err != nil {
 		return nil, err
@@ -102,11 +114,13 @@ func (s *Server) List(ctx context.Context, request *rdpb.ListRequest) (*rdpb.Lis
 		return nil, err
 	}
 	var keys []string
+	var token string
 	if err := s.db.View(func(tx *bolt.Tx) error {
 		b := tx.Bucket([]byte(request.GetBucket()))
 		if b == nil {
 			return grpcstatus.Errorf(codes.Internal, "could not get bucket %q", request.GetBucket())
 		}
+		token = bucketToken(b)
 		if err := b.ForEach(func(k, v []byte) error {
 			keys = append(keys, string(k))
 			return nil
@@ -119,7 +133,8 @@ func (s *Server) List(ctx context.Context, request *rdpb.ListRequest) (*rdpb.Lis
 	}
 
 	return &rdpb.ListResponse{
-		Keys: keys,
+		Keys:          keys,
+		RevisionToken: token,
 	}, nil
 }
 
@@ -137,7 +152,7 @@ func (s *Server) Delete(ctx context.Context, request *rdpb.DeleteRequest) (*rdpb
 		if err := b.Delete([]byte(request.GetKey())); err != nil {
 			return grpcstatus.Errorf(codes.Internal, "could not delete entry %q", request.GetKey())
 		}
-		return nil
+		return bumpBucketToken(b)
 	}); err != nil {
 		return nil, err
 	}
@@ -151,11 +166,19 @@ func (s *Server) Clear(ctx context.Context, request *rdpb.ClearRequest) (*rdpb.C
 		return nil, err
 	}
 	if err := s.db.Update(func(tx *bolt.Tx) error {
+		var seq uint64
+		if b := tx.Bucket([]byte(request.GetBucket())); b != nil {
+			seq = b.Sequence()
+		}
 		if err := tx.DeleteBucket([]byte(request.GetBucket())); err != nil {
 			return fmt.Errorf("could not delete bucket %q: %v", request.GetBucket(), err)
 		}
-		if _, err := tx.CreateBucketIfNotExists([]byte(request.GetBucket())); err != nil {
+		b, err := tx.CreateBucketIfNotExists([]byte(request.GetBucket()))
+		if err != nil {
 			return fmt.Errorf("could not recreate bucket %q: %v", request.GetBucket(), err)
+		}
+		if err := b.SetSequence(seq + 1); err != nil {
+			return fmt.Errorf("could not set sequence on bucket %q: %v", request.GetBucket(), err)
 		}
 		return nil
 	}); err != nil {
@@ -203,7 +226,7 @@ func (s *Server) Patch(ctx context.Context, request *rdpb.PatchRequest) (*rdpb.P
 				return err
 			}
 		}
-		return nil
+		return bumpBucketToken(b)
 	}); err != nil {
 		return nil, err
 	}
@@ -225,7 +248,7 @@ func (s *Server) BatchPut(ctx context.Context, request *rdpb.BatchPutRequest) (*
 				return grpcstatus.Errorf(codes.Internal, "could not put value with key %q", k)
 			}
 		}
-		return nil
+		return bumpBucketToken(b)
 	}); err != nil {
 		return nil, err
 	}
@@ -242,6 +265,9 @@ func (s *Server) BatchGet(ctx context.Context, request *rdpb.BatchGetRequest) (*
 		b := tx.Bucket([]byte(request.GetBucket()))
 		if b == nil {
 			return grpcstatus.Errorf(codes.Internal, "could not get bucket %q", request.GetBucket())
+		}
+		if request.GetRevisionToken() != "" && request.GetRevisionToken() != bucketToken(b) {
+			return grpcstatus.Errorf(codes.Aborted, "revision token mismatch for bucket %q: got %q, want %q", request.GetBucket(), request.GetRevisionToken(), bucketToken(b))
 		}
 		for _, k := range request.GetKeys() {
 			v := b.Get([]byte(k))
@@ -278,7 +304,7 @@ func (s *Server) BatchDelete(ctx context.Context, request *rdpb.BatchDeleteReque
 				return grpcstatus.Errorf(codes.Internal, "could not delete entry %q", k)
 			}
 		}
-		return nil
+		return bumpBucketToken(b)
 	}); err != nil {
 		return nil, err
 	}

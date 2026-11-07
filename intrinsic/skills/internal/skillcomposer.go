@@ -133,7 +133,7 @@ func (c *productionClient) BatchGetSkills(ctx context.Context, ids []string, opt
 		return nil, nil
 	}
 
-	idVersionProtos, err := c.rtrClient.List(ctx)
+	idVersionProtos, _, err := c.rtrClient.List(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list runtime info: %v", err)
 	}
@@ -180,7 +180,7 @@ func (c *productionClient) ListSkills(ctx context.Context, opts ...Option) ([]*S
 		opt(o)
 	}
 
-	idVersions, err := c.rtrClient.List(ctx)
+	idVersions, _, err := c.rtrClient.List(ctx)
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to list runtime info: %v", err)
 	}
