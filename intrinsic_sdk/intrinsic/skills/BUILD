@@ -22,7 +22,6 @@ go_library(
     importpath = "intrinsic/skills/skillbundle",
     visibility = ["//intrinsic:internal_api_users"],
     deps = [
-        ":skillmanifest",
         ":skillvalidate",
         "//intrinsic_sdk/intrinsic/assets:imageutils",
         "//intrinsic_sdk/intrinsic/assets:ioutils",

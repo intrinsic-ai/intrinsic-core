@@ -36,7 +36,6 @@ go_library(
         "@io_opencensus_go//stats:go_default_library",
         "@io_opencensus_go//stats/view:go_default_library",
         "@io_opencensus_go//tag:go_default_library",
-        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",
         "@org_golang_google_protobuf//proto",

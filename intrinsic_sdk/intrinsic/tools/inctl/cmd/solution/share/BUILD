@@ -24,7 +24,6 @@ go_library(
     ],
     deps = [
         "//intrinsic/solution_versions/proto/v1:solution_version_service_go_proto",
-        "//intrinsic_sdk/intrinsic/assets:cmdutils",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",

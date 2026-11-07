@@ -111,10 +111,8 @@ go_library(
     importpath = "intrinsic/assets/conversion/metadata",
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_tag_go_proto",
-        "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:metadata_go_proto",
         "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_go_proto",

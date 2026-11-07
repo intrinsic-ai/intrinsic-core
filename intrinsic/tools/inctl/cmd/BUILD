@@ -38,8 +38,6 @@ go_library(
         "//intrinsic/kubernetes:chartapply",
         "//intrinsic/kubernetes/workcell_spec:chartassignment",
         "//intrinsic/tools/inctl/util:gcpauth",
-        "//intrinsic/tools/internal:k8sclientutil",
-        "@com_github_pkg_errors//:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_github_spf13_pflag//:go_default_library",
     ],

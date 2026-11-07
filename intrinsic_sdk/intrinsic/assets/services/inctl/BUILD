@@ -61,6 +61,5 @@ go_library(
         "@com_github_spf13_cobra//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/assets/proto:asset_deployment_go_proto",
-        "@intrinsic_apis//intrinsic/util/status:extended_status_go_proto",
     ],
 )

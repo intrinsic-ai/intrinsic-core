@@ -31,8 +31,6 @@ go_library(
         "@com_github_spf13_viper//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
-        "@intrinsic_apis//intrinsic/frontend/cloud/api/v1:clusterdiscovery_api_go_proto",
-        "@intrinsic_apis//intrinsic/frontend/cloud/api/v1:solutiondiscovery_api_go_proto",
         "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",

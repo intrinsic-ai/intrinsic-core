@@ -76,29 +76,6 @@ intrinsic_solution(
 )
 
 go_library(
-    name = "datafiles",
-    srcs = ["data_files.go"],
-    importpath = "intrinsic/config/datafiles",
-    visibility = [
-        "//intrinsic/assets/build_defs:__pkg__",
-        "//intrinsic/assets/install:__pkg__",
-        "//intrinsic/kubernetes/workcell_spec:__pkg__",
-        "//intrinsic/tools/inctl:__subpackages__",
-        "//intrinsic_sdk/intrinsic/tools/inctl:__subpackages__",
-    ],
-    deps = [
-        "//intrinsic/config/proto:application_go_proto",
-        "//intrinsic/resources/proto:resource_type_runtime_go_proto",
-        "//intrinsic_sdk/intrinsic/assets:referenceddata",
-        "//intrinsic_sdk/intrinsic/assets/data:utils",
-        "@com_github_golang_glog//:go_default_library",
-        "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
-        "@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:transfer_go_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_go_proto",
-    ],
-)
-
-go_library(
     name = "applicationview",
     srcs = ["application_view.go"],
     importpath = "intrinsic/config/applicationview",

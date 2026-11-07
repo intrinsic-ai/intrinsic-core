@@ -40,6 +40,5 @@ go_library(
         "@com_github_spf13_cobra//:go_default_library",
         "@com_github_spf13_viper//:go_default_library",
         "@org_golang_google_protobuf//types/known/emptypb",
-        "@org_golang_x_exp//maps",
     ],
 )

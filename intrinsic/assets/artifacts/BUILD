@@ -21,7 +21,6 @@ go_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         "//intrinsic/longrunning/go:operations",
-        "//intrinsic/storage/content_addressable_storage/pkg/clienthelpers",
         "//intrinsic/storage/content_addressable_storage/pkg/crossproject",
         "//intrinsic/storage/content_addressable_storage/pkg/observability",
         "//intrinsic_sdk/intrinsic/assets:baseclientutils",

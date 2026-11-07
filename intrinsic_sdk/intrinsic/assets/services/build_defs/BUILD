@@ -28,7 +28,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "//intrinsic_sdk/intrinsic/util/proto:sourcecodeinfoview",
-        "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_go_proto",
         "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
         "@org_golang_google_protobuf//types/known/anypb",
@@ -43,8 +42,6 @@ go_binary(
         ":servicegen",
         "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/util:flag",
-        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@com_github_golang_glog//:go_default_library",
-        "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_go_proto",
     ],
 )

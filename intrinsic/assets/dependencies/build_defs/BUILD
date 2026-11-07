@@ -35,7 +35,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:interfaceutils",
         "//intrinsic_sdk/intrinsic/assets/dependencies:platform",
         "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_go_proto",
-        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:documentation_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",

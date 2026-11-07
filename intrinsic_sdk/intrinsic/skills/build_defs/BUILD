@@ -39,12 +39,10 @@ go_library(
     importpath = "intrinsic/skills/build_defs/skillgen",
     visibility = ["//visibility:public"],
     deps = [
-        "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/skills:skillbundle",
         "//intrinsic_sdk/intrinsic/skills:skillfix",
         "//intrinsic_sdk/intrinsic/skills:skillvalidate",
         "//intrinsic_sdk/intrinsic/util/proto:protoio",
-        "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
         "@org_golang_google_protobuf//reflect/protodesc:go_default_library",
         "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
@@ -59,11 +57,7 @@ go_binary(
     deps = [
         ":skillgen",
         "//intrinsic_sdk/intrinsic/production:intrinsic",
-        "//intrinsic_sdk/intrinsic/skills:skillbundle",
-        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@com_github_golang_glog//:go_default_library",
-        "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_go_proto",
-        "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
     ],
 )
 

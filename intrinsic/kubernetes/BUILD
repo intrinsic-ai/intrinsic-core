@@ -159,7 +159,6 @@ go_library(
     deps = [
         "//intrinsic/kubernetes/workcell_spec:chartassignment",
         "//intrinsic/kubernetes/workcell_spec:workcellspec",
-        "//intrinsic/tools/inctl/util:gcpauth",
         "//intrinsic_sdk/intrinsic/kubernetes/workcell_spec:imagetags",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_masterminds_semver//:go_default_library",

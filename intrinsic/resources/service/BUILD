@@ -31,7 +31,6 @@ go_library(
     deps = [
         ":resourceregistryutil",
         "//intrinsic/resources/proto:resource_type_runtime_go_proto",
-        "//intrinsic/skills/internal:skillcomposer",
         "//intrinsic/util/pagination:pagetoken",
         "@intrinsic_apis//intrinsic/resources/proto:resource_registry_go_proto",
         "@io_opencensus_go//trace:go_default_library",

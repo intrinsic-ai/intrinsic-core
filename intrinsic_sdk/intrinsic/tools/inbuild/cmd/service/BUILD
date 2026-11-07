@@ -24,9 +24,7 @@ go_library(
     importpath = "intrinsic/tools/inbuild/cmd/service/bundle",
     deps = [
         "//intrinsic_sdk/intrinsic/assets/services/build_defs:servicegen",
-        "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "@com_github_spf13_cobra//:go_default_library",
-        "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_go_proto",
     ],
 )
 
