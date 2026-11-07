@@ -72,13 +72,14 @@ cc_library(
     srcs = ["compute_normals_least_sqr.cc"],
     hdrs = ["compute_normals_least_sqr.h"],
     copts = [
-        "-mavx",
-        "-msse2",
-        "-mssse3",
-        "-msse3",
-        "-msse4.1",
-        "-msse4.2",
-    ],
+        "-fno-math-errno",
+    ] + select({
+        "@platforms//cpu:x86_64": [
+            "-mavx2",
+            "-mfma",
+        ],
+        "//conditions:default": [],
+    }),
     deps = [
         ":image",
         ":image_traits",

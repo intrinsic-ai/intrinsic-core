@@ -14,8 +14,7 @@
 
 #include "intrinsic/perception/core/compute_normals_least_sqr.h"
 
-#include <immintrin.h>
-
+#include <cmath>
 #include <cstdint>
 #include <limits>
 
@@ -28,42 +27,94 @@ namespace intrinsic::perception {
 
 namespace {
 
-// Store normal values from SIMD registers to 8 consecutive pixels in dst.
-void StoreNormals(const __m256& avx_nx, const __m256& avx_ny,
-                  const __m256& avx_nz, int32_t x, int32_t row,
-                  Image<Normal32f>& dst) {
-  float nx[8], ny[8], nz[8];
-  _mm256_storeu_ps(nx, avx_nx);
-  _mm256_storeu_ps(ny, avx_ny);
-  _mm256_storeu_ps(nz, avx_nz);
-  Normal32f::PixelType* out = &dst(x, row);
-  for (int i = 0; i < 8; ++i) {
-    out[i] = {nx[i], ny[i], nz[i]};
-  }
-}
+template <int32_t kTile>
+inline void ComputeNormalsTile(int32_t col, int32_t row, int32_t r,
+                               int32_t step, float threshold, float fx,
+                               float fy, float cx, float cy,
+                               const Image<Depth32f>& depth,
+                               Normal32f::PixelType* __restrict normal_row) {
+  const float dy = static_cast<float>(row) - cy;
+  const float* __restrict depth_row = depth.datarow(row);
+  const float nan = std::numeric_limits<float>::quiet_NaN();
 
-/**
- * SIMD-optimized accumulator. Only considers values
- * if the depth difference to the center pixel is not larger than threshold.
- */
-void Accum(const __m256& avx_i, const __m256& avx_j, const __m256& avx_thres,
-           const __m256& avx_delta, __m256& avx_A0, __m256& avx_A1,
-           __m256& avx_A2, __m256& avx_b0, __m256& avx_b1) {
-  // Create a mask for checking nans.
-  const __m256 avx_mask = _mm256_castsi256_ps(_mm256_set1_epi32(0x7fffffff));
-  // Abs difference from central point.
-  const __m256 avx_dabs = _mm256_and_ps(avx_mask, avx_delta);
-  // Puts 0's for not true or NaN.
-  const __m256 avx_which =  // NOLINT
-      _mm256_cmp_ps(avx_dabs, avx_thres, _CMP_LT_OQ);
-  const __m256 avx_fi = _mm256_and_ps(avx_which, avx_i);
-  const __m256 avx_fj = _mm256_and_ps(avx_which, avx_j);
-  const __m256 avx_delta_masked = _mm256_and_ps(avx_which, avx_delta);
-  avx_A0 += avx_fi * avx_i;
-  avx_A1 += avx_fi * avx_j;
-  avx_A2 += avx_fj * avx_j;
-  avx_b0 += avx_fi * avx_delta_masked;
-  avx_b1 += avx_fj * avx_delta_masked;
+  alignas(32) float d[kTile];
+  for (int32_t k = 0; k < kTile; ++k) {
+    d[k] = depth_row[col + k];
+  }
+
+  alignas(32) float a0[kTile] = {};
+  alignas(32) float a1[kTile] = {};
+  alignas(32) float a2[kTile] = {};
+  alignas(32) float b0[kTile] = {};
+  alignas(32) float b1[kTile] = {};
+
+  for (int32_t m = -r; m <= r; m += step) {
+    const float j = static_cast<float>(m);
+    const float jj = j * j;
+    const float* __restrict nbr_row = depth.datarow(row + m) + col;
+    alignas(32) float sum_i[kTile] = {};
+    alignas(32) int32_t count_m[kTile] = {};
+    alignas(32) float sum_delta[kTile] = {};
+
+    for (int32_t n = -r; n <= r; n += step) {
+      const float i = static_cast<float>(n);
+      const float* __restrict nbr = nbr_row + n;
+#ifdef __clang__
+#pragma clang loop unroll(disable) vectorize_width(kTile)
+#endif
+      for (int32_t k = 0; k < kTile; ++k) {
+        // Depth32f::Invalid() is quiet_NaN(). Under IEEE-754, if either d[k]
+        // or nbr[k] is NaN, delta is NaN and std::abs(delta) < threshold
+        // evaluates to false without needing a separate IsValid() check.
+        const float delta = nbr[k] - d[k];
+        const bool valid = std::abs(delta) < threshold;
+        const float fi = valid ? i : 0.0f;
+        const float fdelta = valid ? delta : 0.0f;
+        a0[k] += fi * i;
+        sum_i[k] += fi;
+        count_m[k] += valid ? 1 : 0;
+        sum_delta[k] += fdelta;
+        b0[k] += fdelta * i;
+      }
+    }
+#ifdef __clang__
+#pragma clang loop unroll(disable) vectorize_width(kTile)
+#endif
+    for (int32_t k = 0; k < kTile; ++k) {
+      a1[k] += sum_i[k] * j;
+      a2[k] += static_cast<float>(count_m[k]) * jj;
+      b1[k] += sum_delta[k] * j;
+    }
+  }
+
+  // Compute and normalize the 2x2 least-squares normal across all kTile pixels.
+  // When d[k] is NaN (invalid depth), a0..b1 are 0, so det == 0, inv_det is
+  // NaN, and the resulting normal is {NaN, NaN, NaN} (Normal32f::Invalid()).
+  alignas(32) float nx_arr[kTile];
+  alignas(32) float ny_arr[kTile];
+  alignas(32) float nz_arr[kTile];
+  const float col_base = static_cast<float>(col) - cx;
+#ifdef __clang__
+#pragma clang loop unroll(disable) vectorize_width(kTile)
+#endif
+  for (int32_t k = 0; k < kTile; ++k) {
+    const float det = a0[k] * a2[k] - a1[k] * a1[k];
+    const float inv_det = (det != 0.0f) ? (1.0f / det) : nan;
+    const float ddx = (+a2[k] * b0[k] - a1[k] * b1[k]) * inv_det;
+    const float ddy = (-a1[k] * b0[k] + a0[k] * b1[k]) * inv_det;
+    const float nx = fx * ddx;
+    const float ny = fy * ddy;
+    const float nz =
+        -(d[k] + dy * ddy + (col_base + static_cast<float>(k)) * ddx);
+    const float norm2 = nx * nx + ny * ny + nz * nz;
+    const float inv_norm = (norm2 > 0.0f) ? (1.0f / std::sqrt(norm2)) : nan;
+    nx_arr[k] = nx * inv_norm;
+    ny_arr[k] = ny * inv_norm;
+    nz_arr[k] = nz * inv_norm;
+  }
+  for (int32_t k = 0; k < kTile; ++k) {
+    normal_row[col + k] = {nx_arr[k], ny_arr[k], nz_arr[k]};
+  }
 }
 
 }  // namespace
@@ -72,74 +123,44 @@ Image<Normal32f> ComputeNormalsLeastSqr(const IntrinsicParams& intrinsic_params,
                                         const Image<Depth32f>& depth,
                                         float threshold, int32_t radius,
                                         int32_t step) {
-  CHECK(depth.cols() >= 2 * radius + 1) << "Depth too small.";
-  CHECK(depth.rows() >= 2 * radius + 1) << "Depth too small.";
+  CHECK_GE(radius, 0);
+  CHECK_GT(step, 0);
+  CHECK_GE(depth.cols(), 2 * radius + 1) << "Depth too small.";
+  CHECK_GE(depth.rows(), 2 * radius + 1) << "Depth too small.";
 
   Image<Normal32f> dst(depth.dimensions(), Normal32f::Invalid());
   const int32_t w = depth.cols();
   const int32_t r = radius;
 
-  const __m256 avx_inf = _mm256_set1_ps(std::numeric_limits<float>::infinity());
-  const __m256 avx_nan =
-      _mm256_set1_ps(std::numeric_limits<float>::quiet_NaN());
-  const __m256 avx_zero = _mm256_setzero_ps();
-  const __m256 avx_fx = _mm256_set1_ps(intrinsic_params.focal_length_x());
-  const __m256 avx_fy = _mm256_set1_ps(intrinsic_params.focal_length_y());
-  const __m256 avx_cx = _mm256_set1_ps(intrinsic_params.principal_point_x());
-  const __m256 avx_cy = _mm256_set1_ps(intrinsic_params.principal_point_y());
-  const __m256 avx_thres = _mm256_set1_ps(threshold);
+  const float fx = intrinsic_params.focal_length_x();
+  const float fy = intrinsic_params.focal_length_y();
+  const float cx = intrinsic_params.principal_point_x();
+  const float cy = intrinsic_params.principal_point_y();
+
+  constexpr int32_t kTile = 8;
 
   ParallelFor(r, depth.rows() - r, [&](int32_t row) {
-    const __m256 avx_y = _mm256_set1_ps(row);
+    const float* __restrict depth_row = depth.datarow(row);
+    Normal32f::PixelType* __restrict normal_row = dst.datarow(row);
 
-    // Process 8 pixels at a time.
-    for (int32_t x = r; x < w - r - 8; x += 8) {
-      const __m256 avx_d = _mm256_loadu_ps(&depth(x, row));
-      __m256 avx_A0 = avx_zero;
-      __m256 avx_A1 = avx_zero;
-      __m256 avx_A2 = avx_zero;
-      __m256 avx_b0 = avx_zero;
-      __m256 avx_b1 = avx_zero;
+    int32_t col = r;
+    // Process kTile adjacent columns at a time so the compiler auto-vectorizes
+    // the innermost k loop with unit-stride SIMD loads (AVX/AVX2 on x86_64,
+    // NEON on arm64).
+    for (; col <= w - r - kTile; col += kTile) {
+      ComputeNormalsTile<kTile>(col, row, r, step, threshold, fx, fy, cx, cy,
+                                depth, normal_row);
+    }
 
-      for (int32_t m = -r; m <= r; m += step) {
-        const __m256 avx_m = _mm256_set1_ps(m);
-        for (int32_t n = -r; n <= r; n += step) {
-          const __m256 avx_n = _mm256_set1_ps(n);
-          const __m256 avx_current = _mm256_loadu_ps(&depth(x + n, row + m));
-          Accum(avx_n, avx_m, avx_thres, avx_current - avx_d, avx_A0, avx_A1,
-                avx_A2, avx_b0, avx_b1);
-        }
+    // Scalar tail for remaining columns near the right border.
+    for (; col < w - r; ++col) {
+      if (Depth32f::IsValid(depth_row[col])) {
+        ComputeNormalsTile<1>(col, row, r, step, threshold, fx, fy, cx, cy,
+                              depth, normal_row);
       }
-
-      const __m256 avx_det = _mm256_rcp_ps(avx_A0 * avx_A2 - avx_A1 * avx_A1);
-      const __m256 avx_cmp_inf1 =  // NOLINT
-          _mm256_cmp_ps(avx_det, avx_inf, _CMP_EQ_OQ);
-      const __m256 avx_div = _mm256_blendv_ps(avx_det, avx_nan, avx_cmp_inf1);
-
-      const __m256 avx_ddx = (+avx_A2 * avx_b0 - avx_A1 * avx_b1) * avx_div;
-      const __m256 avx_ddy = (-avx_A1 * avx_b0 + avx_A0 * avx_b1) * avx_div;
-
-      const __m256 avx_x =
-          _mm256_set_ps(x + 7, x + 6, x + 5, x + 4, x + 3, x + 2, x + 1, x + 0);
-
-      __m256 avx_nx = avx_ddx * avx_fx;
-      __m256 avx_ny = avx_ddy * avx_fy;
-      __m256 avx_nz =
-          -(avx_d + avx_ddx * (avx_x - avx_cx) + avx_ddy * (avx_y - avx_cy));
-
-      const __m256 avx_sqrt =
-          _mm256_rsqrt_ps(avx_nx * avx_nx + avx_ny * avx_ny + avx_nz * avx_nz);
-      const __m256 avx_cmp_inf2 =  // NOLINT
-          _mm256_cmp_ps(avx_sqrt, avx_inf, _CMP_EQ_OQ);
-      const __m256 avx_fac = _mm256_blendv_ps(avx_sqrt, avx_nan, avx_cmp_inf2);
-
-      avx_nx *= avx_fac;
-      avx_ny *= avx_fac;
-      avx_nz *= avx_fac;
-
-      StoreNormals(avx_nx, avx_ny, avx_nz, x, row, dst);
     }
   });
+
   return dst;
 }
 
