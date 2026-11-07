@@ -103,7 +103,7 @@ const (
 	highConsistencyInitialGetTimeout = 10 * time.Second
 
 	// Per-poll query timeout during verification polling (clamped to remaining deadline).
-	verificationGetTimeout       = 100 * time.Millisecond
+	verificationGetTimeout       = 5 * time.Second
 	verificationRetryDelayMin    = 10 * time.Millisecond
 	verificationRetryDelayMax    = 2500 * time.Millisecond
 	verificationRetryDelayFactor = 5
@@ -114,6 +114,31 @@ const (
 	replicationKeyPrefix       = "kv_store_repl"
 	workcellInfoKey            = "workcell_info"
 	globalReplicationNamespace = "global"
+)
+
+// kvStroreTimingConfig contains timeouts and retry intervals
+// used by the KV store.
+// Those values can be overriden in tests where we have to use
+// the real clock. In those tests, it may be possible to
+// use smaller timeouts to reduce run time.
+type kvStroreTimingConfig struct {
+	defaultVerificationTimeout       time.Duration
+	highConsistencyInitialGetTimeout time.Duration
+	verificationGetTimeout           time.Duration
+	verificationRetryDelayMin        time.Duration
+	verificationRetryDelayMax        time.Duration
+	verificationRetryDelayFactor     float64
+}
+
+var (
+	kvStoreTiming = kvStroreTimingConfig{
+		defaultVerificationTimeout:       defaultVerificationTimeout,
+		highConsistencyInitialGetTimeout: highConsistencyInitialGetTimeout,
+		verificationGetTimeout:           verificationGetTimeout,
+		verificationRetryDelayMin:        verificationRetryDelayMin,
+		verificationRetryDelayMax:        verificationRetryDelayMax,
+		verificationRetryDelayFactor:     verificationRetryDelayFactor,
+	}
 )
 
 // NewPubSub creates a new PubSub adapter if possible. Returns either a valid handle
@@ -661,7 +686,7 @@ func (kv *kvStoreHandle) SetAnyWithVerification(ctx context.Context, key string,
 	}
 	if _, ok := ctx.Deadline(); !ok {
 		var cancel context.CancelFunc
-		ctx, cancel = context.WithTimeout(ctx, defaultVerificationTimeout)
+		ctx, cancel = context.WithTimeout(ctx, kvStoreTiming.defaultVerificationTimeout)
 		defer cancel()
 	}
 
@@ -697,7 +722,7 @@ func (kv *kvStoreHandle) SetAnyWithVerification(ctx context.Context, key string,
 	var initialBytes []byte
 	var hasInitialValue bool
 	if options.Mode == kvstore.HighConsistency {
-		timeout := highConsistencyInitialGetTimeout
+		timeout := kvStoreTiming.highConsistencyInitialGetTimeout
 		initialBytes, err = kv.getRawBytes(ctx, prefixedKey, &timeout)
 		if err == nil {
 			hasInitialValue = true
@@ -752,7 +777,7 @@ func (kv *kvStoreHandle) SetAny(key string, valueAny *anypb.Any, highConsistency
 		logDeprecatedHighConsistencyWarning.Do(func() {
 			log.Warning("Passing highConsistency to Set() or SetAny() is deprecated. Use SetWithVerification() or SetAnyWithVerification() instead.")
 		})
-		ctx, cancel := context.WithTimeout(context.Background(), defaultVerificationTimeout)
+		ctx, cancel := context.WithTimeout(context.Background(), kvStoreTiming.defaultVerificationTimeout)
 		defer cancel()
 		return kv.SetAnyWithVerification(ctx, key, valueAny)
 	}
@@ -809,9 +834,9 @@ func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey st
 	}
 
 	b := backoff.NewExponentialBackOff()
-	b.InitialInterval = verificationRetryDelayMin
-	b.MaxInterval = verificationRetryDelayMax
-	b.Multiplier = verificationRetryDelayFactor
+	b.InitialInterval = kvStoreTiming.verificationRetryDelayMin
+	b.MaxInterval = kvStoreTiming.verificationRetryDelayMax
+	b.Multiplier = kvStoreTiming.verificationRetryDelayFactor
 	b.MaxElapsedTime = 0 // Handled by ctx timeout
 
 	operation := func() error {
@@ -819,7 +844,7 @@ func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey st
 			return backoff.Permanent(err)
 		}
 
-		timeout := verificationGetTimeout
+		timeout := kvStoreTiming.verificationGetTimeout
 		currentBytes, err := kv.getRawBytes(ctx, prefixedKey, &timeout)
 
 		stateBytes, exists, err := fetchCurrentRawState(key, currentBytes, err)
