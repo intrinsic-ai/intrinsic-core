@@ -55,7 +55,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_entity_filter",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log:check",
@@ -67,6 +66,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 
@@ -107,7 +107,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/component:geometry_component",
         "//intrinsic_sdk/intrinsic/world/objects:object_entity_filter",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/base",
@@ -121,6 +120,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_action_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
         "@io_opentelemetry_cpp//api",
     ],
 )

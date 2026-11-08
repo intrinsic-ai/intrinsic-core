@@ -47,8 +47,6 @@ cc_library(
     deps = [
         "//intrinsic/scene/config:scene_object_config",
         "//intrinsic_sdk/intrinsic/assets:id_utils",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_grpc_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_proto",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/scene:constants",
         "//intrinsic_sdk/intrinsic/scene/util:scene_object_updates",
@@ -61,6 +59,8 @@ cc_library(
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",
         "@intrinsic_apis//intrinsic/assets/proto:id_cc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_grpc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_proto",
         "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_config_cc_proto",

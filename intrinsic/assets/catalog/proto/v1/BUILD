@@ -23,7 +23,7 @@ proto_library(
     name = "asset_catalog_internal_proto",
     srcs = ["asset_catalog_internal.proto"],
     deps = [
-        "//intrinsic_sdk/intrinsic/assets/catalog/proto/v1:asset_catalog_proto",
+        "@intrinsic_apis//intrinsic/assets/catalog/proto/v1:asset_catalog_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_proto",
         "@intrinsic_apis//intrinsic/assets/proto:view_proto",
     ],
@@ -38,7 +38,7 @@ go_proto_library(
     importpath = "intrinsic/assets/catalog/proto/v1/asset_catalog_internal_go_proto",
     protos = [":asset_catalog_internal_proto"],
     deps = [
-        "//intrinsic_sdk/intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
+        "@intrinsic_apis//intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:view_go_proto",

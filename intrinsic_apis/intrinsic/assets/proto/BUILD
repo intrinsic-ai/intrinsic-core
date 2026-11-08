@@ -199,6 +199,88 @@ py_proto_library(
 )
 
 proto_library(
+    name = "installed_assets_proto",
+    srcs = ["installed_assets.proto"],
+    deps = [
+        ":asset_tag_proto",
+        ":asset_type_proto",
+        ":id_proto",
+        ":metadata_proto",
+        ":view_proto",
+        "@com_google_googleapis//google/api:annotations_proto",
+        "@com_google_googleapis//google/api:field_behavior_proto",
+        "@com_google_googleapis//google/longrunning:operations_proto",
+        "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_proto",
+        "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_proto",
+        "@intrinsic_apis//intrinsic/assets/processes/proto:process_asset_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:asset_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:reference_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:search_proto",
+        "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_proto",
+        "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_proto",
+        "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_inspection_proto",
+        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_proto",
+        "@intrinsic_apis//intrinsic/util/status:extended_status_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "installed_assets_cc_proto",
+    deps = [":installed_assets_proto"],
+)
+
+cc_grpc_library(
+    name = "installed_assets_cc_grpc_proto",
+    srcs = [":installed_assets_proto"],
+    generate_mocks = True,
+    grpc_only = True,
+    deps = [":installed_assets_cc_proto"],
+)
+
+go_proto_library(
+    name = "installed_assets_go_proto",
+    compilers = [
+        "@io_bazel_rules_go//proto:go_grpc_v2",
+        "@io_bazel_rules_go//proto:go_proto",
+    ],
+    importpath = "intrinsic/assets/proto/installed_assets_go_proto",
+    protos = [":installed_assets_proto"],
+    deps = [
+        ":asset_tag_go_proto",
+        ":asset_type_go_proto",
+        ":id_go_proto",
+        ":metadata_go_proto",
+        ":view_go_proto",
+        "@com_google_cloud_go_longrunning//autogen/longrunningpb",
+        "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
+        "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",
+        "@intrinsic_apis//intrinsic/assets/processes/proto:process_asset_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:asset_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:reference_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:search_go_proto",
+        "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_go_proto",
+        "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_go_proto",
+        "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_inspection_go_proto",
+        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_go_proto",
+        "@intrinsic_apis//intrinsic/util/status:extended_status_go_proto",
+        "@org_golang_google_genproto_googleapis_api//annotations",
+    ],
+)
+
+py_proto_library(
+    name = "installed_assets_py_pb2",
+    deps = [":installed_assets_proto"],
+)
+
+py_grpc_library(
+    name = "installed_assets_pb2_grpc",
+    srcs = [":installed_assets_proto"],
+    deps = [":installed_assets_py_pb2"],
+)
+
+proto_library(
     name = "vendor_proto",
     srcs = ["vendor.proto"],
 )

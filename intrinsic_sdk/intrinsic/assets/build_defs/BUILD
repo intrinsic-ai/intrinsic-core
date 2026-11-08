@@ -24,12 +24,12 @@ proto_library(
     name = "asset_proto",
     srcs = ["asset.proto"],
     deps = [
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
         "@com_google_protobuf//:descriptor_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:instance_config_proto",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_proto",
     ],
 )
 
@@ -43,11 +43,11 @@ go_proto_library(
     importpath = "intrinsic/assets/build_defs/asset_go_proto",
     protos = [":asset_proto"],
     deps = [
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:instance_config_go_proto",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 
@@ -58,7 +58,6 @@ go_binary(
     deps = [
         ":asset_go_proto",
         "//intrinsic_sdk/intrinsic/assets:typeutils",
-        "//intrinsic_sdk/intrinsic/assets/processes/proto:process_manifest_go_proto",
         "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/util:flag",
         "//intrinsic_sdk/intrinsic/util/proto:descriptor",
@@ -67,6 +66,7 @@ go_binary(
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",
+        "@intrinsic_apis//intrinsic/assets/processes/proto:process_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
         "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_go_proto",
@@ -101,15 +101,15 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:bundle",
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/assets:throttle",
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:asset_go_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_deployment_go_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_go_proto",
         "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:instance_config_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:reference_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_deployment_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_go_proto",
         "@io_opencensus_go//trace:go_default_library",
         "@org_golang_google_protobuf//encoding/prototext:go_default_library",
         "@org_golang_google_protobuf//reflect/protoregistry:go_default_library",
@@ -126,9 +126,9 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "//intrinsic_sdk/intrinsic/util/proto:registryutil",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:instance_config_go_proto",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
         "@org_golang_google_protobuf//reflect/protoregistry:go_default_library",
     ],
 )
@@ -143,9 +143,9 @@ go_binary(
         "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/util:flag",
         "//intrinsic_sdk/intrinsic/util/proto:protoio",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
         "@org_golang_google_protobuf//reflect/protoregistry:go_default_library",
     ],
 )

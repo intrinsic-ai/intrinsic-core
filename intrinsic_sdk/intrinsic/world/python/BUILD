@@ -27,12 +27,12 @@ py_library(
         "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_py_pb2",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_py_pb2_grpc",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_py_pb2",
         "//intrinsic_sdk/intrinsic/world/robot_payload/python:robot_payload",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_py_pb2",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_py_pb2",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_py_pb2",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_py_pb2",
     ],
 )
 
@@ -56,7 +56,6 @@ py_library(
         "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_py_pb2",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_py_pb2_grpc",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_py_pb2",
         "//intrinsic_sdk/intrinsic/world/robot_payload/python:robot_payload",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_protobuf//:protobuf_python",
@@ -69,5 +68,6 @@ py_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_py_pb2",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_py_pb2",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_py_pb2",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_py_pb2",
     ],
 )

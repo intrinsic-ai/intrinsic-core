@@ -235,7 +235,6 @@ cc_library(
         "//intrinsic/world/component:collections_component",
         "//intrinsic/world/component:robot_component",
         "//intrinsic/world/objects:object_world",
-        "//intrinsic/world/proto:world_updates_cc_proto",
         "//intrinsic/world/service:world_service_cc_proto",
         "//intrinsic/world/util:entity_search_util",
         "//intrinsic/world/util:walk_attachment_tree",
@@ -262,6 +261,7 @@ cc_library(
         "@abseil-cpp//absl/strings:str_format",
         "@intrinsic_apis//intrinsic/world/proto:entity_search_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:kinematics_component_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 

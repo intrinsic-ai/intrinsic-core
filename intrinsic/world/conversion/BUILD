@@ -66,7 +66,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:geometry_types",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -76,6 +75,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/world/proto:collision_action_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:user_data_cc_proto",
     ],
 )

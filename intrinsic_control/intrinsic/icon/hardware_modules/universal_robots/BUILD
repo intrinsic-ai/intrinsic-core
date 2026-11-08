@@ -87,7 +87,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/util:invalid_until_set",
         "//intrinsic_sdk/intrinsic/util/status:status_builder_grpc",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/strings:string_view",
@@ -95,6 +94,7 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@intrinsic_apis//intrinsic/resources/proto:runtime_context_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:object_properties_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 

@@ -240,7 +240,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -250,6 +249,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/logging/proto:context_cc_proto",
         "@intrinsic_apis//intrinsic/resources/proto:resource_handle_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:equipment_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 
@@ -262,12 +262,12 @@ py_library(
         "//intrinsic_sdk/intrinsic/skills/python:preview_context",
         "//intrinsic_sdk/intrinsic/skills/python:skill_canceller",
         "//intrinsic_sdk/intrinsic/skills/python:skill_logging_context",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_py_pb2",
         "//intrinsic_sdk/intrinsic/world/python:object_world_client",
         "//intrinsic_sdk/intrinsic/world/python:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/resources/proto:resource_handle_py_pb2",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_py_pb2",
     ],
 )
 

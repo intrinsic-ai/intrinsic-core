@@ -225,8 +225,6 @@ cc_library(
         "//intrinsic/scene/cad:grpc_cad_importer",
         "//intrinsic/scene/instantiation:asset_and_resource_instantiator",
         "//intrinsic/stats:opencensus",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_grpc_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_proto",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/scene/usd:utils",
@@ -244,6 +242,8 @@ cc_library(
         "@com_google_googleapis//google/longrunning:longrunning_cc_grpc",
         "@com_google_googleapis//google/longrunning:longrunning_cc_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_deployment_cc_grpc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_grpc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_proto",
     ],
 )
 

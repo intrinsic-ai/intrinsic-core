@@ -84,9 +84,9 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets/errors:report",
         "//intrinsic_sdk/intrinsic/assets/hardware_devices:hardwaredevicevalidate",
         "//intrinsic_sdk/intrinsic/assets/processes:processvalidate",
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:asset_go_proto",
         "//intrinsic_sdk/intrinsic/assets/scene_objects:sceneobjectvalidate",
         "//intrinsic_sdk/intrinsic/assets/services:servicevalidate",
         "//intrinsic_sdk/intrinsic/skills:skillvalidate",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:asset_go_proto",
     ],
 )

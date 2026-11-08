@@ -144,7 +144,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/hashing",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log",
@@ -161,5 +160,6 @@ cc_library(
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )

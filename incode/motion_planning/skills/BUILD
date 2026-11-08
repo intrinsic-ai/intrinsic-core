@@ -88,7 +88,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -97,6 +96,7 @@ cc_library(
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:footprint_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 
@@ -137,7 +137,6 @@ cc_test(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/log:scoped_mock_log",
@@ -152,6 +151,7 @@ cc_test(
         "@intrinsic_apis//intrinsic/math/proto:quaternion_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:equipment_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:skill_manifest_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 
@@ -240,7 +240,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:kinematic_object",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/cleanup",
         "@abseil-cpp//absl/log",
@@ -263,6 +262,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/skills/proto:skills_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ] + [],
 )
 

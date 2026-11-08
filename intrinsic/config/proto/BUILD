@@ -56,17 +56,17 @@ proto_library(
         ":common_proto",
         ":process_proto",
         ":resource_set_proto",
-        "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
         "@com_google_protobuf//:timestamp_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_proto",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_proto",
+        "@intrinsic_apis//intrinsic/assets/processes/proto:process_asset_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:instance_config_proto",
         "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_proto",
         "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_proto",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_proto",
         "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_proto",
     ],
 )
 
@@ -83,16 +83,16 @@ go_proto_library(
         ":common_go_proto",
         ":process_go_proto",
         ":resource_set_go_proto",
-        "//intrinsic_sdk/intrinsic/assets/processes/proto:process_asset_go_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/hardware_devices/proto/v1:hardware_device_manifest_go_proto",
+        "@intrinsic_apis//intrinsic/assets/processes/proto:process_asset_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:instance_config_go_proto",
         "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_go_proto",
         "@intrinsic_apis//intrinsic/assets/services/proto:service_manifest_go_proto",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
         "@intrinsic_apis//intrinsic/skills/proto:processed_skill_manifest_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 
@@ -198,7 +198,7 @@ proto_library(
     srcs = ["resource_set.proto"],
     deps = [
         "//intrinsic/resources/proto:resource_instance_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_proto",
     ],
 )
 
@@ -208,7 +208,7 @@ go_proto_library(
     protos = [":resource_set_proto"],
     deps = [
         "//intrinsic/resources/proto:resource_instance_go_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 

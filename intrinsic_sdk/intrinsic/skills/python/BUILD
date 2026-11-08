@@ -89,10 +89,10 @@ py_library(
         ":skill_logging_context",
         "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_py_pb2_grpc",
         "//intrinsic_sdk/intrinsic/motion_planning:motion_planner_client_py",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_py_pb2",
         "//intrinsic_sdk/intrinsic/world/python:object_world_client",
         "//intrinsic_sdk/intrinsic/world/python:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_py_pb2",
     ],
 )
 

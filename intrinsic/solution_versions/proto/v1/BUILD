@@ -23,7 +23,6 @@ proto_library(
     deps = [
         ":solution_diff_proto",
         "//intrinsic/modified_solution/proto/v1:modified_solution_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_googleapis//google/api:field_behavior_proto",
         "@com_google_googleapis//google/api:resource_proto",
@@ -32,6 +31,7 @@ proto_library(
         "@com_google_protobuf//:descriptor_proto",
         "@com_google_protobuf//:field_mask_proto",
         "@com_google_protobuf//:timestamp_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:branch_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:conflict_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:conflict_resolution_proto",
@@ -75,8 +75,8 @@ go_proto_library(
     deps = [
         ":solution_diff_go_proto",
         "//intrinsic/modified_solution/proto/v1:modified_solution_go_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_go_proto",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:branch_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:conflict_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:conflict_resolution_go_proto",
@@ -96,7 +96,7 @@ proto_library(
     name = "solution_diff_proto",
     srcs = ["solution_diff.proto"],
     deps = [
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:diff_mask_proto",
     ],
 )
@@ -110,7 +110,7 @@ go_proto_library(
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution_version:__pkg__",
     ],
     deps = [
-        "//intrinsic_sdk/intrinsic/assets/proto/v1:solution_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:diff_mask_go_proto",
     ],
 )

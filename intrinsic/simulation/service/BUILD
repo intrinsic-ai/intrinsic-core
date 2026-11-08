@@ -62,7 +62,6 @@ cc_library(
     deps = [
         "//intrinsic/simulation/world:world_interpolation",
         "//intrinsic/simulation/world:world_updater",
-        "//intrinsic/world/proto:world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
@@ -72,7 +71,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_entity_filter",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/memory",
@@ -81,6 +79,8 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@intrinsic_apis//intrinsic/world/proto:entity_search_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 

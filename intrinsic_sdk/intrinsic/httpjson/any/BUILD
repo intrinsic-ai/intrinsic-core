@@ -27,9 +27,9 @@ go_library(
     importpath = "intrinsic/httpjson/any",
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_go_proto",
         "//intrinsic_sdk/intrinsic/util/proto:registryutil",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:view_go_proto",
         "@intrinsic_apis//intrinsic/proto_tools/proto:proto_registry_go_proto",
         "@io_bazel_rules_go//go/runfiles:go_default_library",

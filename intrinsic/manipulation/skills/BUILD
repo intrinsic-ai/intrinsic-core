@@ -85,7 +85,6 @@ py_library(
         "//intrinsic_sdk/intrinsic/assets:interface_utils_py",
         "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
         "//intrinsic_sdk/intrinsic/skills/python:skill_interface",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_py_pb2",
         "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl/logging",
@@ -93,6 +92,7 @@ py_library(
         "@intrinsic_apis//intrinsic/hardware/gripper/eoat:eoat_service_py_pb2",
         "@intrinsic_apis//intrinsic/hardware/gripper/eoat:eoat_service_py_pb2_grpc",
         "@intrinsic_apis//intrinsic/skills/proto:footprint_py_pb2",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_py_pb2",
     ],
 )
 

@@ -141,8 +141,6 @@ cc_library(
     deps = [
         "//intrinsic_runtime/intrinsic/proto_tools/registry:resolver",
         "//intrinsic_sdk/intrinsic/assets:id_utils",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_grpc_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_proto",
         "//intrinsic_sdk/intrinsic/util/grpc",
         "//intrinsic_sdk/intrinsic/util/proto:parsed_type_url",
         "//intrinsic_sdk/intrinsic/util/proto:type_url",
@@ -155,6 +153,8 @@ cc_library(
         "@abseil-cpp//absl/strings:str_format",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_protobuf//:protobuf",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_grpc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_proto",
         "@intrinsic_apis//intrinsic/assets/proto:view_cc_proto",
     ],
 )
@@ -201,7 +201,6 @@ cc_binary(
         "//intrinsic_runtime/intrinsic/proto_tools/registry:resolver",
         "//intrinsic_runtime/intrinsic/proto_tools/registry:resolver_asset",
         "//intrinsic_runtime/intrinsic/proto_tools/registry:resolver_common",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/skills/internal:skill_registry_client",
         "//intrinsic_sdk/intrinsic/util/path_resolver",
@@ -217,6 +216,7 @@ cc_binary(
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc_security_base",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_grpc_proto",
     ],
 )
 

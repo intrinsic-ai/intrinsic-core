@@ -24,17 +24,17 @@ cc_library(
     hdrs = ["world_updater.h"],
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
-        "//intrinsic/world/proto:world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/util/thread",
         "//intrinsic_sdk/intrinsic/util/thread:concurrent_queue",
         "//intrinsic_sdk/intrinsic/util/thread:stop_token",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 
@@ -45,7 +45,6 @@ cc_library(
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
         ":world_updater",
-        "//intrinsic/world/proto:world_updates_cc_proto",
         "//intrinsic/world/service:world_service_cc_proto",
         "//intrinsic_sdk/intrinsic/util:macros",
         "//intrinsic_sdk/intrinsic/util/grpc",
@@ -61,6 +60,7 @@ cc_library(
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 
@@ -263,7 +263,6 @@ cc_library(
     deps = [
         "//intrinsic/eigenmath:interpolation",
         "//intrinsic/world",
-        "//intrinsic/world/proto:world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
@@ -271,11 +270,12 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_entity_filter",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 

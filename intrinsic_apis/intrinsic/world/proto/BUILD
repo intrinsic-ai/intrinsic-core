@@ -326,3 +326,86 @@ py_proto_library(
     name = "user_data_py_pb2",
     deps = [":user_data_proto"],
 )
+
+proto_library(
+    name = "world_updates_proto",
+    srcs = ["world_updates.proto"],
+    deps = [
+        ":collision_settings_proto",
+        ":entity_search_proto",
+        "@intrinsic_apis//intrinsic/math/proto:pose_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "world_updates_cc_proto",
+    deps = [":world_updates_proto"],
+)
+
+go_proto_library(
+    name = "world_updates_go_proto",
+    importpath = "intrinsic/world/proto/world_updates_go_proto",
+    importpath_aliases = ["intrinsic/world/public/proto/world_updates_go_proto"],
+    protos = [":world_updates_proto"],
+    deps = [
+        ":collision_settings_go_proto",
+        ":entity_search_go_proto",
+        "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
+        "@intrinsic_apis//intrinsic/messages:messages_go_proto",
+    ],
+)
+
+proto_library(
+    name = "object_world_updates_proto",
+    srcs = ["object_world_updates.proto"],
+    deps = [
+        ":collision_action_proto",
+        ":collision_settings_proto",
+        ":geometry_component_proto",
+        ":object_world_refs_proto",
+        ":physics_component_proto",
+        ":robot_payload_proto",
+        ":simulation_component_proto",
+        ":user_data_proto",
+        ":world_updates_proto",
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:wrappers_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
+        "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_proto",
+        "@intrinsic_apis//intrinsic/math/proto:pose_proto",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "object_world_updates_cc_proto",
+    deps = [":object_world_updates_proto"],
+)
+
+py_proto_library(
+    name = "object_world_updates_py_pb2",
+    deps = [":object_world_updates_proto"],
+)
+
+go_proto_library(
+    name = "object_world_updates_go_proto",
+    importpath = "intrinsic/world/proto/object_world_updates_go_proto",
+    importpath_aliases = ["intrinsic/world/public/proto/object_world_updates_go_proto"],
+    protos = [":object_world_updates_proto"],
+    deps = [
+        ":collision_action_go_proto",
+        ":collision_settings_go_proto",
+        ":geometry_component_go_proto",
+        ":object_world_refs_go_proto",
+        ":physics_component_go_proto",
+        ":robot_payload_go_proto",
+        ":simulation_component_go_proto",
+        ":user_data_go_proto",
+        ":world_updates_go_proto",
+        "@intrinsic_apis//intrinsic/geometry/proto:geometry_service_types_go_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_go_proto",
+        "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_go_proto",
+        "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_go_proto",
+    ],
+)

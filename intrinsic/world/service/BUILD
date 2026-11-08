@@ -155,7 +155,6 @@ cc_library(
         "//intrinsic/world/objects:object_world_proto_utils",
         "//intrinsic/world/objects:simple_transform_node_visitor",
         "//intrinsic/world/proto:world_entity_cc_proto",
-        "//intrinsic/world/proto:world_updates_cc_proto",
         "//intrinsic/world/service/objects:object_world_converter",
         "//intrinsic/world/service/objects:object_world_updates_utils",
         "//intrinsic/world/service/objects:world_comparator",
@@ -185,7 +184,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/base",
@@ -207,6 +205,8 @@ cc_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:footprint_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
         "@io_opentelemetry_cpp//api",
         "@or_tools//ortools/base:strong_int",
     ],
@@ -256,10 +256,10 @@ proto_library(
         "//intrinsic/world:proto",
         "//intrinsic/world/proto:collections_component_proto",
         "//intrinsic/world/proto:world_entity_proto",
-        "//intrinsic/world/proto:world_updates_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_proto",
         "@intrinsic_apis//intrinsic/world/proto:physics_component_proto",
         "@intrinsic_apis//intrinsic/world/proto:sensor_component_proto",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_proto",
     ],
 )
 
@@ -289,10 +289,10 @@ go_proto_library(
         "//intrinsic/world:go_proto",
         "//intrinsic/world/proto:collections_component_go_proto",
         "//intrinsic/world/proto:world_entity_go_proto",
-        "//intrinsic/world/proto:world_updates_go_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:physics_component_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:sensor_component_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:world_updates_go_proto",
     ],
 )
 

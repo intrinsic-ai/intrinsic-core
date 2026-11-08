@@ -25,8 +25,6 @@ py_library(
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/assets:id_utils_py",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_pb2_grpc",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_py_pb2",
         "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
         "@ai_intrinsic_sdks_pip_deps//grpcio_status",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
@@ -36,6 +34,8 @@ py_library(
         "@intrinsic_apis//intrinsic/assets/proto:asset_tag_py_pb2",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_py_pb2",
         "@intrinsic_apis//intrinsic/assets/proto:id_py_pb2",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_pb2_grpc",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_py_pb2",
         "@intrinsic_apis//intrinsic/assets/proto:view_py_pb2",
     ],
 )

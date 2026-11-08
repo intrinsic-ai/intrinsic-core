@@ -103,7 +103,6 @@ cc_library(
         "//intrinsic/stats:scoped_span",
         "//intrinsic/world/conversion:scene_object_to_world_updates",
         "//intrinsic/world/service/updater:world_updater_cc_grpc_proto",
-        "//intrinsic_sdk/intrinsic/assets/proto:installed_assets_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/conductor/proto:conductor_cc_grpc",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/platform/pubsub",
@@ -122,6 +121,7 @@ cc_library(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_googleapis//google/longrunning:longrunning_cc_grpc",
         "@intrinsic_apis//intrinsic/assets/proto:asset_deployment_cc_grpc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_grpc_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_instances_cc_grpc",
         "@intrinsic_apis//intrinsic/assets/scene_objects/proto:scene_object_manifest_cc_proto",
     ],
@@ -169,8 +169,8 @@ cc_library(
     deps = [
         "//intrinsic/config/proto:resource_set_cc_proto",
         "//intrinsic/resources/proto:geometric_resource_data_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/status:statusor",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 

@@ -88,10 +88,10 @@ go_proto_library(
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
         ":robot_calibration_data_service_go_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_go_proto",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_go_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 
@@ -138,7 +138,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -162,5 +161,6 @@ cc_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:object_properties_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_config_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )

@@ -164,10 +164,10 @@ proto_library(
     name = "prediction_proto",
     srcs = ["prediction.proto"],
     deps = [
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_proto",
         "@com_google_protobuf//:any_proto",
         "@com_google_protobuf//:duration_proto",
         "@com_google_protobuf//:timestamp_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_proto",
     ],
 )
 
@@ -181,7 +181,7 @@ go_proto_library(
     importpath = "intrinsic/skills/proto/prediction_go_proto",
     protos = [":prediction_proto"],
     deps = [
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 

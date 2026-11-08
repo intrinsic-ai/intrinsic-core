@@ -25,8 +25,8 @@ go_library(
     deps = [
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/assets:typeutils",
-        "//intrinsic_sdk/intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
+        "@intrinsic_apis//intrinsic/assets/catalog/proto/v1:asset_catalog_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_tag_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",

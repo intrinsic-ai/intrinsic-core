@@ -315,34 +315,6 @@ py_proto_library(
 )
 
 proto_library(
-    name = "world_updates_proto",
-    srcs = ["world_updates.proto"],
-    deps = [
-        "@intrinsic_apis//intrinsic/math/proto:pose_proto",
-        "@intrinsic_apis//intrinsic/world/proto:collision_settings_proto",
-        "@intrinsic_apis//intrinsic/world/proto:entity_search_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "world_updates_cc_proto",
-    deps = [":world_updates_proto"],
-)
-
-go_proto_library(
-    name = "world_updates_go_proto",
-    importpath = "intrinsic/world/proto/world_updates_go_proto",
-    importpath_aliases = ["intrinsic/world/public/proto/world_updates_go_proto"],
-    protos = ["world_updates_proto"],
-    deps = [
-        "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
-        "@intrinsic_apis//intrinsic/messages:messages_go_proto",
-        "@intrinsic_apis//intrinsic/world/proto:collision_settings_go_proto",
-        "@intrinsic_apis//intrinsic/world/proto:entity_search_go_proto",
-    ],
-)
-
-proto_library(
     name = "generic_action_proto",
     srcs = ["generic_action.proto"],
     deps = ["@intrinsic_apis//intrinsic/hardware/gpio/v1:signal_proto"],

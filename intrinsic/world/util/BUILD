@@ -75,10 +75,10 @@ cc_library(
     hdrs = ["remove_redundant_updates.h"],
     deps = [
         "//intrinsic/world/objects:object_world_proto_utils",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 
@@ -106,7 +106,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_cc_proto",
         "@abseil-cpp//absl/cleanup",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/log",
@@ -122,6 +121,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/geometry/proto/v1:transformed_geometry_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
 

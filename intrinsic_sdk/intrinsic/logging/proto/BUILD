@@ -108,7 +108,6 @@ go_proto_library(
         ":visualization_context_go_proto",
         "//intrinsic_sdk/intrinsic/skills/proto:prediction_go_proto",
         "//intrinsic_sdk/intrinsic/skills/proto:skill_service_go_proto",
-        "//intrinsic_sdk/intrinsic/world/proto:object_world_updates_go_proto",
         "//third_party/ros2/ros_interfaces/jazzy/visualization_msgs/msg:marker_array_go_proto",
         "@intrinsic_apis//intrinsic/executive/proto:log_items_go_proto",
         "@intrinsic_apis//intrinsic/hardware/gpio/v1:signal_go_proto",
@@ -158,6 +157,7 @@ go_proto_library(
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_go_proto",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 
