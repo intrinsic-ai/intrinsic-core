@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 
 package(
     default_visibility = [
@@ -48,6 +48,21 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "convert_c_realtime_status_test",
+    size = "small",
+    srcs = ["convert_c_realtime_status_test.cc"],
+    deps = [
+        ":convert_c_realtime_status",
+        ":icon_c_api",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings:string_view",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "convert_c_types",
     srcs = ["convert_c_types.cc"],
@@ -64,5 +79,26 @@ cc_library(
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/types:optional",
         "@com_gitlab_libeigen_eigen//:eigen",
+    ],
+)
+
+cc_test(
+    name = "convert_c_types_test",
+    size = "small",
+    srcs = ["convert_c_types_test.cc"],
+    deps = [
+        ":convert_c_types",
+        ":icon_c_api",
+        "//intrinsic_control/intrinsic/icon/control:joint_position_command",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/math:twist",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )

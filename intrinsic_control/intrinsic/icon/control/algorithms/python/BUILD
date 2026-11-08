@@ -13,6 +13,7 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "pybind_extension")
+load("//bazel:python.bzl", "py_test")
 
 # With bazel the pybind_extension does not work if the visibility is restricted.
 package(default_visibility = ["//visibility:public"])
@@ -26,6 +27,26 @@ pybind_extension(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "@abseil-cpp//absl/status:statusor",
         "@pybind11_abseil//pybind11_abseil:status_casters",
+    ],
+)
+
+py_test(
+    name = "directional_stiffness_test",
+    srcs = ["directional_stiffness_test.py"],
+    deps = [
+        ":directional_stiffness",
+        "@ai_intrinsic_sdks_pip_deps//numpy",
+        "@com_google_absl_py//absl/testing:absltest",
+    ],
+)
+
+py_test(
+    name = "overdamping_test",
+    srcs = ["overdamping_test.py"],
+    deps = [
+        ":overdamping",
+        "@ai_intrinsic_sdks_pip_deps//numpy",
+        "@com_google_absl_py//absl/testing:absltest",
     ],
 )
 

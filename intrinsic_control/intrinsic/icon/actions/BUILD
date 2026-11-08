@@ -14,9 +14,9 @@
 
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 load("//bazel:protos.bzl", "proto_library")
-load("//bazel:python.bzl", "py_library")
+load("//bazel:python.bzl", "py_library", "py_test")
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -34,6 +34,25 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:string_view",
         "@com_google_protobuf//:protobuf",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "action_utils_test",
+    srcs = ["action_utils_test.cc"],
+    deps = [
+        ":action_utils",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:joint_space_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],
 )
@@ -159,6 +178,26 @@ py_proto_library(
     deps = [":cartesian_admittance_action_proto"],
 )
 
+proto_library(
+    name = "impedance_trajectory_generators_proto",
+    srcs = ["impedance_trajectory_generators.proto"],
+    deps = [
+        ":cartesian_impedance_proto",
+        "@com_google_protobuf//:duration_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
+    ],
+)
+
+py_proto_library(
+    name = "impedance_trajectory_generators_py_pb2",
+    deps = [":impedance_trajectory_generators_proto"],
+)
+
+cc_proto_library(
+    name = "impedance_trajectory_generators_cc_proto",
+    deps = [":impedance_trajectory_generators_proto"],
+)
+
 cc_library(
     name = "cartesian_impedance_parameters",
     srcs = ["cartesian_impedance_parameters.cc"],
@@ -182,6 +221,28 @@ cc_library(
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto:joint_space_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto:matrix_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "cartesian_impedance_parameters_test",
+    srcs = ["cartesian_impedance_parameters_test.cc"],
+    deps = [
+        ":cartesian_impedance_cc_proto",
+        ":cartesian_impedance_parameters",
+        ":cartesian_impedance_reference_generators_cc_proto",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
+        "//intrinsic_sdk/intrinsic/eigenmath:rotation_utils",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/math:twist",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -216,6 +277,19 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "point_to_point_move_info_test",
+    srcs = ["point_to_point_move_info_test.cc"],
+    deps = [
+        ":point_to_point_move_info",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto:joint_space_cc_proto",
+    ],
+)
+
 cc_library(
     name = "point_to_point_move_signature",
     srcs = ["point_to_point_move_signature.cc"],
@@ -225,6 +299,56 @@ cc_library(
         ":point_to_point_move_info",
         "//intrinsic_control/intrinsic/icon/common:builtins",
         "@abseil-cpp//absl/log:check",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "point_to_point_move_signature_test",
+    srcs = ["point_to_point_move_signature_test.cc"],
+    deps = [
+        ":point_to_point_move_info",
+        ":point_to_point_move_signature",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+proto_library(
+    name = "linear_gripper_move_proto",
+    srcs = ["linear_gripper_move.proto"],
+)
+
+cc_proto_library(
+    name = "linear_gripper_move_cc_proto",
+    deps = [":linear_gripper_move_proto"],
+)
+
+py_proto_library(
+    name = "linear_gripper_move_py_pb2",
+    deps = [":linear_gripper_move_proto"],
+)
+
+cc_library(
+    name = "linear_gripper_move_info",
+    srcs = ["linear_gripper_move_info.cc"],
+    hdrs = ["linear_gripper_move_info.h"],
+    deps = [
+        ":action_utils",
+        ":linear_gripper_move_cc_proto",
+        "//intrinsic_control/intrinsic/icon/common:builtins",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/types:optional",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "linear_gripper_move_info_test",
+    srcs = ["linear_gripper_move_info_test.cc"],
+    deps = [
+        ":linear_gripper_move_info",
+        "@com_google_googletest//:gtest_main",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],
 )
@@ -244,6 +368,17 @@ cc_library(
         ":tare_force_torque_sensor_info",
         "//intrinsic_control/intrinsic/icon/common:builtins",
         "@abseil-cpp//absl/log:check",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "tare_force_torque_sensor_signature_test",
+    srcs = ["tare_force_torque_sensor_signature_test.cc"],
+    deps = [
+        ":tare_force_torque_sensor_info",
+        ":tare_force_torque_sensor_signature",
+        "@com_google_googletest//:gtest_main",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],
 )
@@ -298,6 +433,12 @@ cc_library(
 )
 
 cc_library(
+    name = "native_hand_guiding_info",
+    hdrs = ["native_hand_guiding_info.h"],
+    deps = ["@com_google_protobuf//:protobuf"],
+)
+
+cc_library(
     name = "simple_gripper_signature",
     srcs = ["simple_gripper_signature.cc"],
     hdrs = ["simple_gripper_signature.h"],
@@ -318,6 +459,40 @@ cc_library(
         ":action_utils",
         ":joint_jogging_info",
         "@abseil-cpp//absl/log:check",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "native_hand_guiding_signature",
+    srcs = ["native_hand_guiding_signature.cc"],
+    hdrs = ["native_hand_guiding_signature.h"],
+    deps = [
+        ":action_utils",
+        ":native_hand_guiding_info",
+        "@abseil-cpp//absl/log:check",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "native_hand_guiding_signature_test",
+    srcs = ["native_hand_guiding_signature_test.cc"],
+    deps = [
+        ":native_hand_guiding_info",
+        ":native_hand_guiding_signature",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "simple_gripper_signature_test",
+    srcs = ["simple_gripper_signature_test.cc"],
+    deps = [
+        ":simple_gripper_info",
+        ":simple_gripper_signature",
+        "@com_google_googletest//:gtest_main",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],
 )
@@ -374,6 +549,17 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "trajectory_tracking_action_signature_test",
+    srcs = ["trajectory_tracking_action_signature_test.cc"],
+    deps = [
+        ":trajectory_tracking_action_info",
+        ":trajectory_tracking_action_signature",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
 proto_library(
     name = "homing_action_proto",
     srcs = ["homing_action.proto"],
@@ -403,6 +589,17 @@ cc_library(
         ":action_utils",
         ":homing_info",
         "@abseil-cpp//absl/log:check",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "homing_signature_test",
+    srcs = ["homing_signature_test.cc"],
+    deps = [
+        ":homing_info",
+        ":homing_signature",
+        "@com_google_googletest//:gtest_main",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],
 )
@@ -478,6 +675,16 @@ py_library(
     ],
 )
 
+py_test(
+    name = "adio_utils_test",
+    srcs = ["adio_utils_test.py"],
+    deps = [
+        ":adio_utils",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@intrinsic_apis//intrinsic/icon/actions:adio_py_pb2",
+    ],
+)
+
 py_library(
     name = "cartesian_admittance_utils",
     srcs = ["cartesian_admittance_utils.py"],
@@ -493,6 +700,76 @@ py_library(
         "@ai_intrinsic_sdks_pip_deps//numpy",
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_py_pb2",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_py_pb2",
+    ],
+)
+
+py_test(
+    name = "cartesian_admittance_utils_test",
+    srcs = ["cartesian_admittance_utils_test.py"],
+    deps = [
+        ":cartesian_admittance_action_py_pb2",
+        ":cartesian_admittance_utils",
+        ":cartesian_impedance_py_pb2",
+        ":cartesian_impedance_reference_generators_py_pb2",
+        "//intrinsic_control/intrinsic/icon/proto:matrix_conversions",
+        "//intrinsic_sdk/intrinsic/math/python:data_types",
+        "@ai_intrinsic_sdks_pip_deps//numpy",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_py_pb2",
+        "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_py_pb2",
+    ],
+)
+
+py_test(
+    name = "wait_for_settling_utils_test",
+    srcs = ["wait_for_settling_utils_test.py"],
+    deps = [
+        ":wait_for_settling_utils",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@intrinsic_apis//intrinsic/icon/actions:wait_for_settling_action_py_pb2",
+    ],
+)
+
+py_test(
+    name = "point_to_point_move_utils_test",
+    srcs = ["point_to_point_move_utils_test.py"],
+    deps = [
+        ":point_to_point_move_utils",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@intrinsic_apis//intrinsic/icon/actions:point_to_point_move_py_pb2",
+        "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_py_pb2",
+    ],
+)
+
+py_test(
+    name = "trajectory_tracking_action_utils_test",
+    srcs = ["trajectory_tracking_action_utils_test.py"],
+    deps = [
+        ":trajectory_tracking_action_utils",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@com_google_protobuf//:protobuf_python",
+        "@intrinsic_apis//intrinsic/icon/actions:trajectory_tracking_action_py_pb2",
+        "@intrinsic_apis//intrinsic/icon/proto:joint_space_py_pb2",
+    ],
+)
+
+py_test(
+    name = "tare_force_torque_sensor_utils_test",
+    srcs = ["tare_force_torque_sensor_utils_test.py"],
+    deps = [
+        ":tare_force_torque_sensor_utils",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@intrinsic_apis//intrinsic/icon/actions:tare_force_torque_sensor_py_pb2",
+    ],
+)
+
+py_test(
+    name = "stop_utils_test",
+    srcs = ["stop_utils_test.py"],
+    deps = [
+        ":stop_utils",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@com_google_protobuf//:protobuf_python",
     ],
 )
 
@@ -547,5 +824,23 @@ py_library(
         "//intrinsic_control/intrinsic/icon/python:icon",
         "//intrinsic_sdk/intrinsic/math/python:data_types",
         "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
+    ],
+)
+
+py_test(
+    name = "force_primitive_utils_test",
+    srcs = ["force_primitive_utils_test.py"],
+    deps = [
+        ":force_primitive_py_pb2",
+        ":force_primitive_utils",
+        "//intrinsic/manipulation/skills/force:contact_stiffness_py_pb2",
+        "//intrinsic/manipulation/skills/force:utils",
+        "//intrinsic_control/intrinsic/icon/control/primitives/force_control/proto:force_primitives_py_pb2",
+        "//intrinsic_sdk/intrinsic/math/python:data_types",
+        "//intrinsic_sdk/intrinsic/solutions/testing:compare",
+        "@com_google_absl_py//absl/testing:absltest",
+        "@intrinsic_apis//intrinsic/math/proto:point_py_pb2",
+        "@intrinsic_apis//intrinsic/math/proto:pose_py_pb2",
+        "@intrinsic_apis//intrinsic/math/proto:quaternion_py_pb2",
     ],
 )

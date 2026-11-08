@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 
 package(default_visibility = [
     "//visibility:public",
@@ -36,6 +36,17 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/synchronization",
+    ],
+)
+
+cc_test(
+    name = "dynamics_factory_test",
+    srcs = ["dynamics_factory_test.cc"],
+    deps = [
+        ":dynamics_factory",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -131,6 +142,35 @@ cc_library(
 )
 
 cc_library(
+    name = "pinocchio_utils",
+    srcs = ["pinocchio_utils.cc"],
+    hdrs = ["pinocchio_utils.h"],
+    deps = [
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
+        "//intrinsic_kinematics/intrinsic/kinematics",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "@abseil-cpp//absl/strings",
+        "@pinocchio//:pinocchio_includes",
+    ],
+)
+
+cc_test(
+    name = "pinocchio_utils_test",
+    srcs = ["pinocchio_utils_test.cc"],
+    deps = [
+        ":pinocchio_utils",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
+        "@abseil-cpp//absl/status",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@pinocchio//:pinocchio_includes",
+    ],
+)
+
+cc_library(
     name = "validate_inertial_parameters",
     srcs = ["validate_inertial_parameters.cc"],
     hdrs = ["validate_inertial_parameters.h"],
@@ -147,6 +187,25 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "validate_inertial_parameters_test",
+    srcs = ["validate_inertial_parameters_test.cc"],
+    deps = [
+        ":validate_inertial_parameters",
+        "//intrinsic/eigenmath:random_number_utils",
+        "//intrinsic_kinematics/intrinsic/kinematics",
+        "//intrinsic_kinematics/intrinsic/kinematics:skeleton",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/eigenmath:rotation_utils",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "@abseil-cpp//absl/random",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "validate_rigid_body_interface",
     srcs = ["validate_rigid_body_interface.cc"],
@@ -157,5 +216,20 @@ cc_library(
         "//intrinsic_sdk/intrinsic/eigenmath",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/strings",
+    ],
+)
+
+cc_test(
+    name = "validate_rigid_body_interface_test",
+    srcs = ["validate_rigid_body_interface_test.cc"],
+    deps = [
+        ":mock_rigid_body_interface",
+        ":validate_rigid_body_interface",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )

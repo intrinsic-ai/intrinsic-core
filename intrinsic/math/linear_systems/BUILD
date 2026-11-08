@@ -40,3 +40,15 @@ cc_library(
         "@abseil-cpp//absl/strings",
     ],
 )
+
+cc_library(
+    name = "kalman_criterions",
+    srcs = ["kalman_criterions.cc"],
+    hdrs = ["kalman_criterions.h"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+    ],
+)

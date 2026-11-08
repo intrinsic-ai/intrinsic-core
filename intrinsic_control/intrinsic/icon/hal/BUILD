@@ -13,7 +13,8 @@
 # limitations under the License.
 
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
+load("//bazel:protos.bzl", "proto_library")
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 package(default_visibility = [
@@ -421,6 +422,81 @@ cc_library(
     ],
 )
 
+proto_library(
+    name = "test_hardware_module_proto",
+    srcs = ["test/test_hardware_module.proto"],
+)
+
+go_proto_library(
+    name = "test_hardware_module_go_proto",
+    importpath = "intrinsic/icon/hal/test_hardware_module_go_proto",
+    protos = [":test_hardware_module_proto"],
+)
+
+cc_proto_library(
+    name = "test_hardware_module_cc_proto",
+    deps = [":test_hardware_module_proto"],
+)
+
+cc_library(
+    name = "test_hardware_module",
+    srcs = ["test/test_hardware_module.cc"],
+    hdrs = [
+        "test/test_hardware_module.h",
+        "test/test_hardware_module_config.h",
+    ],
+    deps = [
+        ":default_hardware_interfaces",
+        ":hardware_interface_handle",
+        ":hardware_interface_registry",
+        ":hardware_module_init_context",
+        ":hardware_module_interface",
+        ":hardware_module_registry",
+        ":module_config",
+        ":test_hardware_module_cc_proto",
+        "//intrinsic_control/intrinsic/icon/control/safety:safety_messages_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/control/safety/extern:safety_status_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:electrical_motor_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:encoder_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:hardware_module_state_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:io_controller_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:joint_command_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:joint_limits_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:joint_state_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/utils:async_buffer",
+        "//intrinsic_control/intrinsic/icon/utils:core_time",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
+        "//intrinsic_sdk/intrinsic/util:invalid_until_set",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/synchronization",
+    ],
+    alwayslink = 1,
+)
+
+cc_library(
+    name = "mock_hardware_module",
+    testonly = True,
+    hdrs = ["test/mock_hardware_module.h"],
+    deps = [
+        ":default_hardware_interfaces",
+        ":hardware_module_init_context",
+        ":hardware_module_interface",
+        ":hardware_module_registry",
+        ":module_config",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "@abseil-cpp//absl/status",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
 cc_library(
     name = "hardware_module_proxy",
     srcs = ["hardware_module_proxy.cc"],
@@ -498,6 +574,50 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@abseil-cpp//absl/types:span",
+        "@intrinsic_apis//intrinsic/icon/server/config:icon_main_config_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "hardware_module_manager_test",
+    srcs = [
+        "hardware_module_manager_test.cc",
+        "test/test_hardware_module_config.h",
+    ],
+    tags = [
+        "notsan",  # b/326581379
+    ],
+    deps = [
+        ":default_hardware_interfaces",
+        ":hardware_module_interface",
+        ":hardware_module_manager",
+        ":hardware_module_proxy",
+        ":hardware_module_registry",
+        ":hardware_module_runtime",
+        ":mock_hardware_module",
+        ":module_config",
+        ":test_hardware_module",
+        "//intrinsic_control/intrinsic/icon/control:realtime_operational_status",
+        "//intrinsic_control/intrinsic/icon/control:realtime_state_manager_interface",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:hardware_module_state_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:io_controller_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/hal/interfaces:joint_state_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/interprocess/shared_memory_manager",
+        "//intrinsic_control/intrinsic/icon/interprocess/shared_memory_manager/testing:unique_segment_name",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "//intrinsic_sdk/intrinsic/util/thread",
+        "//intrinsic_sdk/intrinsic/util/thread:stop_token",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/time",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
         "@intrinsic_apis//intrinsic/icon/server/config:icon_main_config_cc_proto",
     ],
 )

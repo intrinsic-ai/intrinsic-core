@@ -52,3 +52,28 @@ cc_library(
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_storage_refs_cc_proto",
     ],
 )
+
+cc_library(
+    name = "utils",
+    testonly = True,
+    srcs = ["utils.cc"],
+    hdrs = ["utils.h"],
+    deps = [
+        ":world_service_fake",
+        "//intrinsic/geometry/service:in_memory_geometry_service",
+        "//intrinsic/geometry/storage:geometry_service_storage",
+        "//intrinsic/production/external/tsl:net",
+        "//intrinsic/world",
+        "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_grpc_proto",
+        "//intrinsic_sdk/intrinsic/util/path_resolver",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/world/gzfile",
+        "//intrinsic_sdk/intrinsic/world/hashing",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_github_grpc_grpc//:grpc_security_base",
+    ],
+)

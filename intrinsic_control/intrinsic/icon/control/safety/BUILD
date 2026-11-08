@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 load("//intrinsic_sdk/intrinsic/platform:flatbuffers.bzl", "cc_flatbuffers_library", "flatbuffers_library")
 
 package(default_visibility = [
@@ -59,5 +59,17 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/control/safety/extern:safety_status_fbs_cc",
         "@abseil-cpp//absl/strings",
         "@com_github_google_flatbuffers//:runtime_cc",
+    ],
+)
+
+cc_test(
+    name = "safety_messages_fbs_utils_test",
+    srcs = ["safety_messages_utils_test.cc"],
+    deps = [
+        ":safety_messages_fbs_cc",
+        ":safety_messages_fbs_utils",
+        "//intrinsic_control/intrinsic/icon/control/safety/extern:safety_status_fbs_cc",
+        "@com_github_google_flatbuffers//:flatbuffers",
+        "@com_google_googletest//:gtest_main",
     ],
 )

@@ -1,0 +1,73 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+// Copyright 2024 Google LLC.
+// SPDX-License-Identifier: Apache-2.0
+//
+// go/patching#snippets
+
+syntax = "proto2";
+
+package intrinsic_proto.testing;
+
+option go_package = "intrinsic/testing/undeclared/undeclared_output_annotation_go_proto";
+
+// This proto contains data for an undeclared output file. For every file in
+// the undeclared outputs directory, one of these entries may be added
+// to the undeclared outputs manifest file.
+//
+// For more information, see: http://go/undeclared-output-annotations
+message UndeclaredOutputAnnotation {
+  // The path (with name) of the file being described (relative to the
+  // undeclared outputs directory).
+  optional string relative_path = 1;
+
+  // (Optional) a description of what this file is/contains. This is for
+  // reference for anyone viewing these results in sponge. This description
+  // should help someone viewing the list of these files to understand the
+  // purpose of this file and what they would want to view it for.
+  optional string description = 2;
+
+  // (Optional) the content-type (aka MIME-type) of the file. This is for
+  // proper displaying in a web browser.
+  // (i.e. text/plain, image/jpeg, text/html, etc)
+  optional string content_type = 3;
+
+  // (Optional) a url to a content display app/site for this file.
+  //
+  // The following GET parameters will be added to the url. These are needed
+  // in a call back to Sponge to read this file:
+  //   - resource_name=%{resource_name}
+  //   - file_uid=%{file_uid}
+  //   - file_uri=%{file_uri}
+  //   - file_content_type={$file_content_type}
+  //   - file_archive_entry={$file_archive_entry}
+  //   - file_archive_entry_content_type={$file_archive_entry_content_type}
+  //
+  // See go/sponge-v2-content-viewer-contract for more information
+  optional string content_viewer = 4;
+
+  // (Optional) the name of the test case which this output should be
+  // attached to. The format is "com.google.my.Class#testMethodName"
+  // (or "testMethodName" for test types that do not have a class).
+  // See test.xml in Sponge outputs to see all recognized test case
+  // names in an invocation (enable hidden files first).
+  // Note: do not overuse this; the Sponge UI will get overcrowded.
+  optional string test_case = 5;
+
+  reserved 6;
+
+  // (Optional) set this file as hidden on the Sponge UI.
+  optional bool hidden = 7 [default = false];
+}

@@ -1,0 +1,60 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.icon.actions.proto;
+
+option go_package = "intrinsic/icon/actions/linear_gripper_move_go_proto";
+
+// Fixed parameters for a LinearGripperMove action. These are provided once by
+// the user when the action is created, and remain the same for the lifetime of
+// the action.
+message LinearGripperMoveFixedParams {
+  // The width to move the gripper (m).
+  double width = 1;
+  // The force to move the gripper with (N) to the specified width.
+  //
+  // Some gripper device implementations may not use this field.
+  optional double force = 2;
+  // The speed to move the gripper at (m/s) to the specified width.
+  //
+  // Some gripper device implementations may not use this field.
+  optional double speed = 3;
+
+  // The distance threshold (m) between the commanded width and the sensed width
+  // at which the command is considered to be done.
+  // If omitted, a default value is used (1mm).
+  optional double convergence_tolerance = 4;
+}
+
+// Fixed parameters for a LinearGripperStreamingMove action.
+//
+// The action maintains the initial position of the gripper until the first
+// streaming command is sent.
+message LinearGripperStreamingMoveFixedParams {}
+
+// Streaming parameters for a LinearGripperStreamingMove action.
+message LinearGripperStreamingMoveUpdate {
+  // The width to move the gripper (m).
+  double width = 1;
+  // The force to move the gripper with (N) to the specified width.
+  //
+  // Some gripper device implementations may not use this field.
+  optional double force = 2;
+  // The speed to move the gripper at (m/s) to the specified width.
+  //
+  // Some gripper device implementations may not use this field.
+  optional double speed = 3;
+}

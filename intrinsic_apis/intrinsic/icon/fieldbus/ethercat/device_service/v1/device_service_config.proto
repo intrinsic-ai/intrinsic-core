@@ -1,0 +1,382 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.fieldbus.ethercat.device_service.v1;
+
+import "google/protobuf/duration.proto";
+import "intrinsic/assets/proto/field_metadata.proto";
+import "intrinsic/assets/proto/v1/resolved_dependency.proto";
+import "intrinsic/icon/hal/lib/fieldbus/v1/value_parsing.proto";
+import "intrinsic/icon/hal/lib/service_variable_value/v1/service_variable_config.proto";
+
+option go_package = "intrinsic/icon/fieldbus/ethercat/device_service/v1/device_service_config_go_proto";
+
+// An identifier for the type and version of an EtherCAT bus device.
+// A single ESI or device service can define multiple such products or
+// revisions, so we need to strictly define the exact type once. Service
+// implementations are expected to validate that the provided DeviceIdentifier
+// matches the type of the device.
+message DeviceIdentifier {
+  int32 vendor_id = 1;
+  int32 product_code = 2;
+  int32 revision = 3;
+}
+
+// The device-specific EtherCAT configuration message.
+// This mapping will eventually contain the mapping from bus variables to
+// hardware interfaces.
+message DeviceServiceConfig {
+  // The resolved dependency for the Intrinsic runtime.
+  intrinsic_proto.assets.v1.ResolvedDependency intrinsic_runtime = 6
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.data.v1.DataAssets"
+      }];
+
+  // Identifies the device at hand.
+  DeviceIdentifier device_identifier = 1;
+  intrinsic_proto.assets.v1.ResolvedDependency
+      esi_bundle = 2 [(intrinsic_proto.assets.field_metadata).dependency = {
+    requires: "data://intrinsic_proto.fieldbus.ethercat.device_service.v1.EsiBundle",
+  }];
+
+  // List interface mappings that define how device data will be exposed through
+  // hardware interfaces.
+  repeated InterfaceMapping interface_mappings = 3;
+
+  // Options to configure the behavior of the device service.
+  DeviceServiceOptions options = 4;
+
+  // Configuration for the device's synchronization mode.
+  SyncConfig sync_config = 5;
+}
+
+message SyncConfig {
+  // The name of the synchronization mode to use (must match an <OpMode> name
+  // from the ESI). If empty, the system selects a default mode:
+  // 1. If Ds402DeviceData is mapped: Selects the first mode with DC support
+  // (AssignActivate > 0).
+  // 2. Otherwise: Selects the first available mode (typically SM/FreeRun).
+  string selected_op_mode_name = 1;
+}
+
+// Options to configure the behavior of the device service.
+message DeviceServiceOptions {
+  // If true, the service will log detailed information about the variable
+  // resolution process for all variables. This is useful for debugging
+  // complex ESI files or mapping issues.
+  bool enable_variable_resolution_tracing = 1;
+}
+
+// A mapping of device data to a hardware interface.
+message InterfaceMapping {
+  // The interface that the device data maps to.
+  // If DeviceData is a composable type, like JointDeviceData, the same
+  // interface can be referenced (even from other bus devices).
+  Interface interface = 1;
+  // The specific functional device data (e.g., Joint metrics, DS402 drive
+  // parameters, or I/O signals) that should be exposed through the interface.
+  DeviceData device_data = 2;
+}
+
+// An interface to map the device data (joint value, ds402 drive parameters,
+// I/O signals) to.
+// Initially this will just be hardware interfaces, but this will eventually be
+// extended to simulation interfaces.
+message Interface {
+  // Hardware interface name.
+  // Required to be unique in the scope of the same fieldbus.
+  string interface_name = 1;
+}
+
+// A union of all supported device data types.
+// The list matches the interfaces provided by the EtherCAT hardware module
+// through the individual `BusDevice` implementations.
+message DeviceData {
+  oneof data {
+    JointDeviceData joint_device_data = 1;
+    Ds402DeviceData ds402_device_data = 2;
+    AdioDeviceData adio_device_data = 3;
+    ForceTorqueDeviceData force_torque_device_data = 4;
+    ProcessVariableDeviceData bus_variable_device_data = 5;
+    ServiceVariableDeviceData sdo_device_data = 6;
+    // More to be added in the future
+  }
+}
+
+// Describes device data for writing fixed values to bus variables.
+message ProcessVariableDeviceData {
+  repeated BusVariableWrite bus_variable_writes = 1;
+}
+
+// Configuration for writing a fixed value to a bus variable.
+message BusVariableWrite {
+  VariableReference variable_reference = 1;
+  BusVariableValue value = 2;
+}
+
+// The value to write to a bus variable.
+// Intermediate bit lengths (e.g., 24-bit, 40-bit) should be stored in the
+// next largest standard container (e.g., uint32_value for 24-bit).
+message BusVariableValue {
+  oneof value {
+    bool bool_value = 1;
+    uint32 uint8_value = 2;
+    int32 int8_value = 3;
+    uint32 uint16_value = 4;
+    int32 int16_value = 5;
+    uint32 uint32_value = 6;
+    int32 int32_value = 7;
+    uint64 uint64_value = 8;
+    int64 int64_value = 9;
+    float float_value = 10;
+    double double_value = 11;
+  }
+}
+
+// Describes device data for SDO reads and writes.
+// SDOs (Service Data Objects) use the acyclic CoE (CANopen over EtherCAT)
+// mailbox mechanism. They are read/written on demand and do not need to be
+// mapped to a PDO.
+message ServiceVariableDeviceData {
+  repeated ServiceVariableWrite sdo_writes = 1;
+  repeated ServiceVariableRead sdo_reads = 2;
+}
+
+// Configuration for writing a fixed value to an SDO variable.
+message ServiceVariableWrite {
+  // The target object. Can be a localized name (e.g. "Quick Stop Option Code")
+  // or a raw address (e.g. "#x605A.0").
+  string object = 1;
+  BusVariableValue value = 2;
+}
+
+// Configuration for reading an SDO variable.
+message ServiceVariableRead {
+  // The target object. Can be a localized name or a raw address.
+  string object = 1;
+  // The expected variable type to read. A wrong type can result in a
+  // runtime error when reading the variable.
+  intrinsic_proto.fieldbus.v1.ServiceVariableType type = 2;
+  // The alias for the variable.
+  // Required if any of the ANALOG_INPUT export types are enabled.
+  string alias = 3;
+  // Maps the value as read from the device to a string representation.
+  map<string, intrinsic_proto.fieldbus.v1.ValuePatterns>
+      interpretations_of_values = 4;
+}
+
+// Describes joint device data of a single joint.
+// Additional joint data for the complete joint hardware interface may be
+// provided by other (or even the same) bus device(s).
+message JointDeviceData {
+  // Holds the ESI reference to the joint position command variable.
+  VariableReference joint_position_command_reference = 1;
+
+  // Holds the ESI reference to the joint position state variable.
+  VariableReference joint_position_state_reference = 2;
+  // Holds the optional ESI reference to the joint velocity state variable.
+  optional VariableReference joint_velocity_state_reference = 3;
+  // Holds the optional ESI reference to the joint acceleration state variable.
+  optional VariableReference joint_acceleration_state_reference = 4;
+
+  // The joint index.
+  // Joint device data is typically compositioned from multiple joint devices
+  // into n-dimensional state and command vectors. This index specifies the
+  // position of this joint in the kinematic chain from base to tip. Thus, the
+  // index needs to be unique across all variables that are composed to the same
+  // interfaces.
+  // If not provided, order will be determined from the logical bus position.
+  optional uint32 joint_index = 5;
+
+  // The resolution of the encoder in ticks per radian (or ticks/s per radian/s,
+  // or ticks/s^2 per radian/s^2).
+  //
+  // Applied in the following way:
+  //   radian_value = variable_reference (in ticks) / ticks_per_radian.
+  //   command_ticks = radian_command * ticks_per_radian.
+  //
+  // Note: Using negative values changes the turn direction.
+  double ticks_per_radian = 6;
+}
+
+// Describes device data for a drive following the CiA 402 (DS402) profile for
+// drives and motion control.
+message Ds402DeviceData {
+  // Reference to the Status Word (Object 0x6041), which indicates the current
+  // state of the drive's state machine.
+  VariableReference status_word_reference = 1;
+  // Optional reference to the Error Code (Object 0x603F), which provides
+  // specific error information when the drive is in a fault state.
+  optional VariableReference error_code_reference = 2;
+
+  // Reference to the Control Word (Object 0x6040), which is used to command
+  // transitions in the drive's state machine.
+  VariableReference control_word_reference = 3;
+
+  // Reference to Digital Outputs (Object 0x60FE).
+  optional VariableReference digital_outputs_reference = 4;
+
+  // Configuration for DS402 homing.
+  // If not provided, homing support is disabled for this drive.
+  optional HomingReference homing_reference = 5;
+
+  // Interpretations of the error code (read from `error_code_reference`) to
+  // a human readable string.
+  // Multiple interpretations can match a single error code.
+  // Text output may be truncated.
+  map<string, intrinsic_proto.fieldbus.v1.ValuePatterns>
+      error_code_interpretations = 6;
+
+  // The delay to wait after enabling the drive before actually sending the
+  // enabling control words. Useful for temporally displacing potential spikes
+  // of electrical current during enabling, which might otherwise cause unstable
+  // supply voltage. Defaults to 0s if not set.
+  google.protobuf.Duration enable_delay = 7;
+
+  // If true, uses legacy fault detection by triggering faults on a non-zero
+  // error code (`error_code_reference`, Object 0x603F) and ignoring DS402
+  // status word (`status_word_reference`, Object 0x6041) fault states (Fault
+  // or FaultReactionActive) when the error code (`error_code_reference`) is 0
+  // (or not configured). Default: false.
+  // TODO: b/575433338 - Remove this deprecated option once all drives have
+  // been confirmed working with standard DS402 status word fault detection.
+  bool use_legacy_error_code_fault_detection = 8 [deprecated = true];
+}
+
+// Configuration for DS402 homing variables.
+message HomingReference {
+  oneof configuration {
+    // NOTE: This is not implemented yet and will return an error if selected.
+    // Automatically resolve all standard DS402 homing variables (0x6098,
+    // 0x607C, etc.). The engine will prefer PDOs if they exist, otherwise it
+    // will fallback to SDOs.
+    Auto auto = 1;
+
+    // Manually specify which variables to use for homing.
+    Manual manual = 2;
+
+    // Explicitly disable homing support for this device.
+    Disabled disabled = 3;
+  }
+
+  message Auto {}
+
+  message Disabled {}
+
+  // Manual mapping of variables used for homing.
+  // If a variable is provided here, it will be resolved by the device service
+  // and integrated into the PDO configuration.
+  // Unset variables will be accessed via SDO by the hardware module. This might
+  // fail for variables that are already available as PDO.
+  message Manual {
+    // Object 0x6098: Homing method
+    optional VariableReference homing_method = 1;
+    // Object 0x607C: Home offset
+    optional VariableReference home_offset = 2;
+    // Object 0x6099.1: Homing speed (Switch/Zero)
+    optional VariableReference homing_speed = 3;
+    // Object 0x6099.2: Homing speed (Creep)
+    optional VariableReference homing_creep_speed = 4;
+    // Object 0x609A: Homing acceleration
+    optional VariableReference homing_acceleration = 5;
+    // Object 0x6060: Modes of operation
+    optional VariableReference modes_of_operation = 6;
+    // Object 0x6061: Modes of operation display
+    optional VariableReference modes_of_operation_display = 7;
+  }
+}
+
+message AdioDeviceData {
+  oneof adio_variable {
+    DigitalVariableReference digital_input = 1;
+    DigitalVariableReference digital_output = 2;
+    AnalogVariableReferences analog_inputs = 3;
+    AnalogVariableReferences analog_outputs = 4;
+  }
+}
+
+message DigitalVariableReference {
+  VariableReference variable_reference = 1;
+  // If the value referenced by `variable_reference` is an array,
+  // this is the index of the desired array element.
+  optional uint64 array_index = 2;
+  // Optional aliases for the individual bits of the variable.
+  // The key is the bit index (LSB first) and the value is the alias.
+  // The indices are zero indexed and need to be smaller than the size of the
+  // variable.
+  map<uint32, string> bit_index_to_alias = 3;
+}
+
+message AnalogVariableReferences {
+  // The key is the alias name of each variable reference and must be unique.
+  // The value is the variable reference to the device's object dictionary.
+  map<string, VariableReference> named_variable_references = 1;
+}
+
+message ForceTorqueDeviceData {
+  enum ForceTorqueDeviceModel {
+    DEVICE_MODEL_UNSPECIFIED = 0;
+    DEVICE_MODEL_ATI_OEM = 1;
+  }
+
+  VariableReference force_x = 1;
+  VariableReference force_y = 2;
+  VariableReference force_z = 3;
+
+  VariableReference torque_x = 4;
+  VariableReference torque_y = 5;
+  VariableReference torque_z = 6;
+
+  VariableReference status_code = 7;
+  VariableReference sample_counter = 9;
+  VariableReference control_code = 10;
+
+  ForceTorqueDeviceModel device_model = 11;
+  optional uint32 filter_index = 12;
+}
+
+// Represents a variable (object) within an EtherCAT device.
+// This structure allows users to define variables using names or
+// precise hardware addresses.
+message VariableReference {
+  // The PDO (Process Data Object) that contains or should contain the variable.
+  // This is optional. If omitted, the engine will search all active PDOs
+  // for the object.
+  //
+  // Options:
+  // 1. Numerical Index: Use hex or decimal (e.g., "0x1A01", "#x1A01", "6657").
+  //    This is the most stable and unambiguous method.
+  // 2. Exact Name: The string name of the PDO as it appears in the ESI file
+  //    (e.g., "2nd Transmit PDO mapping").
+  string pdo = 1;
+
+  // The specific object within the device's Object Dictionary.
+  //
+  // Options:
+  // 1. Strict Address: "Index.SubIndex" using hex or decimal
+  //    (e.g., "0x603F.0", "#x603F.0", "24639.0", "0x603F.0x0").
+  //    *Priority:* If the string follows numerical notation AND the
+  //    address exists in the hardware, it is resolved as an address.
+  // 2. Exact Name: The string name of the variable from the ESI
+  //    (e.g., "Error code", "Status word").
+  //
+  // Ambiguity Handling:
+  // If a string could be both a valid address and a valid name, the engine
+  // will prioritize the Address. If the user intends to target a Name that
+  // happens to look like an address (e.g., a variable named "100"), they
+  // must use the "name:" prefix (e.g., "name:100").
+  string object = 2;
+}

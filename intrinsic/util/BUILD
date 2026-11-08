@@ -75,6 +75,22 @@ cc_library(
 )
 
 cc_library(
+    name = "subprocess",
+    srcs = ["subprocess.cc"],
+    hdrs = ["subprocess.h"],
+    deps = [
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/types:span",
+    ],
+)
+
+cc_library(
     name = "testcallback",
     srcs = ["testcallback.cc"],
     hdrs = ["testcallback.h"],

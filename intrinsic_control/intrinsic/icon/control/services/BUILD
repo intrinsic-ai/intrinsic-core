@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 
 package(
     default_visibility = [
@@ -153,6 +153,23 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "geometry_from_geometry_library_test",
+    srcs = ["geometry_from_geometry_library_test.cc"],
+    deps = [
+        ":geometry_from_geometry_library",
+        "//intrinsic/geometry/service:in_memory_geometry_service",
+        "//intrinsic/geometry/storage:geometry_service_storage",
+        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
+        "//intrinsic_sdk/intrinsic/geometry/api:shape_factory",
+        "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_grpc_proto",
+        "//intrinsic_sdk/intrinsic/geometry/storage:geometry_library",
+        "@com_github_grpc_grpc//:grpc++",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "dynamics_service",
     hdrs = ["dynamics_service.h"],
@@ -215,5 +232,107 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/release:source_location",
         "@abseil-cpp//absl/hash",
         "@cppregpattern//:registry",
+    ],
+)
+
+cc_test(
+    name = "service_test",
+    srcs = ["service_test.cc"],
+    deps = [
+        ":service",
+        ":service_collection",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_library(
+    name = "world_from_scene_object_gzf_service",
+    testonly = True,
+    srcs = ["world_from_scene_object_gzf_service.cc"],
+    hdrs = ["world_from_scene_object_gzf_service.h"],
+    deps = [
+        ":service",
+        ":service_registration",
+        ":world_service",
+        "//intrinsic/world",
+        "//intrinsic/world/objects:object_world",
+        "//intrinsic/world/service/test:world_service_fake",
+        "//intrinsic_sdk/intrinsic/geometry/storage:gzf_storage",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/scene/util:scene_object_gzf",
+        "//intrinsic_sdk/intrinsic/util/path_resolver",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/world/gzfile",
+        "//intrinsic_sdk/intrinsic/world/hashing",
+        "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
+        "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
+    ],
+    alwayslink = True,
+)
+
+cc_test(
+    name = "dynamics_from_kinematics_service_test",
+    srcs = ["dynamics_from_kinematics_service_test.cc"],
+    data = [
+        "//intrinsic_control/intrinsic/models/robot_definitions/ur:ur3e_scene_object",
+    ],
+    deps = [
+        ":dynamics_from_kinematics_service",
+        ":dynamics_service",
+        ":kinematics_from_world_service",
+        ":service",
+        ":world_from_scene_object_gzf_service",
+        "//intrinsic_control/intrinsic/icon/dynamics:register_robotics_library_dynamics_creator",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings:string_view",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/server/config:services_config_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "assembly_from_world_service_test",
+    size = "small",
+    srcs = ["assembly_from_world_service_test.cc"],
+    data = [
+        "//intrinsic_control/intrinsic/models/robot_definitions/ur:ur3e_scene_object",
+    ],
+    deps = [
+        ":assembly_from_world_service",
+        ":world_from_scene_object_gzf_service",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
+cc_test(
+    name = "world_from_scene_object_gzf_service_test",
+    srcs = ["world_from_scene_object_gzf_service_test.cc"],
+    data = [
+        "//intrinsic_control/intrinsic/models/robot_definitions/ur:ur3e_scene_object",
+    ],
+    deps = [
+        ":world_from_scene_object_gzf_service",
+        ":world_service",
+        "//intrinsic_control/intrinsic/icon/utils:world_utils",
+        "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
+        "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
+        "//intrinsic_sdk/intrinsic/world/objects:world_object",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )

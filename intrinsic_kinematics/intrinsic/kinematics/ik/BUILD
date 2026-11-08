@@ -300,6 +300,27 @@ cc_library(
 )
 
 cc_library(
+    name = "mock_inverse_kinematics",
+    testonly = True,
+    hdrs = [
+        "mock_inverse_kinematics.h",
+    ],
+    deps = [
+        ":inverse_kinematics_interface",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
+        "//intrinsic_kinematics/intrinsic/kinematics",
+        "//intrinsic_kinematics/intrinsic/kinematics:group",
+        "//intrinsic_kinematics/intrinsic/kinematics:model_interface",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "@abseil-cpp//absl/types:optional",
+        "@abseil-cpp//absl/types:span",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_library(
     name = "rt_calibrated_ur_inverse_kinematics",
     srcs = ["rt_calibrated_ur_inverse_kinematics.cc"],
     hdrs = ["rt_calibrated_ur_inverse_kinematics.h"],

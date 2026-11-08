@@ -939,6 +939,20 @@ cc_library(
 )
 
 cc_library(
+    name = "fake_realtime_slot_map_impl",
+    testonly = True,
+    srcs = ["fake_realtime_slot_map_impl.cc"],
+    hdrs = ["fake_realtime_slot_map_impl.h"],
+    visibility = [":icon"],
+    deps = [
+        ":realtime_slot_map",
+        ":slot_types",
+        "//intrinsic_control/intrinsic/icon/control/parts:feature_interface_registry",
+        "@abseil-cpp//absl/container:flat_hash_map",
+    ],
+)
+
+cc_library(
     name = "realtime_state_manager_interface",
     hdrs = ["realtime_state_manager_interface.h"],
     visibility = [

@@ -163,6 +163,19 @@ cc_library(
 )
 
 cc_library(
+    name = "joint_state_matcher",
+    testonly = True,
+    hdrs = ["joint_state_matcher.h"],
+    deps = [
+        ":joint_state",
+        ":state_rn",
+        ":to_fixed_string",
+        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_library(
     name = "joint_trajectories",
     srcs = ["joint_trajectories.cc"],
     hdrs = ["joint_trajectories.h"],

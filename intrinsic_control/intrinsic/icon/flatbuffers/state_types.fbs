@@ -1,0 +1,112 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+
+include "intrinsic/icon/flatbuffers/transform_types.fbs";
+
+namespace intrinsic_fbs;
+
+// Cartesian state with position.
+struct CartStateP {
+  pose:intrinsic_fbs.Transform;
+}
+
+// Cartesian state with velocity.
+struct CartStateV {
+  velocity:intrinsic_fbs.Twist;
+}
+
+// Cartesian state with position and velocity.
+struct CartStatePV {
+  pose:intrinsic_fbs.Transform;
+  velocity:intrinsic_fbs.Twist;
+}
+
+// Cartesian state with position, velocity and acceleration data of one frame's
+// motion relative to and expressed in another frame (observer frame). Exactly
+// which frame is being described depends on where this structure is used.
+struct CartStatePVA {
+  pose:intrinsic_fbs.Transform;
+  velocity:intrinsic_fbs.Twist;
+  acceleration:intrinsic_fbs.Acceleration;
+}
+
+// Cartesian state with time, position, velocity and acceleration data of one
+// frame's motion relative to and expressed in another frame (observer frame).
+// Exactly which frame is being described depends on where this structure is
+// used.
+struct CartStateTPVA {
+  timestamp_ns:int64; // in nanoseconds
+  pose:intrinsic_fbs.Transform;
+  velocity:intrinsic_fbs.Twist;
+  acceleration:intrinsic_fbs.Acceleration;
+}
+
+// Joint state with position, velocity, torque data.
+// Have to spell out torque here because flatc generates two structs for each 
+// table:
+// * One that has the literal table name
+// * One that has the suffix "T"
+// Since we *also* have `JointPositionPV`, *that* gets a generated struct named
+// `JointPositionPVT`...
+table JointStatePVTorque {
+  position:intrinsic_fbs.VectorNd;
+  velocity:intrinsic_fbs.VectorNd;
+  torque:intrinsic_fbs.VectorNd;
+}
+
+// Joint state with velocity, acceleration, and jerk data.
+table JointStateVAJ {
+  velocity:intrinsic_fbs.VectorNd;
+  acceleration:intrinsic_fbs.VectorNd;
+  jerk:intrinsic_fbs.VectorNd;
+}
+
+// Joint state with position, velocity, acceleration, and jerk data.
+table JointStatePVAJ {
+  position:intrinsic_fbs.VectorNd;
+  velocity:intrinsic_fbs.VectorNd;
+  acceleration:intrinsic_fbs.VectorNd;
+  jerk:intrinsic_fbs.VectorNd;
+}
+
+// Joint state with position, velocity and acceleration data.
+table JointStatePVA {
+  position:intrinsic_fbs.VectorNd;
+  velocity:intrinsic_fbs.VectorNd;
+  acceleration:intrinsic_fbs.VectorNd;
+}
+
+// Joint state with position data.
+table JointStateP {
+  position:intrinsic_fbs.VectorNd;
+}
+
+// Joint state with position and velocity data.
+table JointStatePV {
+  position:intrinsic_fbs.VectorNd;
+  velocity:intrinsic_fbs.VectorNd;
+}
+
+// Joint state with velocity data.
+table JointStateV {
+  velocity:intrinsic_fbs.VectorNd;
+}
+
+// Joint state with velocity and acceleration data.
+table JointStateVA {
+  velocity:intrinsic_fbs.VectorNd;
+  acceleration:intrinsic_fbs.VectorNd;
+}
+

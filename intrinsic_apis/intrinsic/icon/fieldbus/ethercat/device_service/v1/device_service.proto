@@ -1,0 +1,126 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.fieldbus.ethercat.device_service.v1;
+
+import "intrinsic/icon/fieldbus/ethercat/device_service/v1/device_service_config.proto";
+import "intrinsic/icon/fieldbus/ethercat/device_service/v1/esi.proto";
+
+option go_package = "intrinsic/icon/fieldbus/ethercat/device_service/v1/device_service_go_proto";
+
+// Request to get the configuration of the EtherCAT bus device.
+message GetConfigurationRequest {}
+
+// Response to the GetConfiguration request.
+message GetConfigurationResponse {
+  // The configuration of the EtherCAT fieldbus device, which includes the
+  // mapping from bus variables to what will later become hardware interfaces.
+  DeviceServiceConfig device_service_config = 1;
+
+  // The ESI bundle Data Asset.
+  EsiBundle esi_bundle = 2;
+
+  // The fully resolved bus configuration.
+  // "Resolved" means that logical variable references have been mapped to
+  // concrete EtherCAT objects (index/subindex) and assigned to specific PDOs
+  // as defined by the ESI logic.
+  // This configuration provides the necessary details for the system to
+  // generate the ENI Builder Input (EBI) and initialize hardware interfaces.
+  ResolvedConfiguration resolved_configuration = 3;
+}
+
+// Represents the fully resolved hardware configuration for a single device.
+message ResolvedConfiguration {
+  // Instructions for the EBI generator regarding PDO selection and
+  // modification.
+  message EbiPdoInstructions {
+    // List of PDO indices to be added to the exclusion list (turned OFF).
+    // Corresponds to <ExcludePdo><Add> entries in the EBI.
+    repeated uint32 pdo_exclusions_to_add = 1;
+    // List of PDO indices to be removed from the exclusion list (turned ON).
+    // Corresponds to <ExcludePdo><Remove> entries in the EBI.
+    repeated uint32 pdo_exclusions_to_remove = 2;
+
+    // Defines an object to be explicitly added to a PDO mapping in the EBI.
+    message ObjectAddition {
+      uint32 pdo_index = 1;
+      uint32 object_index = 2;
+      uint32 object_sub_index = 3;
+
+      // Metadata retrieved from the ESI needed for the EBI <Entry> tag.
+      string data_type = 4;  // e.g., "UINT"
+      uint32 bit_size = 5;   // e.g., 16
+      string name = 6;       // The localized name of the object.
+    }
+    // List of objects to be appended to specific PDOs.
+    repeated ObjectAddition objects_to_add = 3;
+  }
+  EbiPdoInstructions ebi_pdo_instructions = 1;
+
+  // Mapping from logical references to resolved hardware names and indices.
+  // Key: Unique concatenator of the user VariableReference as "pdo::object".
+  // Value: Metadata used to construct the final ENI variable access string.
+  map<string, ResolvedPdoVariable> pdo_mappings = 2;
+
+  // Mapping from logical SDO references (names or raw addresses) to their
+  // resolved hardware indices.
+  // Key: The exact 'object' string provided in the ServiceVariableRead or
+  // ServiceVariableWrite config. Value: The resolved index and sub-index.
+  map<string, ResolvedSdoVariable> sdo_mappings = 6;
+
+  // The list of available synchronization modes as defined in the ESI.
+  // Each mode corresponds to an <OpMode> entry.
+  repeated OpModeInfo supported_op_modes = 4;
+
+  // The active OpMode name that was selected for this device.
+  // This is the result of resolving the `selected_op_mode_name` from the
+  // config.
+  string active_op_mode_name = 5;
+}
+
+message OpModeInfo {
+  string name = 1;
+  string description = 2;
+  // True if this mode supports Distributed Clocks (AssignActivate > 0).
+  bool is_dc = 3;
+}
+
+// Metadata for a resolved variable within the bus configuration.
+message ResolvedPdoVariable {
+  uint32 pdo_index = 1;
+  uint32 index = 2;
+  uint32 sub_index = 3;
+
+  // The specific name components from the ESI used to build the ENI access
+  // string. final_eni_name = [DeviceName] + "." + [pdo_eni_name] + "." +
+  // [object_eni_name]
+  string pdo_eni_name = 4;
+  string object_eni_name = 5;
+}
+
+// Metadata for a resolved SDO variable.
+message ResolvedSdoVariable {
+  uint32 index = 1;
+  uint32 sub_index = 2;
+}
+// The DeviceService provides information and variable mapping information about
+// a single EtherCAT bus device.
+// It is used to configure the EtherCAT hardware module.
+service DeviceService {
+  // Returns the EtherCAT configuration for a particular device.
+  rpc GetConfiguration(GetConfigurationRequest)
+      returns (GetConfigurationResponse) {}
+}

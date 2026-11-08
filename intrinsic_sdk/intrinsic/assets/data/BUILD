@@ -15,6 +15,25 @@
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
+    name = "fakedataassets",
+    testonly = True,
+    srcs = ["fake_data_assets.go"],
+    importpath = "intrinsic/assets/data/fakedataassets",
+    visibility = ["//intrinsic:public_api_users"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/assets:idutils",
+        "//intrinsic_sdk/intrinsic/testing:grpctest",
+        "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_go_proto",
+        "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_assets_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:metadata_go_proto",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//codes:go_default_library",
+        "@org_golang_google_grpc//credentials/local:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
+    ],
+)
+
+go_library(
     name = "databundle",
     srcs = ["databundle.go"],
     importpath = "intrinsic/assets/data/databundle",

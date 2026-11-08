@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 
 package(
     default_visibility = [
@@ -42,6 +42,18 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "part_group_test",
+    size = "small",
+    srcs = ["part_group_test.cc"],
+    deps = [
+        ":part_group",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
 cc_library(
     name = "topic_names",
     srcs = ["topic_names.cc"],
@@ -55,6 +67,19 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "topic_names_test",
+    size = "small",
+    srcs = ["topic_names_test.cc"],
+    deps = [
+        ":id_types",
+        ":topic_names",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 cc_library(
     name = "slot_part_map",
     srcs = ["slot_part_map.cc"],
@@ -62,6 +87,19 @@ cc_library(
     deps = [
         "@abseil-cpp//absl/container:btree",
         "@abseil-cpp//absl/container:flat_hash_map",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "slot_part_map_test",
+    size = "small",
+    srcs = ["slot_part_map_test.cc"],
+    deps = [
+        ":slot_part_map",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_googletest//:gtest_main",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],
 )
@@ -78,6 +116,18 @@ cc_library(
         "@abseil-cpp//absl/time",
         "@intrinsic_apis//intrinsic/icon/proto/v1:service_cc_proto",
         "@or_tools//ortools/base:strong_int",
+    ],
+)
+
+cc_test(
+    name = "part_properties_test",
+    srcs = ["part_properties_test.cc"],
+    deps = [
+        ":part_properties",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:service_cc_proto",
     ],
 )
 

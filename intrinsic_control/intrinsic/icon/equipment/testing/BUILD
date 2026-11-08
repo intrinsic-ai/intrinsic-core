@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 
 package(
     default_testonly = True,
@@ -47,6 +47,21 @@ cc_library(
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/icon/equipment:force_control_settings_cc_proto",
         "@intrinsic_apis//intrinsic/icon/equipment:icon_equipment_cc_proto",
+        "@intrinsic_apis//intrinsic/resources/proto:resource_handle_cc_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:equipment_cc_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:skills_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "equipment_test_utils_test",
+    srcs = ["equipment_test_utils_test.cc"],
+    deps = [
+        ":equipment_test_utils",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/equipment:force_control_settings_cc_proto",
         "@intrinsic_apis//intrinsic/resources/proto:resource_handle_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:equipment_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:skills_cc_proto",

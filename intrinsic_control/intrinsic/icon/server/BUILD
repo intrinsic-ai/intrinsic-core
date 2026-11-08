@@ -195,6 +195,42 @@ cc_library(
 )
 
 cc_library(
+    name = "fake_robot_connection",
+    testonly = True,
+    srcs = ["fake_robot_connection.cc"],
+    hdrs = ["fake_robot_connection.h"],
+    visibility = ["//intrinsic_control/intrinsic/icon:icon_client_users"],
+    deps = [
+        ":operational_state_interface",
+        ":part_collection",
+        ":robot_connection_interface",
+        ":session_interface",
+        ":signature_utils",
+        "//intrinsic_control/intrinsic/icon/cc_client:operational_status",
+        "//intrinsic_control/intrinsic/icon/common:id_types",
+        "//intrinsic_control/intrinsic/icon/common:slot_part_map",
+        "//intrinsic_control/intrinsic/icon/control:logging_mode",
+        "//intrinsic_control/intrinsic/icon/control/parts:realtime_log_context",
+        "//intrinsic_control/intrinsic/icon/server/example:noop_action",
+        "//intrinsic_control/intrinsic/icon/server/testing:fake_operational_state",
+        "//intrinsic_control/intrinsic/icon/server/testing:fake_part_collection",
+        "//intrinsic_control/intrinsic/icon/server/testing:fake_session",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/algorithm:container",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/types:optional",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_library(
     name = "runtime_options",
     hdrs = ["runtime_options.h"],
 )

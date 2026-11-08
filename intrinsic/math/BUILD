@@ -106,3 +106,18 @@ cc_library(
         "@abseil-cpp//absl/types:span",
     ],
 )
+
+cc_library(
+    name = "lissajous_pattern_utils",
+    srcs = ["lissajous_pattern_utils.cc"],
+    hdrs = ["lissajous_pattern_utils.h"],
+    visibility = ["//intrinsic_control/intrinsic/icon/control/algorithms:__subpackages__"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+    ],
+)

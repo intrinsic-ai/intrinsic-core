@@ -1,0 +1,33 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.icon.external_actions;
+
+option go_package = "intrinsic/icon/control/c_api/external_action_api/sine_wave_action_go_proto";
+
+// Fixed parameters for SineWaveAction.
+// This action calculates the value of a sine wave with the given parameters
+// each cycle, and adds the result to the starting position for each joint.
+message SineWaveFixedParams {
+  message JointSineParams {
+    // Frequency of the sine wave for this joint.
+    double frequency_hz = 1;
+    // Maximum amplitude of the sine wave (applied as an offset to the position
+    // the joint was in when the action started), in radians.
+    double amplitude_rad = 2;
+  }
+  repeated JointSineParams joints = 1;
+}

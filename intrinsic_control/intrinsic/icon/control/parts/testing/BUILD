@@ -15,6 +15,25 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 cc_library(
+    name = "position_loopback_fake_part",
+    testonly = True,
+    srcs = ["position_loopback_fake_part.cc"],
+    hdrs = ["position_loopback_fake_part.h"],
+    visibility = ["//intrinsic_control/intrinsic/icon:rtcl_users"],
+    deps = [
+        ":fake_realtime_part",
+        "//intrinsic_control/intrinsic/icon/control:joint_position_command",
+        "//intrinsic_control/intrinsic/icon/control/parts:fake_feature_interfaces",
+        "//intrinsic_control/intrinsic/icon/control/parts:realtime_part_interface",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
+        "@abseil-cpp//absl/log:check",
+    ],
+)
+
+cc_library(
     name = "fake_realtime_part",
     testonly = True,
     hdrs = ["fake_realtime_part.h"],

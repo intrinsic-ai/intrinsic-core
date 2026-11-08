@@ -105,6 +105,18 @@ cc_library(
 )
 
 cc_library(
+    name = "eigen_file_export",
+    hdrs = ["eigen_file_export.h"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@com_gitlab_libeigen_eigen//:eigen",
+    ],
+)
+
+cc_library(
     name = "swing_twist",
     hdrs = ["swing_twist.h"],
     deps = [

@@ -1,0 +1,31 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.testing;
+
+option go_package = "intrinsic/icon/hal/test_hardware_module_go_proto";
+
+message TestHardwareModule {
+  // A prefix for all the hardware interfaces in a TestHardwareModule.
+  string interface_prefix = 1;
+  // When present, the module will advertise a strict digital command interface
+  // with this name and two bits.
+  // The status of the interface is not reflected anywhere.
+  // The module checks the validity of the command on ApplyCommand.
+  optional string strict_dio_command_interface_name = 2;
+  // Do illegal mallocs during first ReadStatus() and first ApplyCommand().
+  bool do_illegal_mallocs = 3;
+}

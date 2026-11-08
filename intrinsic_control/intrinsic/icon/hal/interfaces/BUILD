@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
 load("//intrinsic_sdk/intrinsic/platform:flatbuffers.bzl", "cc_flatbuffers_library", "flatbuffers_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -25,6 +25,29 @@ flatbuffers_library(
 cc_flatbuffers_library(
     name = "adio_fbs_cc",
     deps = [":adio_fbs"],
+)
+
+cc_library(
+    name = "adio_fbs_utils",
+    srcs = ["adio_utils.cc"],
+    hdrs = [
+        "adio_utils.h",
+    ],
+    deps = [
+        ":adio_fbs_cc",
+        "@com_github_google_flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_test(
+    name = "adio_utils_test",
+    srcs = ["adio_utils_test.cc"],
+    deps = [
+        ":adio_fbs_cc",
+        ":adio_fbs_utils",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
+    ],
 )
 
 flatbuffers_library(
@@ -50,6 +73,17 @@ cc_library(
     deps = [
         ":control_mode_fbs_cc",
         "@com_github_google_flatbuffers//:runtime_cc",
+    ],
+)
+
+cc_test(
+    name = "control_mode_utils_test",
+    srcs = ["control_mode_utils_test.cc"],
+    deps = [
+        ":control_mode_fbs_cc",
+        ":control_mode_fbs_utils",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -81,6 +115,22 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@com_github_google_flatbuffers//:runtime_cc",
+    ],
+)
+
+cc_test(
+    name = "control_period_utils_test",
+    srcs = ["control_period_utils_test.cc"],
+    deps = [
+        ":control_period_fbs_cc",
+        ":control_period_fbs_utils",
+        "//intrinsic_control/intrinsic/icon/hal:hardware_interface_handle",
+        "//intrinsic_control/intrinsic/icon/interprocess/shared_memory_manager",
+        "//intrinsic_control/intrinsic/icon/interprocess/shared_memory_manager/testing:unique_segment_name",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -117,6 +167,18 @@ cc_library(
         ":electrical_motor_fbs_cc",
         ":electrical_motor_fbs_utils",
         "//intrinsic_control/intrinsic/icon/hal:hardware_interface_traits",
+    ],
+)
+
+cc_test(
+    name = "electrical_motor_utils_test",
+    srcs = ["electrical_motor_utils_test.cc"],
+    deps = [
+        ":electrical_motor_fbs_cc",
+        ":electrical_motor_fbs_utils",
+        "//intrinsic_control/intrinsic/icon/flatbuffers:fixed_string",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -159,6 +221,33 @@ cc_flatbuffers_library(
     deps = [":force_sensor_fbs"],
 )
 
+cc_library(
+    name = "force_sensor_fbs_utils",
+    srcs = [
+        "force_sensor_utils.cc",
+    ],
+    hdrs = [
+        "force_sensor_utils.h",
+    ],
+    deps = [
+        ":force_sensor_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/flatbuffers:transform_types_fbs_cc",
+        "//intrinsic_control/intrinsic/icon/utils:fixed_string",
+        "@com_github_google_flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_test(
+    name = "force_sensor_utils_test",
+    srcs = ["force_sensor_utils_test.cc"],
+    deps = [
+        ":force_sensor_fbs_cc",
+        ":force_sensor_fbs_utils",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 flatbuffers_library(
     name = "force_torque_fbs",
     srcs = [
@@ -191,6 +280,20 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
         "//intrinsic_control/intrinsic/icon/utils:fixed_string",
         "@com_github_google_flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_test(
+    name = "force_torque_utils_test",
+    srcs = ["force_torque_utils_test.cc"],
+    deps = [
+        ":force_sensor_fbs_cc",
+        ":force_torque_fbs_cc",
+        ":force_torque_fbs_utils",
+        "//intrinsic_control/intrinsic/icon/flatbuffers:transform_types_fbs_cc",
+        "@abseil-cpp//absl/strings",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -242,6 +345,17 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "hardware_module_state_utils_test",
+    srcs = ["hardware_module_state_utils_test.cc"],
+    deps = [
+        ":hardware_module_state_fbs_cc",
+        ":hardware_module_state_fbs_utils",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
+
 flatbuffers_library(
     name = "icon_state_fbs",
     srcs = [
@@ -263,6 +377,17 @@ cc_library(
     deps = [
         ":icon_state_fbs_cc",
         "@com_github_google_flatbuffers//:flatbuffers",
+    ],
+)
+
+cc_test(
+    name = "icon_state_utils_test",
+    srcs = ["icon_state_utils_test.cc"],
+    deps = [
+        ":icon_state_fbs_cc",
+        ":icon_state_fbs_utils",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -293,6 +418,17 @@ cc_library(
         ":imu_fbs_cc",
         "//intrinsic_control/intrinsic/icon/flatbuffers:transform_types_fbs_cc",
         "@com_github_google_flatbuffers//:runtime_cc",
+    ],
+)
+
+cc_test(
+    name = "imu_utils_test",
+    srcs = ["imu_utils_test.cc"],
+    deps = [
+        ":imu_fbs_cc",
+        ":imu_fbs_utils",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -337,6 +473,18 @@ cc_library(
         ":adio_fbs_cc",
         ":io_controller_fbs_cc",
         "@com_github_google_flatbuffers//:runtime_cc",
+    ],
+)
+
+cc_test(
+    name = "io_controller_utils_test",
+    srcs = ["io_controller_utils_test.cc"],
+    deps = [
+        ":adio_fbs_cc",
+        ":io_controller_fbs_cc",
+        ":io_controller_fbs_utils",
+        "@com_github_google_flatbuffers//:runtime_cc",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 

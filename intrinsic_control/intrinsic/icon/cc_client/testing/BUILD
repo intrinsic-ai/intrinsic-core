@@ -12,9 +12,45 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
+load("//bazel:cc_macros.bzl", "cc_library", "cc_test")
+load("//bazel:protos.bzl", "proto_library")
 
 package(default_visibility = ["//visibility:public"])
+
+proto_library(
+    name = "fake_action_proto",
+    testonly = True,
+    srcs = ["fake_action.proto"],
+)
+
+cc_proto_library(
+    name = "fake_action_cc_proto",
+    testonly = True,
+    deps = [":fake_action_proto"],
+)
+
+cc_library(
+    name = "operational_status_matchers",
+    testonly = True,
+    hdrs = ["operational_status_matchers.h"],
+    deps = [
+        "//intrinsic_control/intrinsic/icon/cc_client:operational_status",
+        "@com_google_googletest//:gtest",
+    ],
+)
+
+cc_test(
+    name = "operational_status_matchers_test",
+    srcs = ["operational_status_matchers_test.cc"],
+    deps = [
+        ":operational_status_matchers",
+        "//intrinsic_control/intrinsic/icon/cc_client:operational_status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/status:statusor",
+        "@com_google_googletest//:gtest_main",
+    ],
+)
 
 cc_library(
     name = "channel_fake",
@@ -51,6 +87,32 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "channel_fake_test",
+    size = "small",
+    srcs = ["channel_fake_test.cc"],
+    deps = [
+        ":channel_fake",
+        "//intrinsic_control/intrinsic/icon/actions:joint_jogging_info",
+        "//intrinsic_control/intrinsic/icon/actions:point_to_point_move_info",
+        "//intrinsic_control/intrinsic/icon/cc_client:condition",
+        "//intrinsic_control/intrinsic/icon/common:id_types",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
+        "@intrinsic_apis//intrinsic/icon/proto:joint_space_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:part_status_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:service_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
 cc_library(
     name = "rtcl_readonly_parts",
     testonly = True,
@@ -64,6 +126,26 @@ cc_library(
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
         "//intrinsic_sdk/intrinsic/math:pose3",
+    ],
+)
+
+cc_test(
+    name = "rtcl_readonly_parts_test",
+    srcs = ["rtcl_readonly_parts_test.cc"],
+    deps = [
+        ":rtcl_readonly_parts",
+        "//intrinsic_control/intrinsic/icon/control/parts:fake_feature_interfaces",
+        "//intrinsic_control/intrinsic/icon/control/parts:feature_interface_registry",
+        "//intrinsic_control/intrinsic/icon/control/parts:feature_interfaces",
+        "//intrinsic_control/intrinsic/icon/control/parts:io_block",
+        "//intrinsic_control/intrinsic/icon/control/parts:realtime_part_interface",
+        "//intrinsic_control/intrinsic/icon/dynamics:rigid_body_interface",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
     ],
 )
 
@@ -118,6 +200,51 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "rtcl_controller_fake_session_test",
+    size = "small",
+    srcs = ["rtcl_controller_fake_session_test.cc"],
+    deps = [
+        ":channel_fake",
+        ":rtcl_controller_fake_session",
+        "//intrinsic_control/intrinsic/icon/actions:action_utils",
+        "//intrinsic_control/intrinsic/icon/cc_client:condition",
+        "//intrinsic_control/intrinsic/icon/cc_client:operational_status",
+        "//intrinsic_control/intrinsic/icon/cc_client:session",
+        "//intrinsic_control/intrinsic/icon/common:id_types",
+        "//intrinsic_control/intrinsic/icon/common:part_group",
+        "//intrinsic_control/intrinsic/icon/common:slot_part_map",
+        "//intrinsic_control/intrinsic/icon/control:action_factory_context",
+        "//intrinsic_control/intrinsic/icon/control:mock_rtcl_action",
+        "//intrinsic_control/intrinsic/icon/control:rtcl_action",
+        "//intrinsic_control/intrinsic/icon/control:rtcl_action_factory_registry",
+        "//intrinsic_control/intrinsic/icon/control/actions:test_helpers",
+        "//intrinsic_control/intrinsic/icon/control/parts/testing:position_loopback_fake_part",
+        "//intrinsic_control/intrinsic/icon/proto:joint_trajectory_conversion",
+        "//intrinsic_control/intrinsic/icon/server:session_interface",
+        "//intrinsic_control/intrinsic/icon/server/testing:fake_operational_state",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:dynamic_limits_check_mode",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_trajectories",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@com_google_protobuf//:protobuf",
+        "@intrinsic_apis//intrinsic/icon/proto:joint_space_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:service_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
 cc_library(
     name = "rtcl_controller_fake_robot_connection",
     testonly = True,
@@ -158,6 +285,46 @@ cc_library(
     ],
 )
 
+cc_test(
+    name = "rtcl_controller_fake_robot_connection_test",
+    srcs = ["rtcl_controller_fake_robot_connection_test.cc"],
+    deps = [
+        ":channel_fake",
+        ":rtcl_controller_channel_fake",
+        ":rtcl_controller_fake_robot_connection",
+        ":rtcl_controller_fake_session",
+        ":rtcl_readonly_parts",
+        "//intrinsic_control/intrinsic/icon/actions:action_utils",
+        "//intrinsic_control/intrinsic/icon/cc_client:condition",
+        "//intrinsic_control/intrinsic/icon/cc_client:operational_status",
+        "//intrinsic_control/intrinsic/icon/common:builtins",
+        "//intrinsic_control/intrinsic/icon/common:id_types",
+        "//intrinsic_control/intrinsic/icon/common:part_properties",
+        "//intrinsic_control/intrinsic/icon/common:slot_part_map",
+        "//intrinsic_control/intrinsic/icon/control:action_factory_context",
+        "//intrinsic_control/intrinsic/icon/control:logging_mode",
+        "//intrinsic_control/intrinsic/icon/control:mock_rtcl_action",
+        "//intrinsic_control/intrinsic/icon/control:rtcl_action_factory_registry",
+        "//intrinsic_control/intrinsic/icon/control/actions:rtcl_joint_stop_action",
+        "//intrinsic_control/intrinsic/icon/control/actions:test_helpers",
+        "//intrinsic_control/intrinsic/icon/control/parts/testing:fake_realtime_part",
+        "//intrinsic_control/intrinsic/icon/control/parts/testing:position_loopback_fake_part",
+        "//intrinsic_control/intrinsic/icon/server:session_interface",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto:part_status_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:service_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
 cc_library(
     name = "rtcl_controller_channel_fake",
     testonly = True,
@@ -181,6 +348,49 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/types:span",
         "@com_github_grpc_grpc//:grpc++",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:service_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
+    ],
+)
+
+cc_test(
+    name = "rtcl_controller_channel_fake_test",
+    size = "small",
+    srcs = ["rtcl_controller_channel_fake_test.cc"],
+    deps = [
+        ":channel_fake",
+        ":rtcl_controller_channel_fake",
+        ":rtcl_controller_fake_session",
+        "//intrinsic/production/external/tsl:net",
+        "//intrinsic_control/intrinsic/icon/cc_client:client",
+        "//intrinsic_control/intrinsic/icon/cc_client:client_utils",
+        "//intrinsic_control/intrinsic/icon/cc_client:condition",
+        "//intrinsic_control/intrinsic/icon/cc_client:operational_status",
+        "//intrinsic_control/intrinsic/icon/cc_client:session",
+        "//intrinsic_control/intrinsic/icon/cc_client:state_variable_path",
+        "//intrinsic_control/intrinsic/icon/common:builtins",
+        "//intrinsic_control/intrinsic/icon/common:id_types",
+        "//intrinsic_control/intrinsic/icon/control:action_factory_context",
+        "//intrinsic_control/intrinsic/icon/control:mock_rtcl_action",
+        "//intrinsic_control/intrinsic/icon/control:rtcl_action",
+        "//intrinsic_control/intrinsic/icon/control:rtcl_action_factory_registry",
+        "//intrinsic_control/intrinsic/icon/control/parts:realtime_part_factory_common",
+        "//intrinsic_control/intrinsic/icon/control/parts/testing:position_loopback_fake_part",
+        "//intrinsic_control/intrinsic/icon/server/testing:in_process_server",
+        "//intrinsic_control/intrinsic/icon/server/testing:test_with_status_spec",
+        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:status_matchers",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+        "@abseil-cpp//absl/types:span",
+        "@com_github_inazarenko_protobuf_matchers//protobuf-matchers",
+        "@com_google_cel_cpp//internal:testing_no_main",
+        "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/icon/proto:cart_space_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:part_status_cc_proto",
+        "@intrinsic_apis//intrinsic/icon/proto:safety_status_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto/v1:service_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],
