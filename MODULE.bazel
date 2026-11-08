@@ -726,7 +726,7 @@ oci.pull(
 )
 oci.pull(
     name = "python3",
-    digest = "sha256:f0aecb335180611a3a000c45def529ec8ee768d5d26ff24bae4dfb70594a9121",
+    digest = "sha256:e97b88e416c3c01eb427b21fd8cd3ebf006e6ee38afcfcc3cae1c54ee2ab0a75",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/library/python",
     platforms = ["linux/amd64"],
     tag = "3-slim",  # tag needs to be specified for renovatebot to sync the digest
