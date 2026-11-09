@@ -1063,6 +1063,18 @@ single_version_override(
     ],
 )
 
+# Patch zenoh-c's zenoh-shm crate on Linux to allow overriding the shared
+# memory directory via the ZENOH_SHM_PATH environment variable (defaulting to
+# /dev/shm when unset).
+single_version_override(
+    module_name = "zenoh-c",
+    patch_strip = 1,
+    patches = [
+        "//third_party/zenoh_c:zenoh_shm_path.patch",
+    ],
+    version = "1.8.0.bcr.1",
+)
+
 
 
 

@@ -1,0 +1,85 @@
+diff --git a/BUILD.bazel b/BUILD.bazel
+--- a/BUILD.bazel
++++ b/BUILD.bazel
+@@ -20,6 +20,8 @@
+ load("//:features.bzl", "zenoh_c_crate_features")
+ load("//cbindgen:cbindgen.bzl", "rust_cbindgen_library")
+ 
++exports_files(["zenoh_shm_path.patch"])
++
+ # Transform the opaque types from a .txt to a .rs file.
+ 
+ rust_binary(
+diff --git a/MODULE.bazel b/MODULE.bazel
+--- a/MODULE.bazel
++++ b/MODULE.bazel
+@@ -84,7 +84,12 @@
+         "shared-memory",
+     ],
+ )
++crate.annotation(
++    crate = "zenoh-shm",
++    patch_args = ["-p1"],
++    patches = ["//:zenoh_shm_path.patch"],
++)
+ use_repo(crate, "crates_zenoh_c")
+ 
+ # Register cbindgen toolchain (for generating C headers from Rust code)
+ 
+diff --git a/zenoh_shm_path.patch b/zenoh_shm_path.patch
+new file mode 100644
+--- /dev/null
++++ b/zenoh_shm_path.patch
+@@ -0,0 +1,52 @@
++diff --git a/commons/zenoh-shm/src/posix_shm/cleanup.rs b/commons/zenoh-shm/src/posix_shm/cleanup.rs
++--- a/commons/zenoh-shm/src/posix_shm/cleanup.rs
+++++ b/commons/zenoh-shm/src/posix_shm/cleanup.rs
++@@ -38,7 +38,7 @@
++         #[cfg(shm_external_lockfile)]
++         let shm_files = fs::read_dir(std::env::temp_dir())?;
++         #[cfg(not(shm_external_lockfile))]
++-        let shm_files = fs::read_dir("/dev/shm")?;
+++        let shm_files = fs::read_dir(shm::platform::shm_dir())?;
++ 
++         for segment_file in shm_files.filter_map(Result::ok).filter(|f| {
++             if let Some(ext) = f.path().extension() {
++diff --git a/commons/zenoh-shm/src/shm/unix.rs b/commons/zenoh-shm/src/shm/unix.rs
++--- a/commons/zenoh-shm/src/shm/unix.rs
+++++ b/commons/zenoh-shm/src/shm/unix.rs
++@@ -27,14 +27,35 @@
++ use nix::{
++     fcntl::OFlag,
++     sys::{
++-        mman::{mlock, mmap, munmap, shm_open, shm_unlink, MapFlags, ProtFlags},
+++        mman::{mlock, mmap, munmap, MapFlags, ProtFlags},
++         stat::{fstat, Mode},
++     },
++     unistd::ftruncate,
++ };
++ 
++ use super::{SegmentCreateError, SegmentID, SegmentOpenError, ShmCreateResult, ShmOpenResult};
++ 
+++pub(crate) fn shm_dir() -> &'static std::path::Path {
+++    static SHM_DIR: std::sync::OnceLock<std::path::PathBuf> = std::sync::OnceLock::new();
+++    SHM_DIR.get_or_init(|| {
+++        std::env::var_os("ZENOH_SHM_PATH")
+++            .filter(|p| !p.is_empty())
+++            .unwrap_or_else(|| "/dev/shm".into())
+++            .into()
+++    })
+++}
+++
+++fn shm_open(name: &str, flags: OFlag, mode: Mode) -> nix::Result<OwnedFd> {
+++    let flags = flags | OFlag::O_NOFOLLOW | OFlag::O_CLOEXEC;
+++    let path = shm_dir().join(name.trim_start_matches('/'));
+++    let fd = nix::fcntl::open(&path, flags, mode)?;
+++    Ok(unsafe { std::os::fd::FromRawFd::from_raw_fd(fd) })
+++}
+++
+++fn shm_unlink(name: &str) -> std::io::Result<()> {
+++    std::fs::remove_file(shm_dir().join(name.trim_start_matches('/')))
+++}
+++
++ pub struct SegmentImpl<ID: SegmentID> {
++     lock_fd: OwnedFd,
++     len: NonZeroUsize,
