@@ -455,10 +455,10 @@ bazel_dep(name = "aspect_rules_esbuild", version = "0.27.1", dev_dependency = Tr
 node = use_extension("@rules_nodejs//nodejs:extensions.bzl", "node", dev_dependency = True)
 node.toolchain(
     node_repositories = {
-        "24.22.1-linux_amd64": [
-            "node-v24.22.1-linux-x64.tar.xz",
-            "node-v24.22.1-linux-x64",
-            "6c172a9ab6718f7b801fb5a7bd486af2ee5e32758086a04b84fcce2aa77095e6",
+        "24.22.2-linux_amd64": [
+            "node-v24.22.2-linux-x64.tar.xz",
+            "node-v24.22.2-linux-x64",
+            "48cc0e21e048790e54c0cf5749c2725005313d652651c40b7a21feb9697aaf75",
         ],
     },
     node_version_from_nvmrc = "//:.nvmrc",
