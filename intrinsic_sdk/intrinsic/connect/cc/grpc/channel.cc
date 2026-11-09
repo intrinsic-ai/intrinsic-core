@@ -29,7 +29,6 @@
 #include "grpc/grpc.h"
 #include "grpcpp/channel.h"
 #include "grpcpp/client_context.h"
-#include "grpcpp/completion_queue.h"
 #include "grpcpp/create_channel.h"
 #include "grpcpp/security/credentials.h"
 #include "grpcpp/support/channel_arguments.h"
@@ -62,16 +61,10 @@ absl::Status CheckChannelHealth(
     std::shared_ptr<::grpc::Channel> channel, absl::Duration timeout,
     std::optional<absl::string_view> server_instance_name) {
   // Try an arbitrary RPC (we use the Health service but could use anything that
-  // responds quickly without side-effects). Use the async client because the
-  // sync client doesn't seem to respect the deadline for certain channels.
+  // responds quickly without side-effects).
   auto health_stub = grpc::health::v1::Health::NewStub(channel);
 
-  grpc::CompletionQueue cq;
   absl::Time deadline = absl::Now() + timeout;
-  // gRPC fails the RPC at deadline and posts the Finish tag.
-  // Wait a bit longer so we consume that event before cq/ctx are destroyed.
-  // Returning with pending RPC causes a use-after-free.
-  absl::Time queue_wait_deadline = deadline + absl::Seconds(1);
   grpc::ClientContext ctx;
   ctx.set_deadline(deadline);
   if (server_instance_name.has_value()) {
@@ -79,28 +72,7 @@ absl::Status CheckChannelHealth(
                     std::string(*server_instance_name));
   }
   HealthCheckResponse resp;
-  grpc::Status status;
-  std::unique_ptr<grpc::ClientAsyncResponseReader<HealthCheckResponse>> rpc(
-      health_stub->AsyncCheck(&ctx, HealthCheckRequest(), &cq));
-  int tag = 1;
-  rpc->Finish(&resp, &status, &tag);
-
-  // Wait for the response. If it succeeds or returns "unimplemented", then we
-  // know the channel is healthy.
-  void* got_tag;
-  bool ok = false;
-  if (cq.AsyncNext(&got_tag, &ok, queue_wait_deadline) !=
-          grpc::CompletionQueue::GOT_EVENT ||
-      *static_cast<int*>(got_tag) != tag || !ok) {
-    // Returning destroys context and completion queue while gRPC still uses
-    // them.
-    LOG(ERROR) << "Returning with the RPC in flight: use-after-free, the "
-                  "process may crash or keep using a dead connection until "
-                  "restart.";
-    return absl::DeadlineExceededError(
-        "deadline exceeded when checking channel health");
-  }
-
+  grpc::Status status = health_stub->Check(&ctx, HealthCheckRequest(), &resp);
   if (!status.ok() && status.error_code() != grpc::StatusCode::UNIMPLEMENTED) {
     return ToAbslStatus(status);
   }
