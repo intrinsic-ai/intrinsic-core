@@ -78,6 +78,7 @@ func GetCommand() *cobra.Command {
 	}
 	flags.SetCommand(cmd)
 	flags.AddFlagAssetTypes("")
+	flags.AddFlagEnvironmentOptional()
 	flags.AddFlagOrganizationOptional()
 
 

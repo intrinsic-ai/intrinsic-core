@@ -95,6 +95,7 @@ func Command() *cobra.Command {
 	}
 
 	flags.SetCommand(cmd)
+	flags.AddFlagEnvironmentOptional()
 	flags.AddFlagOrganizationOptional()
 	flags.AddFlagView()
 

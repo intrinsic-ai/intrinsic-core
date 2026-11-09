@@ -239,11 +239,8 @@ func (c *client) run(ctx context.Context) error {
 
 		if !skipAssetVerificationFlag {
 			_, conn, err := clientutils.DialCatalog(ctx, clientutils.DialCatalogOptions{
-				// DialCatalog is broken and wants the qualified org name
-				// Internally it's not requried due to some defaulting logic.
-				// Externally it's not required when customers can avoid using the `@` logic.
-				// But the way the code is written, it'll always work when the `@` is provided here.
-				Org: c.org + "@" + c.project,
+				Org:     c.org,
+				Project: c.project,
 			})
 			if err != nil {
 				return fmt.Errorf("dial catalog: %w", err)

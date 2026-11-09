@@ -108,6 +108,7 @@ func GetCommand() *cobra.Command {
 
 	flags.SetCommand(cmd)
 	flags.AddFlagDefault("asset")
+	flags.AddFlagEnvironmentOptional()
 	flags.AddFlagOrganizationOptional()
 	flags.AddFlagOrgPrivate()
 	flags.AddFlagSkipPrompts()

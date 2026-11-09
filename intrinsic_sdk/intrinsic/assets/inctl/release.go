@@ -94,6 +94,7 @@ func GetCommand() *cobra.Command {
 	flags.AddFlagDryRun()
 	flags.AddFlagIgnoreExisting("asset")
 	flags.AddFlagImageUploadParallelism(1)
+	flags.AddFlagEnvironmentOptional()
 	flags.AddFlagOrganizationOptional()
 	flags.AddFlagOrgPrivate()
 	flags.AddFlagsRateLimit(throttle.CloudRateLimit, throttle.CloudBurst)

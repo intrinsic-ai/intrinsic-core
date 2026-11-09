@@ -55,6 +55,8 @@ const (
 	keyDefault = "default"
 	// keyDryRun is the name of the dry run flag.
 	keyDryRun = "dry_run"
+	// keyEnvironment is used as central flag name for passing an environment name to inctl.
+	keyEnvironment = orgutil.KeyEnvironment
 	// keyIgnoreExisting is the name of the flag to ignore AlreadyExists errors.
 	keyIgnoreExisting = "ignore_existing"
 	// keyImageUploadParallelism indicates how many layers of the image should be uploaded in parallel.
@@ -308,6 +310,17 @@ func (cf *CmdFlags) AddFlagOrganizationOptional() {
 // GetFlagOrganization gets the value of the organization flag added by AddFlagOrganizationOptional.
 func (cf *CmdFlags) GetFlagOrganization() string {
 	return cf.GetString(keyOrganization)
+}
+
+// AddFlagEnvironmentOptional adds a hidden optional flag for the auth environment.
+func (cf *CmdFlags) AddFlagEnvironmentOptional() {
+	cf.optionalEnvString(keyEnvironment, "", "Auth environment to use.")
+	cf.MarkHidden(keyEnvironment)
+}
+
+// GetFlagEnvironment gets the value of the environment flag added by AddFlagEnvironmentOptional.
+func (cf *CmdFlags) GetFlagEnvironment() string {
+	return cf.GetString(keyEnvironment)
 }
 
 // AddFlagsProjectOrg adds both the project and org flag, including the necessary handling.

@@ -85,6 +85,7 @@ func GetCommand() *cobra.Command {
 	}
 
 	flags.SetCommand(cmd)
+	flags.AddFlagEnvironmentOptional()
 	flags.AddFlagOrganizationOptional()
 	flags.AddFlagView()
 
@@ -166,6 +167,7 @@ func GetBatchCommand() *cobra.Command {
 	}
 
 	flags.SetCommand(cmd)
+	flags.AddFlagEnvironmentOptional()
 	flags.AddFlagOrganizationOptional()
 	flags.AddFlagView()
 

@@ -61,8 +61,6 @@ go_library(
     deps = [
         ":baseclientutils",
         ":cmdutils",
-        "//intrinsic/kubernetes/config:crcconfig",
-        "//intrinsic/tools/inctl/util:gcpauth",
         "//intrinsic_sdk/intrinsic/config:environments",
         "//intrinsic_sdk/intrinsic/kubernetes/acl:identity",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
