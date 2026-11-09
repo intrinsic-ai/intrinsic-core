@@ -131,6 +131,7 @@ function configure_kubeconfig() {
     local k3s_yaml="/etc/rancher/k3s/k3s.yaml"
     local kube_dir="${HOME}/.kube"
     local kube_config="${kube_dir}/config"
+    local tmp_k3s_yaml="${WORK_DIR}/k3s.yaml"
 
     sudo sed -i \
         -e 's/name: default/name: k3s/g' \
@@ -139,28 +140,31 @@ function configure_kubeconfig() {
         -e 's/current-context: default/current-context: k3s/g' \
         "${k3s_yaml}"
 
-    if getent group adm >/dev/null; then
-        sudo chgrp adm "${k3s_yaml}"
-        sudo chmod 640 "${k3s_yaml}"
-    else
-        sudo chown "${USER}" "${k3s_yaml}"
-        chmod 600 "${k3s_yaml}"
-    fi
+    sudo chgrp containerd "${k3s_yaml}"
+    sudo chmod 640 "${k3s_yaml}"
+
+    # Copy via sudo so the current shell (which does not have the containerd
+    # group active yet if it was just added) can read k3s.yaml.
+    sudo install -m 600 -o "$(id -u)" -g "$(id -g)" "${k3s_yaml}" "${tmp_k3s_yaml}"
 
     mkdir -p "${kube_dir}"
 
     if [ ! -f "${kube_config}" ]; then
-        cp "${k3s_yaml}" "${kube_config}"
+        cp "${tmp_k3s_yaml}" "${kube_config}"
         chmod 600 "${kube_config}"
     else
         local backup_config="${kube_config}.bak.$(date +%s)"
         cp "${kube_config}" "${backup_config}"
 
-        KUBECONFIG="${k3s_yaml}:${kube_config}" kubectl config view --flatten > "${kube_dir}/config.tmp"
+        KUBECONFIG="${tmp_k3s_yaml}:${kube_config}" kubectl config view --flatten > "${kube_dir}/config.tmp"
         mv "${kube_dir}/config.tmp" "${kube_config}"
         chmod 600 "${kube_config}"
-        kubectl config use-context k3s >/dev/null 2>&1 || true
+        KUBECONFIG="${kube_config}" kubectl config use-context k3s >/dev/null 2>&1 || true
     fi
+
+    # k3s's kubectl ignores ~/.kube/config when /etc/rancher/k3s/k3s.yaml exists
+    # and KUBECONFIG is unset, so export it for the rest of this run.
+    export KUBECONFIG="${kube_config}"
 }
 
 function configure_containerd() {
@@ -289,10 +293,7 @@ function main() {
     configure_sysctl
     configure_containerd
 
-    local k3s_args=("--disable=traefik" "--write-kubeconfig-mode=0640")
-    if getent group adm >/dev/null; then
-        k3s_args+=("--write-kubeconfig-group=adm")
-    fi
+    local k3s_args=("--disable=traefik" "--write-kubeconfig-mode=0640" "--write-kubeconfig-group=containerd")
     local node_name
     node_name=$(get_node_name_override)
     if [[ -n "${node_name}" ]]; then
@@ -344,6 +345,11 @@ function main() {
       --version "${CHART_ASSIGNMENT_CONTROLLER_VERSION}" --set webhook.enabled=false
 
     echo "Setup complete!"
+
+    if [[ "${EUID}" -ne 0 ]] && ! id -nG | tr ' ' '\n' | grep -qx containerd; then
+        echo ""
+        echo "NOTE: Log out and back in (or run 'newgrp containerd') to use kubectl and containerd without sudo."
+    fi
 
     check_nvidia_support
 }
