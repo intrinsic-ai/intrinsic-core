@@ -84,6 +84,10 @@ func RegisterExporter(ctx context.Context, project string) func(context.Context)
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
 		log.V(1).InfoContextf(ctx, "Some traces have not been uploaded: %v", err)
 	}))
+	if project == "" {
+		log.V(1).InfoContext(ctx, "Project is empty. Traces will not be uploaded.")
+		return func(context.Context) {}
+	}
 	tp, err := newTracerProvider(ctx, project)
 	if err != nil {
 		log.V(1).InfoContextf(ctx, "Traces will not be uploaded: %v", err)
@@ -108,9 +112,8 @@ func getProject(ctx context.Context, args []string) string {
 		log.V(1).InfoContextf(ctx, "Using project %q from args or environment.", project)
 		return project
 	}
-	// TODO: hard-coding the project creates broken traces for all other projects
-	log.V(1).InfoContextf(ctx, "Could not determine project. Using fallback %q", "giza-workcells")
-	return "giza-workcells"
+	log.V(1).InfoContext(ctx, "Could not determine project from args or environment.")
+	return ""
 }
 
 // SetUpTracing initializes the trace exporter.
