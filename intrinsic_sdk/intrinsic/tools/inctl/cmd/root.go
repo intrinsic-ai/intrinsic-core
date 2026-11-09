@@ -223,7 +223,7 @@ func Execute(ec executionContext) bool {
 
 
 	flush := traceutil.SetUpTracing(ctx, flag.Args())
-	defer flush()
+	defer flush(ctx)
 
 
 	ctx, span := trace.StartSpan(ctx, "inctl")

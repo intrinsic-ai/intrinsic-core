@@ -40,8 +40,7 @@ var (
 	flagTrace bool // The --trace flag.
 )
 
-func newTracerProvider(project string) (*sdktrace.TracerProvider, error) {
-	ctx := context.Background()
+func newTracerProvider(ctx context.Context, project string) (*sdktrace.TracerProvider, error) {
 	creds, err := oauth.NewApplicationDefault(ctx, "https://www.googleapis.com/auth/trace.append")
 	if err != nil {
 		return nil, fmt.Errorf("load application default credentials: %w", err)
@@ -81,18 +80,18 @@ func newTracerProvider(project string) (*sdktrace.TracerProvider, error) {
 // RegisterExporter registers a StackDriver for the given project that sends errors to the log
 // rather than stderr, so as not to confuse users. It returns a flush function that can be called to
 // wait for in-progress uploads.
-func RegisterExporter(project string) func() {
+func RegisterExporter(ctx context.Context, project string) func(context.Context) {
 	otel.SetErrorHandler(otel.ErrorHandlerFunc(func(err error) {
-		log.V(1).Infof("Some traces have not been uploaded: %v", err)
+		log.V(1).InfoContextf(ctx, "Some traces have not been uploaded: %v", err)
 	}))
-	tp, err := newTracerProvider(project)
+	tp, err := newTracerProvider(ctx, project)
 	if err != nil {
-		log.V(1).Infof("Traces will not be uploaded: %v", err)
-		return func() {}
+		log.V(1).InfoContextf(ctx, "Traces will not be uploaded: %v", err)
+		return func(context.Context) {}
 	}
-	return func() {
+	return func(ctx context.Context) {
 		// Bounded because refreshing a user credential's token ignores the export timeout.
-		ctx, cancel := context.WithTimeout(context.Background(), 15*time.Second)
+		ctx, cancel := context.WithTimeout(ctx, 15*time.Second)
 		defer cancel()
 		tp.Shutdown(ctx)
 	}
@@ -116,12 +115,12 @@ func getProject(ctx context.Context, args []string) string {
 
 // SetUpTracing initializes the trace exporter.
 // Should only be called from the root command.
-func SetUpTracing(ctx context.Context, args []string) func() {
+func SetUpTracing(ctx context.Context, args []string) func(context.Context) {
 	if flagTrace {
-		flush := RegisterExporter(getProject(ctx, args))
+		flush := RegisterExporter(ctx, getProject(ctx, args))
 		return flush
 	}
-	return func() {}
+	return func(context.Context) {}
 }
 
 func init() {

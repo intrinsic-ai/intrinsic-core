@@ -433,7 +433,7 @@ func main() {
 	intrinsicinit.Init()
 
 	flush := traceutil.SetUpTracing(ctx, flag.Args())
-	defer flush()
+	defer flush(ctx)
 
 	if err := updateCmd().ExecuteContext(ctx); err != nil {
 		os.Exit(1)
