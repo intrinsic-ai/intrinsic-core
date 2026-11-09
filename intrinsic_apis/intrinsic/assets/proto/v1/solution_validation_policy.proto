@@ -1,0 +1,38 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.assets.v1;
+
+option go_package = "intrinsic/assets/proto/v1/solution_validation_policy_go_proto";
+
+// A policy to specify the validity required when editing or deploying
+// a Solution.
+//
+// Each policy determines whether each Solution validation issue is treated as
+// a warning or error.
+enum SolutionValidationPolicy {
+  // If undefined, a default validation level may be chosen by the service.
+  SOLUTION_VALIDATION_POLICY_UNSPECIFIED = 0;
+  // Validation issues that do not prevent the Solution from being deployed on a
+  // workcell are treated as warnings. All other validation issues are treated
+  // as errors.
+  SOLUTION_VALIDATION_POLICY_RECOVERABLE = 10;
+  // All validation issues are treated as errors.
+  //
+  // This policy addresses only validation of the Solution definition.
+  // It does not address validation of runtime behavior.
+  SOLUTION_VALIDATION_POLICY_STRICT = 20;
+}

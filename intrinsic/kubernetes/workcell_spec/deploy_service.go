@@ -33,6 +33,7 @@ import (
 	"intrinsic/assets/errors/report"
 	"intrinsic/assets/idutils"
 	"intrinsic/assets/instances/instanceconversion"
+	"intrinsic/assets/solutions/solutionvalidate"
 	"intrinsic/assets/viewutils"
 	"intrinsic/config/applicationview"
 	"intrinsic/config/convertrunnables"
@@ -64,6 +65,7 @@ import (
 	icpb "intrinsic/assets/proto/v1/instance_config_go_proto"
 	solutiondeploymentpb "intrinsic/assets/proto/v1/solution_deployment_go_proto"
 	solutionpb "intrinsic/assets/proto/v1/solution_go_proto"
+	svpb "intrinsic/assets/proto/v1/solution_validation_policy_go_proto"
 	conductorgrpcpb "intrinsic/conductor/proto/conductor_go_proto"
 	conductorpb "intrinsic/conductor/proto/conductor_go_proto"
 	apb "intrinsic/config/proto/application_go_proto"
@@ -480,8 +482,13 @@ func (s *DeployService) DeployApplication(ctx context.Context, req *deploypb.Dep
 		trace.StringAttribute("cluster", s.clusterInfo.Name),
 	)
 
+	rule, err := severityRule(svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED, svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
+	if err != nil {
+		return nil, err
+	}
+
 	if branchName := req.GetApplication().GetMetadata().GetName(); branchName != "" {
-		op, err := s.scheduleVersionedSolution(ctx, branchName, req.GetApplication().GetOperationMode(), true /* allowRunning */, solutiondeploymentpb.SolutionDeploymentView_SOLUTION_DEPLOYMENT_VIEW_UNSPECIFIED)
+		op, err := s.scheduleVersionedSolution(ctx, branchName, req.GetApplication().GetOperationMode(), true /* allowRunning */, solutiondeploymentpb.SolutionDeploymentView_SOLUTION_DEPLOYMENT_VIEW_UNSPECIFIED, rule)
 		if err != nil {
 			return nil, err
 		}
@@ -494,9 +501,9 @@ func (s *DeployService) DeployApplication(ctx context.Context, req *deploypb.Dep
 
 	log.InfoContext(ctx, "Solution is not a branch.  No save data will be retrieved.")
 	var validateDependencies deployValidator = func(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) error {
-		if _, err := s.validateDependencies(ctx, app, rts); err != nil {
+		if _, err := s.validateDependencies(ctx, app, rts, rule, codes.InvalidArgument); err != nil {
 			log.ErrorContextf(ctx, "dependency validation failed in DeployApplication: %v", err)
-			return status.Errorf(codes.FailedPrecondition, "dependency validation failed when deploying the Solution: %v", err)
+			return err
 		}
 		return nil
 	}
@@ -953,14 +960,18 @@ func (s *DeployService) CreateSolutionDeploymentFromVersionedSolution(ctx contex
 	} else {
 		req.View = view
 	}
-	op, err := s.scheduleVersionedSolution(ctx, req.GetSolutionId(), req.GetOperationMode(), false /* allowRunning */, req.GetView())
+	rule, err := severityRule(svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED, svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
+	if err != nil {
+		return nil, err
+	}
+	op, err := s.scheduleVersionedSolution(ctx, req.GetSolutionId(), req.GetOperationMode(), false /* allowRunning */, req.GetView(), rule)
 	if err != nil {
 		return nil, err
 	}
 	return op.Proto(), nil
 }
 
-func (s *DeployService) scheduleVersionedSolution(ctx context.Context, solutionID string, operationMode opmodepb.OperationMode, allowRunning bool, view solutiondeploymentpb.SolutionDeploymentView) (*operations.Operation, error) {
+func (s *DeployService) scheduleVersionedSolution(ctx context.Context, solutionID string, operationMode opmodepb.OperationMode, allowRunning bool, view solutiondeploymentpb.SolutionDeploymentView, rule report.SeverityRule) (*operations.Operation, error) {
 	op := operations.New(&lropb.Operation{
 		Name: path.Join(deploymentPrefix, "create-from-versioned-solution", newOperationName()),
 	})
@@ -1006,10 +1017,10 @@ func (s *DeployService) scheduleVersionedSolution(ctx context.Context, solutionI
 		app.Metadata.SolutionDeploymentId = newSolutionDeploymentID()
 
 		var validateDependencies deployValidator = func(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) error {
-			es, err := s.validateDependencies(ctx, app, rts)
+			es, err := s.validateDependencies(ctx, app, rts, rule, codes.FailedPrecondition)
 			if err != nil {
 				log.ErrorContextf(ctx, "dependency validation failed in CreateSolutionDeploymentFromVersionedSolution: %v", err)
-				return status.Errorf(codes.FailedPrecondition, "dependency validation failed when deploying the Solution: %v", err)
+				return err
 			} else if es != nil {
 				metadata := &solutiondeploymentpb.CreateSolutionDeploymentFromVersionedSolutionMetadata{
 					Warnings: es,
@@ -1076,6 +1087,11 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 		req.View = view
 	}
 
+	rule, err := severityRule(svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED, svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
+	if err != nil {
+		return nil, err
+	}
+
 	op := operations.New(&lropb.Operation{
 		Name: path.Join(deploymentPrefix, "update", newOperationName()),
 	})
@@ -1133,10 +1149,10 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 		}
 
 		var validateDependencies deployValidator = func(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) error {
-			es, err := s.validateDependencies(ctx, app, rts)
+			es, err := s.validateDependencies(ctx, app, rts, rule, codes.InvalidArgument)
 			if err != nil {
 				log.ErrorContextf(ctx, "dependency validation failed in UpdateSolutionDeployment: %v", err)
-				return status.Errorf(codes.FailedPrecondition, "dependency validation failed when deploying the Solution: %v", err)
+				return err
 			} else if es != nil {
 				metadata := &solutiondeploymentpb.UpdateSolutionDeploymentMetadata{
 					Warnings: es,
@@ -1256,8 +1272,31 @@ func basicSolutionView(solution *solutionpb.Solution) *solutionpb.Solution {
 	}
 }
 
-func (s *DeployService) validateDependencies(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime) (*espb.ExtendedStatus, error) {
-	r := report.New(report.WithSeverityRule(report.AllWarnings))
+// severityRule returns the severity rule for the requested Solution validation policy, falling
+// back to a default if unspecified. Returns an InvalidArgument error if the policy is not
+// supported.
+func severityRule(p, defaultPolicy svpb.SolutionValidationPolicy) (report.SeverityRule, error) {
+	if p == svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED {
+		p = defaultPolicy
+	}
+	if p == svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid solution validation policy: %v", p)
+	}
+	rule, err := solutionvalidate.SeverityRuleFor(p)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid solution validation policy: %v", err)
+	}
+	return rule, nil
+}
+
+// validateDependencies validates Asset dependencies.
+//
+// It returns an ExtendedStatus describing any validation issues that the given rule classifies as
+// warnings. If validation fails, or finds issues that rule classifies as errors, it returns an
+// error with gRPC code errCode and the error carries an ExtendedStatus detail
+// describing those issues.
+func (s *DeployService) validateDependencies(ctx context.Context, app *apb.Application, rts map[string]*rtrpb.ResourceTypeRuntime, rule report.SeverityRule, errCode codes.Code) (*espb.ExtendedStatus, error) {
+	r := report.New(report.WithSeverityRule(rule))
 	sc, err := runtimegraph.NewSolutionContext(ctx, app.GetResources().GetResourceInstances(), slices.Collect(maps.Values(rts)), runtimegraph.WithPlatformRuntime())
 	if err != nil {
 		// TODO(b/536078799): As a temporary measure, we only log the errors here instead of fatally
@@ -1267,13 +1306,17 @@ func (s *DeployService) validateDependencies(ctx context.Context, app *apb.Appli
 		return nil, nil
 	}
 	if err := graph.ValidateAll(sc, graph.WithReport(r)); err != nil {
-		return nil, err
+		return nil, status.Errorf(errCode, "dependency validation failed when deploying the Solution: %v", err)
 	}
-	if len(r.Warnings()) > 0 {
-		extStatus := r.ToExtendedStatus(
-			report.WithTitlePrefix("Validation errors during Solution deployment"),
-		)
-		return extStatus.Proto(), nil
+	extStatus := r.ToExtendedStatus(
+		report.WithTitlePrefix("Validation errors during Solution deployment"),
+		report.WithGrpcCode(errCode),
+	)
+	if extStatus == nil {
+		return nil, nil
 	}
-	return nil, nil
+	if len(r.Errors()) > 0 {
+		return nil, extStatus.Err()
+	}
+	return extStatus.Proto(), nil
 }
