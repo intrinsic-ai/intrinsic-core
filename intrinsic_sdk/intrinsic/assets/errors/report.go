@@ -40,14 +40,14 @@ const (
 )
 
 const (
-	// defaultComponentName is the name that will be used as the component name for ExtendedStatus
+	// ComponentName is the name that will be used as the component name for ExtendedStatus
 	// errors unless overridden. This is arbitrarily chosen, and deviates from the official
 	// guidelines that specifies providing a component name following an ID format
 	// (e.g. <package>.<name>), since the component is not specific to any Asset.
-	defaultComponentName = "assets_errors"
-	// defaultStatusCode is the status code that will be used for ExtendedStatus errors unless
+	ComponentName = "assets_errors"
+	// StatusCode is the status code that will be used for ExtendedStatus errors unless
 	// overridden.
-	defaultStatusCode = 2000
+	StatusCode = 2000
 )
 
 // SeverityRule decides the [Severity] of an error.
@@ -217,8 +217,8 @@ func extendedStatus(errs []error, opts []ReportExtendedStatusOption) *extstatus.
 		return nil
 	}
 	o := &reportExtendedStatusOpts{
-		component: defaultComponentName,
-		code:      defaultStatusCode,
+		component: ComponentName,
+		code:      StatusCode,
 	}
 	for _, opt := range opts {
 		opt(o)
@@ -232,8 +232,8 @@ func extendedStatus(errs []error, opts []ReportExtendedStatusOption) *extstatus.
 		} else if converter, ok := err.(ExtendedStatusConverter); ok {
 			es = converter.ToExtendedStatus()
 		} else {
-			es = extstatus.New(defaultComponentName,
-				uint32(defaultStatusCode),
+			es = extstatus.New(ComponentName,
+				uint32(StatusCode),
 				extstatus.WithTitle(err.Error()),
 			)
 		}
