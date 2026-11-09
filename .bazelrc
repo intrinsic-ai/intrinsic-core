@@ -195,8 +195,8 @@ common --copt=-Wthread-safety-beta
 
 # Disable warnings again for some parts we enabled above, in particular
 # third_party vendored code.
-common      --per_file_copt=google3/third_party/.*,third_party/.*@-Wno-everything
-common --host_per_file_copt=google3/third_party/.*,third_party/.*@-Wno-everything
+common      --per_file_copt=google3/third_party/.*,intrinsic_sdk/third_party/.*,third_party/.*@-Wno-everything
+common --host_per_file_copt=google3/third_party/.*,intrinsic_sdk/third_party/.*,third_party/.*@-Wno-everything
 
 # insrc builds target Linux x86. Explicitly specifying this ensures we can
 # switch between --config=remote (RBE) and local builds without discarding the

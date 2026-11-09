@@ -185,8 +185,8 @@ cc_library(
     srcs = ["version.cc"],
     hdrs = ["version.h"],
     deps = [
-        "//third_party/strings_numbers:sort",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "//intrinsic_sdk/third_party/strings_numbers:sort",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
