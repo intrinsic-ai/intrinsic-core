@@ -49,7 +49,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util:lru_cache",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
-        "//third_party/simple_lru_cache",
+        "//intrinsic_sdk/third_party/simple_lru_cache",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",

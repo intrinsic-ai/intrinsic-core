@@ -30,7 +30,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world/hashing",
-        "//third_party/simple_lru_cache",
+        "//intrinsic_sdk/third_party/simple_lru_cache",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/hash",
         "@abseil-cpp//absl/synchronization",

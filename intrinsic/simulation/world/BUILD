@@ -131,7 +131,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/component:sensor_component",
         "//intrinsic_sdk/intrinsic/world/hashing",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
-        "//third_party/thorough_hash",
+        "//intrinsic_sdk/third_party/thorough_hash",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",

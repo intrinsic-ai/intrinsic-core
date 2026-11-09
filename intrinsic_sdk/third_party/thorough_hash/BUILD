@@ -1,5 +1,5 @@
-load("@rules_cc//cc:cc_library.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
+load("//bazel:cc_macros.bzl", "cc_library")
 
 package(
     default_applicable_licenses = [":license"],

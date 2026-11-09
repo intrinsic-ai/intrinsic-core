@@ -105,7 +105,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/marshal:riegeli_coder",
         "//intrinsic_sdk/intrinsic/util:hash",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "//third_party/thorough_hash",
+        "//intrinsic_sdk/third_party/thorough_hash",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/meta:type_traits",

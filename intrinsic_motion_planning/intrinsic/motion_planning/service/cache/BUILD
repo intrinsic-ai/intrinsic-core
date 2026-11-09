@@ -60,7 +60,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/component:geometry_component",
         "//intrinsic_sdk/intrinsic/world/component:kinematics_component",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
-        "//third_party/simple_lru_cache",
+        "//intrinsic_sdk/third_party/simple_lru_cache",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_map",

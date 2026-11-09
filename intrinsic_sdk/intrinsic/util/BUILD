@@ -33,7 +33,7 @@ cc_library(
     name = "hash",
     hdrs = ["hash.h"],
     deps = [
-        "//third_party/thorough_hash",
+        "//intrinsic_sdk/third_party/thorough_hash",
         "@abseil-cpp//absl/strings",
     ],
 )
@@ -110,7 +110,7 @@ cc_library(
     name = "lru_cache",
     hdrs = ["lru_cache.h"],
     deps = [
-        "//third_party/simple_lru_cache",
+        "//intrinsic_sdk/third_party/simple_lru_cache",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
     ],

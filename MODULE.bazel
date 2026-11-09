@@ -288,47 +288,47 @@ single_version_override(
         # to pick the optimization level of `-c fastbuild` builds (default O0),
         # giving feature parity with toolchains_llvm.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/802
-        "//third_party/llvm:fastbuild_compile_flags.patch",
+        "//intrinsic_sdk/third_party/llvm:fastbuild_compile_flags.patch",
         # The patch below fixes a bug that causes several BCR package headers to
         # be shadowed by LLVM headers.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/806
-        "//third_party/llvm:header_search_paths.patch",
+        "//intrinsic_sdk/third_party/llvm:header_search_paths.patch",
         # The patch below forces compilation of libc++ and libc++-abi to be compiled
         # with msan support when using @llvm//config:msan (MSan requires an
         # instrumented C++ standard library), following the existing inherit_asan pattern.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/803
-        "//third_party/llvm:msan_libcxx.patch",
+        "//intrinsic_sdk/third_party/llvm:msan_libcxx.patch",
         # The patch below makes the cc_stage0_object transition reset user
         # copt/cxxopt/conlyopt/linkopt (as configure_builder_for_runtimes already does
         # for the other runtimes) and the fuzzer/profile settings it forgot, so
         # crtbegin.o/crtend.o never carry -fsanitize-coverage instrumentation into
         # every shared library.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/815
-        "//third_party/llvm:stage0_object_reset.patch",
+        "//intrinsic_sdk/third_party/llvm:stage0_object_reset.patch",
         # The patch below backports @llvm-project//third-party:BUILD.bazel (llvm_enable_zstd)
         # to LLVM 21.x so sanitizer symbolizer transitions work.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/805
-        "//third_party/llvm:llvm21_third_party_zstd.patch",
+        "//intrinsic_sdk/third_party/llvm:llvm21_third_party_zstd.patch",
         # The patch below applies the (already declared) ASAN_CFLAGS and
         # UBSAN_STANDALONE_CFLAGS to the asan / ubsan_standalone runtimes so they are
         # built with -fno-rtti -fno-exceptions like upstream CMake does. Without it the
         # runtimes reference __cxa_begin_catch / __gxx_personality_v0 / _Unwind_Resume
         # and plain-C links (e.g. CMake's compiler check in rules_foreign_cc) fail.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/813
-        "//third_party/llvm:asan_runtime.patch",
+        "//intrinsic_sdk/third_party/llvm:asan_runtime.patch",
         # The patch below makes sanitizer_common_symbolizer depend on libunwind on
         # Linux. The toolchain links with --unwindlib=none and only hands libunwind to
         # C++ links, so a C link against a sanitizer runtime otherwise lacks
         # _Unwind_Backtrace / _Unwind_GetIP.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/814
-        "//third_party/llvm:sanitizer_runtime_libunwind.patch",
+        "//intrinsic_sdk/third_party/llvm:sanitizer_runtime_libunwind.patch",
         # The patch below adds the opt-in @llvm//config:sanitizer_strip_foreign_source_paths
         # flag. When set, compile command lines exported to foreign build systems
         # (no `source_file` variable: rules_foreign_cc, rules_rust cargo_build_script)
         # strip source paths from UBSan locations and disable ASan global metadata,
         # so code compiled with absolute paths does not embed the build root.
         # See: https://github.com/hermeticbuild/hermetic-llvm/pull/816
-        "//third_party/llvm:sanitizer_strip_foreign_source_paths.patch",
+        "//intrinsic_sdk/third_party/llvm:sanitizer_strip_foreign_source_paths.patch",
     ],
     version = "0.8.24",
 )
@@ -1070,7 +1070,7 @@ single_version_override(
     module_name = "zenoh-c",
     patch_strip = 1,
     patches = [
-        "//third_party/zenoh_c:zenoh_shm_path.patch",
+        "//intrinsic_sdk/third_party/zenoh_c:zenoh_shm_path.patch",
     ],
     version = "1.8.0.bcr.1",
 )
