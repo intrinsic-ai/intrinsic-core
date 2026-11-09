@@ -147,6 +147,12 @@ const (
 
 	// IntrinsicIPCEmailSuffix is the email domain for IPC accounts.
 	IntrinsicIPCEmailSuffix = "@ipc.intrinsic.ai"
+
+	// IntrinsicExternalServiceAccountEmailSuffix is the email domain for
+	// service accounts that customer org admins create for their own software.
+	// Not to be confused with IntrinsicServiceAccountEmailSuffix, which is for
+	// Intrinsic's internal automation.
+	IntrinsicExternalServiceAccountEmailSuffix = "@serviceaccounts.intrinsic.equipment"
 )
 
 var cookieHeaders = []string{authProxyCookieName, onpremTokenCookieName, portalCookieName}
@@ -661,6 +667,12 @@ func ClearContext(ctx context.Context) (context.Context, error) {
 	defer span.End()
 
 	return AppendToOutgoingContext(ctx, WithClearUser())
+}
+
+// IsExternalServiceAccount returns whether the email belongs to a service
+// account that a customer org admin created.
+func IsExternalServiceAccount(email string) bool {
+	return strings.HasSuffix(email, IntrinsicExternalServiceAccountEmailSuffix)
 }
 
 // IPCEmail returns the IPC email based on its identifier.
