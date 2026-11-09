@@ -16,7 +16,9 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/geometry:__subpackages__"])
+package(default_visibility = [
+    "//intrinsic/geometry:__subpackages__",
+])
 
 exports_files(
     srcs = [
@@ -26,7 +28,6 @@ exports_files(
     visibility = [
         "//intrinsic/geometry:__subpackages__",
         "//intrinsic/world/service/benchmarks:__subpackages__",
-        "//incode/experimental/users/sgayda2:__subpackages__",
     ],
 )
 
