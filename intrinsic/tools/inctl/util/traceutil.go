@@ -36,12 +36,9 @@ import (
 	log "github.com/golang/glog"
 )
 
-
 var (
 	flagTrace bool // The --trace flag.
 )
-
-
 
 func newTracerProvider(project string) (*sdktrace.TracerProvider, error) {
 	ctx := context.Background()
