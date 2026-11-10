@@ -22,6 +22,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
 #include "intrinsic/perception/cameras/camera_setting_access.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
@@ -66,6 +67,14 @@ class ImageSourceInterface {
 
   virtual absl::Status UpdateCameraSetting(
       const CameraSetting& camera_setting) = 0;
+
+  // Applies each setting in `camera_settings` if it is a command, cannot be
+  // read, or differs from the currently read setting value.
+  virtual absl::Status ApplyCameraSettings(
+      absl::Span<const CameraSetting> camera_settings) {
+    return absl::UnimplementedError(
+        "Applying camera settings is not implemented for the current driver.");
+  }
 
   // A token that represents a registered callback.
   INTRINSIC_DEFINE_STRING_TYPE(CallbackToken);

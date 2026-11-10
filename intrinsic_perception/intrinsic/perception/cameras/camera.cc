@@ -32,6 +32,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "grpcpp/support/client_callback.h"
 #include "grpcpp/support/time.h"
 #include "intrinsic/assets/interface_utils.h"
@@ -185,6 +186,11 @@ absl::Status Camera::UpdateCameraSetting(const CameraSetting& camera_setting) {
   return image_source_interface_->UpdateCameraSetting(camera_setting);
 }
 
+absl::Status Camera::ApplyCameraSettings(
+    absl::Span<const CameraSetting> camera_settings) {
+  return image_source_interface_->ApplyCameraSettings(camera_settings);
+}
+
 absl::Status Camera::GetFaultsStatus() const {
   return image_source_interface_->GetFaultsStatus();
 }
@@ -314,6 +320,22 @@ absl::StatusOr<std::shared_ptr<ConcurrentCamera>> CameraManager::Get(
 
   INTR_ASSIGN_OR_RETURN(std::shared_ptr<ConcurrentCamera> camera,
                         ConcurrentCamera::Create(identifier));
+  std::vector<CameraSetting> initial_settings;
+  {
+    const absl::MutexLock lock(mutex_);
+    if (active_camera_config_.has_value() &&
+        identifier == active_camera_config_->identifier) {
+      initial_settings = active_camera_config_->config.camera_settings;
+    }
+  }
+  if (!initial_settings.empty()) {
+    if (absl::Status status =
+            camera->Call(&Camera::ApplyCameraSettings, initial_settings);
+        !status.ok()) {
+      LOG(WARNING) << "Failed to apply initial camera settings for "
+                   << identifier << ": " << status;
+    }
+  }
   const absl::MutexLock lock(mutex_);
   camera_by_id_[identifier] = camera;
   if (active_camera_config_.has_value() &&

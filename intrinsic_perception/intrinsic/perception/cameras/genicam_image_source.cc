@@ -538,8 +538,10 @@ absl::Status GenicamImageSource::ConfigureCameraDefaults(
   aravis_camera.gain_props_ = GetGainProperties(aravis_camera.camera_.get());
   if (aravis_camera.exposure_time_props_.has_value() &&
       aravis_camera.exposure_time_props_->range.has_value()) {
-    aravis_camera.software_hdr_ =
-        SoftwareHdr(*aravis_camera.exposure_time_props_);
+    if (!aravis_camera.software_hdr_.has_value()) {
+      aravis_camera.software_hdr_ =
+          SoftwareHdr(*aravis_camera.exposure_time_props_);
+    }
   } else {
     aravis_camera.software_hdr_ = std::nullopt;
   }

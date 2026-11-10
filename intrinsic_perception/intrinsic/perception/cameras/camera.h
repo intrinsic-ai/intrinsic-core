@@ -33,6 +33,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/client_callback.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
@@ -131,6 +132,11 @@ class Camera {
   // mode). This will require a restart of the streaming on the next call to
   // GetFrame() which maybe costly.
   absl::Status UpdateCameraSetting(const CameraSetting& camera_setting);
+
+  // Applies each setting in `camera_settings` if it is a command, cannot be
+  // read, or differs from the currently read setting value.
+  absl::Status ApplyCameraSettings(
+      absl::Span<const CameraSetting> camera_settings);
 
   // Add a callback that will receive new capture results
   absl::StatusOr<ImageSourceInterface::CallbackToken> AddCaptureCallback(

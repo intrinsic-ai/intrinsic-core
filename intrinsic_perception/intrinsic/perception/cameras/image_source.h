@@ -28,6 +28,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "cppregpattern/registry.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
@@ -89,6 +90,11 @@ class ImageSource : public ImageSourceInterface {
   // not provide a concrete implementation of UpdateCameraSettingImpl() (see
   // below), this function may raise invalid argument errors.
   absl::Status UpdateCameraSetting(const CameraSetting& camera_setting) final;
+
+  // Applies each setting in `camera_settings` if it is a command, cannot be
+  // read, or differs from the currently read setting value.
+  absl::Status ApplyCameraSettings(
+      absl::Span<const CameraSetting> camera_settings) final;
 
   absl::StatusOr<std::vector<SensorInformation>> DescribeCameraSensors()
       const final;

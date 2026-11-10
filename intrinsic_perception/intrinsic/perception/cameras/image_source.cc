@@ -31,6 +31,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
+#include "absl/types/span.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
 #include "intrinsic/perception/cameras/camera_setting_access.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
@@ -66,17 +67,8 @@ absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
 
   {
     const stats::ScopedSpan span("ImageSource::Capture::UpdateSettings");
-    for (const CameraSetting& camera_setting :
-         args.camera_config.camera_settings) {
-      if (std::holds_alternative<CameraSetting::Command>(
-              camera_setting.value)) {
-        INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
-      } else if (const absl::StatusOr<CameraSetting> current_setting =
-                     ReadCameraSetting(camera_setting.name);
-                 !current_setting.ok() || *current_setting != camera_setting) {
-        INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
-      }
-    }
+    INTR_RETURN_IF_ERROR(
+        ApplyCameraSettings(args.camera_config.camera_settings));
   }
 
   INTR_ASSIGN_OR_RETURN(CaptureResult capture_result,
@@ -88,6 +80,26 @@ absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
                                               std::move(capture_result), args));
   }
   return capture_result;
+}
+
+absl::Status ImageSource::ApplyCameraSettings(
+    absl::Span<const CameraSetting> camera_settings) {
+  for (const CameraSetting& camera_setting : camera_settings) {
+    if (camera_setting.name.empty()) {
+      return absl::InvalidArgumentError(
+          "Camera setting 'name' cannot be empty.");
+    }
+  }
+  for (const CameraSetting& camera_setting : camera_settings) {
+    if (std::holds_alternative<CameraSetting::Command>(camera_setting.value)) {
+      INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
+    } else if (const absl::StatusOr<CameraSetting> current_setting =
+                   ReadCameraSetting(camera_setting.name);
+               !current_setting.ok() || *current_setting != camera_setting) {
+      INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
+    }
+  }
+  return absl::OkStatus();
 }
 
 absl::StatusOr<CaptureResult> ImageSource::PostCaptureImplProcessing(
@@ -220,16 +232,8 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
   }
 
   // Apply all camera settings once before we start the capture loop.
-  for (const CameraSetting& camera_setting :
-       params.camera_config.camera_settings) {
-    if (std::holds_alternative<CameraSetting::Command>(camera_setting.value)) {
-      INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
-    } else if (const absl::StatusOr<CameraSetting> current_setting =
-                   ReadCameraSetting(camera_setting.name);
-               !current_setting.ok() || *current_setting != camera_setting) {
-      INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
-    }
-  }
+  INTR_RETURN_IF_ERROR(
+      ApplyCameraSettings(params.camera_config.camera_settings));
 
   absl::MutexLock lock(streaming_mutex_);
   is_stream_starting_ = false;
