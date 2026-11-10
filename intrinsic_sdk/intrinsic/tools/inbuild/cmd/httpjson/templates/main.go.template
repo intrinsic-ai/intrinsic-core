@@ -30,6 +30,7 @@ import (
 
 	// Internal Intrinsic dependencies
 	"intrinsic/httpjson/any"
+	"intrinsic/httpjson/cachecontrol"
 	"intrinsic/httpjson/serialization"
 	oah "intrinsic/httpjson/openapi/handlers"
 	rcpb "intrinsic/resources/proto/runtime_context_go_proto"
@@ -90,8 +91,8 @@ func main() {
 	addr := fmt.Sprintf(":%d", rc.GetHttpPort())
 	log.Printf("Listening on %s", addr)
 
-	// Start server with Cross-Origin Protection
-	server := http.NewCrossOriginProtection().Handler(mux)
+	// Start server with Cross-Origin Protection and no-cache headers
+	server := cachecontrol.NoCacheHeaders(http.NewCrossOriginProtection().Handler(mux))
 	if err := http.ListenAndServe(addr, server); err != nil {
 		log.Fatalf("HTTP server failed: %v", err)
 	}

@@ -131,6 +131,7 @@ go_binary(
         "//intrinsic/kubernetes:intrinsic",
         "//intrinsic_runtime/httpjson/webrtc",
         "//intrinsic_sdk/intrinsic/httpjson/any",
+        "//intrinsic_sdk/intrinsic/httpjson/cachecontrol",
         "//intrinsic_sdk/intrinsic/httpjson/serialization",
         "//intrinsic_sdk/intrinsic/platform/pubsub/golang:pubsub",
         "//intrinsic_sdk/intrinsic/stats/go:telemetry",

@@ -26,6 +26,7 @@ import (
 	"os"
 
 	"intrinsic/httpjson/any"
+	"intrinsic/httpjson/cachecontrol"
 	"intrinsic/httpjson/serialization"
 	"intrinsic/kubernetes/intrinsic"
 	"intrinsic/platform/pubsub/golang/pubsub"
@@ -120,7 +121,7 @@ func run(ctx context.Context, cliArgs *arguments.CLIArguments) error {
 		// Block cross-origin requests.
 		// CrossOriginProtection allows all "safe" methods like GET, HEAD, and OPTIONS
 		// So reviews of APIs added to the http-gateway must make sure these methods don't change state
-		http.NewCrossOriginProtection().Handler(mux),
+		cachecontrol.NoCacheHeaders(http.NewCrossOriginProtection().Handler(mux)),
 	)
 }
 
