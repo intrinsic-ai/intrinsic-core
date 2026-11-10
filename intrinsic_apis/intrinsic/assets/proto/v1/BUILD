@@ -475,6 +475,7 @@ proto_library(
     srcs = ["solution_deployment.proto"],
     deps = [
         ":solution_proto",
+        ":solution_validation_policy_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_googleapis//google/longrunning:operations_proto",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_proto",
@@ -493,6 +494,7 @@ go_proto_library(
     protos = [":solution_deployment_proto"],
     deps = [
         ":solution_go_proto",
+        ":solution_validation_policy_go_proto",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto",
         "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",

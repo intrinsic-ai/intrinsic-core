@@ -960,7 +960,7 @@ func (s *DeployService) CreateSolutionDeploymentFromVersionedSolution(ctx contex
 	} else {
 		req.View = view
 	}
-	rule, err := severityRule(svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED, svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
+	rule, err := severityRule(req.GetValidationPolicy(), svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
 	if err != nil {
 		return nil, err
 	}
@@ -1087,7 +1087,7 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 		req.View = view
 	}
 
-	rule, err := severityRule(svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED, svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
+	rule, err := severityRule(req.GetValidationPolicy(), svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
 	if err != nil {
 		return nil, err
 	}

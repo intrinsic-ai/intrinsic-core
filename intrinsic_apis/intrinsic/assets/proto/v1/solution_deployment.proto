@@ -19,6 +19,7 @@ package intrinsic_proto.assets.v1;
 import "google/api/annotations.proto";
 import "google/longrunning/operations.proto";
 import "intrinsic/assets/proto/v1/solution.proto";
+import "intrinsic/assets/proto/v1/solution_validation_policy.proto";
 import "intrinsic/kubernetes/generator/proto/auth_options.proto";
 import "intrinsic/config/proto/operation_mode.proto";
 import "intrinsic/util/status/extended_status.proto";
@@ -130,6 +131,19 @@ message CreateSolutionDeploymentFromVersionedSolutionRequest {
   // Specify the information returned in the request.
   // SOLUTION_DEPLOYMENT_VIEW_BASIC is used by default.
   SolutionDeploymentView view = 3;
+
+  // Policy that sets which Solution validation issues fail this deployment
+  // and which only produce warnings.
+  //
+  // Issues treated as errors fail the request. Issues treated as warnings are
+  // returned in
+  // `CreateSolutionDeploymentFromVersionedSolutionMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the deployment, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 4;
 }
 
 message GetSolutionDeploymentRequest {
@@ -154,6 +168,19 @@ message UpdateSolutionDeploymentRequest {
   // Specify the information returned in the request.
   // SOLUTION_DEPLOYMENT_VIEW_BASIC is used by default.
   SolutionDeploymentView view = 4;
+
+  // Policy that sets which Solution validation issues fail this update and
+  // which only produce warnings.
+  //
+  // Validation covers only the parts of the Solution that this update
+  // changes. Issues treated as errors fail the request. Issues treated as
+  // warnings are returned in `UpdateSolutionDeploymentMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the changes are deployed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 5;
 }
 
 message CreateSolutionDeploymentFromVersionedSolutionMetadata {
