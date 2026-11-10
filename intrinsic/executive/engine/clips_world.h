@@ -34,6 +34,13 @@
 namespace intrinsic {
 namespace executive {
 
+// Returns the metadata that identifies the world object created for
+// `footprint`: the objects named by its WRITE object reservations, without
+// duplicates.
+intrinsic_proto::skills::FootprintWorldObjectMetadata
+MakeFootprintWorldObjectMetadata(
+    const intrinsic_proto::skills::Footprint& footprint);
+
 // Converts a Footprint protobuf into a CreateObjectRequest for
 // ObjectWorldService.
 //
@@ -43,6 +50,8 @@ namespace executive {
 //   `<local_name>_root`, each carrying `Intrinsic_Collision` and
 //   `Intrinsic_Visual` geometry components (via `named_geometries` for
 //   TransformedGeometry or legacy `geometries` for GeometryStorageRefs).
+// The request carries `metadata` in its user data under
+// `scene_object::kFootprintObjectMetadataUserDataKey`.
 //
 // Requires all VolumeReservation entries to have volume_oneof set and have type
 // WRITE. Returns an InvalidArgumentError if any reservation has a non-WRITE
@@ -50,7 +59,8 @@ namespace executive {
 absl::StatusOr<intrinsic_proto::world::CreateObjectRequest>
 FootprintToCreateObjectRequest(
     absl::string_view world_id, absl::string_view local_name,
-    const intrinsic_proto::skills::Footprint& footprint);
+    const intrinsic_proto::skills::Footprint& footprint,
+    const intrinsic_proto::skills::FootprintWorldObjectMetadata& metadata);
 
 // Adds footprint volumes to the object world as a standalone scene object.
 // - If the footprint contains no volumes, returns an empty string ("")

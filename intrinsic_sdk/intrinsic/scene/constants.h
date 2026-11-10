@@ -29,6 +29,13 @@ constexpr absl::string_view kSceneObjectAssetUserDataKey =
 // LINT.ThenChange(
 // //intrinsic/frontend/world_viewer/core/model/world_ids.ts
 // )
+
+// User-data key under which the world object that holds a running skill's
+// volume reservations carries its
+// `intrinsic_proto.skills.FootprintWorldObjectMetadata`.
+constexpr absl::string_view kFootprintObjectMetadataUserDataKey =
+    "__INTRINSIC_FOOTPRINT";
+
 constexpr int kSceneObjectNumReservedUserDataKeys = 4;
 constexpr std::array<absl::string_view, kSceneObjectNumReservedUserDataKeys>
     kSceneObjectReservedUserDataKeys = {

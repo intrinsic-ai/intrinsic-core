@@ -527,6 +527,7 @@ cc_library(
         "//intrinsic/world/service/updater:world_updater_cc_proto",
         "//intrinsic/world/util:remove_redundant_updates",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/scene:constants",
         "//intrinsic_sdk/intrinsic/util:eigen",
         "//intrinsic_sdk/intrinsic/util/grpc",
         "//intrinsic_sdk/intrinsic/util/status:return",

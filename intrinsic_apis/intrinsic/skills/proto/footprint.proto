@@ -193,3 +193,20 @@ message ResourceReservation {
   // Name of the equipment to be locked.
   string name = 2;
 }
+
+// Metadata that the executive attaches to the world object it creates to hold
+// the volume reservations (`Footprint.volume`) of a running skill. The object
+// carries this message in its user data under the key "__INTRINSIC_FOOTPRINT"
+// for as long as it exists. Skills don't set it.
+//
+// World consumers (e.g. a motion planner) can use it to recognize these
+// objects without relying on their names, and to see which objects (e.g. a
+// robot) the skill holding the footprint has reserved for writing.
+message FootprintWorldObjectMetadata {
+  // Objects that the skill holding the footprint has reserved with WRITE
+  // access (`Footprint.object_reservation` entries of type WRITE that name an
+  // object), without duplicates. These are other world objects, such as a
+  // robot, not the object carrying this message. May be empty.
+  repeated intrinsic_proto.world.ObjectReferenceByName write_reserved_objects =
+      1;
+}

@@ -38,6 +38,7 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
+#include "google/protobuf/any.pb.h"
 #include "google/protobuf/empty.pb.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/time.h"  // for grpc::TimePoint<absl::Time>
@@ -50,6 +51,7 @@
 #include "intrinsic/executive/proto/world_query.pb.h"
 #include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
 #include "intrinsic/math/proto_conversion.h"
+#include "intrinsic/scene/constants.h"
 #include "intrinsic/skills/internal/conflicts.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
 #include "intrinsic/stats/scoped_span.h"
@@ -85,6 +87,7 @@ using ::intrinsic::toAffineMatrix4d;
 using ::intrinsic::ToProto;
 using ::intrinsic::eigenmath::Matrix4d;
 using ::intrinsic::eigenmath::MatrixXd;
+using ::intrinsic::scene_object::kFootprintObjectMetadataUserDataKey;
 using ::intrinsic_proto::FromProto;
 using ::intrinsic_proto::Matrixd;
 using ::intrinsic_proto::Pose;
@@ -93,11 +96,14 @@ using ::intrinsic_proto::geometry::TransformedGeometryStorageRefs;
 using ::intrinsic_proto::scene_object::v1::Entity;
 using ::intrinsic_proto::scene_object::v1::SceneObject;
 using ::intrinsic_proto::skills::Footprint;
+using ::intrinsic_proto::skills::FootprintWorldObjectMetadata;
+using ::intrinsic_proto::skills::ObjectWorldReservation;
 using ::intrinsic_proto::skills::VolumeReservation;
 using ::intrinsic_proto::world::CreateObjectRequest;
 using ::intrinsic_proto::world::DeleteObjectRequest;
 using ::intrinsic_proto::world::GeometryComponent;
 using ::intrinsic_proto::world::Object;
+using ::intrinsic_proto::world::ObjectReferenceByName;
 using ::intrinsic_proto::world::ObjectReferenceWithEntityFilter;
 using ::intrinsic_proto::world::ObjectWorldService;
 
@@ -671,9 +677,53 @@ absl::StatusOr<Pose> MatrixToPoseProto(const Matrixd& matrix_proto) {
 
 }  // namespace
 
+FootprintWorldObjectMetadata MakeFootprintWorldObjectMetadata(
+    const Footprint& footprint) {
+  FootprintWorldObjectMetadata metadata;
+
+  // Inspect only explicit `object_reservation` entries. Legacy
+  // `EntitySearchCriteria`-based entity reservations cannot be resolved to
+  // object names without querying the world, and implied permissions (such as
+  // WRITE access on child objects) are intentionally not expanded so the
+  // metadata records only what the skill declared.
+  for (const ObjectWorldReservation& reservation :
+       footprint.object_reservation()) {
+    // Skip non-WRITE (e.g., READ) reservations: a READ holder does not move
+    // the reserved object. `WRITE` is the zero enum value, so reservations
+    // with an unset sharing type also count as WRITE.
+    if (reservation.type() != ObjectWorldReservation::WRITE) {
+      continue;
+    }
+    // Skip `frame` (or unset) reservations: reserving a frame does not
+    // identify which object moves.
+    if (!reservation.has_object()) {
+      continue;
+    }
+    const absl::string_view object_name = reservation.object().object_name();
+    // Skip empty object names (for example, when a skill references a part by
+    // ID rather than by name), because they do not identify any object.
+    if (object_name.empty()) {
+      continue;
+    }
+    // Remove duplicate object names while keeping the first occurrence so the
+    // output is deterministic. Footprints are expected to have only a few
+    // reservations, so a linear scan avoids allocating an auxiliary hash set.
+    const bool already_recorded = absl::c_any_of(
+        metadata.write_reserved_objects(),
+        [object_name](const ObjectReferenceByName& existing_object) {
+          return existing_object.object_name() == object_name;
+        });
+    if (already_recorded) {
+      continue;
+    }
+    *metadata.add_write_reserved_objects() = reservation.object();
+  }
+  return metadata;
+}
+
 absl::StatusOr<CreateObjectRequest> FootprintToCreateObjectRequest(
     absl::string_view world_id, absl::string_view local_name,
-    const Footprint& footprint) {
+    const Footprint& footprint, const FootprintWorldObjectMetadata& metadata) {
   CreateObjectRequest request;
   request.set_world_id(world_id);
   request.set_name(local_name);
@@ -768,6 +818,19 @@ absl::StatusOr<CreateObjectRequest> FootprintToCreateObjectRequest(
             "a volume.");
     }
   }
+
+  // Attach the metadata to the request-level `user_data` map only (never
+  // `SceneObject.user_data`, because request-level `user_data` inserts without
+  // overwriting keys already set on the `SceneObject`).
+  google::protobuf::Any metadata_any;
+  if (!metadata_any.PackFrom(metadata)) {
+    return absl::InternalError(absl::StrCat(
+        "Failed to pack FootprintWorldObjectMetadata for footprint object '",
+        local_name, "'."));
+  }
+  (*request.mutable_user_data())[std::string(
+      kFootprintObjectMetadataUserDataKey)] = std::move(metadata_any);
+
   return request;
 }
 
@@ -786,8 +849,12 @@ absl::StatusOr<std::string> AddFootprintVolumesToWorld(
       absl::StrCat(action_id, "_footprint"));
 
   INTR_ASSIGN_OR_RETURN(
-      CreateObjectRequest request,
-      FootprintToCreateObjectRequest(world_id, local_name, footprint));
+      const CreateObjectRequest request,
+      FootprintToCreateObjectRequest(
+          world_id, local_name, footprint,
+          MakeFootprintWorldObjectMetadata(footprint)),
+      _ << "Failed to build CreateObjectRequest for footprint object '"
+        << local_name << "'.");
 
   grpc::ClientContext context;
   ConfigureClientContext(&context);
