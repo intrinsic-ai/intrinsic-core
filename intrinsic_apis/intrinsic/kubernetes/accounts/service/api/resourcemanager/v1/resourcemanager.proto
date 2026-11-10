@@ -20,6 +20,9 @@ import "google/api/annotations.proto";
 import "google/api/field_behavior.proto";
 import "google/longrunning/operations.proto";
 import "google/protobuf/empty.proto";
+
+import "google/protobuf/field_mask.proto";
+
 import "google/protobuf/timestamp.proto";
 import "protoc-gen-openapiv2/options/annotations.proto";
 
@@ -144,6 +147,156 @@ message DeleteOrganizationRequest {
 
 message CreateOrganizationPaymentPlanOperationMetadata {}
 
+
+// A service account is a non-human identity that belongs to an organization,
+// for software that runs outside of an IPC (e.g. on a customer's server) and
+// needs to call Intrinsic APIs on behalf of the organization.
+//
+// A service account authenticates by signing a JWT with one of its private
+// keys and exchanging it at the accounts token endpoint. Service accounts are
+// not members of the organization: they have no access until an admin grants
+// them a role binding (e.g. the clusterUser role) on the organization.
+message ServiceAccount {
+  // The resource name of the service account.
+  // Format: organizations/{organization}/serviceAccounts/{service_account}
+  // where {service_account} is a server-generated ID of the form sa-{xid}.
+  string name = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The email address of the service account, which is the subject of its
+  // tokens and of role bindings that grant it access.
+  // Format: {service_account}@serviceaccounts.intrinsic.equipment
+  string email = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The human-readable display name of the service account. It must be 1 to
+  // 128 Unicode characters long and must not contain control characters.
+  string display_name = 3 [(google.api.field_behavior) = REQUIRED];
+
+  // The email address of the user who created the service account.
+  string creator = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The public keys of the service account. At most 10 keys are allowed.
+  repeated ServiceAccountKey keys = 5
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The time at which the service account was created.
+  google.protobuf.Timestamp create_time = 6
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The time at which the service account was last updated.
+  google.protobuf.Timestamp update_time = 7
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// A public key of a service account. The matching private key is generated
+// and kept by the client and is never sent to the server.
+message ServiceAccountKey {
+  // The resource name of the key.
+  // Format:
+  // organizations/{organization}/serviceAccounts/{service_account}/keys/{key}
+  string name = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The server-assigned ID of the key (a UUID), which clients set as the "kid"
+  // header of the JWTs they sign with the matching private key.
+  string key_id = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The PEM-encoded public key. Only ECDSA P-256 keys and RSA keys of at least
+  // 2048 bits are accepted.
+  string public_key = 3 [
+    (google.api.field_behavior) = REQUIRED,
+    (google.api.field_behavior) = IMMUTABLE
+  ];
+
+  // The JWS algorithm that JWTs signed with this key must use, derived from
+  // the public key (e.g. "ES256" or "RS256").
+  string algorithm = 4 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The email address of the user who added the key.
+  string creator = 5 [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The time at which the key was added.
+  google.protobuf.Timestamp create_time = 6
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+
+  // The approximate time at which the key was last used to get a token. This
+  // is updated at most once per hour, and is unset if the key was never used.
+  // It helps admins find unused keys.
+  google.protobuf.Timestamp last_used_time = 7
+      [(google.api.field_behavior) = OUTPUT_ONLY];
+}
+
+// Request for creating a new service account.
+message CreateServiceAccountRequest {
+  // The resource name of the organization to create the service account in.
+  // Format: organizations/{organization}
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The service account to create. Only display_name may be set.
+  ServiceAccount service_account = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Request for listing the service accounts of an organization.
+message ListServiceAccountsRequest {
+  // The resource name of the organization to list service accounts of.
+  // Format: organizations/{organization}
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The maximum number of service accounts to return.
+  int32 page_size = 2;
+
+  // The page token, received from a previous `ListServiceAccounts` call.
+  // Provide this to retrieve the subsequent page.
+  string page_token = 3;
+}
+
+message ListServiceAccountsResponse {
+  // The list of service accounts, including their keys.
+  repeated ServiceAccount service_accounts = 1;
+
+  // A token, which can be sent as `page_token` to retrieve the next page.
+  // If this field is omitted, there are no subsequent pages.
+  string next_page_token = 2;
+}
+
+// Request for updating a service account.
+message UpdateServiceAccountRequest {
+  // The service account to update. The name field identifies the service
+  // account. Only display_name can be updated.
+  ServiceAccount service_account = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The fields to update. Only "display_name" is supported.
+  google.protobuf.FieldMask update_mask = 2
+      [(google.api.field_behavior) = REQUIRED];
+}
+
+// Request for deleting a service account.
+message DeleteServiceAccountRequest {
+  // The resource name of the service account to delete.
+  // Format: organizations/{organization}/serviceAccounts/{service_account}
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Metadata for the DeleteServiceAccount operation.
+message DeleteServiceAccountOperationMetadata {}
+
+// Request for creating a public key for a service account.
+message CreateServiceAccountKeyRequest {
+  // The resource name of the service account to create the key for.
+  // Format: organizations/{organization}/serviceAccounts/{service_account}
+  string parent = 1 [(google.api.field_behavior) = REQUIRED];
+
+  // The key to create. Only public_key may be set.
+  ServiceAccountKey key = 2 [(google.api.field_behavior) = REQUIRED];
+}
+
+// Request for deleting a public key of a service account.
+message DeleteServiceAccountKeyRequest {
+  // The resource name of the key to delete.
+  // Format:
+  // organizations/{organization}/serviceAccounts/{service_account}/keys/{key}
+  string name = 1 [(google.api.field_behavior) = REQUIRED];
+}
+
+
 // ResourceManagerService manages the user-facing accounts resources like
 // organizations.
 service ResourceManagerService {
@@ -211,6 +364,93 @@ service ResourceManagerService {
       operation_id: "DeleteOrganization"
     };
   }
+
+
+  // Creates a service account in an organization. The service account has no
+  // keys and no access until a key is added and a role binding is granted.
+  // Requires the service_account_create permission on the organization.
+  rpc CreateServiceAccount(CreateServiceAccountRequest)
+      returns (ServiceAccount) {
+    option (google.api.http) = {
+      post: "/resourcemanager/v1/{parent=organizations/*}/serviceAccounts"
+      body: "service_account"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      operation_id: "CreateServiceAccount"
+    };
+  }
+
+  // Lists the service accounts of an organization, including their keys.
+  // Requires the service_account_get permission on the organization.
+  rpc ListServiceAccounts(ListServiceAccountsRequest)
+      returns (ListServiceAccountsResponse) {
+    option (google.api.http) = {
+      get: "/resourcemanager/v1/{parent=organizations/*}/serviceAccounts"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      operation_id: "ListServiceAccounts"
+    };
+  }
+
+  // Updates the display name of a service account.
+  // Requires the service_account_update permission on the organization.
+  rpc UpdateServiceAccount(UpdateServiceAccountRequest)
+      returns (ServiceAccount) {
+    option (google.api.http) = {
+      patch: "/resourcemanager/v1/{service_account.name=organizations/*/serviceAccounts/*}"
+      body: "service_account"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      operation_id: "UpdateServiceAccount"
+    };
+  }
+
+  // Deletes a service account, including all of its keys and the role
+  // bindings granted to it. Tokens that were already issued to the service
+  // account remain valid until they expire (within 1h).
+  // Requires the service_account_delete permission on the organization.
+  rpc DeleteServiceAccount(DeleteServiceAccountRequest)
+      returns (google.longrunning.Operation) {
+    option (google.api.http) = {
+      delete: "/resourcemanager/v1/{name=organizations/*/serviceAccounts/*}"
+    };
+    option (google.longrunning.operation_info) = {
+      response_type: "google.protobuf.Empty"
+      metadata_type: "DeleteServiceAccountOperationMetadata"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      operation_id: "DeleteServiceAccount"
+    };
+  }
+
+  // Creates a public key for a service account. A service account can have at
+  // most 10 keys. To rotate a key without downtime, add a new key, deploy it,
+  // then delete the old key.
+  // Requires the service_account_update permission on the organization.
+  rpc CreateServiceAccountKey(CreateServiceAccountKeyRequest)
+      returns (ServiceAccountKey) {
+    option (google.api.http) = {
+      post: "/resourcemanager/v1/{parent=organizations/*/serviceAccounts/*}/keys"
+      body: "key"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      operation_id: "CreateServiceAccountKey"
+    };
+  }
+
+  // Deletes a public key of a service account. Deleting the last key is
+  // allowed: the service account then can't get tokens until a key is added.
+  // Requires the service_account_update permission on the organization.
+  rpc DeleteServiceAccountKey(DeleteServiceAccountKeyRequest)
+      returns (google.protobuf.Empty) {
+    option (google.api.http) = {
+      delete: "/resourcemanager/v1/{name=organizations/*/serviceAccounts/*/keys/*}"
+    };
+    option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
+      operation_id: "DeleteServiceAccountKey"
+    };
+  }
+
 
   // Ping can be used for latency and health checks.
   rpc Ping(google.protobuf.Empty) returns (PingResponse) {
