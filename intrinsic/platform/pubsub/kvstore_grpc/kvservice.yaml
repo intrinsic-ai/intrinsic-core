@@ -87,7 +87,7 @@ spec:
   endpoints:
     - port: http-metrics
       path: /metrics
-      interval: 10s
+      interval: 30s
       metricRelabelings:
         - action: labeldrop
           regex: pod
