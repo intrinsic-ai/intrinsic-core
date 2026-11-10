@@ -20,7 +20,10 @@ package(default_visibility = ["//visibility:public"])
 
 proto_library(
     name = "clustermanager_api_proto",
-    srcs = ["clustermanager_api.proto"],
+    srcs = [
+        "clustermanager_api.proto",
+        "clustermanager_migration_msg.proto",
+    ],
     deps = [
         "//intrinsic/config/proto:application_proto",
         "@com_github_grpc_ecosystem_grpc_gateway_v2//protoc-gen-openapiv2/options:options_proto",

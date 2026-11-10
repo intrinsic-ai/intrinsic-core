@@ -24,6 +24,7 @@ import "google/protobuf/duration.proto";
 import "google/protobuf/empty.proto";
 import "google/protobuf/field_mask.proto";
 import "google/protobuf/timestamp.proto";
+import "incode/frontend/cloud/api/v1/clustermanager_migration_msg.proto";
 import "intrinsic/config/proto/application.proto"; 
 import "intrinsic/config/proto/operation_mode.proto";
 import "intrinsic/kubernetes/generator/proto/auth_options.proto";
@@ -1136,6 +1137,43 @@ service ClustersService {
     option (grpc.gateway.protoc_gen_openapiv2.options.openapiv2_operation) = {
       operation_id: "UpdateClusterDHCPLeases"
     };
+    option (aclType) = "can_configure";
+  }
+
+  // Exports the cluster's metadata, public key, and version state from the
+  // source project prior to migration. Validates that the cluster is a
+  // single-node control-plane cluster.
+  rpc ExportClusterMigrationState(ExportClusterMigrationStateRequest)
+      returns (ExportClusterMigrationStateResponse) {
+    option (aclType) = "can_delete";
+  }
+
+  // Partially registers the cluster in the target project (Firestore, Robot CR,
+  // ExtendedStatus, OSConfiguration, Inversion, token-vendor public key, ACL
+  // ownership, and staged config) without registering with accounts.
+  rpc StageClusterMigration(StageClusterMigrationRequest)
+      returns (StageClusterMigrationResponse);
+
+  // Instructs the on-prem IPC via the source project's API relay to validate
+  // access to the target project, write the new config.yaml, and stage a
+  // solution-reset marker.
+  rpc PrepareOnPremMigration(PrepareOnPremMigrationRequest)
+      returns (PrepareOnPremMigrationResponse) {
+    option (aclType) = "can_delete";
+  }
+
+  // Rolls back a partially staged cluster in the target project before
+  // finalization.
+  rpc AbortClusterMigration(AbortClusterMigrationRequest)
+      returns (AbortClusterMigrationResponse) {
+    option (aclType) = "can_delete";
+  }
+
+  // Finalizes the cluster registration in the target project
+  // (accounts.RegisterIPC and Inversion update trigger) after the cluster has
+  // been removed from the source project.
+  rpc FinalizeClusterMigration(FinalizeClusterMigrationRequest)
+      returns (FinalizeClusterMigrationResponse) {
     option (aclType) = "can_configure";
   }
 
