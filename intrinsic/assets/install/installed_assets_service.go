@@ -1632,48 +1632,29 @@ func (s *installedAssetsService) UpdateInstalledAsset(ctx context.Context, req *
 // uninstallAssets will remove the assets specified in the idsToDeleteSet from
 // the solution based on the provided policy.
 func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iapb.DeleteInstalledAssetsRequest_Policy, idsToDelete map[string]struct{}) error {
-	installed, _, err := s.rtrClient.List(ctx)
+	state, err := s.summarizeState(ctx)
 	if err != nil {
-		return status.Errorf(codes.Internal, "unable to list assets: %v", err)
-	}
-
-	installedByID := make(map[string][]*idutils.IDVersionParts)
-	for _, idv := range installed {
-		parts, err := idutils.NewIDVersionParts(idv)
-		if err != nil {
-			return status.Errorf(codes.Internal, "invalid state in cache: %v", err)
-		}
-		installedByID[parts.ID()] = append(installedByID[parts.ID()], parts)
+		return err
 	}
 
 	var idVersionsToDelete []string
+	// A map of instances to ID versions for assets being deleted.
+	usedInstancesByIDVersion := make(map[string][]string)
 	for id := range idsToDelete {
-		idvs, ok := installedByID[id]
+		idvs, ok := state.versions[id]
 		if !ok {
 			return status.Errorf(codes.NotFound, "requested delete of %q which is not installed", id)
 		}
 		for _, idv := range idvs {
-			idVersionsToDelete = append(idVersionsToDelete, idv.IDVersion())
-		}
-	}
-
-	app, err := s.appClient.GetCurrentApplication(ctx, &aspb.GetCurrentApplicationRequest{})
-	if err != nil {
-		return status.Errorf(codes.Internal, "unable to get current state of the solution: %v", err)
-	}
-	usedInstalled := make(map[string]*idutils.IDVersionParts)
-	for _, ri := range app.GetApplication().GetResources().GetResourceInstances() {
-		parts, err := idutils.NewIDVersionParts(ri.GetTypeIdVersion())
-		if err != nil {
-			return status.Errorf(codes.Internal, "invalid state in cache: %v", err)
-		}
-		if _, ok := idsToDelete[parts.ID()]; ok {
-			usedInstalled[ri.GetName()] = parts
+			idVersionsToDelete = append(idVersionsToDelete, idv)
+			if instances := state.installed[idv].instances; len(instances) > 0 {
+				usedInstancesByIDVersion[idv] = instances
+			}
 		}
 	}
 
 	var newApp *apb.Application
-	if skills := app.GetApplication().GetSkills(); skills != nil {
+	if skills := state.app.GetSkills(); skills != nil {
 		var updateApp bool
 		var idvs []string
 		for _, idv := range skills.GetSkillIdVersions() {
@@ -1693,19 +1674,18 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 			}
 		}
 		if updateApp {
-			newApp = proto.Clone(app.GetApplication()).(*apb.Application)
+			newApp = proto.Clone(state.app).(*apb.Application)
 			newApp.GetSkills().SkillIdVersions = idvs
 		}
 	}
 
-	if assets := app.GetApplication().GetAssets(); assets != nil {
-		for id := range idsToDelete {
-			delete(assets, id)
-		}
+	if state.app.GetAssets() != nil {
 		if newApp == nil {
-			newApp = proto.Clone(app.GetApplication()).(*apb.Application)
+			newApp = proto.Clone(state.app).(*apb.Application)
 		}
-		newApp.Assets = assets
+		for id := range idsToDelete {
+			delete(newApp.Assets, id)
+		}
 	}
 
 	switch policy {
@@ -1713,14 +1693,10 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 		// User left this unspecified, so apply some reasonable default.
 		fallthrough
 	case iapb.DeleteInstalledAssetsRequest_POLICY_REJECT_USED:
-		if len(usedInstalled) > 0 {
-			id2names := make(map[string][]string)
-			for name, parts := range usedInstalled {
-				id2names[parts.IDVersion()] = append(id2names[parts.ID()], name)
-			}
+		if len(usedInstancesByIDVersion) > 0 {
 			var instances []string
-			for id, names := range id2names {
-				instances = append(instances, fmt.Sprintf("%q (Asset: %q)", strings.Join(names, ", "), id))
+			for idv, names := range usedInstancesByIDVersion {
+				instances = append(instances, fmt.Sprintf("%q (Asset: %q)", strings.Join(names, ", "), idv))
 			}
 			return status.Errorf(codes.FailedPrecondition, "update unused policy was selected, but the following instances are in use: %v", strings.Join(instances, "; "))
 		}
@@ -1731,9 +1707,9 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 	if newApp != nil {
 		if _, err := s.appClient.SetCurrentApplication(ctx, &aspb.SetCurrentApplicationRequest{
 			Application:   newApp,
-			RevisionToken: app.GetRevisionToken(),
+			RevisionToken: state.revisionToken,
 		}); err != nil {
-			log.ErrorContextf(ctx, "SetCurrentApplication(%v, %v) failed after deployment: %v", newApp, app.GetRevisionToken(), err)
+			log.ErrorContextf(ctx, "SetCurrentApplication(%v, %v) failed after deployment: %v", newApp, state.revisionToken, err)
 			return status.Error(codes.Internal, "unable to save application state")
 		}
 	}
@@ -1743,7 +1719,7 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 		return status.Errorf(codes.Internal, "could not remove runtime info for assets: %v", err)
 	}
 
-	currentApp := app.GetApplication()
+	currentApp := state.app
 	if newApp != nil {
 		currentApp = newApp
 	}
