@@ -62,7 +62,6 @@ py_library(
     srcs = ["dialerutil.py"],
     deps = [
         ":auth_py",
-        "//intrinsic_sdk/intrinsic/config:environments_py",
         "//intrinsic_sdk/intrinsic/kubernetes/acl/py:identity",
         "//intrinsic_sdk/intrinsic/kubernetes/acl/py:jwt",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",

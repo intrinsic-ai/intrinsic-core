@@ -23,7 +23,6 @@ from typing import Callable
 
 import grpc
 
-from intrinsic.config import environments
 from intrinsic.frontend.cloud.api.v1 import solutiondiscovery_api_pb2
 from intrinsic.frontend.cloud.api.v1 import solutiondiscovery_api_pb2_grpc
 from intrinsic.kubernetes.acl.py import identity
@@ -219,11 +218,7 @@ def _create_channel(
   call_credentials = []
 
   if auth_token is None:
-    env = environments.from_any_project(org_info.project)
-    token = auth.get_configuration(org_info.project).get_default_credentials()
-    portal = environments.portal_domain(env)
-
-    token_source = token.as_id_token_credentials(portal_domain=portal)
+    token_source = auth.get_id_token_credentials(org_info.project)
     call_credentials.append(
         grpc.metadata_call_credentials(token_source, name="TokenAuth")
     )

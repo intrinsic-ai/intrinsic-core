@@ -60,7 +60,7 @@ class APIKeyTokenSource(grpc.AuthMetadataPlugin):
   def __init__(
       self,
       api_key: str,
-      portal_domain: str,
+      portal_domain: str = "flowstate.intrinsic.ai",
   ):
     super().__init__()
     self._api_key = api_key
@@ -194,9 +194,63 @@ class CredentialsNotFoundError(ValueError):
     return f"Credentials for project '{self.project_name}' could not be found!"
 
 
+def get_env_configuration(env: str) -> ProjectConfiguration:
+  """Retrieves the configuration for environment `env`.
+
+  Args:
+    env: name of the Intrinsic environment (e.g. 'prod', 'staging', 'dev')
+
+  Raises:
+    CredentialsNotFoundError: if configuration could not be found.
+
+  Returns:
+    configuration for the environment.
+  """
+  env_config_file_name = os.path.join(
+      userconfig.get_user_config_dir(),
+      ENV_STORE_DIRECTORY,
+      env + AUTH_CONFIG_EXTENSION,
+  )
+  try:
+    with open(env_config_file_name, "r", encoding="utf-8") as f:
+      return parse_config(f, env)
+  except FileNotFoundError as e:
+    raise CredentialsNotFoundError(
+        message="Configuration not found.", project_name=env
+    ) from e
+
+
+def get_project_configuration(project_name: str) -> ProjectConfiguration:
+  """Retrieves the configuration for project `project_name` directly from storage.
+
+  Explicitly does not fall back to environment configurations.
+
+  Args:
+    project_name: name of the GCP project
+
+  Raises:
+    CredentialsNotFoundError: if configuration could not be found.
+
+  Returns:
+    configuration for the project.
+  """
+  project_config_file_name = os.path.join(
+      userconfig.get_user_config_dir(),
+      STORE_DIRECTORY,
+      project_name + AUTH_CONFIG_EXTENSION,
+  )
+  try:
+    with open(project_config_file_name, "r", encoding="utf-8") as f:
+      return parse_config(f, project_name)
+  except FileNotFoundError as e:
+    raise CredentialsNotFoundError(
+        message="Configuration not found.", project_name=project_name
+    ) from e
+
+
 def get_configuration(name: str) -> ProjectConfiguration:
   """
-  Retrieves the configuration for project `project_name`.
+  Retrieves the configuration for project `name`.
   It first infers the environment of the project from its name and tries to
   get the configuration for the environment.
   If there's no configuration for the environment, it falls back to the project.
@@ -213,31 +267,29 @@ def get_configuration(name: str) -> ProjectConfiguration:
 
   env_name = environments.from_any_project(name)
 
-  env_config_file_name = os.path.join(
-      userconfig.get_user_config_dir(),
-      ENV_STORE_DIRECTORY,
-      env_name + AUTH_CONFIG_EXTENSION,
-  )
   try:
-    with open(env_config_file_name, "r", encoding="utf-8") as f:
-      return parse_config(f, env_name)
+    return get_env_configuration(env_name)
   # TODO: (b/530456416) remove fallback to project
-  except FileNotFoundError:
-    pass
+  except CredentialsNotFoundError:
+    return get_project_configuration(name)
 
-  project_config_file_name = os.path.join(
-      userconfig.get_user_config_dir(),
-      STORE_DIRECTORY,
-      name + AUTH_CONFIG_EXTENSION,
-  )
-  try:
-    with open(project_config_file_name, "r", encoding="utf-8") as f:
-      return parse_config(f, name)
-  except FileNotFoundError:
-    pass
 
-  raise CredentialsNotFoundError(
-      message="Configuration not found.", project_name=name
+def get_id_token_credentials(project_name: str) -> APIKeyTokenSource:
+  """Retrieves default credentials for a project as an ID token source.
+
+  Args:
+    project_name: name of the GCP project
+
+  Raises:
+    CredentialsNotFoundError: if configuration could not be found.
+
+  Returns:
+    APIKeyTokenSource configured for the project's environment portal domain.
+  """
+  env_name = environments.from_any_project(project_name)
+  token = get_configuration(project_name).get_default_credentials()
+  return token.as_id_token_credentials(
+      portal_domain=environments.portal_domain(env_name)
   )
 
 
