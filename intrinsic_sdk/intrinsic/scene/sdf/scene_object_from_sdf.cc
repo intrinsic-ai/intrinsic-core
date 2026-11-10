@@ -44,6 +44,7 @@
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object_updates.pb.h"
 #include "intrinsic/scene/proto/v1/simulation_spec.pb.h"
+#include "intrinsic/scene/scene_object/root_entity.h"
 #include "intrinsic/scene/sdf/custom_tags.h"
 #include "intrinsic/scene/sdf/entity_from_sdf.h"
 #include "intrinsic/scene/sdf/sdf_path_resolver.h"
@@ -256,21 +257,15 @@ SceneObjectFromSdfModel(const ::sdf::Model& sdf_model,
     }
   }
 
-  // All entity parents should be set by this point. Make sure we only have one
-  // root entity and clear its parent_t_this.
-  std::vector<absl::string_view> root_entity_names;
-  for (auto& e : *scene_object_model.mutable_entities()) {
-    if (e.parent_name().empty()) {
-      root_entity_names.push_back(e.name());
-      e.clear_parent_t_this();
-    }
+  // All entity parents are set by this point. Verifies there is a single root
+  // entity and clears its parent_t_this.
+  absl::StatusOr<intrinsic_proto::scene_object::v1::Entity*> root_entity =
+      FindRootEntity(scene_object_model);
+  if (!root_entity.ok()) {
+    return absl::FailedPreconditionError(absl::StrCat(
+        "Expected only one root entity: ", root_entity.status().message()));
   }
-
-  if (root_entity_names.size() != 1) {
-    return absl::FailedPreconditionError(
-        absl::StrCat("Expected only one root entity, but found: ",
-                     absl::StrJoin(root_entity_names, ", ")));
-  }
+  (*root_entity)->clear_parent_t_this();
 
   // Parses optional <intrinsic:cartesian_limits> tag.
   INTR_ASSIGN_OR_RETURN(const auto limits,

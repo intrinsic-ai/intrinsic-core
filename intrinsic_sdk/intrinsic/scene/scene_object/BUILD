@@ -35,3 +35,20 @@ cc_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
     ],
 )
+
+cc_library(
+    name = "root_entity",
+    srcs = ["root_entity.cc"],
+    hdrs = ["root_entity.h"],
+    visibility = [
+        "//intrinsic:intrinsic_internal",
+    ],
+    deps = [
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
+    ],
+)

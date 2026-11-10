@@ -58,18 +58,14 @@ cc_library(
     hdrs = ["transform_scene_object.h"],
     deps = [
         "//intrinsic/scene/processing/util:transform_util",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:so3",
         "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/scene/scene_object:root_entity",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
-        "@intrinsic_apis//intrinsic/math/proto:quaternion_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
-        "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
     ],
 )
 

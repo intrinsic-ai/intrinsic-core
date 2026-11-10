@@ -165,6 +165,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/scene:user_data_keys",
         "//intrinsic_sdk/intrinsic/scene/conversion:object_properties_conversion",
         "//intrinsic_sdk/intrinsic/scene/conversion:user_data",
+        "//intrinsic_sdk/intrinsic/scene/scene_object:root_entity",
         "//intrinsic_sdk/intrinsic/scene/util:scene_object_updates",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/conversion/sdf:joint_conversion",

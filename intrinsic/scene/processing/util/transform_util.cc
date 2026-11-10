@@ -15,18 +15,13 @@
 #include "intrinsic/scene/processing/util/transform_util.h"
 
 #include <ranges>
-#include <string>
 
-#include "absl/algorithm/container.h"
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
-#include "absl/strings/substitute.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/geometry/api/io.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
-#include "intrinsic/scene/proto/v1/scene_object.pb.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/proto/geometry_component.pb.h"
 
@@ -34,20 +29,6 @@ namespace intrinsic {
 namespace scene_object {
 
 using ::intrinsic_proto::scene_object::v1::Entity;
-using ::intrinsic_proto::scene_object::v1::SceneObject;
-
-absl::StatusOr<std::string> GetRootEntityName(const SceneObject& scene_object) {
-  auto root_entity =
-      absl::c_find_if(scene_object.entities(), [](const auto& entity) {
-        return entity.parent_name().empty() && !entity.name().empty();
-      });
-  if (root_entity == scene_object.entities().end()) {
-    return absl::InvalidArgumentError(
-        absl::Substitute("No root entity with a name found in SceneObject $0",
-                         scene_object.name()));
-  }
-  return root_entity->name();
-}
 
 absl::Status TransformEntityByPose(Entity& entity,
                                    const Pose3d& new_parent_t_old_parent) {

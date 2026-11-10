@@ -14,32 +14,21 @@
 
 #include "intrinsic/scene/processing/transform_scene_object.h"
 
-#include <cmath>
 #include <string>
 
-#include "absl/algorithm/container.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
-#include "intrinsic/eigenmath/so3.h"
-#include "intrinsic/eigenmath/types.h"
-#include "intrinsic/geometry/api/io.h"
 #include "intrinsic/math/pose3.h"
-#include "intrinsic/math/proto/quaternion.pb.h"
-#include "intrinsic/math/proto/vector3.pb.h"
-#include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/scene/processing/util/transform_util.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
+#include "intrinsic/scene/scene_object/root_entity.h"
 #include "intrinsic/util/status/status_macros.h"
-#include "intrinsic/world/proto/geometry_component.pb.h"
 
 namespace intrinsic {
 namespace scene_object {
 
-using ::intrinsic::eigenmath::Vector3d;
-using ::intrinsic_proto::Quaternion;
-using ::intrinsic_proto::Vector3;
 using ::intrinsic_proto::scene_object::v1::Entity;
 using ::intrinsic_proto::scene_object::v1::SceneObject;
 
@@ -58,8 +47,9 @@ absl::StatusOr<SceneObject> TransformSceneObject(
     return scene_object;
   }
 
-  INTR_ASSIGN_OR_RETURN(const std::string root_entity_name,
-                        GetRootEntityName(scene_object));
+  INTR_ASSIGN_OR_RETURN(const Entity* root_entity,
+                        FindRootEntity(scene_object));
+  const std::string& root_entity_name = root_entity->name();
 
   SceneObject transformed_scene_object = scene_object;
   for (auto& entity : *transformed_scene_object.mutable_entities()) {

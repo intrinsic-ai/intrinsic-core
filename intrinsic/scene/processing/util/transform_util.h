@@ -15,20 +15,12 @@
 #ifndef INTRINSIC_SCENE_PROCESSING_UTILS_TRANSFORM_UTILS_H_
 #define INTRINSIC_SCENE_PROCESSING_UTILS_TRANSFORM_UTILS_H_
 
-#include <string>
-
 #include "absl/status/status.h"
-#include "absl/status/statusor.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
-#include "intrinsic/scene/proto/v1/scene_object.pb.h"
 
 namespace intrinsic {
 namespace scene_object {
-
-// Finds the root entity of a SceneObject
-absl::StatusOr<std::string> GetRootEntityName(
-    const ::intrinsic_proto::scene_object::v1::SceneObject& scene_object);
 
 // Applies a Pose3d transformation to an entity's parent_t_this pose.
 absl::Status TransformEntityByPose(
