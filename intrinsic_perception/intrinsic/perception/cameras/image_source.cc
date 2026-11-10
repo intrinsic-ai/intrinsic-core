@@ -95,7 +95,8 @@ absl::Status ImageSource::ApplyCameraSettings(
       INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
     } else if (const absl::StatusOr<CameraSetting> current_setting =
                    ReadCameraSetting(camera_setting.name);
-               !current_setting.ok() || *current_setting != camera_setting) {
+               !current_setting.ok() ||
+               !current_setting->IsApprox(camera_setting)) {
       INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
     }
   }

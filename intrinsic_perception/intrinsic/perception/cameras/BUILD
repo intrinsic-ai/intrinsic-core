@@ -133,7 +133,10 @@ cc_library(
     name = "camera_setting",
     srcs = ["camera_setting.cc"],
     hdrs = ["camera_setting.h"],
-    deps = ["@abseil-cpp//absl/functional:overload"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/math:almost_equals",
+        "@abseil-cpp//absl/functional:overload",
+    ],
 )
 
 cc_library(

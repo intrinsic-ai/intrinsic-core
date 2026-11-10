@@ -52,6 +52,11 @@ struct CameraSetting {
   std::string name;
   Value value = std::monostate();
   auto operator<=>(const CameraSetting&) const = default;
+
+  // Returns true if `name` and `value` match `other`, comparing `Float` values
+  // within tolerance (both absolute and relative) to account for 32-bit
+  // `<FloatReg>` or `<Converter>` readback quantization on GenICam devices.
+  [[nodiscard]] bool IsApprox(const CameraSetting& other) const;
 };
 
 std::ostream& operator<<(std::ostream& os, const CameraSetting& setting);
