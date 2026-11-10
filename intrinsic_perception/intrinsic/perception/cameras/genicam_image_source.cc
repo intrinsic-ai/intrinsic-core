@@ -1130,7 +1130,36 @@ absl::StatusOr<CaptureResult> GenicamImageSource::GetLdrCaptureResult(
   do {
     ++num_tries;
     status_or_capture_result = GetCaptureResultAsync(deadline);
-    if (!status_or_capture_result.ok()) continue;
+    if (!status_or_capture_result.ok()) {
+      // Note: Do not break on `kDeadlineExceeded` while `absl::Now() <
+      // deadline`, because Aravis also maps per-frame packet retention timeouts
+      // (`ARV_BUFFER_STATUS_TIMEOUT`) and single-command GVCP timeouts
+      // (`ARV_DEVICE_ERROR_TIMEOUT`) to `kDeadlineExceeded`.
+      if (absl::Status faults_status = GetFaultsStatus(); !faults_status.ok()) {
+        LOG(WARNING) << "Attempt " << num_tries
+                     << " to acquire frame from camera " << device_id_
+                     << " failed: " << status_or_capture_result.status()
+                     << "; aborting due to camera fault.";
+        status_or_capture_result = std::move(faults_status);
+        break;
+      }
+      if (absl::IsPermissionDenied(status_or_capture_result.status()) ||
+          absl::Now() >= deadline) {
+        break;
+      }
+      LOG(WARNING) << "Attempt " << num_tries
+                   << " to acquire frame from camera " << device_id_
+                   << " failed: " << status_or_capture_result.status()
+                   << "; retrying.";
+      if (use_software_trigger_) {
+        if (const absl::Status stop_status = StopAsyncAcquisition();
+            !stop_status.ok()) {
+          LOG(WARNING) << "Failed to stop acquisition before retry for camera "
+                       << device_id_ << ": " << stop_status;
+        }
+      }
+      continue;
+    }
     if (requires_exact_exposure_time) {
       if (absl::Status verify_status =
               VerifyExposureTime(status_or_capture_result->exposure_time,
@@ -1169,8 +1198,10 @@ absl::StatusOr<CaptureResult> GenicamImageSource::GetLdrCaptureResult(
     status = intrinsic::DeadlineExceededErrorBuilder() << error_message;
   }
 
-  LOG(WARNING) << "Failed to acquire image within " << timeout << " after "
-               << num_tries << " tries. Last error: " << status;
+  LOG(WARNING) << "Failed to acquire image from camera " << device_id_
+               << " after " << num_tries << " tries ("
+               << (absl::Now() - start_time) << " elapsed, timeout " << timeout
+               << "). Last error: " << status;
   return status;
 }
 

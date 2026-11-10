@@ -81,15 +81,16 @@ class GenicamImageSource : public ImageSource {
   absl::Status StopStream() override;
 
  protected:
+  struct CaptureResultWithExposureTime {
+    CaptureResult capture_result;
+    std::optional<absl::Duration> exposure_time;
+  };
+
   explicit GenicamImageSource(std::string_view device_id);
 
   absl::Status Init(bool requires_device_reset);
 
  private:
-  struct CaptureResultWithExposureTime {
-    CaptureResult capture_result;
-    std::optional<absl::Duration> exposure_time;
-  };
   struct StreamingHdrState {
     std::vector<absl::Duration> exposure_times;
     std::vector<CameraSetting> auto_settings_to_restore;
@@ -209,7 +210,8 @@ class GenicamImageSource : public ImageSource {
   absl::StatusOr<std::vector<SensorInformation>> DescribeCameraSensorsImpl()
       const override;
 
-  absl::StatusOr<CaptureResultWithExposureTime> GetCaptureResultAsync(
+  // virtual for unit testing.
+  virtual absl::StatusOr<CaptureResultWithExposureTime> GetCaptureResultAsync(
       absl::Time deadline) ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Creates a stream w/ buffers and starts the camera acquisition.
@@ -218,7 +220,8 @@ class GenicamImageSource : public ImageSource {
 
   // Stops the camera acquisition while keeping the current stream and its
   // buffers allocated.
-  absl::Status StopAsyncAcquisition();
+  // virtual for unit testing.
+  virtual absl::Status StopAsyncAcquisition();
 
   // Temporarily stops a stream to quickly change camera parameters.
   // virtual for unit testing.
