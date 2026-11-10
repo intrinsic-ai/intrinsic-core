@@ -36,6 +36,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/migrate",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/share",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/start",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/status",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/stop",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "@com_github_spf13_cobra//:go_default_library",

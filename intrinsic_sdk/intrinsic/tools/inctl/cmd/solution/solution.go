@@ -24,6 +24,7 @@ import (
 	"intrinsic/tools/inctl/cmd/solution/migrate/migrate"
 	"intrinsic/tools/inctl/cmd/solution/share/share"
 	"intrinsic/tools/inctl/cmd/solution/start/start"
+	"intrinsic/tools/inctl/cmd/solution/status/status"
 	"intrinsic/tools/inctl/cmd/solution/stop/stop"
 
 	"github.com/spf13/cobra"
@@ -42,6 +43,7 @@ func init() {
 	cmd.AddCommand(create.NewCommand())
 	cmd.AddCommand(share.NewCommand())
 	cmd.AddCommand(start.NewCommand())
+	cmd.AddCommand(status.NewCommand())
 	cmd.AddCommand(stop.NewCommand())
 	cmd.AddCommand(delete.NewCommand())
 	cmd.AddCommand(migrate.NewCommand())
