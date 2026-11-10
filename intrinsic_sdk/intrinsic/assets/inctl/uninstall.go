@@ -22,6 +22,8 @@ import (
 	"intrinsic/assets/clientutils"
 	"intrinsic/assets/cmdutils"
 	"intrinsic/assets/idutils"
+	"intrinsic/tools/inctl/util/color"
+	"intrinsic/util/status/extstatus"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/grpc/status"
@@ -90,6 +92,15 @@ func GetCommand() *cobra.Command {
 				return fmt.Errorf("uninstalling failed: %w", err)
 			}
 			log.Printf("Finished uninstalling %q", idString)
+			if op.GetMetadata() != nil {
+				metadata := &iapb.DeleteInstalledAssetMetadata{}
+				if err := op.GetMetadata().UnmarshalTo(metadata); err != nil {
+					log.Printf("failed to check for warnings: failed to unmarshal operation metadata: %v", err)
+				} else if metadata.GetWarnings() != nil {
+					ext := extstatus.FromProto(metadata.GetWarnings())
+					color.C.Yellow().Printf("\nWARNING: Uninstallation succeeded with warnings:\n%v\n", ext)
+				}
+			}
 
 			return nil
 		},
