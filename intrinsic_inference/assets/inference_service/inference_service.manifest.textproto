@@ -21,7 +21,7 @@ metadata {
     display_name: "Intrinsic"
   }
   documentation {
-    description: "This service provides an inference server that can load models and provides an open inference protocol API."
+    description: "This service provides a GPU-accelerated inference server that can load ML models and provides an open inference protocol API. Requires an NVIDIA GPU. Supported backends: Python, PyTorch, ONNX, TensorFlow, TensorRT."
   }
   display_name: "ML Inference Service"
 }
