@@ -24,6 +24,7 @@ cc_library(
     deps = [
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/scene/conversion:scene_object_model_utils",
         "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validation",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
@@ -33,6 +34,7 @@ cc_library(
         "@abseil-cpp//absl/types:span",
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:kinematics_component_cc_proto",
     ],
 )
 

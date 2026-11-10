@@ -122,8 +122,10 @@ class SceneObjectView {
   std::vector<const Entity*> GetPathFromRoot(absl::string_view name) const;
 
   // Returns the pose of every entity relative to the root entity keyed
-  // by entity name.
-  absl::flat_hash_map<absl::string_view, Pose3d> GetRootPoses() const;
+  // by entity name. Returns an error if the pose of an entity cannot be
+  // computed.
+  absl::StatusOr<absl::flat_hash_map<absl::string_view, Pose3d>> GetRootPoses()
+      const;
 
  private:
   struct Node {

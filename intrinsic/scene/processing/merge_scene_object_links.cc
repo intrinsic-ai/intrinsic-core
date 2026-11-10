@@ -57,7 +57,7 @@ absl::StatusOr<SceneObject> MergeSceneObjectLinks(
   }
 
   const Entity& root_entity = view.GetRootEntity();
-  const auto root_t_entities = view.GetRootPoses();
+  INTR_ASSIGN_OR_RETURN(const auto root_t_entities, view.GetRootPoses());
 
   Entity merged_root_entity = root_entity;
 

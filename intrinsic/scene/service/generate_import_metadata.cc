@@ -154,7 +154,7 @@ absl::StatusOr<ImportResultMetadata> GenerateImportMetadata(
     // Pre-compute the absolute pose of every entity in the scene object.
     INTR_ASSIGN_OR_RETURN(const SceneObjectView view,
                           SceneObjectView::Create(scene_object));
-    const auto absolute_poses = view.GetRootPoses();
+    INTR_ASSIGN_OR_RETURN(const auto absolute_poses, view.GetRootPoses());
 
     for (const auto& entity : scene_object.entities()) {
       if (!entity.has_link()) continue;

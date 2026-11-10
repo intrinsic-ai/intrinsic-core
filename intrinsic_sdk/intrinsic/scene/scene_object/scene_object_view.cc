@@ -25,11 +25,18 @@
 #include "absl/types/span.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
+#include "intrinsic/scene/conversion/scene_object_model_utils.h"
 #include "intrinsic/scene/validate/scene_object_validation.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/world/proto/kinematics_component.pb.h"
 
 namespace intrinsic {
 namespace scene_object {
+namespace {
+
+using ::intrinsic_proto::world::KinematicsComponent;
+
+}  // namespace
 
 absl::StatusOr<SceneObjectView> SceneObjectView::Create(
     SceneObject scene_object_value) {
@@ -213,8 +220,8 @@ std::vector<const SceneObjectView::Entity*> SceneObjectView::GetPathFromRoot(
   return path;
 }
 
-absl::flat_hash_map<absl::string_view, Pose3d> SceneObjectView::GetRootPoses()
-    const {
+absl::StatusOr<absl::flat_hash_map<absl::string_view, Pose3d>>
+SceneObjectView::GetRootPoses() const {
   // `tree_order_` visits every parent before its children, so the parent's pose
   // is always known when a child is reached.
   std::vector<Pose3d> root_t_node(nodes_.size(), Pose3d::Identity());
@@ -224,11 +231,20 @@ absl::flat_hash_map<absl::string_view, Pose3d> SceneObjectView::GetRootPoses()
     const int index = index_by_name_.at(entity->name());
     const int parent_index = nodes_[index].parent_index;
     if (parent_index >= 0) {
-      // Cannot fail: `Create()` validated every `parent_t_this`.
-      const Pose3d parent_t_entity =
-          entity->has_parent_t_this()
-              ? FromProtoNormalized(entity->parent_t_this()).value()
-              : Pose3d::Identity();
+      Pose3d parent_t_entity = Pose3d::Identity();
+      if (entity->has_joint() &&
+          entity->joint().kinematics_component().has_raw_value() &&
+          entity->joint().kinematics_component().motion_type() !=
+              KinematicsComponent::MOTION_TYPE_FIXED) {
+        // A revolute or prismatic joint with `raw_value` is posed by its
+        // `raw_value`.
+        INTR_ASSIGN_OR_RETURN(
+            parent_t_entity, ResolveJointEntityPose(*entity),
+            _ << "Cannot compute the pose of joint '" << entity->name() << "'");
+      } else if (entity->has_parent_t_this()) {
+        INTR_ASSIGN_OR_RETURN(parent_t_entity,
+                              FromProtoNormalized(entity->parent_t_this()));
+      }
       root_t_node[index] = root_t_node[parent_index] * parent_t_entity;
     }
     root_poses.emplace(entity->name(), root_t_node[index]);
