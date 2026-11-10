@@ -494,7 +494,11 @@ message DeleteInstalledAssetRequest {
   DeletePolicy policy = 2;
 }
 
-message DeleteInstalledAssetMetadata {}
+message DeleteInstalledAssetMetadata {
+  // Warnings associated with the uninstallation of the Asset, including any
+  // associated dependency validation errors.
+  intrinsic_proto.status.ExtendedStatus warnings = 1;
+}
 
 message DeleteInstalledAssetsRequest {
   enum Policy {
@@ -508,4 +512,8 @@ message DeleteInstalledAssetsRequest {
   Policy policy = 2;
 }
 
-message DeleteInstalledAssetsMetadata {}
+message DeleteInstalledAssetsMetadata {
+  // Warnings associated with the uninstallation of the Assets, including any
+  // associated dependency validation errors.
+  intrinsic_proto.status.ExtendedStatus warnings = 1;
+}

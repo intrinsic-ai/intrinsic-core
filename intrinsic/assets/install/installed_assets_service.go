@@ -1005,7 +1005,7 @@ func (s *installedAssetsService) installAssets(
 	for _, idv := range actions.remove {
 		delete(expectedRTRs, idv)
 	}
-	es, err := s.validateDependenciesAtInstall(ctx, actions.app, expectedRTRs, toInstall)
+	es, err := validateDependencies(ctx, actions.app, slices.Collect(maps.Values(expectedRTRs)), slices.Collect(toInstall.Keys()), "Dependency validation errors during Asset installation")
 	if err != nil {
 		log.ErrorContextf(ctx, "dependency validation failed during installation: %v", err)
 		return status.Errorf(codes.FailedPrecondition, "dependency validation failed during installation: %v", err)
@@ -1101,41 +1101,25 @@ func (s *installedAssetsService) installAssets(
 	return nil
 }
 
-func (s *installedAssetsService) validateDependenciesAtInstall(ctx context.Context, app *apb.Application, rtrs map[string]*rtrpb.ResourceTypeRuntime, toInstall *orderedmap.OrderedMap[string, *rtrpb.ResourceTypeRuntime]) (*statuspb.ExtendedStatus, error) {
-	sc, err := runtimegraph.NewSolutionContext(
-		ctx,
-		app.GetResources().GetResourceInstances(),
-		slices.Collect(maps.Values(rtrs)),
-		runtimegraph.WithPlatformRuntime(),
-	)
+func validateDependencies(ctx context.Context, app *apb.Application, rtrs []*rtrpb.ResourceTypeRuntime, referencesTo []string, errReportTitle string) (*statuspb.ExtendedStatus, error) {
+	sc, err := runtimegraph.NewSolutionContext(ctx, app.GetResources().GetResourceInstances(), rtrs, runtimegraph.WithPlatformRuntime())
 	if err != nil {
 		return nil, status.Errorf(codes.Internal, "failed to build solution context for validation: %v", err)
 	}
 
-	var installedIDs []string
-	for id := range toInstall.Keys() {
-		installedIDs = append(installedIDs, id)
-	}
-
 	r := report.New(report.WithSeverityRule(report.AllWarnings))
-	valOpts := []graph.ValidateGraphOption{
-		graph.WithReport(r),
+	opts := []graph.ValidateGraphOption{graph.WithReport(r)}
+	if len(referencesTo) > 0 {
+		opts = append(opts, graph.WithOnlyReferencesTo(referencesTo...))
 	}
-	if len(installedIDs) > 0 {
-		valOpts = append(valOpts, graph.WithOnlyReferencesTo(installedIDs...))
-	}
-
-	if err := graph.ValidateAll(sc, valOpts...); err != nil {
+	if err := graph.ValidateAll(sc, opts...); err != nil {
 		return nil, fmt.Errorf("dependency validation failed: %w", err)
 	}
-	var es *statuspb.ExtendedStatus
-	if len(r.Warnings()) > 0 {
-		log.WarningContextf(ctx, "dependencies validation warnings: %v", r.Warnings())
-		es = r.ToExtendedStatus(
-			report.WithTitlePrefix("Dependency validation errors during Asset installation"),
-		).Proto()
+	if len(r.Warnings()) == 0 {
+		return nil, nil
 	}
-	return es, nil
+	log.WarningContextf(ctx, "dependencies validation warnings: %v", r.Warnings())
+	return r.ToExtendedStatus(report.WithTitlePrefix(errReportTitle)).Proto(), nil
 }
 
 func appendAssetsToInstall(toInstall map[string]*rtrpb.ResourceTypeRuntime, rtrs []*rtrpb.ResourceTypeRuntime) error {
@@ -1631,13 +1615,13 @@ func (s *installedAssetsService) UpdateInstalledAsset(ctx context.Context, req *
 
 // uninstallAssets will remove the assets specified in the idsToDeleteSet from
 // the solution based on the provided policy.
-func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iapb.DeleteInstalledAssetsRequest_Policy, idsToDelete map[string]struct{}) error {
+func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iapb.DeleteInstalledAssetsRequest_Policy, idsToDelete map[string]struct{}, setMetadata setMetadataFn) error {
 	state, err := s.summarizeState(ctx)
 	if err != nil {
 		return err
 	}
 
-	var idVersionsToDelete []string
+	idVersionsToDelete := make(map[string]bool)
 	// A map of instances to ID versions for assets being deleted.
 	usedInstancesByIDVersion := make(map[string][]string)
 	for id := range idsToDelete {
@@ -1646,7 +1630,7 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 			return status.Errorf(codes.NotFound, "requested delete of %q which is not installed", id)
 		}
 		for _, idv := range idvs {
-			idVersionsToDelete = append(idVersionsToDelete, idv)
+			idVersionsToDelete[idv] = true
 			if instances := state.installed[idv].instances; len(instances) > 0 {
 				usedInstancesByIDVersion[idv] = instances
 			}
@@ -1704,6 +1688,24 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 		return status.Errorf(codes.Unimplemented, "unrecognized policy: %d", policy)
 	}
 
+	expectedApp := state.app
+	if newApp != nil {
+		expectedApp = newApp
+	}
+
+	// Run dependency validation against the expected state of the Solution after the delete.
+	expectedRTRs := slices.DeleteFunc(slices.Clone(state.rtrs), func(rtr *rtrpb.ResourceTypeRuntime) bool {
+		return idVersionsToDelete[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())]
+	})
+	es, err := validateDependencies(ctx, expectedApp, expectedRTRs, slices.Collect(maps.Keys(idsToDelete)), "Dependency validation errors during Asset uninstallation")
+	if err != nil {
+		log.ErrorContextf(ctx, "dependency validation failed during uninstallation: %v", err)
+		return status.Errorf(codes.FailedPrecondition, "dependency validation failed during uninstallation: %v", err)
+	}
+	if es != nil {
+		setMetadata(es)
+	}
+
 	if newApp != nil {
 		if _, err := s.appClient.SetCurrentApplication(ctx, &aspb.SetCurrentApplicationRequest{
 			Application:   newApp,
@@ -1714,20 +1716,17 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 		}
 	}
 
-	log.InfoContextf(ctx, "uninstalling %v", strings.Join(idVersionsToDelete, ","))
-	if err := s.rtrClient.BatchDelete(ctx, idVersionsToDelete); err != nil {
+	idvs := slices.Collect(maps.Keys(idVersionsToDelete))
+	log.InfoContextf(ctx, "uninstalling %v", strings.Join(idvs, ","))
+	if err := s.rtrClient.BatchDelete(ctx, idvs); err != nil {
 		return status.Errorf(codes.Internal, "could not remove runtime info for assets: %v", err)
 	}
 
-	currentApp := state.app
-	if newApp != nil {
-		currentApp = newApp
-	}
 	remainingRTRs, err := resourcetyperuntime.GetAll(ctx, s.rtrClient)
 	if err != nil {
 		log.WarningContextf(ctx, "failed to get remaining runtime types for onSolutionUpdate: %v", err)
 	} else {
-		if err := s.onSolutionUpdate(ctx, currentApp, remainingRTRs); err != nil {
+		if err := s.onSolutionUpdate(ctx, expectedApp, remainingRTRs); err != nil {
 			log.WarningContextf(ctx, "onSolutionUpdate failed during uninstall: %v", err)
 		}
 	}
@@ -1735,10 +1734,13 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 	return nil
 }
 
-func (s *installedAssetsService) DeleteInstalledAssets(ctx context.Context, req *iapb.DeleteInstalledAssetsRequest) (*lropb.Operation, error) {
-	ctx, span := trace.StartSpan(ctx, "installed_assets_service.DeleteInstalledAssets")
-	defer span.End()
+type deleteOpts struct {
+	// metadataFrom returns the metadata message of the LRO from its contents -- extended status
+	// in this case, for representing dependency validation errors.
+	metadataFrom func(warnings *statuspb.ExtendedStatus) proto.Message
+}
 
+func (s *installedAssetsService) deleteInstalledAssets(ctx context.Context, req *iapb.DeleteInstalledAssetsRequest, opts deleteOpts) (*lropb.Operation, error) {
 	idsToDelete := make(map[string]struct{})
 	for _, idp := range req.GetAssets() {
 		id, err := idutils.IDFromProto(idp)
@@ -1754,8 +1756,16 @@ func (s *installedAssetsService) DeleteInstalledAssets(ctx context.Context, req 
 	// At this point the logic becomes dependent on the state of the cluster,
 	// so handle this within the queue.  There's a single worker, so requests
 	// will be handled sequentially.
-	op, err := s.runner.ScheduleNew(ctx, "delete", func(ctx context.Context) (proto.Message, error) {
-		if err := s.uninstallAssets(ctx, req.GetPolicy(), idsToDelete); err != nil {
+	op := operations.NewWithPrefix("delete")
+	err := s.runner.Schedule(ctx, op, func(ctx context.Context) (proto.Message, error) {
+		var setMetadata setMetadataFn = func(es *statuspb.ExtendedStatus) {
+			if opts.metadataFrom != nil {
+				if err := op.SetMetadata(opts.metadataFrom(es)); err != nil {
+					log.ErrorContextf(ctx, "failed to set metadata: %v", err)
+				}
+			}
+		}
+		if err := s.uninstallAssets(ctx, req.GetPolicy(), idsToDelete, setMetadata); err != nil {
 			return nil, err
 		}
 		return &emptypb.Empty{}, nil
@@ -1766,19 +1776,38 @@ func (s *installedAssetsService) DeleteInstalledAssets(ctx context.Context, req 
 	return op.Proto(), nil
 }
 
+func (s *installedAssetsService) DeleteInstalledAssets(ctx context.Context, req *iapb.DeleteInstalledAssetsRequest) (*lropb.Operation, error) {
+	ctx, span := trace.StartSpan(ctx, "installed_assets_service.DeleteInstalledAssets")
+	defer span.End()
+
+	return s.deleteInstalledAssets(ctx, req, deleteOpts{
+		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
+			return &iapb.DeleteInstalledAssetsMetadata{
+				Warnings: es,
+			}
+		},
+	})
+}
+
 func (s *installedAssetsService) DeleteInstalledAsset(ctx context.Context, req *iapb.DeleteInstalledAssetRequest) (*lropb.Operation, error) {
 	ctx, span := trace.StartSpan(ctx, "installed_assets_service.DeleteInstalledAsset")
 	defer span.End()
 
 	// Unlike the create function, we don't need to do any conversion on the
 	// result, since delete methods always return an Empty proto.
-	return s.DeleteInstalledAssets(ctx, &iapb.DeleteInstalledAssetsRequest{
+	return s.deleteInstalledAssets(ctx, &iapb.DeleteInstalledAssetsRequest{
 		Assets: []*idpb.Id{
 			req.GetAsset(),
 		},
 		// We're just forcing the conversion, since the enums mirror each other.
 		// TODO - b/364732263: use DeletePolicy in a BatchDelete method.
 		Policy: iapb.DeleteInstalledAssetsRequest_Policy(int(req.GetPolicy())),
+	}, deleteOpts{
+		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
+			return &iapb.DeleteInstalledAssetMetadata{
+				Warnings: es,
+			}
+		},
 	})
 }
 
