@@ -178,6 +178,7 @@ def intrinsic_mlmodel(
         remote_model_files = remote_model_files,
         backend = backend,
         source_project = source_project,
+        tags = kwargs.get("tags"),
     )
 
     # Collect only local source files that need to be packaged via intrinsic_data
