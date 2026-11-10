@@ -25,31 +25,12 @@
 #include <utility>
 #include <vector>
 
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/descriptor.pb.h"
 #include "google/protobuf/descriptor_database.h"
 
 namespace intrinsic {
-
-// Implementation of google::protobuf::DescriptorPool::ErrorCollector that
-// collects errors and returns the latest error as an absl::Status.
-class DescriptorPoolErrorCollector
-    : public google::protobuf::DescriptorPool::ErrorCollector {
- public:
-  DescriptorPoolErrorCollector();
-
-  void RecordError(absl::string_view filename, absl::string_view element_name,
-                   const google::protobuf::Message* descriptor,
-                   ErrorLocation location, absl::string_view message) override;
-
-  absl::Status GetStatus() const { return return_status_; }
-
- private:
-  absl::Status return_status_;
-};
 
 // Creates a transitively closed FileDescriptorSet proto that contains the
 // descriptors of the given files and all of their transitive dependencies (via

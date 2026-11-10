@@ -34,6 +34,7 @@ cc_library(
         "//intrinsic/util/proto:compile_utils",
         "//intrinsic_runtime/intrinsic/proto_tools/util:descriptor_pool_loader",
         "//intrinsic_sdk/intrinsic/util:log_lines",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptor_pools",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",

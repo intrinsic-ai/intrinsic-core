@@ -20,11 +20,33 @@
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/message.h"
 
 namespace intrinsic {
+
+void DescriptorPoolErrorCollector::RecordError(
+    absl::string_view filename, absl::string_view element_name,
+    const google::protobuf::Message* /*descriptor*/, ErrorLocation /*location*/,
+    absl::string_view message) {
+  errors_.push_back(absl::StrCat(filename, ": ", element_name, ": ", message));
+}
+
+std::string DescriptorPoolErrorCollector::GetErrorsJoined() const {
+  return absl::StrJoin(errors_, "; ");
+}
+
+absl::Status DescriptorPoolErrorCollector::GetStatus(
+    absl::StatusCode code) const {
+  if (errors_.empty()) {
+    return absl::OkStatus();
+  }
+  return {code, GetErrorsJoined()};
+}
 
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 CreateProtoInstanceFromDescriptorPool(

@@ -38,17 +38,6 @@
 
 namespace intrinsic {
 
-DescriptorPoolErrorCollector::DescriptorPoolErrorCollector()
-    : google::protobuf::DescriptorPool::ErrorCollector(),
-      return_status_(absl::OkStatus()) {}
-
-void DescriptorPoolErrorCollector::RecordError(
-    absl::string_view filename, absl::string_view element_name,
-    const google::protobuf::Message* descriptor, ErrorLocation location,
-    absl::string_view message) {
-  return_status_ = absl::Status(absl::StatusCode::kInvalidArgument, message);
-}
-
 class InMemorySourceTree : public google::protobuf::compiler::SourceTree {
  public:
   absl::Status AddFile(std::string_view name, std::string_view content) {

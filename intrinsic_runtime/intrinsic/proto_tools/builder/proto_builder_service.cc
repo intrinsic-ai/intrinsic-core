@@ -42,6 +42,7 @@
 #include "intrinsic/executive/proto/proto_builder.pb.h"
 #include "intrinsic/util/log_lines.h"
 #include "intrinsic/util/proto/compile_utils.h"
+#include "intrinsic/util/proto/descriptor_pools.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_macros_grpc.h"
@@ -357,7 +358,7 @@ absl::Status CheckMergedUserAndWellKnownTypesDatabase(
       return absl::InvalidArgumentError(absl::StrFormat(
           "Failed to verify dependency %s (not retrievable, maybe dependency "
           "set not transitively closed: %s)",
-          user_file_proto.name(), error_collector.GetStatus().message()));
+          user_file_proto.name(), error_collector.GetErrorsJoined()));
     }
 
     // Check if the user dependency also exists in the well-known types
@@ -490,7 +491,7 @@ grpc::Status ProtoBuilderService::Compose(
   if (file_descriptor == nullptr) {
     absl::Status status = absl::InvalidArgumentError(absl::StrFormat(
         "Failed to import proto '%s': %s", request->proto_filename(),
-        error_collector.GetStatus().message()));
+        error_collector.GetErrorsJoined()));
     LOG(ERROR) << status;
     return ToGrpcStatus(status);
   }
