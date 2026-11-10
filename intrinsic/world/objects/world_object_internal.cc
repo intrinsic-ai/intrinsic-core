@@ -2058,7 +2058,8 @@ absl::StatusOr<WorldObject*> WorldObject::CreateObjectFromSceneObject(
       // For each named configuration, we need parse the joint names and arrange
       // the positions within the VectorXd before setting it on the robot.
       for (const auto& named_config : kinematics_proto.named_configurations()) {
-        eigenmath::VectorXd joint_positions(joint_ids.size());
+        eigenmath::VectorXd joint_positions =
+            eigenmath::VectorXd::Zero(joint_ids.size());
         for (const auto& [joint_name, joint_position] :
              named_config.joint_positions()) {
           joint_positions[joint_index_by_name.at(joint_name)] = joint_position;
