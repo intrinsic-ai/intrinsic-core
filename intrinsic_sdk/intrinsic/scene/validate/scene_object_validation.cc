@@ -346,6 +346,12 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
           const int index = joint_index_by_name.size();
           joint_index_by_name[e.name()] = index;
 
+          // Rejects joints whose pose cannot be computed from their
+          // kinematics, e.g., a zero axis, even if `parent_t_this` or
+          // `raw_value` is unset.
+          INTR_RETURN_IF_ERROR(ResolveJointEntityPose(e).status())
+              << "Invalid kinematics on joint " << e.name();
+
           if (e.has_parent_t_this()) {
             INTR_ASSIGN_OR_RETURN(const Pose3d parent_t_this,
                                   FromProtoNormalized(e.parent_t_this()));
