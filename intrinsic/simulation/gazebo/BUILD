@@ -132,8 +132,8 @@ cc_library(
         "-Wl,_Z*Ogre*Singleton*",
     ],
     deps = [
+        "//intrinsic/production/external/glvnd_stubs",
         "@gz-rendering//ogre2:gz-rendering-ogre2-engine-static",
-        "@sysroot_glvnd_stubs",
     ],
     alwayslink = 1,
 )

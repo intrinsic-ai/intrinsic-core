@@ -27,16 +27,6 @@ def _non_module_deps_impl(
 
 
 
-    # Download and extract GLVND EGL/GL stubs from the sysroot.
-    # Needed for tests that require OpenGL/EGL
-    http_archive(
-        name = "sysroot_glvnd_stubs",
-        build_file = Label("//intrinsic/production/external:sysroot_glvnd_stubs.BUILD.bazel"),
-        urls = ["https://storage.googleapis.com/chrome-linux-sysroot/toolchain/4f611ec025be98214164d4bf9fbe8843f58533f7/debian_bullseye_amd64_sysroot.tar.xz"],
-        sha256 = "5df5be9357b425cdd70d92d4697d07e7d55d7a923f037c22dc80a78e85842d2c",
-        type = "tar.xz",
-    )
-
     http_jar(
         name = "firestore_emulator",
         sha256 = "9d43599ed6151199e8d604dc87fac51218e49e5f3a48519b1ae560bbe5e3382d",

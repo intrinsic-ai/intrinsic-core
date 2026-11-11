@@ -35,7 +35,7 @@ def cc_opengl_test(name, srcs, deps = [], tags = [], env = {}, **kwargs):
     }
 
     deps = deps + [
-        "@sysroot_glvnd_stubs",
+        "//intrinsic/production/external/glvnd_stubs",
     ]
 
     cc_test(
@@ -46,6 +46,15 @@ def cc_opengl_test(name, srcs, deps = [], tags = [], env = {}, **kwargs):
         env = env,
         **kwargs
     )
+
+def _glvnd_env(pkg_label, arch, existing_ld_path):
+    pkg = Label(pkg_label).repo_name
+    ld_path = "../{}/usr/lib/{}-linux-gnu/".format(pkg, arch)
+    if existing_ld_path:
+        ld_path = "{}:{}".format(ld_path, existing_ld_path)
+    return {
+        "LD_LIBRARY_PATH": ld_path,
+    }
 
 def _wrap_py_opengl_rule(
         py_rule,
@@ -66,20 +75,26 @@ def _wrap_py_opengl_rule(
     """
 
     data = data + [
-        "@sysroot_glvnd_stubs//:files",
+        "//intrinsic/production/external/glvnd_stubs:files",
     ]
 
     # Needed so that the test can use the NVIDIA driver.
-    glvnd_stubs_pkg = Label("@sysroot_glvnd_stubs//:files").repo_name
-    existing_ld_path = env.get("LD_LIBRARY_PATH") or ""
-    env = env | {
-        # ".." must be prefixed to the repo_name in order to escape out of "_main".
-        "LD_LIBRARY_PATH": "../{}/usr/lib/x86_64-linux-gnu/:{}".format(
-            glvnd_stubs_pkg,
-            existing_ld_path,
-        ),
+    base_env = env | {
         "NVIDIA_DRIVER_CAPABILITIES": "compute,graphics,utility",
     }
+    existing_ld_path = base_env.get("LD_LIBRARY_PATH") or ""
+    env = select({
+        "@platforms//cpu:aarch64": base_env | _glvnd_env(
+            "@glvnd_stubs_arm64//:files",
+            "aarch64",
+            existing_ld_path,
+        ),
+        "//conditions:default": base_env | _glvnd_env(
+            "@glvnd_stubs_amd64//:files",
+            "x86_64",
+            existing_ld_path,
+        ),
+    })
 
     py_rule(
         name = name,
