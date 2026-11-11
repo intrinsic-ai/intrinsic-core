@@ -12,7 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""GLVND GL/EGL and host glib system library stubs multiplexer.
+"""GLVND GL/EGL system library stubs multiplexer.
 
 Routes to the architecture-specific package repository based on target CPU.
 """

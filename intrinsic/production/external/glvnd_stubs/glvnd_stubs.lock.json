@@ -2,20 +2,13 @@
   "input_data": {
     "architectures": ["amd64", "arm64"],
     "packages": [
-      "libblkid1",
       "libbsd0",
       "libegl1",
-      "libffi7",
       "libgl1",
-      "libglib2.0-0",
-      "libglib2.0-dev",
       "libglvnd0",
       "libglx0",
       "libmd0",
-      "libmount1",
       "libopengl0",
-      "libpcre3",
-      "libselinux1",
       "libx11-6",
       "libxau6",
       "libxcb1",
@@ -32,24 +25,6 @@
     ]
   },
   "packages": [
-    {
-      "arch": "amd64",
-      "dependencies": [],
-      "key": "libblkid1_2.36.1-8-p-deb11u2_amd64",
-      "name": "libblkid1",
-      "sha256": "be6ec9f14626174a34e27f8ca0c8be5531c07f22266fed4738c978af7f575ab2",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/u/util-linux/libblkid1_2.36.1-8+deb11u2_amd64.deb",
-      "version": "2.36.1-8+deb11u2"
-    },
-    {
-      "arch": "arm64",
-      "dependencies": [],
-      "key": "libblkid1_2.36.1-8-p-deb11u2_arm64",
-      "name": "libblkid1",
-      "sha256": "3fbb4e3ffd78dcc7e181d424beb934233d5717a15998ad2e18d241b14ddf2e10",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/u/util-linux/libblkid1_2.36.1-8+deb11u2_arm64.deb",
-      "version": "2.36.1-8+deb11u2"
-    },
     {
       "arch": "amd64",
       "dependencies": [],
@@ -89,24 +64,6 @@
     {
       "arch": "amd64",
       "dependencies": [],
-      "key": "libffi7_3.3-6_amd64",
-      "name": "libffi7",
-      "sha256": "30ca89bfddae5fa6e0a2a044f22b6e50cd17c4bc6bc850c579819aeab7101f0f",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/libf/libffi/libffi7_3.3-6_amd64.deb",
-      "version": "3.3-6"
-    },
-    {
-      "arch": "arm64",
-      "dependencies": [],
-      "key": "libffi7_3.3-6_arm64",
-      "name": "libffi7",
-      "sha256": "eb748e33ae4ed46f5a4c14b7a2a09792569f2029ede319d0979c373829ba1532",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/libf/libffi/libffi7_3.3-6_arm64.deb",
-      "version": "3.3-6"
-    },
-    {
-      "arch": "amd64",
-      "dependencies": [],
       "key": "libgl1_1.3.2-1_amd64",
       "name": "libgl1",
       "sha256": "f300f9610b5f05f1ce566c4095f1bf2170e512ac5d201c40d895b8fce29dec98",
@@ -121,42 +78,6 @@
       "sha256": "18075b79c22b06bb25b9b4f3fa44a42127c40e573b34703af3f4c0b780cae29a",
       "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/libg/libglvnd/libgl1_1.3.2-1_arm64.deb",
       "version": "1.3.2-1"
-    },
-    {
-      "arch": "amd64",
-      "dependencies": [],
-      "key": "libglib2.0-0_2.66.8-1-p-deb11u4_amd64",
-      "name": "libglib2.0-0",
-      "sha256": "7aff8c1338b58a6fa2b3a914724040a2b7f6e8dc2333f30c98834f7948f1884f",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/g/glib2.0/libglib2.0-0_2.66.8-1+deb11u4_amd64.deb",
-      "version": "2.66.8-1+deb11u4"
-    },
-    {
-      "arch": "arm64",
-      "dependencies": [],
-      "key": "libglib2.0-0_2.66.8-1-p-deb11u4_arm64",
-      "name": "libglib2.0-0",
-      "sha256": "6acd43e7296d0f1baceb582bf323fffa6ce4d428f6ee88d9ebc0a45d9001a399",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/g/glib2.0/libglib2.0-0_2.66.8-1+deb11u4_arm64.deb",
-      "version": "2.66.8-1+deb11u4"
-    },
-    {
-      "arch": "amd64",
-      "dependencies": [],
-      "key": "libglib2.0-dev_2.66.8-1-p-deb11u4_amd64",
-      "name": "libglib2.0-dev",
-      "sha256": "6aee47dab59b9adf5a01988bdfced79a629478eeff4902d8de73a93f23b5398f",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/g/glib2.0/libglib2.0-dev_2.66.8-1+deb11u4_amd64.deb",
-      "version": "2.66.8-1+deb11u4"
-    },
-    {
-      "arch": "arm64",
-      "dependencies": [],
-      "key": "libglib2.0-dev_2.66.8-1-p-deb11u4_arm64",
-      "name": "libglib2.0-dev",
-      "sha256": "13ab053362d2fa2a55cca2aaefea8e223a8a8bbdf4141140d11ba5b1591dab6d",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/g/glib2.0/libglib2.0-dev_2.66.8-1+deb11u4_arm64.deb",
-      "version": "2.66.8-1+deb11u4"
     },
     {
       "arch": "amd64",
@@ -215,24 +136,6 @@
     {
       "arch": "amd64",
       "dependencies": [],
-      "key": "libmount1_2.36.1-8-p-deb11u2_amd64",
-      "name": "libmount1",
-      "sha256": "43e68214dd58fefe97ec14b131285aadca94167cd7b8f7d765c60f93909eda6e",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/u/util-linux/libmount1_2.36.1-8+deb11u2_amd64.deb",
-      "version": "2.36.1-8+deb11u2"
-    },
-    {
-      "arch": "arm64",
-      "dependencies": [],
-      "key": "libmount1_2.36.1-8-p-deb11u2_arm64",
-      "name": "libmount1",
-      "sha256": "1ff25c96e811f2dd31c6217bfe646476b6290e4a7e575af03d3053b038dd8e66",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/u/util-linux/libmount1_2.36.1-8+deb11u2_arm64.deb",
-      "version": "2.36.1-8+deb11u2"
-    },
-    {
-      "arch": "amd64",
-      "dependencies": [],
       "key": "libopengl0_1.3.2-1_amd64",
       "name": "libopengl0",
       "sha256": "4327a9f20b88e7bcb07af3b196121096877331b61eeed64467854eb0b525fc43",
@@ -247,42 +150,6 @@
       "sha256": "0dcd4846079fd8106f92f943331e4d035b3c79d9eae5a337135ced490a0deb15",
       "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/libg/libglvnd/libopengl0_1.3.2-1_arm64.deb",
       "version": "1.3.2-1"
-    },
-    {
-      "arch": "amd64",
-      "dependencies": [],
-      "key": "libpcre3_2-8.39-13_amd64",
-      "name": "libpcre3",
-      "sha256": "48efcf2348967c211cd9408539edf7ec3fa9d800b33041f6511ccaecc1ffa9d0",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/p/pcre3/libpcre3_8.39-13_amd64.deb",
-      "version": "2:8.39-13"
-    },
-    {
-      "arch": "arm64",
-      "dependencies": [],
-      "key": "libpcre3_2-8.39-13_arm64",
-      "name": "libpcre3",
-      "sha256": "21cac4064a41dbc354295c437f37bf623f9004513a97a6fa030248566aa986e9",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/p/pcre3/libpcre3_8.39-13_arm64.deb",
-      "version": "2:8.39-13"
-    },
-    {
-      "arch": "amd64",
-      "dependencies": [],
-      "key": "libselinux1_3.1-3_amd64",
-      "name": "libselinux1",
-      "sha256": "339f5ede10500c16dd7192d73169c31c4b27ab12130347275f23044ec8c7d897",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/libs/libselinux/libselinux1_3.1-3_amd64.deb",
-      "version": "3.1-3"
-    },
-    {
-      "arch": "arm64",
-      "dependencies": [],
-      "key": "libselinux1_3.1-3_arm64",
-      "name": "libselinux1",
-      "sha256": "da98279a47dabaa46a83514142f5c691c6a71fa7e582661a3a3db6887ad3e9d1",
-      "url": "https://snapshot.debian.org/archive/debian/20250201T023325Z/pool/main/libs/libselinux/libselinux1_3.1-3_arm64.deb",
-      "version": "3.1-3"
     },
     {
       "arch": "amd64",

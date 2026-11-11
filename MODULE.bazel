@@ -962,8 +962,8 @@ http_jar(
 # Others #
 ##########
 
-glvnd_apt = use_extension("@bazel_linux_packages//apt:extensions.bzl", "apt")
-glvnd_apt.debian(
+host_stubs_apt = use_extension("@bazel_linux_packages//apt:extensions.bzl", "apt")
+host_stubs_apt.debian(
     name = "glvnd_stubs",
     architectures = [
         "amd64",
@@ -972,20 +972,13 @@ glvnd_apt.debian(
     build_file = "//intrinsic/production/external/glvnd_stubs:glvnd_stubs_arch.BUILD.bazel",
     lockfile = "//intrinsic/production/external/glvnd_stubs:glvnd_stubs.lock.json",
     packages = [
-        "libblkid1",
         "libbsd0",
         "libegl1",
-        "libffi7",
         "libgl1",
-        "libglib2.0-0",
-        "libglib2.0-dev",
         "libglvnd0",
         "libglx0",
         "libmd0",
-        "libmount1",
         "libopengl0",
-        "libpcre3",
-        "libselinux1",
         "libx11-6",
         "libxau6",
         "libxcb1",
@@ -995,7 +988,33 @@ glvnd_apt.debian(
     resolve_transitive = False,
     suites = ["bullseye"],
 )
-use_repo(glvnd_apt, "glvnd_stubs_amd64", "glvnd_stubs_arm64")
+host_stubs_apt.debian(
+    name = "host_glib",
+    architectures = [
+        "amd64",
+        "arm64",
+    ],
+    build_file = "//intrinsic/production/external/host_glib:host_glib_arch.BUILD.bazel",
+    lockfile = "//intrinsic/production/external/host_glib:host_glib.lock.json",
+    packages = [
+        "libblkid1",
+        "libffi7",
+        "libglib2.0-0",
+        "libglib2.0-dev",
+        "libmount1",
+        "libpcre3",
+        "libselinux1",
+    ],
+    resolve_transitive = False,
+    suites = ["bullseye"],
+)
+use_repo(
+    host_stubs_apt,
+    "glvnd_stubs_amd64",
+    "glvnd_stubs_arm64",
+    "host_glib_amd64",
+    "host_glib_arm64",
+)
 
 bazel_dep(name = "rules_distroless", version = "0.8.0")
 

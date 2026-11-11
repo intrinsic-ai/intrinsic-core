@@ -149,7 +149,7 @@ selects.config_setting_group(
 cc_dynamic_library(
     name = "glib_wrapper",
     deps = select({
-        ":host_glib_setting": ["//intrinsic/production/external/glvnd_stubs:system_glib"],
+        ":host_glib_setting": ["//intrinsic/production/external/host_glib:glib"],
         "//conditions:default": ["@glib//glib"],
     }),
 )
@@ -158,7 +158,7 @@ cc_dynamic_library(
     name = "gmodule_wrapper",
     dynamic_library_deps = [":glib_wrapper"],
     deps = select({
-        ":host_glib_setting": ["//intrinsic/production/external/glvnd_stubs:system_gmodule"],
+        ":host_glib_setting": ["//intrinsic/production/external/host_glib:gmodule"],
         "//conditions:default": ["@glib//gmodule"],
     }),
 )
@@ -167,7 +167,7 @@ cc_dynamic_library(
     name = "gobject_wrapper",
     dynamic_library_deps = [":glib_wrapper"],
     deps = select({
-        ":host_glib_setting": ["//intrinsic/production/external/glvnd_stubs:system_gobject"],
+        ":host_glib_setting": ["//intrinsic/production/external/host_glib:gobject"],
         "//conditions:default": ["@glib//gobject"],
     }),
 )
@@ -181,7 +181,7 @@ cc_dynamic_library(
     ],
     exports_filter = ["@zlib//:z"],
     deps = select({
-        ":host_glib_setting": ["//intrinsic/production/external/glvnd_stubs:system_gio"],
+        ":host_glib_setting": ["//intrinsic/production/external/host_glib:gio"],
         "//conditions:default": ["@glib//gio"],
     }),
 )

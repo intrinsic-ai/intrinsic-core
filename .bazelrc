@@ -47,7 +47,8 @@ common --incompatible_default_to_explicit_init_py
 # explicitly load rules like cc_library, proto_library, etc. Can be removed once all
 # external dependencies add explicit load statements for their rules.
 # Not a complete inventory, but at the time of writing:
-# * rules_cc is needed for @io_opentelemetry_cpp, @rules_android (transitive dep).
+# * rules_cc is needed for @io_opentelemetry_cpp, @rules_android (transitive dep),
+#   and @bazel_linux_packages repository BUILD files.
 # * com_google_protobuf is needed for @tink_cc.
 common --incompatible_autoload_externally=+@rules_cc,+@com_google_protobuf
 # https://github.com/bazelbuild/bazel/issues/17032

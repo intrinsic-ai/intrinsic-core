@@ -1,0 +1,116 @@
+# Copyright 2026 Intrinsic Innovation LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+"""Host glib system library stubs from an architecture sysroot.
+
+Glib/GObject/GIO/GModule stubs are needed to link against host
+glib libraries when a target needs access to Qt6.
+"""
+
+package(
+    default_visibility = [
+        "//visibility:public",
+    ],
+)
+
+alias(
+    name = "lock",
+    actual = "@{target_name}//:lock",
+)
+
+# We need to compile a dummy empty.cc file into all system glib stubs.
+# Bazel's cc_shared_library rule has a strict analysis-phase check that fails
+# if a target in its transitive deps contains only precompiled dynamic libraries
+# (.so files) with no compiled objects. The dummy empty.cc forces Bazel to compile
+# an object file and package it, satisfying the cc_shared_library check.
+genrule(
+    name = "empty_cc",
+    outs = ["empty.cc"],
+    cmd = "touch $@",
+)
+
+_GLIB_HDRS = glob(
+    [
+        "usr/include/glib-2.0/**/*.h",
+        "usr/lib/*-linux-gnu/glib-2.0/include/**/*.h",
+    ],
+    allow_empty = True,
+)
+
+_GLIB_INCLUDES = ["usr/include/glib-2.0"] + glob(
+    ["usr/lib/*-linux-gnu/glib-2.0/include"],
+    allow_empty = True,
+    exclude_directories = 0,
+)
+
+cc_library(
+    name = "glib",
+    srcs = glob(
+        [
+            "usr/lib/*-linux-gnu/libglib-2.0.so*",
+            "lib/*-linux-gnu/libpcre.so.3*",
+        ],
+        allow_empty = True,
+    ) + [":empty_cc"],
+    hdrs = _GLIB_HDRS,
+    includes = _GLIB_INCLUDES,
+)
+
+cc_library(
+    name = "gobject",
+    srcs = glob(
+        [
+            "usr/lib/*-linux-gnu/libgobject-2.0.so*",
+            "usr/lib/*-linux-gnu/libffi.so.7*",
+        ],
+        allow_empty = True,
+    ) + [":empty_cc"],
+    hdrs = _GLIB_HDRS,
+    includes = _GLIB_INCLUDES,
+    deps = [":glib"],
+)
+
+cc_library(
+    name = "gio",
+    srcs = glob(
+        [
+            "usr/lib/*-linux-gnu/libgio-2.0.so*",
+            "usr/lib/*-linux-gnu/libmount.so.1*",
+            "usr/lib/*-linux-gnu/libblkid.so.1*",
+            "lib/*-linux-gnu/libselinux.so.1*",
+        ],
+        allow_empty = True,
+    ) + [":empty_cc"],
+    hdrs = _GLIB_HDRS + glob(
+        ["usr/include/gio-unix-2.0/**/*.h"],
+        allow_empty = True,
+    ),
+    includes = _GLIB_INCLUDES + ["usr/include/gio-unix-2.0"],
+    deps = [
+        ":glib",
+        ":gmodule",
+        ":gobject",
+    ],
+)
+
+cc_library(
+    name = "gmodule",
+    srcs = glob(
+        ["usr/lib/*-linux-gnu/libgmodule-2.0.so*"],
+        allow_empty = True,
+    ) + [":empty_cc"],
+    hdrs = _GLIB_HDRS,
+    includes = _GLIB_INCLUDES,
+    deps = [":glib"],
+)
