@@ -18,6 +18,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/base/attributes.h"
 #include "absl/log/check.h"
@@ -115,35 +116,37 @@ absl::StatusOr<ExactGeometry> FromShapeBaseImpl(const ShapeBase& shape,
   }
 }
 
-// Check if the passed assimp scene is fully transparent. The check is
-// optimistic in the sense that if there is a single partially/ fully opaque
-// material defined in the scene, the check returns false, even if there may not
-// be a shape in the scene that actually uses that material.
+// Checks whether the passed assimp scene is fully transparent. Returns false if
+// at least one material referenced by a mesh is partially/fully opaque or has
+// no explicit opacity.
 bool IsAiSceneFullyTransparent(const aiScene* scene) {
   CHECK(scene != nullptr);
 
+  std::vector<bool> material_used(scene->mNumMaterials, !scene->HasMeshes());
+  for (unsigned int i = 0; i < scene->mNumMeshes; ++i) {
+    const unsigned int mat_idx = scene->mMeshes[i]->mMaterialIndex;
+    if (mat_idx < scene->mNumMaterials) {
+      material_used[mat_idx] = true;
+    }
+  }
+
   bool found_opacity = false;
-  for (int i = 0; i < scene->mNumMaterials; ++i) {
-    float opacity = 1;
+  for (unsigned int i = 0; i < scene->mNumMaterials; ++i) {
+    if (!material_used[i]) {
+      continue;
+    }
+    float opacity = 1.0f;
     if (scene->mMaterials[i]->Get(AI_MATKEY_OPACITY, opacity) !=
         aiReturn_SUCCESS) {
-      continue;
+      return false;
     }
     found_opacity = true;
-
-    // Ignore the default material if there are other materials in the scene
-    // since it won't be used.
-    if (scene->mNumMaterials > 1 &&
-        scene->mMaterials[i]->GetName() == aiString(AI_DEFAULT_MATERIAL_NAME)) {
-      continue;
-    }
-
-    if (opacity > 0) {
+    if (opacity > 0.0f) {
       return false;
     }
   }
-  // If we did not find a material with a specified opacity value, assume scene
-  // is fully opaque.
+  // When no used material specifies an opacity value, the scene is treated as
+  // opaque.
   return found_opacity;
 }
 }  // namespace
