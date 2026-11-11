@@ -262,22 +262,6 @@ cc_test_and_malloc_test(
     ],
 )
 
-cc_test_and_malloc_test(
-    name = "osqp_realtime_test",
-    srcs = ["osqp_realtime_test.cc"],
-    deps = [
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:status_matchers",
-        "@com_gitlab_libeigen_eigen//:eigen",
-        "@com_google_cel_cpp//internal:testing_no_main",
-        "@com_google_googletest//:gtest",
-        "@osqp-cpp//:osqp++",
-    ],
-)
-
 cc_library(
     name = "linear_kalman_filter",
     srcs = ["linear_kalman_filter.cc"],
@@ -378,54 +362,6 @@ cc_test(
 )
 
 cc_library(
-    name = "dynamic_prefilter",
-    srcs = ["dynamic_prefilter.cc"],
-    hdrs = [
-        "dynamic_prefilter.h",
-    ],
-    visibility = [
-        ":icon",
-    ],
-    deps = [
-        "//intrinsic/math/proto:iir_filter_config_cc_proto",
-        "//intrinsic/math/signals:iir_filt",
-        "//intrinsic_control/intrinsic/icon/proto:joint_collection_prefilter_config_cc_proto",
-        "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/status:statusor",
-    ],
-)
-
-cc_test_and_malloc_test(
-    name = "dynamic_prefilter_test",
-    srcs = ["dynamic_prefilter_test.cc"],
-    deps = [
-        ":dynamic_prefilter",
-        ":joint_position_reflexxes",
-        "//intrinsic/math/signals:iir_filt",
-        "//intrinsic_control/intrinsic/icon/proto:joint_collection_prefilter_config_cc_proto",
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
-        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
-        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:status_matchers",
-        "@com_google_cel_cpp//internal:testing_no_main",
-        "@com_google_googletest//:gtest",
-    ],
-)
-
-cc_library(
     name = "cartesian_impedance_trajectory",
     srcs = ["cartesian_impedance_trajectory.cc"],
     hdrs = ["cartesian_impedance_trajectory.h"],
@@ -445,28 +381,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
-    ],
-)
-
-cc_test_and_malloc_test(
-    name = "cartesian_impedance_trajectory_test",
-    srcs = ["cartesian_impedance_trajectory_test.cc"],
-    deps = [
-        ":cartesian_impedance_trajectory",
-        "//intrinsic_control/intrinsic/icon/actions:cartesian_impedance_parameters",
-        "//intrinsic_control/intrinsic/icon/control/algorithms/testing:cartesian_impedance_controller_test_utils",
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
-        "//intrinsic_kinematics/intrinsic/kinematics/types:cart_state",
-        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "//intrinsic_sdk/intrinsic/eigenmath:rotation_utils",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:status_matchers",
-        "@com_google_cel_cpp//internal:testing_no_main",
-        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -1295,30 +1209,6 @@ cc_test_and_malloc_test(
 )
 
 cc_library(
-    name = "task_space_dynamic_load",
-    srcs = ["task_space_dynamic_load.cc"],
-    hdrs = ["task_space_dynamic_load.h"],
-    visibility = ["//visibility:private"],
-    deps = [
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:skew_symmetric_matrix",
-        "//intrinsic_sdk/intrinsic/math:twist",
-    ],
-)
-
-cc_test_and_malloc_test(
-    name = "task_space_dynamic_load_test",
-    srcs = ["task_space_dynamic_load_test.cc"],
-    deps = [
-        ":task_space_dynamic_load",
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "//intrinsic_sdk/intrinsic/math:twist",
-    ],
-)
-
-cc_library(
     name = "distance_tracker",
     srcs = ["distance_tracker.cc"],
     hdrs = ["distance_tracker.h"],
@@ -1506,149 +1396,6 @@ cc_test_and_malloc_test(
         "@com_google_cel_cpp//internal:testing_no_main",
         "@com_google_googletest//:gtest",
         "@intrinsic_apis//intrinsic/icon/proto:joint_position_pid_velocity_controller_config_cc_proto",
-    ],
-)
-
-cc_library(
-    name = "virtual_impedance_dynamics_bidiagonalization",
-    srcs = ["virtual_impedance_dynamics_bidiagonalization.cc"],
-    hdrs = [
-        "virtual_impedance_dynamics_bidiagonalization.h",
-    ],
-    visibility = ["//visibility:private"],
-    deps = [
-        "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "@com_gitlab_libeigen_eigen//:eigen",
-    ],
-)
-
-cc_test_and_malloc_test(
-    name = "virtual_impedance_dynamics_bidiagonalization_test",
-    srcs = ["virtual_impedance_dynamics_bidiagonalization_test.cc"],
-    deps = [
-        ":virtual_impedance_dynamics_bidiagonalization",
-        "//intrinsic/eigenmath:pseudo_inverse",
-        "//intrinsic_control/intrinsic/icon/control/algorithms/testing:cartesian_impedance_controller_test_utils",
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_control/intrinsic/icon/utils:log",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
-        "//intrinsic_kinematics/intrinsic/kinematics/ik:register_spherical_wrist_inverse_kinematics",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:status_matchers",
-        "@com_gitlab_libeigen_eigen//:eigen",
-        "@com_google_benchmark//:benchmark",
-        "@com_google_cel_cpp//internal:testing_no_main",
-        "@com_google_googletest//:gtest",
-    ],
-)
-
-cc_library(
-    name = "constrained_harmonic_oscillator",
-    srcs = ["constrained_harmonic_oscillator.cc"],
-    hdrs = [
-        "constrained_harmonic_oscillator.h",
-    ],
-    visibility = ["//visibility:private"],
-    deps = [
-        "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
-        "//intrinsic_control/intrinsic/icon/utils:log",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
-        "//intrinsic_sdk/intrinsic/math:ipow",
-    ],
-)
-
-cc_test_and_malloc_test(
-    name = "constrained_harmonic_oscillator_test",
-    srcs = ["constrained_harmonic_oscillator_test.cc"],
-    deps = [
-        ":constrained_harmonic_oscillator",
-        "//intrinsic/eigenmath:eigen_file_export",
-        "//intrinsic/eigenmath:random_number_utils",
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
-        "//intrinsic_kinematics/intrinsic/kinematics/ik:register_spherical_wrist_inverse_kinematics",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/math:gaussian_noise",
-        "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/functional:any_invocable",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/random",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:status_matchers",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@abseil-cpp//absl/types:span",
-        "@com_google_cel_cpp//internal:testing_no_main",
-        "@com_google_googletest//:gtest",
-    ],
-)
-
-cc_library(
-    name = "constrained_second_order_virtual_dynamics",
-    srcs = ["constrained_second_order_virtual_dynamics.cc"],
-    hdrs = [
-        "constrained_second_order_virtual_dynamics.h",
-    ],
-    visibility = ["//visibility:private"],
-    deps = [
-        ":cartesian_impedance_commons",
-        ":constrained_harmonic_oscillator",
-        ":virtual_impedance_dynamics_bidiagonalization",
-        "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
-        "//intrinsic_control/intrinsic/icon/utils:log",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
-        "//intrinsic_kinematics/intrinsic/kinematics/types:to_fixed_string",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:manifolds",
-        "//intrinsic_sdk/intrinsic/math:almost_equals",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/math:twist",
-    ],
-)
-
-cc_test_and_malloc_test(
-    name = "constrained_second_order_virtual_dynamics_test",
-    srcs = ["constrained_second_order_virtual_dynamics_test.cc"],
-    deps = [
-        ":cartesian_impedance_commons",
-        ":compute_critical_damping",
-        ":constrained_second_order_virtual_dynamics",
-        "//intrinsic/eigenmath:eigen_file_export",
-        "//intrinsic_control/intrinsic/icon/actions:cartesian_impedance_parameters",
-        "//intrinsic_control/intrinsic/icon/control/algorithms/testing:cartesian_impedance_controller_test_utils",
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
-        "//intrinsic_kinematics/intrinsic/kinematics/ik:register_spherical_wrist_inverse_kinematics",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:manifolds",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "//intrinsic_sdk/intrinsic/eigenmath:rotation_utils",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/math:twist",
-        "//intrinsic_sdk/intrinsic/util:eigen",
-        "@abseil-cpp//absl/flags:flag",
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/random",
-        "@abseil-cpp//absl/random:bit_gen_ref",
-        "@abseil-cpp//absl/random:distributions",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:status_matchers",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@abseil-cpp//absl/types:span",
-        "@com_google_cel_cpp//internal:testing_no_main",
-        "@com_google_googletest//:gtest",
     ],
 )
 
@@ -2046,41 +1793,6 @@ cc_test(
         "@com_google_fuzztest//fuzztest",
         "@com_google_fuzztest//fuzztest:init_fuzztest",
         "@com_google_googletest//:gtest",
-    ],
-)
-
-cc_library(
-    name = "invariant_pose_kalman_filter",
-    srcs = ["invariant_pose_kalman_filter.cc"],
-    hdrs = [
-        "invariant_pose_kalman_filter.h",
-    ],
-    visibility = ["//intrinsic_control/intrinsic/icon:rtcl_users"],
-    deps = [
-        "//intrinsic_control/intrinsic/icon/utils:log",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:pose3_utils",
-        "//intrinsic_sdk/intrinsic/math:ipow",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/math:twist",
-    ],
-)
-
-cc_test_and_malloc_test(
-    name = "invariant_pose_kalman_filter_test",
-    srcs = ["invariant_pose_kalman_filter_test.cc"],
-    deps = [
-        ":invariant_pose_kalman_filter",
-        "//intrinsic_control/intrinsic/icon/testing:malloc_test",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "@abseil-cpp//absl/status:status_matchers",
-        "@com_google_cel_cpp//internal:testing_no_main",
     ],
 )
 

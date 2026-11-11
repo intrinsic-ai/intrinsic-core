@@ -62,28 +62,6 @@ cc_library(
 )
 
 cc_library(
-    name = "iir_filt",
-    hdrs = [
-        "iir_filt.h",
-    ],
-    deps = [
-        "//intrinsic/math/proto:iir_filter_config_cc_proto",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/math:almost_equals",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/algorithm:container",
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@abseil-cpp//absl/types:span",
-    ],
-)
-
-cc_library(
     name = "nested_quadrature",
     hdrs = ["nested_quadrature.h"],
     deps = [
