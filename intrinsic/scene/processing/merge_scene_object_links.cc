@@ -21,6 +21,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/substitute.h"
+#include "absl/types/span.h"
 #include "intrinsic/scene/processing/util/transform_util.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
@@ -43,16 +44,16 @@ absl::StatusOr<SceneObject> MergeSceneObjectLinks(
   INTR_ASSIGN_OR_RETURN(const SceneObjectView view,
                         SceneObjectView::Create(scene_object));
 
-  for (const auto& entity : scene_object.entities()) {
-    if (!entity.has_link()) {
+  for (const Entity* entity : view.GetEntitiesInTreeOrder()) {
+    if (!entity->has_link()) {
       return absl::InvalidArgumentError(absl::Substitute(
           "MergeSceneObjectLinks only supports link-only SceneObjects. Found "
           "non-link entity '$0'.",
-          entity.name()));
+          entity->name()));
     }
   }
 
-  if (scene_object.entities_size() == 1) {
+  if (view.GetNumEntities() == 1) {
     return scene_object;
   }
 
@@ -61,21 +62,19 @@ absl::StatusOr<SceneObject> MergeSceneObjectLinks(
 
   Entity merged_root_entity = root_entity;
 
-  for (const auto& entity : scene_object.entities()) {
-    // Geometries attached directly to the root entity are already in the root
-    // link's coordinate frame and included in `merged_root_entity`.
-    if (entity.name() == root_entity.name()) {
-      continue;
-    }
-    if (!entity.link().has_geometry_component()) {
+  // Geometries attached directly to the root entity (at index 0 in tree order)
+  // are already in the root link's coordinate frame and included in
+  // `merged_root_entity`.
+  for (const Entity* entity : view.GetEntitiesInTreeOrder().subspan(1)) {
+    if (!entity->link().has_geometry_component()) {
       continue;
     }
 
     // Transform the child link's local geometries into the root link's
     // coordinate frame using its resolved `root_t_entity` pose.
-    Entity transformed_entity = entity;
+    Entity transformed_entity = *entity;
     INTR_RETURN_IF_ERROR(TransformLinkGeometry(
-        transformed_entity, root_t_entities.at(entity.name())));
+        transformed_entity, root_t_entities.at(entity->name())));
 
     // Merge each geometry type (e.g. `Intrinsic_Visual`, `Intrinsic_Collision`)
     // from the transformed child link into the root link's GeometryComponent.
@@ -95,7 +94,7 @@ absl::StatusOr<SceneObject> MergeSceneObjectLinks(
       for (auto& [geom_name, transformed_geometry] :
            *geometry_set.mutable_named_geometries()) {
         const std::string base_name =
-            absl::StrCat(entity.name(), "_", geom_name);
+            absl::StrCat(entity->name(), "_", geom_name);
         std::string merged_name = base_name;
         int suffix = 1;
         while (root_named_geometries.contains(merged_name)) {

@@ -96,6 +96,12 @@ class SceneObjectView {
   // `name`.
   absl::Span<const Entity* const> GetChildren(absl::string_view name) const;
 
+  // Returns true if the entity named `name` has no children. Returns false if
+  // the entity has children or if there is no entity named `name`.
+  bool IsLeaf(absl::string_view name) const {
+    return HasEntity(name) && GetChildren(name).empty();
+  }
+
   // Returns all entities in depth-first pre-order of the entity tree, starting
   // at the root entity with children visited in order of entity name. Each
   // entity precedes its descendants, and the subtree of an entity is

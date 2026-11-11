@@ -26,6 +26,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/types:span",
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
