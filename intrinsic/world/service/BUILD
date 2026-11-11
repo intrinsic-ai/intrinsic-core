@@ -85,7 +85,6 @@ cc_library(
         ":world_service_cc_grpc_proto",
         ":world_service_cc_proto",
         ":world_storage",
-        "//intrinsic/choreographer/fabrication_toolkit:shape_util",
         "//intrinsic/skills:footprint_util",
         "//intrinsic/stats:scoped_span",
         "//intrinsic/world",
