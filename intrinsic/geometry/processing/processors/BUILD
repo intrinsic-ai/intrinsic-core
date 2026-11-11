@@ -77,13 +77,8 @@ cc_library(
     name = "mesh_simplification_processor",
     srcs = ["mesh_simplification_processor.cc"],
     hdrs = ["mesh_simplification_processor.h"],
-    copts = ["-fexceptions"] + select({
-        "@platforms//cpu:x86_32": ["-frounding-math"],
-        "@platforms//cpu:x86_64": ["-frounding-math"],
-        "//conditions:default": [],
-    }),
     deps = [
-        "//intrinsic/geometry/api:construct_simplified_mesh",
+        "//intrinsic/geometry/api:simplify_mesh_strict_memoize",
         "//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "//intrinsic/geometry/processing:processor",
         "//intrinsic/longrunning/cc:operation_context",

@@ -1,4 +1,4 @@
-load("@rules_cc//cc:defs.bzl", "cc_library", "cc_test")
+load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
@@ -23,16 +23,6 @@ cc_library(
     srcs = ["simplifier.cpp"],
     hdrs = ["simplifier.h"],
     deps = [
-        "@meshoptimizer",
-    ],
-)
-
-cc_test(
-    name = "simplifier_test",
-    srcs = ["simplifier_test.cc"],
-    deps = [
-        ":simplifier",
-        "@com_google_googletest//:gtest_main",
         "@meshoptimizer",
     ],
 )

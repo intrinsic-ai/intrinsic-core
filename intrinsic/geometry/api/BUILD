@@ -186,19 +186,12 @@ cc_library(
 )
 
 cc_library(
-    name = "construct_simplified_mesh",
-    srcs = ["construct_simplified_mesh.cc"],
-    hdrs = ["construct_simplified_mesh.h"],
-    copts = ["-fexceptions"] + select({
-        "@platforms//cpu:x86_32": ["-frounding-math"],
-        "@platforms//cpu:x86_64": ["-frounding-math"],
-        "//conditions:default": [],
-    }),
+    name = "simplify_mesh_strict_memoize",
+    srcs = ["simplify_mesh_strict_memoize.cc"],
+    hdrs = ["simplify_mesh_strict_memoize.h"],
     deps = [
         "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
-        "//intrinsic/geometry/internal/distance_3:hausdorff_optimization_state",
-        "//intrinsic/geometry/internal/distance_3:hausdorff_stop_predicate",
-        "//intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
+        "//intrinsic/geometry/internal/mesh_simplification:meshopt_locality_simplifier",
         "//intrinsic/geometry/internal/util:timeout_predicate",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
@@ -211,7 +204,6 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
-        "@cgal",
     ],
 )
 

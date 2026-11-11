@@ -107,7 +107,6 @@ cc_library(
     srcs = ["load_mesh_from_file.cc"],
     hdrs = ["load_mesh_from_file.h"],
     visibility = [
-        "//intrinsic/geometry/internal/distance_3:__pkg__",
         "//intrinsic/geometry/internal/legacy/mesh/io:__pkg__",
         "//intrinsic/scene/sdf:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",

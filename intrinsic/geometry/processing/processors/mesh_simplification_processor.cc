@@ -14,6 +14,7 @@
 
 #include "intrinsic/geometry/processing/processors/mesh_simplification_processor.h"
 
+#include <cmath>
 #include <memory>
 #include <vector>
 
@@ -21,8 +22,8 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
-#include "intrinsic/geometry/api/construct_simplified_mesh.h"
 #include "intrinsic/geometry/api/geometry.h"
+#include "intrinsic/geometry/api/simplify_mesh_strict_memoize.h"
 #include "intrinsic/geometry/processing/pipeline_config.pb.h"
 #include "intrinsic/longrunning/cc/operation_context.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -34,10 +35,11 @@ absl::StatusOr<std::unique_ptr<MeshSimplificationGeometryProcessor>>
 MeshSimplificationGeometryProcessor::Create(
     const intrinsic_proto::geometry::MeshSimplificationProcessorConfig&
         config) {
-  if (config.max_hausdorff_distance() < 0.0) {
+  if (!std::isfinite(config.max_hausdorff_distance()) ||
+      config.max_hausdorff_distance() < 0.0) {
     return absl::InvalidArgumentError(absl::StrFormat(
-        "Hausdorff distance must be greater than or equal to 0.0 but "
-        "%f was provided.",
+        "Hausdorff distance must be finite and greater than or equal to 0.0 "
+        "but %f was provided.",
         config.max_hausdorff_distance()));
   }
   INTR_ASSIGN_OR_RETURN(absl::Duration timeout,
@@ -67,8 +69,8 @@ MeshSimplificationGeometryProcessor::Process(
                         TimeoutPredicate::Create(timeout));
   INTR_ASSIGN_OR_RETURN(
       Geometry result,
-      ConstructSimplifiedMesh(input, max_hausdorff_distance_, stopToken,
-                              custom_early_stop_predicate));
+      SimplifyMeshStrictMemoize(input, max_hausdorff_distance_, stopToken,
+                                custom_early_stop_predicate));
   context.AddProgress(1.0);
   return std::vector<Geometry>{std::move(result)};
 }
