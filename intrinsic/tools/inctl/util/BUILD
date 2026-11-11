@@ -27,12 +27,6 @@ go_library(
 )
 
 go_library(
-    name = "introspection",
-    srcs = ["introspection.go"],
-    importpath = "intrinsic/tools/inctl/util/introspection",
-)
-
-go_library(
     name = "gcpauth",
     srcs = ["gcpauth.go"],
     importpath = "intrinsic/tools/inctl/util/gcpauth",

@@ -121,3 +121,9 @@ go_library(
         "@org_golang_google_grpc//credentials/oauth:go_default_library",
     ],
 )
+
+go_library(
+    name = "introspection",
+    srcs = ["introspection.go"],
+    importpath = "intrinsic/tools/inctl/util/introspection",
+)
