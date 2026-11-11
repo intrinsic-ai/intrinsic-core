@@ -87,7 +87,7 @@ def _nvidia_libs_ext_impl(module_ctx):
                 arch = tag.arch,
             )
 
-    module_ctx.extension_metadata(reproducible = True)
+    return module_ctx.extension_metadata(reproducible = True)
 
 _cuda_libs_tag = tag_class(
     attrs = {

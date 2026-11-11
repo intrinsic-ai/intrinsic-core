@@ -21,9 +21,7 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file"
 # TODO(b/572956581): Remove NVIDIA Pose Estimator out of insrc
 load("//bazel:nvidia_pose_estimator_models.bzl", "nvidia_pose_estimator_models")  
 
-# Module extension function signatures include a ctx variable, which should not be removed.
-def _non_module_deps_impl(
-        ctx):  # @unused
+def _non_module_deps_impl(ctx):
 
 
 
@@ -207,8 +205,9 @@ filegroup(
 
 
 
-    # The pass below ensures that if copybara strips everything out of this function
-    # it still produces a valid function (functions without content are invalid).
-    pass
+    # The set of generated repos is deterministic and does not depend on the environment, so
+    # there is no need to store this extension in the lockfile. This statement also ensures
+    # that the function stays valid if copybara strips everything else out of it.
+    return ctx.extension_metadata(reproducible = True)
 
 non_module_deps_ext = module_extension(implementation = _non_module_deps_impl)
