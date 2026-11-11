@@ -43,5 +43,7 @@ feature_options_overrides: ""
 # Values filled in either by ArgoCD or --values on the command-line.
 project_number: 0
 region: ""
+# True on the primary cluster of a multi-cluster project (e.g. the portal cluster serving the flowstate host).
+primaryCluster: false
 cloudInference:
   bucket_suffix: ""
