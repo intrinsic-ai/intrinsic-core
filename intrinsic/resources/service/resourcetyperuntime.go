@@ -45,8 +45,9 @@ const (
 	// where the gRPC size limits were exceeded.
 	rtrChunkSize = 10
 	// Maximum number of times GetAll retries when the bucket is concurrently
-	// modified between List and BatchGet.
-	getAllMaxRetries     = 5
+	// modified between List and BatchGet (~500ms expected total sleep across 8
+	// retries, independent of individual RPC duration).
+	getAllMaxRetries     = 8
 	getAllInitialBackoff = 10 * time.Millisecond
 )
 
@@ -433,8 +434,30 @@ func GetFromID(ctx context.Context, client Client, id string) (*rtrpb.ResourceTy
 	return rtr, nil
 }
 
-// GetAll gets `ResourceTypeRuntime` protos of all Assets in the runtime db.
-func GetAll(ctx context.Context, client Client) ([]*rtrpb.ResourceTypeRuntime, error) {
+type getAllOptions struct {
+	filter func(idVersion string) bool
+}
+
+// GetAllOption configures a GetAll call.
+type GetAllOption func(*getAllOptions)
+
+// WithIDVersionFilter restricts GetAll to fetching and returning only the
+// ID-versions from List for which filter returns true (skipping those where it
+// returns false).
+func WithIDVersionFilter(filter func(idVersion string) bool) GetAllOption {
+	return func(o *getAllOptions) {
+		o.filter = filter
+	}
+}
+
+// GetAll gets `ResourceTypeRuntime` protos of Assets in the runtime db,
+// returning all installed Assets by default or only those matching
+// WithIDVersionFilter if provided.
+func GetAll(ctx context.Context, client Client, opts ...GetAllOption) ([]*rtrpb.ResourceTypeRuntime, error) {
+	o := &getAllOptions{}
+	for _, opt := range opts {
+		opt(o)
+	}
 	b := backoff.WithContext(
 		backoff.WithMaxRetries(
 			backoff.NewExponentialBackOff(backoff.WithInitialInterval(getAllInitialBackoff)),
@@ -447,6 +470,15 @@ func GetAll(ctx context.Context, client Client) ([]*rtrpb.ResourceTypeRuntime, e
 		if err != nil {
 			return nil, backoff.Permanent(fmt.Errorf("could not list runtime info for assets: %v", err))
 		}
+		if o.filter != nil {
+			var filtered []string
+			for _, idv := range idvs {
+				if o.filter(idv) {
+					filtered = append(filtered, idv)
+				}
+			}
+			idvs = filtered
+		}
 
 		var rtrs []*rtrpb.ResourceTypeRuntime
 		if len(idvs) > 0 {
@@ -455,7 +487,7 @@ func GetAll(ctx context.Context, client Client) ([]*rtrpb.ResourceTypeRuntime, e
 		for chunk := range slices.Chunk(idvs, rtrChunkSize) {
 			chunkRtrs, err := client.BatchGet(ctx, chunk, WithRevisionToken(token))
 			if status.Code(err) == codes.Aborted {
-				return nil, fmt.Errorf("could not get runtime info for assets: %v", err)
+				return nil, fmt.Errorf("could not get runtime info for assets because the runtime database was concurrently modified (retry may succeed): %v", err)
 			}
 			if err != nil {
 				return nil, backoff.Permanent(fmt.Errorf("could not get runtime info for assets: %v", err))
