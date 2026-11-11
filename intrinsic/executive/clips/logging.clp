@@ -15,6 +15,7 @@
 ; This file contains rules to trigger logging of Executive data as necessary.
 ; Requires: log_context.clp
 ; behavior_call_instance_tree.clp (finding parent PBT for parent log id)
+; behavior_tree/state_proto_update.clp (updating log_context in RunMetadata)
 
 ; Contract on logged context IDs.
 ; The executive logs LoggedOperation log items at specific points in time:
@@ -216,6 +217,10 @@
   (pb-remove ?fe-proto)
   (pb-remove ?log-context)
   (modify ?bt (log-id ?bt-log-id))
+  ; Requires the tree's log-id to be set, which will be copied into
+  ; executive-plan-id. The log context does not change after starting an
+  ; operation so we update it here once and do not track changes.
+  (run-metadata-proto-update-log-context ?op-name)
 )
 
 (defrule log-completed-operation

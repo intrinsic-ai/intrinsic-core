@@ -1689,5 +1689,10 @@
                               (run-metadata-proto-start-node-id
                                 ?operation-tree-root-id)))
 
+  ; Set the log context right away so that it is available, e.g., in the
+  ; CreateOperation response. Will be updated with the plan ID later.(see
+  ; log-new-operation in logging.clp).
+  (run-metadata-proto-update-log-context ?operation-name)
+
   (return (result-create TRUE ""))
 )

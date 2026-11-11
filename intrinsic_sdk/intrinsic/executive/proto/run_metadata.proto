@@ -113,11 +113,10 @@ message RunMetadata {
   // start, being suspended or done.
   optional google.protobuf.Duration execution_time = 27;
 
-  // This context is set when getting the operation info via the service.  It
-  // contains the session ID and possibly the ID of the current runnable. It
-  // will *not* contain an action ID. The field is *not* set for logged
-  // executive states (which already are associated with a context anyway). The
-  // IDs can be used to query other relevant data.
+  // The log context contains the session ID and possibly the ID of the current
+  // runnable. It will *not* contain an action ID. The field is *not* guaranteed
+  // to be set for logged executive states (which already are associated with a
+  // context anyway). The IDs can be used to query other relevant data.
   optional intrinsic_proto.data_logger.Context log_context = 23;
 
   // This contains diagnostics information for the current operation. These are

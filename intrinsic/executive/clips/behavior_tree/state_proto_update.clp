@@ -78,6 +78,19 @@
   )
 )
 
+; Sets log_context in the RunMetadata proto.
+;
+; Args:
+;   ?operation-name: Name of the operation
+(deffunction run-metadata-proto-update-log-context (?operation-name)
+  (bind ?context-proto (executive-state-create-context-proto ?operation-name))
+  (if (<> ?context-proto 0) then
+    (run-metadata-proto-update-field "log_context" ?context-proto
+                                     ?operation-name)
+    (pb-remove ?context-proto)
+  )
+)
+
 ; Clears decorators field in state proto if no decorators set.
 ;
 ; Args:
