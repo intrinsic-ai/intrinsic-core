@@ -54,25 +54,6 @@ go_library(
 )
 
 go_library(
-    name = "traceutil",
-    srcs = ["traceutil.go"],
-    importpath = "intrinsic/tools/inctl/util/traceutil",
-    deps = [
-        "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
-        "@com_github_golang_glog//:go_default_library",
-        "@io_opentelemetry_go_otel//:otel",
-        "@io_opentelemetry_go_otel//attribute",
-        "@io_opentelemetry_go_otel//semconv/v1.34.0:v1_34_0",
-        "@io_opentelemetry_go_otel_bridge_opencensus//:opencensus",
-        "@io_opentelemetry_go_otel_exporters_otlp_otlptrace_otlptracegrpc//:otlptracegrpc",
-        "@io_opentelemetry_go_otel_sdk//resource",
-        "@io_opentelemetry_go_otel_sdk//trace",
-        "@org_golang_google_grpc//:go_default_library",
-        "@org_golang_google_grpc//credentials/oauth:go_default_library",
-    ],
-)
-
-go_library(
     name = "casgeometryuploader",
     srcs = ["cas_geometry_uploader.go"],
     importpath = "intrinsic/tools/inctl/util/casgeometryuploader",

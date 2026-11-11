@@ -77,12 +77,12 @@ go_library(
     ],
     importpath = "intrinsic/tools/inctl/cmd/root",
     deps = [
-        "//intrinsic/tools/inctl/util:traceutil",
         "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:dialerutil",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:traceutil",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_pkg_errors//:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",

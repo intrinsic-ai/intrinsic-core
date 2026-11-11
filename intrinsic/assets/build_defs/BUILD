@@ -40,7 +40,6 @@ go_binary(
     deps = [
         ":cascopyprocessor",
         "//intrinsic/tools/inctl/util:introspection",
-        "//intrinsic/tools/inctl/util:traceutil",
         "//intrinsic_sdk/intrinsic/assets:bundle",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
@@ -56,6 +55,7 @@ go_binary(
         "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd/directupload",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:traceutil",
         "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "//intrinsic_sdk/intrinsic/util/status:extstatus",
         "@com_github_cenkalti_backoff_v4//:go_default_library",
