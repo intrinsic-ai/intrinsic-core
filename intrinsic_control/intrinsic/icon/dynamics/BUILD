@@ -142,35 +142,6 @@ cc_library(
 )
 
 cc_library(
-    name = "pinocchio_utils",
-    srcs = ["pinocchio_utils.cc"],
-    hdrs = ["pinocchio_utils.h"],
-    deps = [
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
-        "//intrinsic_kinematics/intrinsic/kinematics",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "@abseil-cpp//absl/strings",
-        "@pinocchio//:pinocchio_includes",
-    ],
-)
-
-cc_test(
-    name = "pinocchio_utils_test",
-    srcs = ["pinocchio_utils_test.cc"],
-    deps = [
-        ":pinocchio_utils",
-        "//intrinsic_control/intrinsic/icon/utils:realtime_status_matchers",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/eigenmath:matchers",
-        "@abseil-cpp//absl/status",
-        "@com_google_cel_cpp//internal:testing_no_main",
-        "@com_google_googletest//:gtest_main",
-        "@pinocchio//:pinocchio_includes",
-    ],
-)
-
-cc_library(
     name = "validate_inertial_parameters",
     srcs = ["validate_inertial_parameters.cc"],
     hdrs = ["validate_inertial_parameters.h"],

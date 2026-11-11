@@ -178,26 +178,6 @@ py_proto_library(
     deps = [":cartesian_admittance_action_proto"],
 )
 
-proto_library(
-    name = "impedance_trajectory_generators_proto",
-    srcs = ["impedance_trajectory_generators.proto"],
-    deps = [
-        ":cartesian_impedance_proto",
-        "@com_google_protobuf//:duration_proto",
-        "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
-    ],
-)
-
-py_proto_library(
-    name = "impedance_trajectory_generators_py_pb2",
-    deps = [":impedance_trajectory_generators_proto"],
-)
-
-cc_proto_library(
-    name = "impedance_trajectory_generators_cc_proto",
-    deps = [":impedance_trajectory_generators_proto"],
-)
-
 cc_library(
     name = "cartesian_impedance_parameters",
     srcs = ["cartesian_impedance_parameters.cc"],
@@ -309,45 +289,6 @@ cc_test(
     deps = [
         ":point_to_point_move_info",
         ":point_to_point_move_signature",
-        "@com_google_googletest//:gtest_main",
-        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
-    ],
-)
-
-proto_library(
-    name = "linear_gripper_move_proto",
-    srcs = ["linear_gripper_move.proto"],
-)
-
-cc_proto_library(
-    name = "linear_gripper_move_cc_proto",
-    deps = [":linear_gripper_move_proto"],
-)
-
-py_proto_library(
-    name = "linear_gripper_move_py_pb2",
-    deps = [":linear_gripper_move_proto"],
-)
-
-cc_library(
-    name = "linear_gripper_move_info",
-    srcs = ["linear_gripper_move_info.cc"],
-    hdrs = ["linear_gripper_move_info.h"],
-    deps = [
-        ":action_utils",
-        ":linear_gripper_move_cc_proto",
-        "//intrinsic_control/intrinsic/icon/common:builtins",
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/types:optional",
-        "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
-    ],
-)
-
-cc_test(
-    name = "linear_gripper_move_info_test",
-    srcs = ["linear_gripper_move_info_test.cc"],
-    deps = [
-        ":linear_gripper_move_info",
         "@com_google_googletest//:gtest_main",
         "@intrinsic_apis//intrinsic/icon/proto/v1:types_cc_proto",
     ],

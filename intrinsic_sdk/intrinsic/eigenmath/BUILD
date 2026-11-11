@@ -139,21 +139,6 @@ cc_library(
 )
 
 cc_library(
-    name = "test_utils",
-    testonly = True,
-    hdrs = [
-        "test_utils.h",
-    ],
-    deps = [
-        ":eigenmath",
-        ":manifolds",
-        ":so3",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "@com_gitlab_libeigen_eigen//:eigen",
-    ],
-)
-
-cc_library(
     name = "matchers",
     testonly = True,
     hdrs = ["matchers.h"],
