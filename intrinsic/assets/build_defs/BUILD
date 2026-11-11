@@ -35,18 +35,11 @@ go_library(
 
 go_binary(
     name = "solution_update",
-    srcs = ["solution_update.go"],
+    srcs = ["solution_update.go"] + [],
     importpath = "intrinsic/assets/build_defs/solution_update",
     deps = [
         ":cascopyprocessor",
-        "//intrinsic/assets/conversion:solutionconversion",
-        "//intrinsic/config/proto:application_go_proto",
-        "//intrinsic/config/proto:common_go_proto",
-        "//intrinsic/storage/content_addressable_storage/pkg/filetocas",
-        "//intrinsic/tools/inctl/cmd:apputil",
-        "//intrinsic/tools/inctl/util:casgeometryuploader",
         "//intrinsic/tools/inctl/util:introspection",
-        "//intrinsic/tools/inctl/util:releaseutil",
         "//intrinsic/tools/inctl/util:traceutil",
         "//intrinsic_sdk/intrinsic/assets:bundle",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
@@ -60,7 +53,6 @@ go_binary(
         "//intrinsic_sdk/intrinsic/assets/services:bundleimages",
         "//intrinsic_sdk/intrinsic/config:operationmode",
         "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:solution_service_go_proto",
-        "//intrinsic_sdk/intrinsic/kubernetes/workcell_spec/proto:deploy_go_proto",
         "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd/directupload",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
@@ -77,7 +69,8 @@ go_binary(
         "@intrinsic_apis//intrinsic/frontend/solution_service/proto:status_go_proto",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
         "@io_opencensus_go//trace:go_default_library",
+        "@org_golang_google_grpc//:go_default_library",
         "@org_golang_google_grpc//codes:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",
-    ],
+    ] + [],
 )

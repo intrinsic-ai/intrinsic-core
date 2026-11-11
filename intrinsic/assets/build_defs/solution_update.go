@@ -29,7 +29,6 @@ import (
 	"intrinsic/assets/bundle"
 	"intrinsic/assets/clientutils"
 	"intrinsic/assets/cmdutils"
-	"intrinsic/assets/conversion/solutionconversion"
 	"intrinsic/assets/imagetransfer"
 	"intrinsic/assets/referenceddata"
 	"intrinsic/assets/scene_objects/gzfprocessor"
@@ -38,12 +37,9 @@ import (
 	"intrinsic/config/operationmode"
 	intrinsicinit "intrinsic/production/intrinsic"
 	"intrinsic/skills/tools/skill/cmd/directupload/directupload"
-	"intrinsic/storage/content_addressable_storage/pkg/filetocas"
-	"intrinsic/tools/inctl/cmd/apputil"
-	"intrinsic/tools/inctl/util/casgeometryuploader"
+
 	"intrinsic/tools/inctl/util/color"
 	"intrinsic/tools/inctl/util/introspection"
-	"intrinsic/tools/inctl/util/releaseutil"
 	"intrinsic/tools/inctl/util/traceutil"
 	"intrinsic/util/proto/protoio"
 	"intrinsic/util/status/extstatus"
@@ -54,20 +50,17 @@ import (
 	"github.com/pkg/errors"
 	"github.com/spf13/cobra"
 	"go.opencensus.io/trace"
+	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	assetpb "intrinsic/assets/build_defs/asset_go_proto"
 	assetartifactspb "intrinsic/assets/proto/v1/asset_artifacts_go_proto"
 	solutiondeploymentpb "intrinsic/assets/proto/v1/solution_deployment_go_proto"
-	apb "intrinsic/config/proto/application_go_proto"
-	commonpb "intrinsic/config/proto/common_go_proto"
 	opmodepb "intrinsic/config/proto/operation_mode_go_proto"
 	solutionservicegrpcpb "intrinsic/frontend/solution_service/proto/solution_service_go_proto"
 	solutionservicepb "intrinsic/frontend/solution_service/proto/solution_service_go_proto"
 	solutionstatuspb "intrinsic/frontend/solution_service/proto/status_go_proto"
-	deploygrpcpb "intrinsic/kubernetes/workcell_spec/proto/deploy_go_proto"
-	dpb "intrinsic/kubernetes/workcell_spec/proto/deploy_go_proto"
 	casgrpcpb "intrinsic/storage/content_addressable_storage/proto/cas_service_go_proto"
 )
 
@@ -139,30 +132,11 @@ func updateSolutionDeployment(ctx context.Context, client solutiondeploymentpb.S
 	}, deployBackoff)
 }
 
-// deployApplication deploys the given application using the provided client with retry logic.
-func deployApplication(ctx context.Context, client deploygrpcpb.DeployServiceClient, app *apb.Application) error {
-	ctx, span := trace.StartSpan(ctx, "inctl.app_start.deployApplication")
-	defer span.End()
+// deployApplication deploys the given application as a fallback if implemented.
+var deployApplication func(ctx context.Context, conn grpc.ClientConnInterface, solutionDeployment *solutiondeploymentpb.SolutionDeployment) error
 
-	deployRetries := 5
-	eb := backoff.NewExponentialBackOff()
-	eb.InitialInterval = 2 * time.Second
-	eb.RandomizationFactor = 0.5
-	deployBackoff := backoff.WithContext(backoff.WithMaxRetries(eb, uint64(deployRetries)), ctx)
-	err := backoff.Retry(func() error {
-		if _, err := client.DeployApplication(ctx, &dpb.DeployApplicationRequest{
-			Application: app,
-		}); err != nil {
-			// Retry to be resilient against transient infrastructure failures
-			if status.Code(err) == codes.Unavailable {
-				log.WarningContextf(ctx, "Retrying DeployApplication due to transient error: %v", err)
-				return err // Retry
-			}
-			return backoff.Permanent(err)
-		}
-		return nil // Success
-	}, deployBackoff)
-	return err
+var fallbackGZFOptions = func(casgrpcpb.ContentAddressableStorageServiceClient) []gzfprocessor.Option {
+	return nil
 }
 
 // clearPrintedLines clears numLines of output to stdout. This assumes
@@ -304,14 +278,6 @@ $ bazel run //intrinsic/config:empty_application --\
 			ingressConn := throttle.ConnectionWithRateLimit(rawIngressConn, flags.GetFlagRateLimit(), flags.GetFlagRateBurst())
 
 			casClient := casgrpcpb.NewContentAddressableStorageServiceClient(ingressConn)
-			f2c := filetocas.NewUploader(
-				casClient,
-				filetocas.UseChunkSize(releaseutil.CASUploadChunkSize),
-			)
-			gu, err := casgeometryuploader.New(f2c, 8)
-			if err != nil {
-				return fmt.Errorf("failed to create a CAS geometry uploader: %w", err)
-			}
 
 			// Determine the image transferer to use. Default to direct injection into the cluster.
 			var transfer imagetransfer.Transferer
@@ -352,8 +318,7 @@ $ bazel run //intrinsic/config:empty_application --\
 					ImageProcessor: bundleimages.CreateImageProcessor(transfer),
 					GZFProcessor: gzfprocessor.New(
 						rdProcessor,
-						gzfprocessor.WithLegacyUploader(gu),
-						gzfprocessor.WithConcurrencyLimiter(processingLimiter),
+						append(fallbackGZFOptions(casClient), gzfprocessor.WithConcurrencyLimiter(processingLimiter))...,
 					),
 					ReferencedDataProcessor: rdProcessor,
 				},
@@ -373,25 +338,14 @@ $ bazel run //intrinsic/config:empty_application --\
 
 			startDeployApplication := time.Now()
 			solutionDeploymentClient := solutiondeploymentpb.NewSolutionDeploymentServiceClient(ingressConn)
-			if err := updateSolutionDeployment(ctx, solutionDeploymentClient, lroClient, solutionDeployment); status.Code(err) == codes.Unimplemented {
-				log.InfoContextf(ctx, "UpdateSolutionDeployment is not implemented, falling back to DeployApplication")
-				app, err := solutionconversion.AsApplication(solutionDeployment)
-				if err != nil {
-					return fmt.Errorf("failed to convert solution deployment to application: %w", err)
+			if err := updateSolutionDeployment(ctx, solutionDeploymentClient, lroClient, solutionDeployment); err != nil {
+				if deployApplication != nil && status.Code(err) != codes.Unimplemented {
+					if err := deployApplication(ctx, ingressConn, solutionDeployment); err != nil {
+						return fmt.Errorf("deploy application: %w", err)
+					}
+				} else {
+					return fmt.Errorf("update solution deployment: %w", err)
 				}
-				app.GetMetadata().LastUpdatedBy = apputil.CurrentUsername()
-				// This is required for backwards compatibility with old clusters that
-				// enforce category is either instance or branch in the deploy service.
-				// TODO: b/568089088 - remove when all clusters we want to support have
-				// go/inpr/56938.
-				app.GetMetadata().Category = commonpb.Metadata_INSTANCE
-
-				deployClient := deploygrpcpb.NewDeployServiceClient(ingressConn)
-				if err := deployApplication(ctx, deployClient, app); err != nil {
-					return fmt.Errorf("deploy application: %w", err)
-				}
-			} else if err != nil {
-				return fmt.Errorf("update solution deployment: %w", err)
 			}
 			dDeployApplication := time.Since(startDeployApplication)
 

@@ -19,18 +19,6 @@ package(default_visibility = ["//visibility:public"])
 exports_files(["data/ssh_config"])
 
 go_library(
-    name = "apputil",
-    srcs = ["app_util.go"],
-    importpath = "intrinsic/tools/inctl/cmd/apputil",
-    deps = [
-        "//intrinsic_sdk/intrinsic/tools/inctl/auth",
-        "@com_github_golang_glog//:go_default_library",
-        "@com_github_pkg_errors//:go_default_library",
-        "@org_golang_google_grpc//metadata:go_default_library",
-    ],
-)
-
-go_library(
     name = "chartstop",
     srcs = ["chart_stop.go"],
     importpath = "intrinsic/tools/inctl/cmd/chartstop",
