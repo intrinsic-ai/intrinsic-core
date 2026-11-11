@@ -25,7 +25,7 @@ metadata {
     display_name: "Intrinsic"
   }
   documentation {
-    description: "Custom training service for the pose estimator used in IOC. The train service takes as input a SceneObject and inference parameters (number of iterations, confidence threshold and visibility threshold) and generates a PoseEstimator data asset."
+    description: "Custom training service for the pose estimator used in IOC. The train service takes as input a SceneObject and inference parameters (confidence threshold, text prompt) and generates a PoseEstimator data asset."
   }
   display_name: "IOC Train Service"
 }

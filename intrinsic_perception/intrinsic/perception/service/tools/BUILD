@@ -42,3 +42,20 @@ py_binary(
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_py_pb2",
     ],
 )
+
+py_binary(
+    name = "run_pose_estimation",
+    srcs = ["run_pose_estimation.py"],
+    deps = [
+        "//intrinsic_perception/intrinsic/perception/skills/multi_view:estimate_pose_multi_view_py_pb2",
+        "//intrinsic_sdk/intrinsic/assets:id_utils_py",
+        "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
+        "//intrinsic_sdk/intrinsic/solutions:deployments",
+        "//intrinsic_sdk/intrinsic/solutions:execution",
+        "//intrinsic_sdk/intrinsic/solutions:provided",
+        "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
+        "@com_google_absl_py//absl:app",
+        "@com_google_absl_py//absl/flags",
+        "@intrinsic_apis//intrinsic/perception/proto/v1:pose_estimator_id_py_pb2",
+    ],
+)

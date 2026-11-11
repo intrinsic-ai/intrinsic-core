@@ -12,12 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Solution builder script to set up and run the IOC pose estimation pipeline.
+"""Solution builder script to set up and run the pose estimation pipeline.
 
 Connects to a running Intrinsic solution, sets up the `capture_images` and
-`estimate_pose_multi_view` skills connected to the `ioc_pose_estimator_service`,
-executes the pose estimation process on the solution executive, and retrieves and
-displays the estimated 6D object poses.
+`estimate_pose_multi_view` skills connected to the pose estimator service,
+executes the pose estimation process on the solution executive, and retrieves
+and displays the estimated 6D object poses.
+
+NOTE: `ioc_pose_estimator_service` is currently unimplemented and calling
+`RunPoseEstimation` on it always raises an `UNIMPLEMENTED` error.
 """
 
 from typing import Any
@@ -38,7 +41,10 @@ from intrinsic.solutions import provided
 # Global default configuration values
 _DEFAULT_POSE_ESTIMATOR_ID: str = "ai.intrinsic.review_validation"
 _DEFAULT_CAMERA_NAME: str = "orbbec_gemini_335le"
-_DEFAULT_SERVICE_NAME: str = "ioc_pose_estimator_service"
+_POSE_ESTIMATOR_SERVICES: Sequence[str] = (
+    "ioc_pose_estimator_service",
+    "nvidia_pose_estimator_service",
+)
 _DEFAULT_SENSOR_IDS: Sequence[int] = (1, 4)
 _DEFAULT_MIN_NUM_INSTANCES: int = 1
 
@@ -74,12 +80,14 @@ _CAMERA_NAME = flags.DEFINE_string(
         f" '{_DEFAULT_CAMERA_NAME}' or auto-detected from solution resources)."
     ),
 )
-_SERVICE_NAME = flags.DEFINE_string(
+_SERVICE_NAME = flags.DEFINE_enum(
     "service_name",
-    _DEFAULT_SERVICE_NAME,
+    None,
+    _POSE_ESTIMATOR_SERVICES,
     help=(
-        "Name of the IOC pose estimator service resource "
-        f"(defaults to '{_DEFAULT_SERVICE_NAME}')."
+        "Name of the pose estimator service resource to use (or auto-detected "
+        "from solution resources if omitted). Note that "
+        "'ioc_pose_estimator_service' is currently unimplemented."
     ),
 )
 _SENSOR_IDS = flags.DEFINE_list(
@@ -198,7 +206,7 @@ def get_perception_service_resource(
     solution: deployments.Solution,
     service_name: str | None = None,
 ) -> provided.ResourceHandle:
-  """Retrieves the IOC pose estimator service resource handle from the solution.
+  """Retrieves the pose estimator service resource handle from the solution.
 
   Args:
     solution: The connected Solution instance.
@@ -218,10 +226,6 @@ def get_perception_service_resource(
           f" Available resources: {available}"
       )
     return solution.resources[service_name]
-
-  # Check default service name
-  if _has_resource(solution, _DEFAULT_SERVICE_NAME):
-    return solution.resources[_DEFAULT_SERVICE_NAME]
 
   # Auto-detect resource with PoseEstimationService capability
   handles = _list_resource_handles(solution)

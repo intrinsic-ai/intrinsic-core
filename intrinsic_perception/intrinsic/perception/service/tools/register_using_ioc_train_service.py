@@ -72,11 +72,6 @@ _POSE_ESTIMATOR_ID = flags.DEFINE_string(
     ),
     required=True,
 )
-_REFINEMENT_ITERS = flags.DEFINE_integer(
-    "refinement_iters",
-    3,
-    help="Optional number of refinement iterations for FoundationPose.",
-)
 _CONFIDENCE_THRESHOLD = flags.DEFINE_float(
     "confidence_threshold",
     0.6,
@@ -100,7 +95,6 @@ def get_create_training_job_request(
     scene_object: scene_object_pb2.SceneObject,
     part_name: str,
     pose_estimator_id: str,
-    refinement_iters: int | None = None,
     confidence_threshold: float | None = None,
     visibility_threshold: float | None = None,
     text_prompt: str | None = None,
@@ -113,7 +107,6 @@ def get_create_training_job_request(
     scene_object: SceneObject proto defining the target geometry.
     part_name: Target part identifier string.
     pose_estimator_id: Full ID of the pose estimator asset (e.g., 'package.name').
-    refinement_iters: Optional number of refinement iterations for pose estimation.
     confidence_threshold: Optional minimum confidence / detection score threshold.
     visibility_threshold: Optional minimum visibility threshold.
     text_prompt: Optional text prompt for SAM 3 zero-shot segmentation.
@@ -136,8 +129,6 @@ def get_create_training_job_request(
   pose_estimation_config.targets.append(target)
 
   params = ioc_pose_estimator_params_pb2.FoundationPoseEstimatorParams()
-  if refinement_iters is not None:
-    params.refinement_iters = refinement_iters
   if confidence_threshold is not None:
     params.confidence_threshold = confidence_threshold
   if visibility_threshold is not None:
@@ -347,15 +338,13 @@ def main(argv: Sequence[str]) -> None:
 
   print(
       "Submitting training job to generate Pose Estimator:"
-      f" {pose_estimator_name} (iters: {_REFINEMENT_ITERS.value}, conf:"
-      f" {_CONFIDENCE_THRESHOLD.value}, vis: {_VISIBILITY_THRESHOLD.value},"
-      f" prompt: {_TEXT_PROMPT.value!r})"
+      f" {pose_estimator_name} (conf: {_CONFIDENCE_THRESHOLD.value}, vis:"
+      f" {_VISIBILITY_THRESHOLD.value}, prompt: {_TEXT_PROMPT.value!r})"
   )
   create_training_job_request = get_create_training_job_request(
       scene_object=scene_object,
       part_name=scene_object_name,
       pose_estimator_id=_POSE_ESTIMATOR_ID.value,
-      refinement_iters=_REFINEMENT_ITERS.value,
       confidence_threshold=_CONFIDENCE_THRESHOLD.value,
       visibility_threshold=_VISIBILITY_THRESHOLD.value,
       text_prompt=_TEXT_PROMPT.value,

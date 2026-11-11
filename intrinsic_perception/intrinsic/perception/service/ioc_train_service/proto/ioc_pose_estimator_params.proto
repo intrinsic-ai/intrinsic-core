@@ -20,15 +20,15 @@ option go_package = "intrinsic_perception/intrinsic/perception/service/ioc_train
 
 // Inference parameters for the FoundationPose pipeline.
 message FoundationPoseEstimatorParams {
-  // Number of refinement iterations for FoundationPose.
-  optional int32 refinement_iters = 1;
-
   // Confidence / detection score threshold for the object detector.
   optional float confidence_threshold = 2;
 
-  // Minimum visibility threshold for detected objects.
-  optional float visibility_threshold = 3;
+  // Minimum visibility threshold for detected objects (unused).
+  optional float visibility_threshold = 3 [deprecated = true];
 
-  // Text prompt for zero-shot open-vocabulary segmentation (e.g. SAM 3).
+  // Text prompt for zero-shot open-vocabulary segmentation.
   optional string text_prompt = 4;
+
+  reserved 1;
+  reserved "refinement_iters";
 }

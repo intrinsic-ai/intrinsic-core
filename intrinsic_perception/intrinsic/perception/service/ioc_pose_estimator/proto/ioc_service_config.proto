@@ -34,17 +34,6 @@ message IocPoseEstimatorServiceConfig {
         requires: "grpc://inference.GRPCInferenceService"
       }];
 
-  intrinsic_proto.assets.v1.ResolvedDependency segmentation_model = 2
-      [(intrinsic_proto.assets.field_metadata).dependency = {
-        requires: "data://intrinsic_proto.ml.inference_service.v1.MlModelAsset"
-      }];
-
-  intrinsic_proto.assets.v1.ResolvedDependency foundationpose_model = 3
-      [(intrinsic_proto.assets.field_metadata).dependency = {
-        requires: "data://intrinsic_proto.ml.inference_service.v1.MlModelAsset"
-      }];
-
-  // Optional batch size for FoundationPose candidate pose inference.
-  // Defaults to 240 (full batch) if unset.
-  optional int32 batch_size = 4;
+  reserved 2 to 4;
+  reserved "segmentation_model", "foundationpose_model", "batch_size";
 }
