@@ -20,8 +20,10 @@ import (
 	"flag"
 	"fmt"
 	"io"
+	"maps"
 	"os"
 	"path/filepath"
+	"slices"
 	"time"
 
 	"intrinsic/assets/build_defs/assetprocessor"
@@ -29,6 +31,7 @@ import (
 	"intrinsic/assets/bundle"
 	"intrinsic/assets/clientutils"
 	"intrinsic/assets/cmdutils"
+	"intrinsic/assets/errors/report"
 	"intrinsic/assets/imagetransfer"
 	"intrinsic/assets/referenceddata"
 	"intrinsic/assets/scene_objects/gzfprocessor"
@@ -57,12 +60,20 @@ import (
 	assetpb "intrinsic/assets/build_defs/asset_go_proto"
 	assetartifactspb "intrinsic/assets/proto/v1/asset_artifacts_go_proto"
 	solutiondeploymentpb "intrinsic/assets/proto/v1/solution_deployment_go_proto"
+	svpb "intrinsic/assets/proto/v1/solution_validation_policy_go_proto"
 	opmodepb "intrinsic/config/proto/operation_mode_go_proto"
 	solutionservicegrpcpb "intrinsic/frontend/solution_service/proto/solution_service_go_proto"
 	solutionservicepb "intrinsic/frontend/solution_service/proto/solution_service_go_proto"
 	solutionstatuspb "intrinsic/frontend/solution_service/proto/status_go_proto"
 	casgrpcpb "intrinsic/storage/content_addressable_storage/proto/cas_service_go_proto"
 )
+
+// validationPolicies maps values of the --validation_policy flag to Solution validation policies.
+var validationPolicies = map[string]svpb.SolutionValidationPolicy{
+	"":            svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED,
+	"strict":      svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_STRICT,
+	"recoverable": svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
+}
 
 func readLocalSolution(path string) (*assetpb.LocalSolution, error) {
 	assets := new(assetpb.LocalSolution)
@@ -73,7 +84,7 @@ func readLocalSolution(path string) (*assetpb.LocalSolution, error) {
 }
 
 // updateSolutionDeployment updates the given solution deployment using the provided client with retry logic.
-func updateSolutionDeployment(ctx context.Context, client solutiondeploymentpb.SolutionDeploymentServiceClient, lroClient lropb.OperationsClient, sd *solutiondeploymentpb.SolutionDeployment) error {
+func updateSolutionDeployment(ctx context.Context, client solutiondeploymentpb.SolutionDeploymentServiceClient, lroClient lropb.OperationsClient, sd *solutiondeploymentpb.SolutionDeployment, policy svpb.SolutionValidationPolicy) error {
 	ctx, span := trace.StartSpan(ctx, "solution_update.updateSolutionDeployment")
 	defer span.End()
 
@@ -86,6 +97,7 @@ func updateSolutionDeployment(ctx context.Context, client solutiondeploymentpb.S
 		op, err := client.UpdateSolutionDeployment(ctx, &solutiondeploymentpb.UpdateSolutionDeploymentRequest{
 			SolutionDeployment: sd,
 			AllowMissing:       true,
+			ValidationPolicy:   policy,
 		})
 		if err != nil {
 			// Retry to be resilient against transient infrastructure failures
@@ -137,6 +149,22 @@ var deployApplication func(ctx context.Context, conn grpc.ClientConnInterface, s
 
 var fallbackGZFOptions = func(casgrpcpb.ContentAddressableStorageServiceClient) []gzfprocessor.Option {
 	return nil
+}
+
+// deployError annotates err with msg. If err carries an ExtendedStatus for Solution validation
+// errors, the returned error's message includes the formatted ExtendedStatus details.
+func deployError(msg string, err error) error {
+	es, ok := extstatus.FromGRPCError(err)
+	if !ok {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	sc := es.Proto().GetStatusCode()
+	if sc.GetComponent() != report.ComponentName || sc.GetCode() != report.StatusCode {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return fmt.Errorf("%s: Solution validation failed:\n\n%s\n"+
+		"Fix these errors and retry, or re-run with --validation_policy=recoverable to deploy with "+
+		"non-blocking validation issues.", msg, color.C.Red().Sprintf("%s", es.String()))
 }
 
 // clearPrintedLines clears numLines of output to stdout. This assumes
@@ -198,6 +226,7 @@ func waitForReady(ctx context.Context, client solutionservicegrpcpb.SolutionServ
 func updateCmd() *cobra.Command {
 	flags := cmdutils.NewCmdFlags()
 	var flagOperationMode string
+	var flagValidationPolicy string
 	cmd := &cobra.Command{
 		Use:   "solution_update [app name]",
 		Short: "Deploy an app",
@@ -241,6 +270,10 @@ $ bazel run //intrinsic/config:empty_application --\
 Start a solution on a cluster on the local network:
 $ bazel run //intrinsic/config:empty_application --\
 		--address 192.168.0.100:17080
+
+Start a solution with the recoverable validation policy, deploying despite non-blocking validation issues:
+$ bazel run //intrinsic/config:empty_application --\
+		--validation_policy=recoverable
 `,
 		// Do not print usage when a command exits with an error.
 		SilenceUsage: true,
@@ -249,6 +282,7 @@ $ bazel run //intrinsic/config:empty_application --\
 			ctx, span := trace.StartSpan(cmd.Context(), "inctl app start")
 			span.AddAttributes(trace.BoolAttribute("completed", false))
 			span.AddAttributes(trace.StringAttribute("operation_mode", flagOperationMode))
+			span.AddAttributes(trace.StringAttribute("validation_policy", flagValidationPolicy))
 			span.AddAttributes(trace.StringAttribute("org", flags.GetFlagOrganization()))
 			defer span.End()
 
@@ -258,6 +292,11 @@ $ bazel run //intrinsic/config:empty_application --\
 					"\n\tTentative Cloud Trace link (not guaranteed to work if you interrupt this run):\n\n\t%s\n\n",
 					introspection.CloudTraceURL(span.SpanContext().TraceID.String(), flags.GetFlagProject()),
 				)
+			}
+
+			validationPolicy, ok := validationPolicies[flagValidationPolicy]
+			if !ok {
+				return fmt.Errorf("%q provided for --validation_policy is invalid; valid values are: %q", flagValidationPolicy, slices.Sorted(maps.Keys(validationPolicies)))
 			}
 
 			log.InfoContextf(ctx, "Deploying to cluster")
@@ -338,13 +377,13 @@ $ bazel run //intrinsic/config:empty_application --\
 
 			startDeployApplication := time.Now()
 			solutionDeploymentClient := solutiondeploymentpb.NewSolutionDeploymentServiceClient(ingressConn)
-			if err := updateSolutionDeployment(ctx, solutionDeploymentClient, lroClient, solutionDeployment); err != nil {
+			if err := updateSolutionDeployment(ctx, solutionDeploymentClient, lroClient, solutionDeployment, validationPolicy); err != nil {
 				if deployApplication != nil && status.Code(err) != codes.Unimplemented {
 					if err := deployApplication(ctx, ingressConn, solutionDeployment); err != nil {
-						return fmt.Errorf("deploy application: %w", err)
+						return deployError("deploy application", err)
 					}
 				} else {
-					return fmt.Errorf("update solution deployment: %w", err)
+					return deployError("update solution deployment", err)
 				}
 			}
 			dDeployApplication := time.Since(startDeployApplication)
@@ -379,6 +418,11 @@ $ bazel run //intrinsic/config:empty_application --\
 	flags.AddFlagSkipDirectUpload("app")
 
 	cmd.Flags().StringVar(&flagOperationMode, "operation_mode", "", "Sets the operation mode of the app [sim,real]")
+	cmd.Flags().StringVar(&flagValidationPolicy, "validation_policy", "", fmt.Sprintf(
+		"Solution validation policy: \"strict\" fails the deployment on any validation issue; "+
+			"\"recoverable\" reports issues that don't prevent the Solution from being deployed as "+
+			"warnings. If unset, the service chooses its default. Can be: %q",
+		slices.Sorted(maps.Keys(validationPolicies))))
 	return cmd
 }
 
