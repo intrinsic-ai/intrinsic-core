@@ -176,6 +176,21 @@ message VisualizationSceneContext {
   map<string, VisualizationRenderable> renderables = 3;
 }
 
+// Error encountered while collecting or writing visualization context data.
+message VisualizationContextError {
+  enum Source {
+    SOURCE_UNSPECIFIED = 0;
+    SOURCE_SCENE_CONTEXT = 1;
+    SOURCE_SYSTEM_CONTEXT = 2;
+    SOURCE_CLUSTER = 3;
+    SOURCE_OS_VERSION = 4;
+    SOURCE_WORKCELL_MODE = 5;
+  }
+
+  Source source = 1;   // Component or RPC that failed.
+  string message = 2;  // Error message detail.
+}
+
 // Additional context for visualizing Intrinsic recordings.
 //
 // This message captures contextual data that is useful for visualization but
@@ -248,6 +263,8 @@ message VisualizationContext {
   // an offset index of 0, ensuring it appears chronologically FIRST in the
   // recording, before any other visualization messages.
   int64 next_offset_index = 5;
+
+  repeated VisualizationContextError errors = 8;  // Context collection errors.
 }
 
 // System context available at the time of recording.
@@ -271,4 +288,6 @@ message VisualizationSystemContext {
   // Workcell mode indicating whether the workcell is in operate or develop
   // mode.
   string workcell_mode = 4;
+
+  repeated VisualizationContextError errors = 5;  // System RPC fetch errors.
 }
