@@ -48,7 +48,6 @@ cc_library(
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/strings:string_view",
         "@com_github_grpc_grpc//:grpc++",
-        "@com_google_protobuf//:differencer",
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/executive/proto:proto_builder_cc_grpc_proto",
         "@intrinsic_apis//intrinsic/executive/proto:proto_builder_cc_proto",

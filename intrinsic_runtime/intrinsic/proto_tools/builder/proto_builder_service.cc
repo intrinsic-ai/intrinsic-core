@@ -35,7 +35,6 @@
 #include "google/protobuf/descriptor.pb.h"
 #include "google/protobuf/descriptor_database.h"
 #include "google/protobuf/repeated_ptr_field.h"
-#include "google/protobuf/util/message_differencer.h"
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
 #include "intrinsic_runtime/intrinsic/proto_tools/util/descriptor_pool_loader.h"
@@ -306,113 +305,17 @@ absl::Status ProtoBuilderService::CheckContainsOnlyWellKnownTypes(
   return absl::OkStatus();
 }
 
-namespace {
-
-absl::StatusOr<std::string> DiffFileDescriptorProtos(
-    const google::protobuf::FileDescriptorProto& file_descriptor_1,
-    const google::protobuf::FileDescriptorProto& file_descriptor_2) {
-  const google::protobuf::FieldDescriptor* source_code_info_field =
-      google::protobuf::FileDescriptorProto::GetDescriptor()->FindFieldByName(
-          "source_code_info");
-  if (!source_code_info_field) {
-    return absl::InternalError("Field 'source_code_info' not found");
-  }
-  const google::protobuf::FieldDescriptor* json_name_field =
-      google::protobuf::FieldDescriptorProto::GetDescriptor()->FindFieldByName(
-          "json_name");
-  if (!json_name_field) {
-    return absl::InternalError("Field 'json_name' not found");
-  }
-
-  google::protobuf::util::MessageDifferencer differencer;
-  // Source code info does not have any effect on functionality.
-  differencer.IgnoreField(source_code_info_field);
-  // Compiled-in descriptors and descriptors loaded from a file descriptor set
-  // with source code info differ in the json_name field. Ignoring the field
-  // here allows users to use a compiled-in file descriptor, e.g. for
-  // "wrappers.proto", in the user supplied dependencies (instead of getting the
-  // file descriptor for the same file via ProtoBuilder.GetWellKnownTypes).
-  differencer.IgnoreField(json_name_field);
-  std::string diff;
-  differencer.ReportDifferencesToString(&diff);
-  bool equal = differencer.Compare(file_descriptor_1, file_descriptor_2);
-  return equal ? "" : diff;
-}
-
-absl::Status CheckMergedUserAndWellKnownTypesDatabase(
-    google::protobuf::DescriptorDatabase* merged_db,
-    const google::protobuf::FileDescriptorSet user_fds,
-    google::protobuf::DescriptorDatabase* well_known_types_db) {
-  // Create a temporary pool only to be used as a helper in this function.
-  DescriptorPoolErrorCollector error_collector;
-  google::protobuf::DescriptorPool merged_pool(merged_db, &error_collector);
-
-  for (const google::protobuf::FileDescriptorProto& user_file_proto :
-       user_fds.file()) {
-    // Check that the user dependency can be loaded. If it cannot, then it
-    // probably means the user failed to supply a transitively closed dependency
-    // set.
-    const google::protobuf::FileDescriptor* user_file =
-        merged_pool.FindFileByName(user_file_proto.name());
-    if (user_file == nullptr) {
-      return absl::InvalidArgumentError(absl::StrFormat(
-          "Failed to verify dependency %s (not retrievable, maybe dependency "
-          "set not transitively closed: %s)",
-          user_file_proto.name(), error_collector.GetErrorsJoined()));
-    }
-
-    // Check if the user dependency also exists in the well-known types
-    // supported by this service. If it does, check that they are the same,
-    // otherwise reject.
-    google::protobuf::FileDescriptorProto well_known_file_proto;
-    if (well_known_types_db->FindFileByName(std::string(user_file->name()),
-                                            &well_known_file_proto)) {
-      INTR_ASSIGN_OR_RETURN(
-          std::string diff,
-          DiffFileDescriptorProtos(user_file_proto, well_known_file_proto));
-      if (!diff.empty()) {
-        return absl::InvalidArgumentError(absl::StrFormat(
-            "Dependency file descriptor set contains "
-            "well-known file '%s' in an incompatible version. Diff:\n%s",
-            user_file->name(), diff));
-      }
-    }
-  }
-  INTR_RETURN_IF_ERROR(error_collector.GetStatus());
-  return absl::OkStatus();
-}
-
-}  // namespace
-
 grpc::Status ProtoBuilderService::Compile(
     grpc::ServerContext* context,
     const intrinsic_proto::executive::ProtoCompileRequest* request,
     intrinsic_proto::executive::ProtoCompileResponse* response) {
-  LOG(INFO) << "Compiling proto " << request->proto_filename()
-            << (request->has_dependencies()
-                    ? " (user supplied custom dependencies)"
-                    : "");
+  LOG(INFO) << "Compiling proto " << request->proto_filename();
   LOG_LINES(INFO, request->proto_schema());
-
-  // We only use the descriptor DB from `LoadedDescriptorPool`, but we use the
-  // class for creation to have consistency. The performance overhead of the
-  // extra pool seems acceptable for nicer readability.
-  INTR_ASSIGN_OR_RETURN_GRPC(
-      std::unique_ptr<LoadedDescriptorPool> user_pool,
-      LoadedDescriptorPool::Create(request->dependencies()));
-
-  auto merged_db = std::make_unique<google::protobuf::MergedDescriptorDatabase>(
-      user_pool->descriptor_db(),
-      well_known_types_loaded_pool_->descriptor_db());
-
-  INTR_RETURN_IF_ERROR_GRPC(CheckMergedUserAndWellKnownTypesDatabase(
-      merged_db.get(), request->dependencies(),
-      well_known_types_loaded_pool_->descriptor_db()));
 
   INTR_ASSIGN_OR_RETURN_GRPC(
       *response->mutable_file_descriptor_set(),
       CompileSchema(request->proto_filename(), request->proto_schema(),
-                    merged_db.get()),
+                    well_known_types_loaded_pool_->descriptor_db()),
       _.LogError());
 
   return grpc::Status::OK;

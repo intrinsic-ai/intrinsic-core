@@ -59,12 +59,21 @@ service ProtoBuilder {
 }
 
 message ProtoCompileRequest {
+  // File name of the .proto file to compile (relative to root of source tree).
+  // Example: "my_process/params.proto"
   string proto_filename = 1;
+
+  // Contents of the .proto file to compile. May import and use any of the types
+  // returned by [ProtoBuilder.GetWellKnownTypes].
   string proto_schema = 2;
-  google.protobuf.FileDescriptorSet dependencies = 3;
+
+  reserved 3;
+  reserved "dependencies";
 }
 
 message ProtoCompileResponse {
+  // The file descriptor set containing the file descriptor for the compiled
+  // schema as well as any direct and transitive dependencies.
   google.protobuf.FileDescriptorSet file_descriptor_set = 1;
 }
 
