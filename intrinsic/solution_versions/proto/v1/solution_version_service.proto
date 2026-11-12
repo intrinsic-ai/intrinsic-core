@@ -18,12 +18,10 @@ package intrinsic_proto.solution_versions.v1;
 
 
 import "google/longrunning/operations.proto";
+
 import "google/protobuf/descriptor.proto";
-
 import "google/protobuf/field_mask.proto";
-
 import "google/rpc/status.proto";
-
 
 import "intrinsic/assets/proto/v1/solution.proto";
 
@@ -209,11 +207,11 @@ service SolutionVersionService {
   // however are also present in the diff mask .
   rpc DiffAndOverlay(DiffAndOverlayRequest) returns (OverlaidSolutionDiff) {}
 
+
   // Resolves and returns FileDescriptorSets for a requested list of asset
   // version IDs.
   rpc BatchGetAssetFileDescriptorSets(BatchGetAssetFileDescriptorSetsRequest)
       returns (BatchGetAssetFileDescriptorSetsResponse) {}
-
 
   // Performs a directional, three-way comparison to generate a pre-merge
   // analysis (preview) of merging a source snapshot into a destination branch.
@@ -717,6 +715,7 @@ message DiffAndOverlayRequest {
   SnapshotSource target = 2;
 }
 
+
 message BatchGetAssetFileDescriptorSetsRequest {
   // The asset ID versions to resolve, formatted as
   // "<package>.<name>.<version>".
@@ -742,7 +741,6 @@ message BatchGetAssetFileDescriptorSetsResponse {
   // List of the requested asset version IDs and their resolution result.
   repeated FileDescriptorSetResult results = 1;
 }
-
 
 message PreviewMergeRequest {
   // The specific snapshot requested to be merged into the destination branch.
