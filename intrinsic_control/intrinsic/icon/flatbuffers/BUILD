@@ -58,8 +58,8 @@ cc_test(
     deps = [
         ":matrix_types_fbs_cc",
         ":matrix_types_utils",
-        "//intrinsic/math/testing:fuzz_math_utils",
         "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/math/testing:fuzz_math_util",
         "@com_google_fuzztest//fuzztest",
         "@com_google_fuzztest//fuzztest:init_fuzztest",
         "@com_google_googletest//:gtest",

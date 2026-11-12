@@ -1475,9 +1475,9 @@ cc_test(
     srcs = ["directional_stiffness_test.cc"],
     deps = [
         ":directional_stiffness",
-        "//intrinsic/math/testing:fuzz_math_utils",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/eigenmath:matchers",
+        "//intrinsic_sdk/intrinsic/math/testing:fuzz_math_util",
         "@abseil-cpp//absl/flags:parse",
         "@com_google_cel_cpp//internal:testing_no_main",
         "@com_google_fuzztest//fuzztest",

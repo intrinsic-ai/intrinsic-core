@@ -20,7 +20,7 @@
 #include "fuzztest/init_fuzztest.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/flatbuffers/matrix_types.fbs.h"
-#include "intrinsic/math/testing/fuzz_math_utils.h"
+#include "intrinsic/math/testing/fuzz_math_util.h"
 
 namespace intrinsic_fbs {
 namespace {

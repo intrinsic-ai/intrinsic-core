@@ -26,7 +26,7 @@
 #include "internal/testing.h"
 #include "intrinsic/eigenmath/matchers.h"
 #include "intrinsic/eigenmath/types.h"
-#include "intrinsic/math/testing/fuzz_math_utils.h"
+#include "intrinsic/math/testing/fuzz_math_util.h"
 
 namespace intrinsic::icon {
 namespace {

@@ -15,10 +15,10 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 cc_library(
-    name = "fuzz_math_utils",
+    name = "fuzz_math_util",
     testonly = True,
-    srcs = ["fuzz_math_utils.cc"],
-    hdrs = ["fuzz_math_utils.h"],
+    srcs = ["fuzz_math_util.cc"],
+    hdrs = ["fuzz_math_util.h"],
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
         "//intrinsic_sdk/intrinsic/eigenmath",

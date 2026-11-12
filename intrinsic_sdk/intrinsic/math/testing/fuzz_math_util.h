@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef INTRINSIC_MATH_TESTING_FUZZ_MATH_UTILS_H_
-#define INTRINSIC_MATH_TESTING_FUZZ_MATH_UTILS_H_
+#ifndef INTRINSIC_MATH_TESTING_FUZZ_MATH_UTIL_H_
+#define INTRINSIC_MATH_TESTING_FUZZ_MATH_UTIL_H_
 
 #include <memory>
 
@@ -115,4 +115,4 @@ fuzztest::Domain<eigenmath::Matrix3d> RotationMatrix3d();
 
 }  // namespace intrinsic::testing
 
-#endif  // INTRINSIC_MATH_TESTING_FUZZ_MATH_UTILS_H_
+#endif  // INTRINSIC_MATH_TESTING_FUZZ_MATH_UTIL_H_

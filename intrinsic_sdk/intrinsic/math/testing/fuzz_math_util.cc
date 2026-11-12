@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/math/testing/fuzz_math_utils.h"
+#include "intrinsic/math/testing/fuzz_math_util.h"
 
 #include <algorithm>
 #include <cmath>
