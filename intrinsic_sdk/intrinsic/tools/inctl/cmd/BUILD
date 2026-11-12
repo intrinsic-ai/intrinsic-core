@@ -77,8 +77,10 @@ go_library(
     ],
     importpath = "intrinsic/tools/inctl/cmd/root",
     deps = [
+        "//intrinsic_sdk/intrinsic/kubernetes/acl:identity",
         "//intrinsic_sdk/intrinsic/production:intrinsic",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:dialerutil",
+        "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:agents",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",

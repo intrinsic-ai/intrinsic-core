@@ -32,8 +32,10 @@ import (
 	grpcstatus "google.golang.org/grpc/status"
 	apierrors "k8s.io/apimachinery/pkg/api/errors" 
 
+	"intrinsic/kubernetes/acl/identity"
 	intrinsic "intrinsic/production/intrinsic"
 	"intrinsic/skills/tools/skill/cmd/dialerutil"
+	"intrinsic/tools/inctl/auth/auth"
 	"intrinsic/tools/inctl/util/agents" 
 	"intrinsic/tools/inctl/util/orgutil"
 	"intrinsic/tools/inctl/util/printer"
@@ -136,16 +138,17 @@ func (e *executionContext) RewriteError(err error, cmdNames []string) string {
 
 	}
 
-	// Some commands don't have the --project flag as a hard requirement but have
-	// execution paths which require it so that the correct API keys can be loaded.
-	if errors.Is(cause, dialerutil.ErrCredentialsRequired) {
-		return fmt.Sprintf("%v\nThe --project flag is required to load the appropriate "+
-			"credentials.", err)
+	// Some commands don't have the --org/--project flag as a hard requirement at
+	// flag-parse time, but have execution paths which require it so that the
+	// appropriate cloud credentials can be loaded.
+	if errors.Is(err, auth.ErrCredentialsRequired) ||
+		errors.Is(err, identity.ErrMissingOrgID) {
+		return fmt.Sprintf("%v\nThe --org flag (or INTRINSIC_ORG environment variable) is required to authenticate with a cloud cluster. Run %s if you have not logged in.", err, loginCmdHint)
 	}
 
 	// User org not known
 	var orgErr *orgutil.ErrOrgNotFound
-	if errors.As(cause, &orgErr) {
+	if errors.As(err, &orgErr) {
 		base := fmt.Sprintf("Credentials for given organization %q not found.", orgErr.OrgName)
 		additions := []string{}
 		if len(orgErr.CandidateOrgs) > 0 {
@@ -164,7 +167,7 @@ func (e *executionContext) RewriteError(err error, cmdNames []string) string {
 
 	// User not logged in.
 	var credErr *dialerutil.ErrCredentialsNotFound
-	if errors.As(cause, &credErr) {
+	if errors.As(err, &credErr) {
 		return fmt.Sprintf("%v\nCredentials for given organization not found. Run %s.", err, loginCmdHint)
 	}
 

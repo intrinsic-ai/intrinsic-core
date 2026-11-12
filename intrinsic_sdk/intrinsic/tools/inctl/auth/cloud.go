@@ -180,6 +180,9 @@ func (e *ErrorDetails) Error() string {
 // ErrUnableToRetrieveToken is returned if the token cannot be retrieved.
 var ErrUnableToRetrieveToken = errors.New("unable to retrieve token")
 
+// ErrCredentialsRequired indicates that authentication information is missing for a cloud connection.
+var ErrCredentialsRequired = errors.New("credentials required")
+
 // NewCloudConnection creates a new gRPC connection to a cloud project.
 //
 // This should be used for all connections to cloud services from inctl. This ensures that the
@@ -269,7 +272,7 @@ func newOrLoadTokenSource(ctx context.Context, optsFuncs ...ConnectionOptsFunc) 
 		f(&opts)
 	}
 	if opts.project == "" && opts.org == "" && opts.env == "" && opts.address == "" {
-		return nil, nil, nil, nil, fmt.Errorf("at least one of project, org, env, or address must be set")
+		return nil, nil, nil, nil, fmt.Errorf("%w: at least one of project, org, env, or address must be set", ErrCredentialsRequired)
 	}
 	if opts.cluster != "" {
 		opts.cluster = vmalias.ResolvePrint(opts.cluster, "")

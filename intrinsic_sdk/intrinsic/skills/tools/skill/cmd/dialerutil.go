@@ -19,7 +19,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"errors"
 	"fmt"
 	"net/url"
 	"regexp"
@@ -80,10 +79,6 @@ type DialInfoParams struct {
 	CredToken   string // Optional the credential value itself. This bypasses the store
 	UseIDTokens bool   // Optional instructions to convert APIKeys to IDTokens on the fly.
 }
-
-// ErrCredentialsRequired indicates that the credential name is not set in the
-// DialInfoParams for a non-local call.
-var ErrCredentialsRequired = errors.New("credential name required")
 
 // ErrCredentialsNotFound indicates that the lookup for a given credential
 // name failed.
@@ -227,7 +222,7 @@ func createCredentials(params DialInfoParams) (credentials.PerRPCCredentials, er
 	}
 	// credential name is required for non-local calls to resolve
 	// the corresponding API key.
-	return nil, ErrCredentialsRequired
+	return nil, fmt.Errorf("%w: credential name required", auth.ErrCredentialsRequired)
 }
 
 func resolveAddress(address string, project string) (string, error) {
@@ -236,7 +231,7 @@ func resolveAddress(address string, project string) (string, error) {
 	}
 
 	if project == "" {
-		return "", fmt.Errorf("project is required if no address is specified")
+		return "", fmt.Errorf("%w: project is required if no address is specified", auth.ErrCredentialsRequired)
 	}
 
 	return fmt.Sprintf("dns:///www.endpoints.%s.cloud.goog:443", project), nil
