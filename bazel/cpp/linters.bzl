@@ -30,6 +30,11 @@ clang_tidy = lint_clang_tidy_aspect(
 
     # Enable linting on libraries, binaries, and tests
     rule_kinds = ["cc_binary", "cc_library", "cc_test"],
+
+    # Treat all findings as build-breaking errors (strict "zero-warning" policy).
+    # This is set here rather than via `WarningsAsErrors` in .clang-tidy so that
+    # IDEs (clangd) report findings as warnings instead of errors.
+    args = ["--warnings-as-errors=*"],
 )
 
 # Output groups defined by aspect_rules_lint (not LLVM toolchain internals):
