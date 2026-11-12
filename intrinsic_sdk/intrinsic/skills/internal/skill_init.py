@@ -22,6 +22,7 @@ import grpc
 
 from intrinsic.geometry.proto import geometry_service_pb2_grpc
 from intrinsic.motion_planning.proto.v1 import motion_planner_service_pb2_grpc
+from intrinsic.platform.pubsub.python import pubsub
 from intrinsic.skills.internal import skill_repository as skill_repo
 from intrinsic.skills.internal import skill_service_impl
 from intrinsic.skills.proto import skill_service_config_pb2
@@ -100,6 +101,11 @@ def skill_init(
   Raises:
     RuntimeError: if skill service fails to use skill_service_port
   """
+  # Pre-warm the process-wide Zenoh session before serving RPCs so the first
+  # skill call does not pay session setup latency or race router queryable
+  # discovery.
+  pubsub.PubSub()
+
   server = grpc.server(
       futures.ThreadPoolExecutor(max_workers=num_threads),
       options=(("grpc.so_reuseport", 0),),

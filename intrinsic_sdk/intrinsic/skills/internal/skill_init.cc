@@ -39,6 +39,7 @@
 #include "intrinsic/geometry/storage/geometry_service_storage.h"  
 #include "intrinsic/logging/data_logger_client.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.grpc.pb.h"
+#include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/skills/internal/skill_repository.h"
 #include "intrinsic/skills/internal/skill_service_impl.h"
 #include "intrinsic/skills/proto/skill_service_config.pb.h"
@@ -89,6 +90,11 @@ absl::Status SkillInit(
     absl::string_view motion_planner_service_address,
     int32_t skill_service_port, absl::Duration connection_timeout,
     SkillRepository& skill_repository) {
+  // Pre-warm the process-wide Zenoh session before serving RPCs so the first
+  // skill call does not pay session setup latency or race router queryable
+  // discovery.
+  PubSub{};
+
   // Start DataLogger if the endpoint is configured by flags. Do not fail if
   // the logger is unavailable.
   if (!data_logger_grpc_service_address.empty()) {
