@@ -57,6 +57,9 @@ def _intrinsic_solution_impl(ctx):
     ).add(
         "--display_name",
         ctx.attr.display_name or ctx.label.name,
+    ).add(
+        "--solution_id",
+        ctx.attr.solution_id,
     )
     asset_bundles = []
     for a in ctx.attr.assets:
@@ -187,6 +190,12 @@ intrinsic_solution = rule(
         "object_world_updates": attr.label_list(
             allow_files = [".txtpb", ".pbtxt", ".textproto"],
             doc = "Updates on the used world.",
+        ),
+        "solution_id": attr.string(
+            doc = """The id to which the solution should be attached at startup.
+            This **will overwrite the solution**. If not set, the solution will
+            run detached, and thus will not be able to be saved to the
+            portal.""",
         ),
         "_localsolutiongen": attr.label(
             default = Label("//intrinsic_sdk/intrinsic/assets/build_defs:localsolutiongen"),

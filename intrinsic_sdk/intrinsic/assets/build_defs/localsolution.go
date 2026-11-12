@@ -60,6 +60,7 @@ type Options struct {
 	ObjectWorldUpdates   []*owupb.ObjectWorldUpdate
 	DefaultOperationMode opmodepb.OperationMode
 	DisplayName          string
+	SolutionID           string
 }
 
 // New creates a new LocalSolution proto.
@@ -152,5 +153,6 @@ func New(opts Options) (*assetpb.LocalSolution, error) {
 		ObjectWorldUpdates:   opts.ObjectWorldUpdates,
 		DefaultOperationMode: opts.DefaultOperationMode,
 		DisplayName:          opts.DisplayName,
+		SolutionId:           opts.SolutionID,
 	}, nil
 }

@@ -367,6 +367,7 @@ func (proc *Processor) Process(ctx context.Context, sa *assetpb.LocalSolution) (
 
 	return &solutiondeploymentpb.SolutionDeployment{
 		DisplayName:   sa.GetDisplayName(),
+		SolutionId:    sa.GetSolutionId(),
 		OperationMode: sa.GetDefaultOperationMode(),
 		Solution: &solutionpb.Solution{
 			Assets:             assets,

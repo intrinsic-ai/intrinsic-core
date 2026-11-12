@@ -77,6 +77,7 @@ message AssetInstanceInfo {
 message LocalSolution {
   // Solution metadata.
   string display_name = 5;
+  string solution_id = 9;
 
   // An asset that was compiled locally or is a reference to an item in the
   // asset catalog.
