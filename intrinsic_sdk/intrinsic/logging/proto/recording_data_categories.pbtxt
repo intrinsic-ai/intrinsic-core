@@ -72,10 +72,11 @@ categories: {
 categories: {
   category_id: "debug_data"
   display_name: "Debug data"
-  description: "Contains debug data, such as system metrics and the executive state."
+  description: "Contains debug data, such as system metrics, traces and the executive state."
   event_sources: [
     "executive.*",
     "/system/metrics",
+    "/otlp-traces",
     "error_report"
   ]
   is_lightweight: false
