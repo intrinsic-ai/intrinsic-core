@@ -125,6 +125,30 @@ py_proto_library(
 )
 
 proto_library(
+    name = "solution_diff_proto",
+    srcs = ["solution_diff.proto"],
+    deps = [
+        ":diff_mask_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_proto",
+    ],
+)
+
+go_proto_library(
+    name = "solution_diff_go_proto",
+    importpath = "intrinsic/solution_versions/proto/v1/solution_diff_go_proto",
+    protos = [":solution_diff_proto"],
+    deps = [
+        ":diff_mask_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_go_proto",
+    ],
+)
+
+py_proto_library(
+    name = "solution_diff_py_pb2",
+    deps = [":solution_diff_proto"],
+)
+
+proto_library(
     name = "warning_proto",
     srcs = ["warning.proto"],
     deps = ["@intrinsic_apis//intrinsic/assets/proto:id_proto"],

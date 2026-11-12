@@ -21,7 +21,6 @@ proto_library(
     name = "solution_version_service_proto",
     srcs = ["solution_version_service.proto"],
     deps = [
-        ":solution_diff_proto",
         "//intrinsic/modified_solution/proto/v1:modified_solution_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_googleapis//google/api:field_behavior_proto",
@@ -37,6 +36,7 @@ proto_library(
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:conflict_resolution_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_source_proto",
+        "@intrinsic_apis//intrinsic/solution_versions/proto/v1:solution_diff_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:warning_proto",
     ],
 )
@@ -73,7 +73,6 @@ go_proto_library(
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__subpackages__",
     ],
     deps = [
-        ":solution_diff_go_proto",
         "//intrinsic/modified_solution/proto/v1:modified_solution_go_proto",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/assets/proto/v1:solution_go_proto",
@@ -82,6 +81,7 @@ go_proto_library(
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:conflict_resolution_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_source_go_proto",
+        "@intrinsic_apis//intrinsic/solution_versions/proto/v1:solution_diff_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:warning_go_proto",
         "@io_bazel_rules_go//proto/wkt:descriptor_go_proto",
         "@io_bazel_rules_go//proto/wkt:field_mask_go_proto",
@@ -90,33 +90,4 @@ go_proto_library(
         "@org_golang_google_genproto_googleapis_api//annotations",
         "@org_golang_google_genproto_googleapis_rpc//status",
     ],
-)
-
-proto_library(
-    name = "solution_diff_proto",
-    srcs = ["solution_diff.proto"],
-    deps = [
-        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_proto",
-        "@intrinsic_apis//intrinsic/solution_versions/proto/v1:diff_mask_proto",
-    ],
-)
-
-go_proto_library(
-    name = "solution_diff_go_proto",
-    importpath = "intrinsic/solution_versions/proto/v1/solution_diff_go_proto",
-    protos = [":solution_diff_proto"],
-    visibility = [
-        "//intrinsic/solution_versions:__subpackages__",
-        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution_version:__pkg__",
-    ],
-    deps = [
-        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_go_proto",
-        "@intrinsic_apis//intrinsic/solution_versions/proto/v1:diff_mask_go_proto",
-    ],
-)
-
-py_proto_library(
-    name = "solution_diff_py_pb2",
-    visibility = ["//visibility:public"],
-    deps = [":solution_diff_proto"],
 )
