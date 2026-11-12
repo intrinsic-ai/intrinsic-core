@@ -21,7 +21,6 @@ cc_library(
     srcs = ["attachment_component.cc"],
     hdrs = ["attachment_component.h"],
     deps = [
-        "//intrinsic/utils/proto_conversion:blue_wrappers",
         "//intrinsic/world/proto:attachment_component_cc_proto",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",

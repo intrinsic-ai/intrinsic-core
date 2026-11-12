@@ -25,7 +25,6 @@
 #include "intrinsic/math/proto_conversion.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_macros.h"
-#include "intrinsic/utils/proto_conversion/blue_wrappers_no_using.h"
 #include "intrinsic/world/entity_id.h"
 #include "intrinsic/world/proto/attachment_component.pb.h"
 
