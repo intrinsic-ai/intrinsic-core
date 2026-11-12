@@ -20,17 +20,6 @@ package(default_visibility = [
     "//intrinsic/geometry:__subpackages__",
 ])
 
-exports_files(
-    srcs = [
-        "test_data/Raw_IPS.ply",
-        "test_data/example_point_cloud.ply",
-    ],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/world/service/benchmarks:__subpackages__",
-    ],
-)
-
 cc_library(
     name = "ai_scene_to_point_cloud",
     srcs = ["ai_scene_to_point_cloud.cc"],
