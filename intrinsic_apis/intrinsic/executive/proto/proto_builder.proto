@@ -56,6 +56,7 @@ service ProtoBuilder {
       get: "/protoBuilder/v0:wellKnownTypes"
     };
   }
+
 }
 
 message ProtoCompileRequest {
@@ -63,8 +64,10 @@ message ProtoCompileRequest {
   // Example: "my_process/params.proto"
   string proto_filename = 1;
 
+  // clang-format off
   // Contents of the .proto file to compile. May import and use any of the types
   // returned by [ProtoBuilder.GetWellKnownTypes].
+  // clang-format on
   string proto_schema = 2;
 
   reserved 3;
