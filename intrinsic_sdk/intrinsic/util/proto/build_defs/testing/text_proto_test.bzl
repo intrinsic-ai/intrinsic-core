@@ -22,7 +22,7 @@ def _cc_test_for_srcs(name, srcs, message, tags, transitive_descriptor_set_name,
     cc_test(
         name = name,
         data = srcs + [transitive_descriptor_set_name],
-        deps = ["//intrinsic/util/proto/build_defs/testing:text_proto_test"],
+        deps = ["//intrinsic_sdk/intrinsic/util/proto/build_defs/testing:text_proto_test"],
         args = [
             "--message_full_name=" + message,
             "--text_proto_files=" + ",".join(srcs_locations),

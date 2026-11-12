@@ -15,12 +15,12 @@
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library", "cc_test")
 load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic/util/proto/build_defs/testing:text_proto_test.bzl", "text_proto_test_suite")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:hardware_module_image.bzl", "hardware_module_image")
 load("//intrinsic_control/intrinsic/icon/hal/bzl:resources.bzl", "hardware_module_manifest")
 load("//intrinsic_sdk/intrinsic/assets/hardware_devices/build_defs:hardware_device.bzl", "intrinsic_hardware_device")
 load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl", "intrinsic_scene_object")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
+load("//intrinsic_sdk/intrinsic/util/proto/build_defs/testing:text_proto_test.bzl", "text_proto_test_suite")
 
 package(default_visibility = ["//visibility:public"])
 
