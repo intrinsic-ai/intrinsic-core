@@ -295,7 +295,7 @@ func processAny(m protoreflect.Message, types *protoregistry.Types, stack map[pr
 		return false, nil
 	}
 
-	if err := anyMsg.MarshalFrom(msg); err != nil {
+	if err := anypb.MarshalFrom(anyMsg, msg, proto.MarshalOptions{Deterministic: true}); err != nil {
 		return false, err
 	}
 
