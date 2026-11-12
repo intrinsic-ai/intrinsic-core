@@ -361,7 +361,7 @@ bazel_dep(name = "rules_java", version = "9.9.0")
 # CUDA #
 ########
 
-bazel_dep(name = "rules_cuda", version = "0.3.0")
+bazel_dep(name = "rules_cuda", version = "0.4.0")
 
 cuda = use_extension("@rules_cuda//cuda:extensions.bzl", "toolchain")
 cuda.redist_json(
@@ -371,6 +371,9 @@ cuda.redist_json(
         "cudart",
         "nvcc",
         "curand",
+    ],
+    platforms = [
+        "linux-x86_64",
     ],
     version = "12.8.1",
 )
