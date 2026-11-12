@@ -15,12 +15,11 @@
 #include "intrinsic/scene/validate/scene_object_validation.h"
 
 #include <cmath>
-#include <functional>
+#include <cstdint>
 #include <optional>
 #include <string>
 #include <vector>
 
-#include "absl/algorithm/container.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/log/log.h"
@@ -29,6 +28,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
+#include "absl/types/span.h"
 #include "google/protobuf/any.pb.h"
 #include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/math/pose3.h"
@@ -53,63 +53,49 @@ using intrinsic_proto::scene_object::v1::Entity;
 using intrinsic_proto::scene_object::v1::Kinematics;
 using intrinsic_proto::scene_object::v1::SceneObject;
 
-// To detect cycles, we know that each entity only has one outgoing edge, so
-// we can do this in O(N): Keep a hash set of all entities that are *not* in
-// a cycle (e.g. they have an ancestry chain to root). If we traverse the
-// parents of an entity to the point that either it is in the set or one of
-// its ancestors is in the set, then we know it's not part of a cycle.
-absl::Status CheckEntityCycles(
-    const SceneObject& scene_object,
-    const absl::flat_hash_map<absl::string_view, absl::string_view>&
-        entity_names_to_parents,
-    absl::string_view root_entity) {
-  absl::flat_hash_set<absl::string_view> visited;
-  absl::flat_hash_set<absl::string_view> children_of_root;
-  children_of_root.insert(root_entity);
+enum class VisitState : uint8_t {
+  kUnvisited,
+  kVisiting,
+  kReachesRoot,
+};
 
-  // Returns true if we detect a cycle
-  std::function<bool(const absl::string_view)> walk_ancestors_detecting_cycles =
-      [&](const absl::string_view e) {
-        if (children_of_root.contains(e)) {
-          return false;
-        }
+// Detects parenting cycles iteratively in O(N) time using integer entity
+// indices. Because each entity has at most one parent, `visit_states` memoizes
+// all entities whose ancestry chains terminate at `root_index`. Walking upwards
+// from each entity stops as soon as it hits `kReachesRoot` or revisits an
+// entity in the current walk (`kVisiting`).
+absl::Status CheckEntityCycles(const SceneObject& scene_object,
+                               absl::Span<const int> parent_indices,
+                               int root_index) {
+  const int num_entities = scene_object.entities_size();
+  std::vector<VisitState> visit_states(num_entities, VisitState::kUnvisited);
+  visit_states[root_index] = VisitState::kReachesRoot;
 
-        // If we've already been here, then it's a cycle.
-        if (visited.contains(e)) {
-          return true;
-        }
-        visited.insert(e);
-
-        if (!walk_ancestors_detecting_cycles(entity_names_to_parents.at(e))) {
-          children_of_root.insert(e);
-          return false;
-        }
-
-        return true;
-      };
-
-  for (const Entity& e : scene_object.entities()) {
-    if (walk_ancestors_detecting_cycles(e.name())) {
-      // The entity `e` is not necessarily in the cycle itself; it may be an
-      // ancestor or descendant that merely points into a cycle. To extract the
-      // exact cycle without looping indefinitely, `seen_in_path` tracks all
-      // visited entities along the ancestry path until a repeat node is
-      // encountered.
-      std::vector<absl::string_view> path;
-      absl::flat_hash_set<absl::string_view> seen_in_path;
-      absl::string_view curr = e.name();
-      while (seen_in_path.insert(curr).second) {
-        path.push_back(curr);
-        curr = entity_names_to_parents.at(curr);
-      }
-      // `curr` is the first node visited a second time, marking the start
-      // and end of the cycle within `path`.
-      auto cycle_start_it = absl::c_find(path, curr);
-      std::vector<absl::string_view> cycle_entities(cycle_start_it, path.end());
-      cycle_entities.push_back(curr);
+  for (int i = 0; i < num_entities; ++i) {
+    if (visit_states[i] == VisitState::kReachesRoot) {
+      continue;
+    }
+    int curr = i;
+    while (visit_states[curr] == VisitState::kUnvisited) {
+      visit_states[curr] = VisitState::kVisiting;
+      curr = parent_indices[curr];
+    }
+    if (visit_states[curr] == VisitState::kVisiting) {
+      // `curr` is the first node visited a second time, marking both the start
+      // and the end of the cycle.
+      std::vector<absl::string_view> cycle_entities;
+      int node = curr;
+      do {
+        cycle_entities.push_back(scene_object.entities(node).name());
+        node = parent_indices[node];
+      } while (node != curr);
+      cycle_entities.push_back(scene_object.entities(curr).name());
       return absl::InvalidArgumentError(
           absl::Substitute("Scene object has cycle in entity parenting: $0",
                            absl::StrJoin(cycle_entities, " -> ")));
+    }
+    for (int node = i; node != curr; node = parent_indices[node]) {
+      visit_states[node] = VisitState::kReachesRoot;
     }
   }
 
@@ -299,10 +285,8 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
     entities_by_name.try_emplace(object.entities(i).name(), i);
   }
 
-  absl::string_view root_entity;
-  absl::flat_hash_map<absl::string_view, absl::string_view>
-      entity_names_to_parents;
-  entity_names_to_parents.reserve(num_entities);
+  int root_index = -1;
+  std::vector<int> parent_indices(num_entities, -1);
   absl::flat_hash_set<absl::string_view> non_fixed_joint_names;
   for (int i = 0; i < num_entities; ++i) {
     const Entity& e = object.entities(i);
@@ -315,10 +299,9 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
       return absl::InvalidArgumentError(
           absl::Substitute("Duplicate entity name: $0", e.name()));
     }
-    entity_names_to_parents[e.name()] = e.parent_name();
 
-    if (e.parent_name().empty() && root_entity.empty()) {
-      root_entity = e.name();
+    if (e.parent_name().empty() && root_index == -1) {
+      root_index = i;
 
       // Root entity should be a link.
       if (e.entity_type_case() != Entity::kLink) {
@@ -326,9 +309,10 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
             absl::Substitute("Root entity $0 must be a link.", e.name()));
       }
     } else if (e.parent_name().empty()) {
-      return absl::InvalidArgumentError(absl::Substitute(
-          "Scene object may only have a single root entity. Found: $0, $1",
-          root_entity, e.name()));
+      return absl::InvalidArgumentError(
+          absl::Substitute("Scene object may only have a single root entity. "
+                           "Found: $0, $1",
+                           object.entities(root_index).name(), e.name()));
     }
 
     std::optional<Pose3d> parent_t_this;
@@ -351,6 +335,7 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
             absl::Substitute("Cannot find parent entity '$1' for entity '$0'",
                              e.name(), e.parent_name()));
       }
+      parent_indices[i] = parent_it->second;
       INTR_RETURN_IF_ERROR(
           ValidateParentType(e, object.entities(parent_it->second)));
     }
@@ -404,7 +389,7 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
     }
   }
 
-  if (root_entity.empty()) {
+  if (root_index == -1) {
     return absl::InvalidArgumentError("Scene object has no root entities.");
   }
 
@@ -427,7 +412,7 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
     }
   }
 
-  return CheckEntityCycles(object, entity_names_to_parents, root_entity);
+  return CheckEntityCycles(object, parent_indices, root_index);
 }
 
 namespace {
