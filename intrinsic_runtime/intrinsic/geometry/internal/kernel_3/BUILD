@@ -12,40 +12,33 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Intrinsic package geometry/processing/surface_mesh_3. """
+""" Intrinsic package geometry/internal/kernel_3. """
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
 package(default_visibility = [
     "//intrinsic/geometry:__subpackages__",
+    "//intrinsic/scene:__subpackages__",
+    "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
     "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
 ])
 
 cc_library(
-    name = "surface_mesh_3d",
-    hdrs = ["surface_mesh_3d.h"],
+    name = "exact_predicates_inexact_constructions_kernel",
+    hdrs = ["exact_predicates_inexact_constructions_kernel.h"],
     copts = ["-fexceptions"] + select({
         "@platforms//cpu:x86_32": ["-frounding-math"],
         "@platforms//cpu:x86_64": ["-frounding-math"],
         "//conditions:default": [],
     }),
-    deps = [
-        "//intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel",
-        "@cgal",
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
     ],
-)
-
-cc_library(
-    name = "unary_predicates",
-    srcs = ["unary_predicates.cc"],
-    hdrs = ["unary_predicates.h"],
-    copts = ["-fexceptions"] + select({
-        "@platforms//cpu:x86_32": ["-frounding-math"],
-        "@platforms//cpu:x86_64": ["-frounding-math"],
-        "//conditions:default": [],
-    }),
     deps = [
-        ":surface_mesh_3d",
         "@cgal",
     ],
 )

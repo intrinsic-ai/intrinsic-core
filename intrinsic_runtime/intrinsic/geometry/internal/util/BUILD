@@ -12,7 +12,10 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load(
+    "//bazel:cc_macros.bzl",
+    "cc_library",
+)
 
 package(default_visibility = ["//intrinsic:intrinsic_internal"])
 
@@ -21,7 +24,7 @@ cc_library(
     srcs = ["cgal_utils.cc"],
     hdrs = ["cgal_utils.h"],
     deps = [
-        "//intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
+        "//intrinsic_runtime/intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@cgal",

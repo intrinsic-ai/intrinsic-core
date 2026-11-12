@@ -12,24 +12,41 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Geometry Sanitizer package based on Alpha Hull algorithm."""
+""" Intrinsic package geometry/internal/surface_mesh_3. """
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/geometry:__subpackages__"])
+package(default_visibility = [
+    "//intrinsic/geometry:__subpackages__",
+    "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+    "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+])
 
 cc_library(
-    name = "alpha_hull_3",
-    srcs = ["alpha_hull_3.cc"],
-    hdrs = ["alpha_hull_3.h"],
+    name = "surface_mesh_3d",
+    hdrs = ["surface_mesh_3d.h"],
     copts = ["-fexceptions"] + select({
         "@platforms//cpu:x86_32": ["-frounding-math"],
         "@platforms//cpu:x86_64": ["-frounding-math"],
         "//conditions:default": [],
     }),
     deps = [
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
+        "//intrinsic_runtime/intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel",
+        "@cgal",
+    ],
+)
+
+cc_library(
+    name = "unary_predicates",
+    srcs = ["unary_predicates.cc"],
+    hdrs = ["unary_predicates.h"],
+    copts = ["-fexceptions"] + select({
+        "@platforms//cpu:x86_32": ["-frounding-math"],
+        "@platforms//cpu:x86_64": ["-frounding-math"],
+        "//conditions:default": [],
+    }),
+    deps = [
+        ":surface_mesh_3d",
         "@cgal",
     ],
 )

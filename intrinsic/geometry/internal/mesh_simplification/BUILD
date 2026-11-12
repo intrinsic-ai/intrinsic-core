@@ -37,7 +37,7 @@ cc_library(
     deps = [
         ":meshopt_simplification_helpers",
         "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
-        "//intrinsic/geometry/internal/util:timeout_predicate",
+        "//intrinsic_runtime/intrinsic/geometry/internal/util:timeout_predicate",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/util/thread:stop_token",
         "//third_party/meshoptimizer:simplifier",

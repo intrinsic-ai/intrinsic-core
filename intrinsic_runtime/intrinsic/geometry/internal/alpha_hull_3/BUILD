@@ -12,19 +12,30 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Intrinsic package geometry/processing/indexed_triangle_set_3. """
+"""Geometry Sanitizer package based on Alpha Hull algorithm."""
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load(
+    "//bazel:cc_macros.bzl",
+    "cc_library",
+)
 
-package(default_visibility = ["//intrinsic/geometry:__subpackages__"])
+package(default_visibility = [
+    "//intrinsic/geometry:__subpackages__",
+    "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+])
 
 cc_library(
-    name = "indexed_triangle_set_3",
-    hdrs = ["indexed_triangle_set_3.h"],
+    name = "alpha_hull_3",
+    srcs = ["alpha_hull_3.cc"],
+    hdrs = ["alpha_hull_3.h"],
     copts = ["-fexceptions"] + select({
         "@platforms//cpu:x86_32": ["-frounding-math"],
         "@platforms//cpu:x86_64": ["-frounding-math"],
         "//conditions:default": [],
     }),
-    deps = ["//intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel"],
+    deps = [
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@cgal",
+    ],
 )

@@ -12,32 +12,25 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Intrinsic package geometry/processing/kernel_3. """
+""" Intrinsic package geometry/internal/indexed_triangle_set_3. """
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load(
+    "//bazel:cc_macros.bzl",
+    "cc_library",
+)
 
 package(default_visibility = [
     "//intrinsic/geometry:__subpackages__",
-    "//intrinsic/scene:__subpackages__",
-    "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+    "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
 ])
 
 cc_library(
-    name = "exact_predicates_inexact_constructions_kernel",
-    hdrs = ["exact_predicates_inexact_constructions_kernel.h"],
+    name = "indexed_triangle_set_3",
+    hdrs = ["indexed_triangle_set_3.h"],
     copts = ["-fexceptions"] + select({
         "@platforms//cpu:x86_32": ["-frounding-math"],
         "@platforms//cpu:x86_64": ["-frounding-math"],
         "//conditions:default": [],
     }),
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/geometry/api:__pkg__",
-        "//intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-        "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
-    ],
-    deps = [
-        "@cgal",
-    ],
+    deps = ["//intrinsic_runtime/intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel"],
 )
