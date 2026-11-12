@@ -368,3 +368,28 @@ cc_library(
     ],
     alwayslink = True,
 )
+
+cc_library(
+    name = "ik_helper",
+    srcs = ["ik_helper.cc"],
+    hdrs = ["ik_helper.h"],
+    deps = [
+        ":ik_solvers",
+        ":inverse_kinematics_factory",
+        ":inverse_kinematics_interface",
+        ":sanitize_ik",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
+        "//intrinsic_kinematics/intrinsic/kinematics:group",
+        "//intrinsic_kinematics/intrinsic/kinematics:skeleton",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
+        "//intrinsic_sdk/intrinsic/eigenmath",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/types:span",
+    ],
+)

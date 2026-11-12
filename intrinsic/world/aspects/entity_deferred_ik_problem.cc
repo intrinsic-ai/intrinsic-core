@@ -25,11 +25,11 @@
 #include "absl/log/log.h"
 #include "absl/status/statusor.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/kinematics/ik/ik_helper.h"
 #include "intrinsic/kinematics/types/joint_state.h"
 #include "intrinsic/kinematics/types/state_rn.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/util/macros.h"
-#include "intrinsic/utils/ik_helper.h"
 #include "intrinsic/world/aspects/entity_kinematic_utils.h"
 #include "intrinsic/world/aspects/entity_world_interface.h"
 #include "intrinsic/world/cartesian_kinematic_view.h"
@@ -94,8 +94,8 @@ EntityDeferredIKProblem::GetSameBranchSolution() const {
     return std::nullopt;
   }
   absl::StatusOr<const std::optional<JointStateP>> solution =
-      ::intrinsic::GetSameBranchIKSolution(solver_key_, *skeleton_, base_t_tip_,
-                                           *q_init_);
+      ::intrinsic::kinematics::GetSameBranchIKSolution(solver_key_, *skeleton_,
+                                                       base_t_tip_, *q_init_);
   if (!solution.ok()) {
     LOG(ERROR) << solution.status();
     return std::nullopt;
@@ -116,8 +116,8 @@ std::vector<eigenmath::VectorXd> EntityDeferredIKProblem::GetSampledSolutions(
   }
 
   absl::StatusOr<std::vector<JointStateP>> solutions =
-      ::intrinsic::GetIKSolutions(solver_key_, *skeleton_, base_t_tip_,
-                                  max_num_solutions, q_init_);
+      ::intrinsic::kinematics::GetIKSolutions(
+          solver_key_, *skeleton_, base_t_tip_, max_num_solutions, q_init_);
   if (!solutions.ok()) {
     LOG(ERROR) << solutions.status();
     return {};

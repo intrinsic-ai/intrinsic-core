@@ -12,44 +12,48 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/utils/ik_helper.h"
+#include "intrinsic/kinematics/ik/ik_helper.h"
 
+#include <cstddef>
 #include <memory>
 #include <optional>
+#include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/flags/flag.h"
-#include "absl/flags/parse.h"
-#include "absl/status/status.h"
+#include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
+#include "absl/types/span.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/utils/realtime_status_macro.h"
 #include "intrinsic/kinematics/chain.h"
 #include "intrinsic/kinematics/ik/inverse_kinematics_factory.h"
+#include "intrinsic/kinematics/ik/inverse_kinematics_interface.h"
 #include "intrinsic/kinematics/ik/sanitize_ik.h"
+#include "intrinsic/kinematics/skeleton.h"
+#include "intrinsic/kinematics/types/joint_limits.h"
+#include "intrinsic/kinematics/types/joint_state.h"
 #include "intrinsic/math/pose3.h"
-#include "intrinsic/util/eigen.h"
 #include "intrinsic/util/status/status_macros.h"
 
 ABSL_FLAG(bool, fan_out_joint_winding, false,
           "Return joint winding options as alternative ik solutions.");
 
 namespace intrinsic {
-
-using kinematics::InverseKinematicsInterface;
+namespace kinematics {
 
 absl::StatusOr<std::vector<JointStateP>> GetIKSolutions(
-    const std::string& solver_name, const kinematics::Skeleton& skeleton,
+    const std::string& solver_name, const Skeleton& skeleton,
     const Pose3d& base_t_tip, size_t max_ik_solutions,
     const eigenmath::VectorXd* q_init) {
-  INTR_ASSIGN_OR_RETURN(kinematics::Chain chain,
-                        kinematics::CreateChainFromModel(skeleton));
+  INTR_ASSIGN_OR_RETURN(Chain chain, CreateChainFromModel(skeleton));
 
   INTR_ASSIGN_OR_RETURN(
       const std::unique_ptr<InverseKinematicsInterface> ik_solver,
-      kinematics::GetGlobalInverseKinematicsFactory()
-          .CreateInverseKinematicsSolver(solver_name, std::move(chain)));
+      GetGlobalInverseKinematicsFactory().CreateInverseKinematicsSolver(
+          solver_name, std::move(chain)));
 
   const JointLimits joint_limits = skeleton.GetDofSystemLimits();
 
@@ -58,7 +62,7 @@ absl::StatusOr<std::vector<JointStateP>> GetIKSolutions(
 }
 
 absl::StatusOr<std::vector<JointStateP>> GetIKSolutions(
-    const kinematics::InverseKinematicsInterface* ik_solver,
+    const InverseKinematicsInterface* ik_solver,
     const JointLimits& joint_limits, const Pose3d& base_t_tip,
     size_t max_ik_solutions, const eigenmath::VectorXd* q_init) {
   std::vector<JointStateP> solutions(max_ik_solutions);
@@ -84,12 +88,12 @@ absl::StatusOr<std::vector<JointStateP>> GetIKSolutions(
   // Expending the joint solution based on winding should be done outside of
   // this scope. This is kept temporary for getting Intrinsic milestone through.
   if (absl::GetFlag(FLAGS_fan_out_joint_winding)) {
-    const int num_wrapped_solutions = kinematics::sanitize_ik::WrapToLimits(
+    const int num_wrapped_solutions = sanitize_ik::WrapToLimits(
         absl::MakeSpan(solutions).subspan(0, num_solutions), joint_limits);
     INTRINSIC_RT_ASSIGN_OR_RETURN(
         num_solutions,
-        kinematics::sanitize_ik::ExpandWindings(
-            absl::MakeSpan(solutions), joint_limits, num_wrapped_solutions));
+        sanitize_ik::ExpandWindings(absl::MakeSpan(solutions), joint_limits,
+                                    num_wrapped_solutions));
   }
   // Only return the actual solutions, since the other values are not
   // meaningful.
@@ -100,15 +104,14 @@ absl::StatusOr<std::vector<JointStateP>> GetIKSolutions(
 }
 
 absl::StatusOr<std::optional<JointStateP>> GetSameBranchIKSolution(
-    const std::string& solver_name, const kinematics::Skeleton& skeleton,
+    const std::string& solver_name, const Skeleton& skeleton,
     const Pose3d& base_t_tip, const eigenmath::VectorXd& q_init) {
-  INTR_ASSIGN_OR_RETURN(kinematics::Chain chain,
-                        kinematics::CreateChainFromModel(skeleton));
+  INTR_ASSIGN_OR_RETURN(Chain chain, CreateChainFromModel(skeleton));
 
   INTR_ASSIGN_OR_RETURN(
       const std::unique_ptr<InverseKinematicsInterface> ik_solver,
-      kinematics::GetGlobalInverseKinematicsFactory()
-          .CreateInverseKinematicsSolver(solver_name, std::move(chain)));
+      GetGlobalInverseKinematicsFactory().CreateInverseKinematicsSolver(
+          solver_name, std::move(chain)));
 
   const JointLimits joint_limits = skeleton.GetDofSystemLimits();
 
@@ -132,4 +135,5 @@ absl::StatusOr<std::optional<JointStateP>> GetSameBranchIKSolution(
   return solution;
 }
 
+}  // namespace kinematics
 }  // namespace intrinsic

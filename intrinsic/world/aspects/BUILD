@@ -61,10 +61,10 @@ cc_library(
     deps = [
         ":entity_kinematic_utils",
         ":entity_world_interface",
-        "//intrinsic/utils:ik_helper",
         "//intrinsic/world:kinematic_world_views",
         "//intrinsic/world:kinematics_builder",
         "//intrinsic_kinematics/intrinsic/kinematics:skeleton",
+        "//intrinsic_kinematics/intrinsic/kinematics/ik:ik_helper",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
         "//intrinsic_kinematics/intrinsic/kinematics/types:state_rn",
         "//intrinsic_sdk/intrinsic/eigenmath",
