@@ -16,7 +16,7 @@
 
 #include <cmath>
 #include <functional>
-#include <map>
+#include <optional>
 #include <string>
 #include <vector>
 
@@ -118,7 +118,7 @@ absl::Status CheckEntityCycles(
 
 absl::Status ValidateKinematics(
     const Kinematics& kinematics,
-    const std::map<std::string, int>& joint_index_by_name) {
+    const absl::flat_hash_set<absl::string_view>& non_fixed_joint_names) {
   // TODO(b/343309271): Support multiple ik_solvers.
   if (kinematics.ik_solvers().size() > 1) {
     std::vector<std::string> ik_solver_keys;
@@ -140,18 +140,18 @@ absl::Status ValidateKinematics(
     }
   }
 
-  // Validation for named configurations.
+  // Validates named configurations against the set of non-fixed joints.
   for (const auto& named_config : kinematics.named_configurations()) {
     if (named_config.name().empty()) {
       return absl::InvalidArgumentError("Named configuration has no name.");
     }
 
-    if (named_config.joint_positions().size() != joint_index_by_name.size()) {
+    if (named_config.joint_positions().size() != non_fixed_joint_names.size()) {
       return absl::InvalidArgumentError(
           absl::StrCat("Named configuration '", named_config.name(), "' has ",
                        named_config.joint_positions().size(),
                        " joint positions, but there are ",
-                       joint_index_by_name.size(), " joints."));
+                       non_fixed_joint_names.size(), " joints."));
     }
 
     for (const auto& [joint_name, joint_position] :
@@ -162,8 +162,7 @@ absl::Status ValidateKinematics(
                          "' has a joint position with an empty joint name."));
       }
 
-      if (auto it = joint_index_by_name.find(joint_name);
-          it == joint_index_by_name.end()) {
+      if (!non_fixed_joint_names.contains(joint_name)) {
         return absl::InvalidArgumentError(
             absl::StrCat("Named configuration '", named_config.name(),
                          "' has a joint position for joint '", joint_name,
@@ -232,7 +231,8 @@ absl::Status ValidateParentType(const Entity& entity, const Entity& parent) {
 }
 
 absl::Status ValidateJointValue(const Entity& entity,
-                                const Pose3d& parent_t_this) {
+                                const Pose3d& parent_t_this,
+                                const Pose3d& computed_parent_t_this) {
   // This is the default when the pose is unset, so if it's roughly identity
   // then ignore it (as some tools may write it out when processing).
   if (parent_t_this.isApprox(Pose3d())) {
@@ -245,8 +245,6 @@ absl::Status ValidateJointValue(const Entity& entity,
     return absl::OkStatus();
   }
 
-  INTR_ASSIGN_OR_RETURN(const Pose3d computed_parent_t_this,
-                        ResolveJointEntityPose(entity));
   if (!parent_t_this.isApprox(computed_parent_t_this, 0.005)) {
     return absl::InvalidArgumentError(absl::Substitute(
         "Joint value '$0' produces invalid parent_t_this from "
@@ -257,34 +255,67 @@ absl::Status ValidateJointValue(const Entity& entity,
   return absl::OkStatus();
 }
 
+template <typename EntityLookup>
+absl::Status ValidateCollisionEntityPairImpl(
+    const CollisionEntityPair& entity_pair, const EntityLookup& entities) {
+  const absl::string_view left_entity_name =
+      entity_pair.left_entity().entity_name();
+  const absl::string_view right_entity_name =
+      entity_pair.right_entity().entity_name();
+
+  if (!left_entity_name.empty() && !entities.contains(left_entity_name)) {
+    return absl::InvalidArgumentError(absl::Substitute(
+        "Entity '$0' in collision rule does not exist in the scene object.",
+        left_entity_name));
+  }
+
+  if (!right_entity_name.empty() && !entities.contains(right_entity_name)) {
+    return absl::InvalidArgumentError(absl::Substitute(
+        "Entity '$0' in collision rule does not exist in the scene object.",
+        right_entity_name));
+  }
+
+  return absl::OkStatus();
+}
+
+template <typename EntityLookup>
+absl::Status ValidateCollisionRulesImpl(const CollisionRules& collision_rules,
+                                        const EntityLookup& entities) {
+  for (const auto& rule : collision_rules.exclusion_rules()) {
+    INTR_RETURN_IF_ERROR(
+        ValidateCollisionEntityPairImpl(rule.entity_pair(), entities));
+  }
+
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 absl::Status ValidateSceneObject(const SceneObject& object) {
-  absl::string_view root_entity;
-  absl::flat_hash_map<absl::string_view, absl::string_view>
-      entity_names_to_parents;
-  absl::flat_hash_set<absl::string_view> entity_names;
-  std::map<std::string, int> joint_index_by_name;
-
-  // Maps each entity name to the index of its first occurrence, which allows
-  // O(1) parent lookups.
+  const int num_entities = object.entities_size();
   absl::flat_hash_map<absl::string_view, int> entities_by_name;
-  entities_by_name.reserve(object.entities_size());
-  for (int i = 0; i < object.entities_size(); ++i) {
+  entities_by_name.reserve(num_entities);
+  for (int i = 0; i < num_entities; ++i) {
     entities_by_name.try_emplace(object.entities(i).name(), i);
   }
 
-  for (const Entity& e : object.entities()) {
+  absl::string_view root_entity;
+  absl::flat_hash_map<absl::string_view, absl::string_view>
+      entity_names_to_parents;
+  entity_names_to_parents.reserve(num_entities);
+  absl::flat_hash_set<absl::string_view> non_fixed_joint_names;
+  for (int i = 0; i < num_entities; ++i) {
+    const Entity& e = object.entities(i);
     if (e.name().empty()) {
       return absl::InvalidArgumentError("Provided entity with no name!");
     }
 
-    if (entity_names_to_parents.contains(e.name())) {
+    // `entities_by_name` holds the first occurrence of each name.
+    if (entities_by_name.at(e.name()) != i) {
       return absl::InvalidArgumentError(
           absl::Substitute("Duplicate entity name: $0", e.name()));
     }
     entity_names_to_parents[e.name()] = e.parent_name();
-    entity_names.insert(e.name());
 
     if (e.parent_name().empty() && root_entity.empty()) {
       root_entity = e.name();
@@ -300,14 +331,16 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
           root_entity, e.name()));
     }
 
+    std::optional<Pose3d> parent_t_this;
     if (e.has_parent_t_this()) {
       if (e.parent_name().empty()) {
         LOG(WARNING) << "Root entity " << e.name()
                      << " has parent_t_this which will be ignored.";
       } else {
         // Non-root entities should have valid poses.
-        INTR_RETURN_IF_ERROR(FromProtoNormalized(e.parent_t_this()).status())
-            << "Invalid pose on entity " << e.name();
+        INTR_ASSIGN_OR_RETURN(parent_t_this,
+                              FromProtoNormalized(e.parent_t_this()),
+                              _ << "Invalid pose on entity " << e.name());
       }
     }
 
@@ -343,19 +376,18 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
 
         if (kinematics.motion_type() !=
             intrinsic_proto::world::KinematicsComponent::MOTION_TYPE_FIXED) {
-          const int index = joint_index_by_name.size();
-          joint_index_by_name[e.name()] = index;
+          non_fixed_joint_names.insert(e.name());
 
           // Rejects joints whose pose cannot be computed from their
           // kinematics, e.g., a zero axis, even if `parent_t_this` or
           // `raw_value` is unset.
-          INTR_RETURN_IF_ERROR(ResolveJointEntityPose(e).status())
-              << "Invalid kinematics on joint " << e.name();
+          INTR_ASSIGN_OR_RETURN(
+              const Pose3d computed_parent_t_this, ResolveJointEntityPose(e),
+              _ << "Invalid kinematics on joint " << e.name());
 
-          if (e.has_parent_t_this()) {
-            INTR_ASSIGN_OR_RETURN(const Pose3d parent_t_this,
-                                  FromProtoNormalized(e.parent_t_this()));
-            INTR_RETURN_IF_ERROR(ValidateJointValue(e, parent_t_this))
+          if (parent_t_this.has_value()) {
+            INTR_RETURN_IF_ERROR(
+                ValidateJointValue(e, *parent_t_this, computed_parent_t_this))
                 << "Invalid joint value on joint " << e.name();
           }
         } else if (kinematics.raw_value() != 0.0) {
@@ -376,30 +408,22 @@ absl::Status ValidateSceneObject(const SceneObject& object) {
     return absl::InvalidArgumentError("Scene object has no root entities.");
   }
 
-  for (const Entity& e : object.entities()) {
-    if (!e.parent_name().empty() &&
-        !entity_names_to_parents.contains(e.parent_name())) {
-      return absl::InvalidArgumentError(absl::Substitute(
-          "Entity $0 has invalid parent: $1", e.name(), e.parent_name()));
-    }
-  }
-
-  if (object.has_properties()) {
-    if (object.properties().has_kinematics()) {
-      INTR_RETURN_IF_ERROR(ValidateKinematics(object.properties().kinematics(),
-                                              joint_index_by_name));
-    }
+  if (object.has_properties() && object.properties().has_kinematics()) {
+    INTR_RETURN_IF_ERROR(ValidateKinematics(object.properties().kinematics(),
+                                            non_fixed_joint_names));
   }
 
   if (object.has_collision_rules()) {
     INTR_RETURN_IF_ERROR(
-        ValidateCollisionRules(object.collision_rules(), entity_names));
+        ValidateCollisionRulesImpl(object.collision_rules(), entities_by_name));
   }
 
-  for (const absl::string_view reserved : kSceneObjectReservedUserDataKeys) {
-    if (object.user_data().contains(reserved)) {
-      return absl::InvalidArgumentError(
-          absl::Substitute("Found reserved user_data key: $0", reserved));
+  if (!object.user_data().empty()) {
+    for (const absl::string_view reserved : kSceneObjectReservedUserDataKeys) {
+      if (object.user_data().contains(reserved)) {
+        return absl::InvalidArgumentError(
+            absl::Substitute("Found reserved user_data key: $0", reserved));
+      }
     }
   }
 
@@ -460,10 +484,14 @@ absl::Status ValidateJointLimits(
 
 absl::Status ValidateJointLimits(
     const intrinsic_proto::world::KinematicsComponent& component) {
-  INTR_RETURN_IF_ERROR(ValidateJointLimits(component.system_limits()))
-      << "While validating system limits";
-  INTR_RETURN_IF_ERROR(ValidateJointLimits(component.application_limits()))
-      << "While validating application limits";
+  if (component.has_system_limits()) {
+    INTR_RETURN_IF_ERROR(ValidateJointLimits(component.system_limits()))
+        << "While validating system limits";
+  }
+  if (component.has_application_limits()) {
+    INTR_RETURN_IF_ERROR(ValidateJointLimits(component.application_limits()))
+        << "While validating application limits";
+  }
 
   if (component.has_system_limits() && component.has_application_limits()) {
     // If we have both system and application limits, we need to make sure that
@@ -544,33 +572,13 @@ absl::Status ValidateJointLimits(
 absl::Status ValidateCollisionEntityPair(
     const CollisionEntityPair& entity_pair,
     const absl::flat_hash_set<absl::string_view>& entity_names) {
-  const auto& left_entity_name = entity_pair.left_entity().entity_name();
-  const auto& right_entity_name = entity_pair.right_entity().entity_name();
-
-  if (!left_entity_name.empty() && !entity_names.contains(left_entity_name)) {
-    return absl::InvalidArgumentError(absl::Substitute(
-        "Entity '$0' in collision rule does not exist in the scene object.",
-        left_entity_name));
-  }
-
-  if (!right_entity_name.empty() && !entity_names.contains(right_entity_name)) {
-    return absl::InvalidArgumentError(absl::Substitute(
-        "Entity '$0' in collision rule does not exist in the scene object.",
-        right_entity_name));
-  }
-
-  return absl::OkStatus();
+  return ValidateCollisionEntityPairImpl(entity_pair, entity_names);
 }
 
 absl::Status ValidateCollisionRules(
     const CollisionRules& collision_rules,
     const absl::flat_hash_set<absl::string_view>& entity_names) {
-  for (const auto& rule : collision_rules.exclusion_rules()) {
-    INTR_RETURN_IF_ERROR(
-        ValidateCollisionEntityPair(rule.entity_pair(), entity_names));
-  }
-
-  return absl::OkStatus();
+  return ValidateCollisionRulesImpl(collision_rules, entity_names);
 }
 
 }  // namespace scene_object
