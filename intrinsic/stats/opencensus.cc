@@ -14,6 +14,7 @@
 
 #include "intrinsic/stats/opencensus.h"
 
+#include <chrono>
 #include <memory>
 #include <string>
 #include <utility>
@@ -301,6 +302,9 @@ OpenCensusPlugin::OpenCensusPlugin(absl::string_view service_name,
             exporter_options);
 
     opentelemetry::sdk::trace::BatchSpanProcessorOptions processor_options;
+    processor_options.max_queue_size = 16384;
+    processor_options.schedule_delay_millis = std::chrono::milliseconds(1000);
+    processor_options.max_export_batch_size = 2048;
     auto processor =
         opentelemetry::sdk::trace::BatchSpanProcessorFactory::Create(
             std::move(otlp_exporter), processor_options);
