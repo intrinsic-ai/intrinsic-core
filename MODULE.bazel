@@ -580,6 +580,7 @@ bazel_dep(name = "gz-plugin", version = "4.0.0.bcr.1")
 bazel_dep(name = "gz-rendering", version = "10.1.0")  
 bazel_dep(name = "gz-sim", version = "10.6.0")  
 bazel_dep(name = "gz-transport", version = "15.1.0")
+bazel_dep(name = "highwayhash", version = "0.0.0-20240305-5ad3bf8.bcr.1") # Remove when reigeli updates to a version that supports ARM64
 bazel_dep(name = "intrinsic-clips", version = "0.1.0")  
 bazel_dep(name = "jq.bzl", version = "0.7.2")  
 bazel_dep(name = "jwt-cpp", version = "0.7.0.bcr.1", repo_name = "jwt-cpp")  
@@ -1119,6 +1120,7 @@ single_version_override(
         "sed -i 's|@system_python//:python_headers|@rules_python//python/cc:current_py_cc_headers|g' python/build_targets.bzl python/py_extension.bzl",
     ],
 )
+
 
 # Patch zenoh-c's zenoh-shm crate on Linux to allow overriding the shared
 # memory directory via the ZENOH_SHM_PATH environment variable (defaulting to
