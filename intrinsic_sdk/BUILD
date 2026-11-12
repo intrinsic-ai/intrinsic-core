@@ -15,6 +15,7 @@
 test_suite(
     name = "export_test_targets",
     tests = [
+        "//intrinsic_sdk/intrinsic/eigenmath/python:pose3_test",
         "//intrinsic_sdk/intrinsic/math/python:data_types_test",
         "//intrinsic_sdk/intrinsic/math/python:math_test_test",
         "//intrinsic_sdk/intrinsic/math/python:math_types_test",
