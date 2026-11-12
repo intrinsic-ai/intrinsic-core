@@ -14,7 +14,6 @@
 
 # Templates used by the external inctl tool.
 package(default_visibility = [
-    "//intrinsic/tools:__subpackages__",
     "//intrinsic_sdk/intrinsic/tools:__subpackages__",
 ])
 
@@ -23,7 +22,6 @@ exports_files(
         "MODULE.bazel.template",
     ],
     visibility = [
-        "//intrinsic/tools/inctl/cmd/bazel:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/bazel:__subpackages__",
     ],
 )
