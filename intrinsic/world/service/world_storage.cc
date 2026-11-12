@@ -57,8 +57,8 @@
 ABSL_FLAG(bool, save_proto_worlds, true,
           "If set to true, will save only world (binary) protos to disk, "
           "otherwise we will save full gzf files to disk.");
-ABSL_FLAG(bool, save_worlds_to_disk, true,
-          "If set to true, will save worlds to disk. Turning this off may "
+ABSL_FLAG(bool, save_worlds_to_disk, false,
+          "If set to true, will save worlds to disk. Leaving this off may "
           "result in loss of data in the event of a service restart/crash.");
 
 namespace intrinsic {
