@@ -290,7 +290,7 @@ func referencedInAssetDefinition(referencedBy *rtrpb.ResourceTypeRuntime, refere
 		}
 		name := msg.GetName()
 		if name == "" {
-			return msg, nil
+			return nil, nil
 		}
 		requires := annotations.GetRequires()
 
@@ -322,7 +322,7 @@ func referencedInAssetDefinition(referencedBy *rtrpb.ResourceTypeRuntime, refere
 				found = append(found, rtr)
 			}
 		}
-		return msg, nil
+		return nil, nil
 	}); err != nil {
 		return nil, err
 	}

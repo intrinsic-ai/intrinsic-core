@@ -660,14 +660,14 @@ func collectDependencies(config *anypb.Any, fds *descriptorpb.FileDescriptorSet)
 	var deps []*dependency
 	err := traversal.ForEachResolvedDependency(config, fds, func(dep *dependencypb.Dependency, msg *rdpb.ResolvedDependency, field traversal.FieldContext) (*rdpb.ResolvedDependency, error) {
 		if (msg == nil || msg.GetName() == "") && field.Optional {
-			return msg, nil
+			return nil, nil
 		}
 		deps = append(deps, &dependency{
 			iface:      dep,
 			on:         msg.GetName(),
 			configPath: field.Path,
 		})
-		return msg, nil
+		return nil, nil
 	})
 	if err != nil {
 		return nil, err
