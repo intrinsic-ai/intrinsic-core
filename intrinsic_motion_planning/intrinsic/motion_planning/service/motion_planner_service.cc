@@ -127,8 +127,6 @@
 namespace intrinsic {
 namespace {
 
-constexpr absl::Duration kStopCheckInterval = absl::Milliseconds(100);
-constexpr absl::Duration kContextRetryDelay = absl::Seconds(5);
 static const auto* const kConfigFormatString =
     new absl::ParsedFormat<'s', 's', 'f'>(
         "Cache <%s> and <%s> has a max starting robot configuration "
@@ -300,20 +298,6 @@ absl::Status MaybeInsertMotionPlanningRequestCacheHit(
                                  plan_trajectory_cache->GetNumOfEntries());
   }
   return absl::OkStatus();
-}
-
-// Sleeps for `duration` in `kStopCheckInterval` increments, returning early if
-// `stop_token.stop_requested()` becomes true.
-void SleepForWithStopCheck(const absl::Duration duration,
-                           const StopToken& stop_token) {
-  const absl::Time deadline = absl::Now() + duration;
-  while (!stop_token.stop_requested()) {
-    const absl::Duration remaining = deadline - absl::Now();
-    if (remaining <= absl::ZeroDuration()) {
-      break;
-    }
-    absl::SleepFor(std::min(remaining, kStopCheckInterval));
-  }
 }
 
 // Verifies that swept volume computation is permitted for the given request.
@@ -550,9 +534,6 @@ void FromProto(
       proto_config.enable_motion_planner_service_swept_volumes();
   config.max_diff_in_rad_for_starting_robot_configuration_threshold =
       proto_config.joint_tolerance_in_rad();
-  if (proto_config.has_log_all_recordings()) {
-    config.log_all_recordings = proto_config.log_all_recordings();
-  }
 }
 
 absl::StatusOr<WorldAndProto>
@@ -666,53 +647,11 @@ MotionPlannerService::Create(
   INTR_ASSIGN_OR_RETURN(auto motion_planner,
                         MotionPlanner::Create(mps_config.flags));
 
-  MotionPlannerServiceConfig actual_config = mps_config;
-  // Tracks if the logger context was successfully retrieved synchronously.
-  // If false and a logger client is provided, we will start a background
-  // thread in the constructor to retry context resolution asynchronously.
-  bool context_resolved = false;
-  if (logger_client != nullptr) {
-    auto context_or = logger_client->GetLoggerContext();
-    if (context_or.ok()) {
-      actual_config.organization_id = context_or->organization_id();
-      actual_config.workcell_name = context_or->workcell_name();
-      LOG(INFO) << "Using organization ID " << actual_config.organization_id
-                << " and workcell name " << actual_config.workcell_name
-                << " from logger context"
-                << (mps_asset_version.has_value()
-                        ? absl::StrCat(" and asset version ",
-                                       *mps_asset_version)
-                        : "")
-                << ".";
-      context_resolved = true;
-    } else {
-      // TODO (b/533110833) Remove the static flags for organization ID and
-      // workcell in MPS config Fallback to static config values if dynamic
-      // query fails.
-      actual_config.organization_id = mps_config.organization_id;
-      actual_config.workcell_name = mps_config.workcell_name;
-      LOG(WARNING)
-          << "Failed to retrieve organization ID and workcell name from logger "
-          << "context. Using static values from MPS config"
-          << (mps_asset_version.has_value()
-                  ? absl::StrCat(" (asset version: ", *mps_asset_version, ")")
-                  : "")
-          << ".";
-    }
-  }
-
-  if (actual_config.organization_id.empty()) {
-    LOG(WARNING) << "Organization ID is empty; logging will be disabled.";
-  }
-  if (actual_config.workcell_name.empty()) {
-    LOG(WARNING) << "Workcell Name is empty; logging will be disabled.";
-  }
-
   return absl::WrapUnique(new MotionPlannerService(
       object_world_service, geometry_library, std::move(motion_planner),
       mps_asset_id_name, std::move(plan_trajectory_cache),
-      std::move(plan_trajectory_nonvolatile_cache), actual_config,
-      mps_asset_version, logger_client, context_resolved));
+      std::move(plan_trajectory_nonvolatile_cache), mps_config,
+      mps_asset_version, logger_client));
 }
 
 MotionPlannerService::MotionPlannerService(
@@ -726,7 +665,7 @@ MotionPlannerService::MotionPlannerService(
         plan_trajectory_nonvolatile_cache,
     const MotionPlannerServiceConfig& mps_config,
     std::optional<std::string> mps_asset_version,
-    const StructuredLoggingClient* logger_client, bool context_resolved)
+    const StructuredLoggingClient* logger_client)
     : object_world_service_(object_world_service),
       geometry_library_(geometry_library),
       mps_config_(mps_config),
@@ -739,35 +678,14 @@ MotionPlannerService::MotionPlannerService(
           pubsub_.CreatePublisher(kPlannedTrajectoryTopicName, TopicConfig())
               .value()),
       mps_asset_version_(mps_asset_version),
-      mps_asset_id_name_(std::string(mps_asset_id_name)),
-      organization_id_(mps_config.organization_id),
-      workcell_name_(mps_config.workcell_name) {
+      mps_asset_id_name_(std::string(mps_asset_id_name))
+{
   LOG(INFO) << "enable_motion_planner_service_caching_fuzzy_check: "
             << mps_config.enable_motion_planner_service_caching_fuzzy_check;
   LOG(INFO) << "enable_motion_planner_service_swept_volumes: "
             << mps_config.enable_motion_planner_service_swept_volumes;
   LOG(INFO) << "publishing trajectories on topic: "
             << kPlannedTrajectoryTopicName;
-
-  if (logger_client != nullptr && !context_resolved) {
-    context_fetcher_thread_ =
-        std::make_unique<Thread>([this, logger_client](StopToken stop_token) {
-          while (!stop_token.stop_requested()) {
-            auto context_or = logger_client->GetLoggerContext();
-            if (context_or.ok()) {
-              absl::WriterMutexLock lock(&context_mutex_);
-              organization_id_ = context_or->organization_id();
-              workcell_name_ = context_or->workcell_name();
-              LOG(INFO) << "Dynamically resolved logger context: org_id="
-                        << organization_id_ << ", workcell=" << workcell_name_;
-              break;
-            }
-            // Sleep in `kStopCheckInterval` increments to ensure the thread
-            // exits immediately during service shutdown.
-            SleepForWithStopCheck(kContextRetryDelay, stop_token);
-          }
-        });
-  }
 }
 absl::Status MotionPlannerService::ComputeSweptVolumeAndAssignToResponse(
     const World& world, const RobotCollectionsEntityId& robot_id,

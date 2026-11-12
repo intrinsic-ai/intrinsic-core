@@ -163,7 +163,6 @@ TEST(MotionPlannerServiceConfigProtoTest, FromProto) {
   EXPECT_TRUE(config.enable_motion_planner_service_swept_volumes);
   EXPECT_DOUBLE_EQ(
       config.max_diff_in_rad_for_starting_robot_configuration_threshold, 0.005);
-  EXPECT_TRUE(config.log_all_recordings);
 }
 class MotionPlannerServiceWithSweptVolumesDisabledTest
     : public MotionPlannerServiceBaseTest,

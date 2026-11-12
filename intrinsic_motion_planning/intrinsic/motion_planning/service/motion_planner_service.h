@@ -18,13 +18,12 @@
 #include <cstddef>
 #include <memory>
 #include <optional>
-#include <queue>
 #include <string>
 #include <string_view>
 #include <vector>
 
+#include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
-#include "absl/random/random.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -48,7 +47,6 @@
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.h"
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
-#include "intrinsic/util/thread/thread.h"
 #include "intrinsic/world/collision/collision_context.pb.h"
 #include "intrinsic/world/objects/kinematic_object_internal.h"
 #include "intrinsic/world/objects/object_world.h"
@@ -104,10 +102,6 @@ struct MotionPlannerServiceConfig {
   // of the flags therein contained.
   MotionPlannerFlags flags = {};
 
-  // If true, creates a recording for all motion planning calls, including
-  // successful calls and routine failures (e.g. unreachable or in-collision IK
-  // targets), instead of only unexpected failures.
-  bool log_all_recordings = false;
 };
 
 // Assigns the configuration fields of C++ `MotionPlannerServiceConfig` from
@@ -121,6 +115,7 @@ struct WorldAndProto {
   World world;
   intrinsic_proto::world::internal::World world_proto;
 };
+
 // A gRPC server that handles motion planning requests.
 class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
                                  MotionPlannerService::Service {
@@ -205,8 +200,7 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
           plan_trajectory_nonvolatile_cache = nullptr,
       const MotionPlannerServiceConfig& mps_config = {},
       std::optional<std::string> mps_asset_version = std::nullopt,
-      const StructuredLoggingClient* logger_client = nullptr,
-      bool context_resolved = false);
+      const StructuredLoggingClient* logger_client = nullptr);
 
   // Returns both the initial World and its proto from the World Service with
   // ID `world_id`.
@@ -251,7 +245,6 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
       bool enable_collision_stats, const object_world::KinematicObject& robot,
       intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse& response
   );
-
   // Computes the swept volume of `robot_id` moving along `path` in `world`,
   // stores the resulting meshes in the geometry library, and appends them to
   // `swept_volumes_out`.
@@ -282,11 +275,6 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
   std::optional<std::string> mps_asset_version_;
   std::string mps_asset_id_name_;
 
-  absl::BitGen rng_;
-  mutable absl::Mutex context_mutex_;
-  std::string organization_id_ ABSL_GUARDED_BY(context_mutex_);
-  std::string workcell_name_ ABSL_GUARDED_BY(context_mutex_);
-  std::unique_ptr<Thread> context_fetcher_thread_;
 };
 
 }  // namespace intrinsic
