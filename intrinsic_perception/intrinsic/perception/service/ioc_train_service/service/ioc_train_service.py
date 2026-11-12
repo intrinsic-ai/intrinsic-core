@@ -33,18 +33,30 @@ from intrinsic.assets.dependencies import utils as asset_utils
 from intrinsic.assets.proto import installed_assets_pb2
 from intrinsic.assets.proto import installed_assets_pb2_grpc
 from intrinsic.assets.proto import metadata_pb2
-from intrinsic.math.python import ros_proto_conversion
+from intrinsic.geometry.api.python import conversion_utils
+from intrinsic.math.python import proto_conversion
 from intrinsic.perception.proto.v1 import perception_model_pb2
 from intrinsic.perception.proto.v1 import train_service_pb2
 from intrinsic.perception.proto.v1 import train_service_pb2_grpc
+from intrinsic.scene.proto.v1 import entity_pb2
 from intrinsic.scene.proto.v1 import scene_object_pb2
 from intrinsic.util.proto import descriptors
+from intrinsic.world.python import geometry_component_utils
+from intrinsic.world.python import geometry_types
 
 _GRPC_OPTIONS = [
     ("grpc.max_receive_message_length", -1),
     ("grpc.max_send_message_length", -1),
     ("grpc.max_message_length", -1),
 ]
+
+# Keys used in GeometryComponent.named_geometries for visual meshes. Standard
+# Intrinsic scene objects use KIND_VISUAL_GEOMETRY ("Intrinsic_Visual"), while
+# external/custom meshes may use "visual".
+_VISUAL_GEOMETRY_SET_KEYS = (
+    geometry_types.KIND_VISUAL_GEOMETRY,
+    "visual",
+)
 
 
 def _installed_assets_interface_uri() -> str:
@@ -54,6 +66,36 @@ def _installed_assets_interface_uri() -> str:
   )
 
 
+def _compute_root_t_entity(
+    entity: entity_pb2.Entity,
+    entities_by_name: dict[str, entity_pb2.Entity],
+) -> np.ndarray:
+  """Computes the 4x4 transform from the scene object root to `entity`."""
+  parent_t_entity = np.eye(4, dtype=np.float64)
+  visited = set()
+  # Walk up the kinematic chain from `entity` to the root entity,
+  # pre-multiplying each link's `parent_t_this` transform:
+  #   root_t_entity = root_t_p1 @ p1_t_p2 @ ... @ pN_t_entity
+  while entity is not None:
+    if entity.name in visited:
+      raise ValueError(
+          "Cycle detected in scene object kinematic chain at entity"
+          f" '{entity.name}'."
+      )
+    visited.add(entity.name)
+    if entity.HasField("parent_t_this"):
+      this_t_entity = parent_t_entity
+      parent_t_this = proto_conversion.pose_from_proto(
+          entity.parent_t_this, normalize_quaternion=True
+      ).matrix4x4()
+      parent_t_entity = parent_t_this @ this_t_entity
+    if not entity.parent_name:
+      break
+    entity = entities_by_name.get(entity.parent_name)
+  root_t_entity = parent_t_entity
+  return root_t_entity
+
+
 def _extract_cas_and_transform_from_scene_object(
     scene_object: scene_object_pb2.SceneObject,
 ) -> tuple[str, np.ndarray]:
@@ -61,65 +103,68 @@ def _extract_cas_and_transform_from_scene_object(
 
   Inspects entity links and geometry components in the modern SceneObject schema
   to locate the CAS mesh reference URI (`intcas://...`) and calculate the composed
-  transform from root to shape.
+  transform from root to shape. Supports multi-entity scene objects as long as
+  they contain at most one visual mesh.
 
   Args:
     scene_object: The SceneObject protobuf to extract CAS URI and transform from.
 
   Returns:
-    A tuple of (cas_uri, root_t_shape) where cas_uri is the CAS URI string (or empty
-    string if not found), and root_t_shape is the 4x4 float64 transformation matrix.
+    A tuple of (cas_uri, root_t_shape) where cas_uri is the CAS URI string and
+    root_t_shape is the 4x4 float64 transformation matrix.
+
+  Raises:
+    ValueError: If the SceneObject does not contain exactly one visual mesh.
   """
-  cas_uri = ""
-  root_t_shape = np.eye(4, dtype=np.float64)
-
-  if not scene_object.entities:
-    return cas_uri, root_t_shape
-
-  if len(scene_object.entities) > 1:
-    raise ValueError(
-        "Training service only supports scene objects consisting of a single"
-        f" mesh, found {len(scene_object.entities)}",
-    )
-  entity = scene_object.entities[0]
-
-  if entity.HasField("link") and entity.link.HasField("geometry_component"):
+  # Find the single visual mesh across all entities in the scene object,
+  # ignoring non-visual geometry sets and non-link entities (such as sensors).
+  visual_mesh = None
+  for entity in scene_object.entities:
+    if not (
+        entity.HasField("link") and entity.link.HasField("geometry_component")
+    ):
+      continue
     gc = entity.link.geometry_component
+    for key in _VISUAL_GEOMETRY_SET_KEYS:
+      if key not in gc.named_geometries:
+        continue
+      for transformed_geom in geometry_component_utils.get_geometries_v1(
+          gc, key
+      ).values():
+        if not transformed_geom.geometry.HasField("geo_ref"):
+          continue
+        refs = transformed_geom.geometry.geo_ref
+        # Prefer renderable_ref (typically the textured GLB visual mesh) over
+        # exact_geometry_ref when both are present.
+        if refs.renderable_ref.startswith("intcas://"):
+          cas_uri = refs.renderable_ref
+        elif refs.exact_geometry_ref.startswith("intcas://"):
+          cas_uri = refs.exact_geometry_ref
+        else:
+          continue
 
-    root_t_entity = np.eye(4, dtype=np.float64)
-    if entity.HasField("parent_t_this"):
-      root_t_entity = ros_proto_conversion.pose_from_proto(
-          entity.parent_t_this, normalize_quaternion=True
-      ).matrix4x4()
+        if visual_mesh is not None:
+          raise ValueError(
+              "Training service only supports scene objects consisting of a"
+              " single visual mesh."
+          )
+        visual_mesh = (entity, cas_uri, transformed_geom)
 
-    ref_t_shape = np.eye(4, dtype=np.float64)
+  if visual_mesh is None:
+    raise ValueError("No valid CAS geometry reference found in scene object.")
 
-    for geom_set in gc.named_geometries.values():
-      for transformed_geom in geom_set.named_geometries.values():
-        if transformed_geom.geometry.HasField("geo_ref"):
-          refs = transformed_geom.geometry.geo_ref
-          if refs.renderable_ref.startswith("intcas://"):
-            cas_uri = refs.renderable_ref
-          elif refs.exact_geometry_ref.startswith("intcas://"):
-            cas_uri = refs.exact_geometry_ref
-
-        if transformed_geom.ref_t_shape.HasField("matrix4d"):
-          vals = list(transformed_geom.ref_t_shape.matrix4d.values)
-          if len(vals) == 16:
-            ref_t_shape = np.array(vals, dtype=np.float64).reshape(
-                (4, 4), order="F"
-            )
-
-        if cas_uri:
-          break
-
-      if cas_uri:
-        break
-
-    root_t_shape = root_t_entity @ ref_t_shape
-    if cas_uri:
-      return cas_uri, root_t_shape
-
+  entity, cas_uri, transformed_geom = visual_mesh
+  entities_by_name = {e.name: e for e in scene_object.entities if e.name}
+  root_t_shape = _compute_root_t_entity(entity, entities_by_name)
+  # Compose the entity's transform in the scene object root frame with the
+  # geometry's local offset.
+  if transformed_geom.HasField("ref_t_shape"):
+    root_t_shape = (
+        root_t_shape
+        @ conversion_utils.geometric_transform_to_ndarray(
+            transformed_geom.ref_t_shape
+        )
+    )
   return cas_uri, root_t_shape
 
 
@@ -229,33 +274,15 @@ class IocTrainService(train_service_pb2_grpc.TrainServiceServicer):
     for req_target in request.pose_estimation_config.targets:
       target_id = req_target.id or asset_name
       mesh_key = f"/poseEstimators/{asset_name}/{target_id}.glb"
-      cas_uri = ""
-
-      if req_target.HasField("scene_object"):
-        cas_uri, _ = _extract_cas_and_transform_from_scene_object(
-            req_target.scene_object
-        )
-
-      if not cas_uri:
+      if not req_target.HasField("scene_object"):
         raise ValueError(
             "No valid CAS geometry reference found in scene object for target"
-            f" '{target_id}'. Cannot create pose estimator without a valid CAS"
-            " mesh."
+            f" '{target_id}'."
         )
 
-      # Match official train service: use target_t_mesh if specified in request, otherwise Identity
-      final_target_t_mesh = np.eye(4, dtype=np.float64)
-      if req_target.HasField("mesh") and req_target.mesh.HasField(
-          "target_t_mesh"
-      ):
-        ttm = req_target.mesh.target_t_mesh
-        if len(ttm.linear.values) >= 9:
-          final_target_t_mesh[:3, :3] = np.array(
-              ttm.linear.values[:9], dtype=np.float64
-          ).reshape((3, 3), order="F")
-        final_target_t_mesh[0, 3] = ttm.translation.x
-        final_target_t_mesh[1, 3] = ttm.translation.y
-        final_target_t_mesh[2, 3] = ttm.translation.z
+      cas_uri, target_t_mesh = _extract_cas_and_transform_from_scene_object(
+          req_target.scene_object
+      )
 
       ref_data = referenced_data_pb2.ReferencedData()
       ref_data.reference = cas_uri
@@ -264,19 +291,11 @@ class IocTrainService(train_service_pb2_grpc.TrainServiceServicer):
       target_entry = perception_model.pose_estimation_config.targets.add()
       target_entry.id = target_id
       target_entry.mesh.filename = mesh_key
-      target_entry.mesh.target_t_mesh.linear.rows = 3
-      target_entry.mesh.target_t_mesh.linear.cols = 3
-      target_entry.mesh.target_t_mesh.linear.values.extend(
-          final_target_t_mesh[:3, :3].flatten(order="F").tolist()
+      target_entry.mesh.target_t_mesh.linear.CopyFrom(
+          proto_conversion.ndarray_to_matrix_proto(target_t_mesh[:3, :3])
       )
-      target_entry.mesh.target_t_mesh.translation.x = float(
-          final_target_t_mesh[0, 3]
-      )
-      target_entry.mesh.target_t_mesh.translation.y = float(
-          final_target_t_mesh[1, 3]
-      )
-      target_entry.mesh.target_t_mesh.translation.z = float(
-          final_target_t_mesh[2, 3]
+      target_entry.mesh.target_t_mesh.translation.CopyFrom(
+          proto_conversion.ndarray_to_point_proto(target_t_mesh[:3, 3])
       )
       logging.info(
           "Linked real CAD target '%s' -> mesh '%s' (%s) with"
@@ -284,7 +303,7 @@ class IocTrainService(train_service_pb2_grpc.TrainServiceServicer):
           target_id,
           mesh_key,
           cas_uri,
-          final_target_t_mesh,
+          target_t_mesh,
       )
 
     if request.pose_estimation_config.HasField("inference_params"):

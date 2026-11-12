@@ -25,11 +25,14 @@ py_library(
     name = "ioc_train_service_lib",
     srcs = ["service/ioc_train_service.py"],
     deps = [
+        "//intrinsic/geometry/api/python:conversion_utils",
+        "//intrinsic/world/python:geometry_component_utils",
+        "//intrinsic/world/python:geometry_types",
         "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_pose_estimator_params_py_pb2",
         "//intrinsic_perception/intrinsic/perception/service/ioc_train_service/proto:ioc_train_service_config_py_pb2",
         "//intrinsic_sdk/intrinsic/assets:interface_utils_py",
         "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
-        "//intrinsic_sdk/intrinsic/math/python:ros_proto_conversion",
+        "//intrinsic_sdk/intrinsic/math/python:proto_conversion",
         "//intrinsic_sdk/intrinsic/util/proto:descriptors_py",
         "@ai_intrinsic_sdks_pip_deps//numpy",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
@@ -43,6 +46,7 @@ py_library(
         "@intrinsic_apis//intrinsic/perception/proto/v1:perception_model_py_pb2",
         "@intrinsic_apis//intrinsic/perception/proto/v1:train_service_py_pb2",
         "@intrinsic_apis//intrinsic/perception/proto/v1:train_service_py_pb2_grpc",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_py_pb2",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_py_pb2",
     ],
 )
