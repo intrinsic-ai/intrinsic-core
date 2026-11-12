@@ -18,17 +18,33 @@ load("@rules_cc//cc:defs.bzl", "cc_library")
 load("@rules_license//rules:license.bzl", "license")
 
 package(
-    default_applicable_licenses = [":license"],
     default_visibility = ["//visibility:public"],
 )
 
+exports_files([
+    "LICENSE.md",
+    "LICENSES/GPL-3.0-or-later.txt",
+    "LICENSES/LGPL-3.0-or-later.txt",
+])
+
 license(
-    name = "license",
+    name = "license_lgpl",
     package_name = "cgal",
     license_kinds = [
-        "@rules_license//licenses/generic:by_exception_only",
+        "@rules_license//licenses/spdx:LGPL-3.0-or-later",
     ],
-    license_text = ":LICENSE.md",
+    license_text = "LICENSES/LGPL-3.0-or-later.txt",
+    package_url = "https://github.com/CGAL/cgal",
+)
+
+license(
+    name = "license_gpl",
+    package_name = "cgal (restricted packages)",
+    license_kinds = [
+        "@rules_license//licenses/spdx:GPL-3.0-or-later",
+    ],
+    license_text = "LICENSES/GPL-3.0-or-later.txt",
+    package_url = "https://github.com/CGAL/cgal",
 )
 
 # Restricted packages from original cgal.BUILD.bazel
@@ -113,21 +129,14 @@ RESTRICTED_CGAL_PACKAGES = [
 cc_library(
     name = "cgal",
     hdrs = glob(
-        ["*/include/**/*.h", "*/include/**/*.hpp"],
-        exclude = ["%s/**" % x for x in RESTRICTED_CGAL_PACKAGES],
+        [
+            "*/include/**/*.h",
+            "*/include/**/*.hpp",
+        ],
         allow_empty = True,
-    ),
-    textual_hdrs = glob(
-        ["*/include/**/*.inc", "*/include/**/*.tcc"],
-        exclude = ["%s/**" % x for x in RESTRICTED_CGAL_PACKAGES],
-        allow_empty = True,
-    ),
-    # Dynamically find all include directories for non-restricted packages
-    includes = glob(
-        ["*/include"],
-        exclude_directories = 0,
         exclude = ["%s/**" % x for x in RESTRICTED_CGAL_PACKAGES],
     ),
+    applicable_licenses = [":license_lgpl"],
     defines = [
         "CGAL_USE_CORE",
         "CGAL_HEADER_ONLY",
@@ -139,6 +148,20 @@ cc_library(
         "CGAL_NO_DEPRECATION_WARNINGS",
         "CGAL_NO_GDB_AUTOLOAD",
     ],
+    # Dynamically find all include directories for non-restricted packages
+    includes = glob(
+        ["*/include"],
+        exclude = ["%s/**" % x for x in RESTRICTED_CGAL_PACKAGES],
+        exclude_directories = 0,
+    ),
+    textual_hdrs = glob(
+        [
+            "*/include/**/*.inc",
+            "*/include/**/*.tcc",
+        ],
+        allow_empty = True,
+        exclude = ["%s/**" % x for x in RESTRICTED_CGAL_PACKAGES],
+    ),
     deps = [
         "@boost.format",
         "@boost.functional",
@@ -151,5 +174,26 @@ cc_library(
         "@onetbb//:tbb",
         "@openmesh",
     ],
+)
+
+cc_library(
+    name = "cgal_restricted",
+    hdrs = glob(
+        ["%s/include/**/*.h" % x for x in RESTRICTED_CGAL_PACKAGES] +
+        ["%s/include/**/*.hpp" % x for x in RESTRICTED_CGAL_PACKAGES],
+        allow_empty = True,
+    ),
+    applicable_licenses = [":license_gpl"],
+    includes = glob(
+        ["%s/include" % x for x in RESTRICTED_CGAL_PACKAGES],
+        allow_empty = True,
+        exclude_directories = 0,
+    ),
+    textual_hdrs = glob(
+        ["%s/include/**/*.inc" % x for x in RESTRICTED_CGAL_PACKAGES] +
+        ["%s/include/**/*.tcc" % x for x in RESTRICTED_CGAL_PACKAGES],
+        allow_empty = True,
+    ),
     visibility = ["//visibility:public"],
+    deps = [":cgal"],
 )
