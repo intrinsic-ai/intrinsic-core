@@ -56,6 +56,10 @@ constexpr absl::Duration kSimulatorRPCWaitForConnected = absl::Seconds(10);
 // seconds of unavailability. Callers that need to wait longer retry the call
 // as a whole (see `CallSimulatorWithRetries` in simulation_runtime.cc).
 // `ResetSimulator` is excluded since its callers already retry it.
+// `GetSimulatorStatus` is excluded so that status queries in
+// `GetSimulatorStatus` and `RefreshConnectedSimulator` report `UNAVAILABLE`
+// immediately instead of blocking while the simulator is starting up;
+// `GetSimulationStatus` retries via `CallSimulatorWithRetries`.
 constexpr char kSimulatorControlServiceConfig[] = R"(
         {
           "methodConfig": [{
@@ -67,10 +71,6 @@ constexpr char kSimulatorControlServiceConfig[] = R"(
               {
                 "service": "intrinsic_proto.simulation.v1.SimulatorControlService",
                 "method": "UnpauseSimulator"
-              },
-              {
-                "service": "intrinsic_proto.simulation.v1.SimulatorControlService",
-                "method": "GetSimulatorStatus"
               }
             ],
             "retryPolicy": {
