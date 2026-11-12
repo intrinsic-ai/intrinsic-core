@@ -21,19 +21,40 @@
 #include "intrinsic/geometry/api/io.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
+#include "intrinsic/scene/conversion/scene_object_model_utils.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/proto/geometry_component.pb.h"
+#include "intrinsic/world/proto/kinematics_component.pb.h"
 
 namespace intrinsic {
 namespace scene_object {
 
 using ::intrinsic_proto::scene_object::v1::Entity;
+using ::intrinsic_proto::world::KinematicsComponent;
 
 absl::Status TransformEntityByPose(Entity& entity,
                                    const Pose3d& new_parent_t_old_parent) {
-  Pose3d parent_t_this;
+  if (entity.has_joint()) {
+    INTR_ASSIGN_OR_RETURN(const Pose3d old_parent_t_this,
+                          ResolveJointEntityPose(entity));
+    KinematicsComponent* const kinematics =
+        entity.mutable_joint()->mutable_kinematics_component();
+    Pose3d parent_t_inboard;
+    if (kinematics->has_parent_t_inboard()) {
+      INTR_ASSIGN_OR_RETURN(const Pose3d parsed_parent_t_inboard,
+                            FromProto(kinematics->parent_t_inboard()));
+      parent_t_inboard = parsed_parent_t_inboard;
+    }
+    const Pose3d new_parent_t_inboard =
+        new_parent_t_old_parent * parent_t_inboard;
+    *kinematics->mutable_parent_t_inboard() = ToProto(new_parent_t_inboard);
+    *entity.mutable_parent_t_this() =
+        ToProto(new_parent_t_old_parent * old_parent_t_this);
+    return absl::OkStatus();
+  }
 
+  Pose3d parent_t_this;
   if (entity.has_parent_t_this()) {
     INTR_ASSIGN_OR_RETURN(parent_t_this, FromProto(entity.parent_t_this()));
   }

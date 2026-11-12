@@ -25,10 +25,12 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/api:io",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/scene/conversion:scene_object_model_utils",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
+        "@intrinsic_apis//intrinsic/world/proto:kinematics_component_cc_proto",
     ],
 )

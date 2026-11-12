@@ -18,7 +18,6 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/substitute.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/scene/processing/util/transform_util.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
@@ -34,15 +33,6 @@ using ::intrinsic_proto::scene_object::v1::SceneObject;
 
 absl::StatusOr<SceneObject> TransformSceneObject(
     const SceneObject& scene_object, const Pose3d& new_parent_t_old_parent) {
-  for (const auto& entity : scene_object.entities()) {
-    if (entity.has_joint()) {
-      return absl::InvalidArgumentError(absl::Substitute(
-          "TransformSceneObject does not support objects with joints. "
-          "Found joint in entity: $0",
-          entity.name()));
-    }
-  }
-
   if (new_parent_t_old_parent.isApprox(Pose3d::Identity())) {
     return scene_object;
   }
