@@ -807,10 +807,10 @@ oci.pull(
 # IVM-specific tritonserver image used in cloud deployments.
 oci.pull(
     name = "tritonserver-ivm",
-    digest = "sha256:8016f5526ef33e110b536d7be75e944e7f6f860cf772b6f9bced6d964ae7fde1",
+    digest = "sha256:e151ea418a2ae576a5c5ea810d9e87fe925cc2d86d90d24a46a96f2eb74aaf2e",
     image = "gcr.io/giza-workcells/tritonserver-ivm",
     platforms = ["linux/amd64"],
-    tag = "25.06-py3-v2",
+    tag = "25.06-py3-v3",
 )
 
 # This image is updated manually via //incode/agent/agents/hmi/sandbox_runner/base_image:build_and_push.
