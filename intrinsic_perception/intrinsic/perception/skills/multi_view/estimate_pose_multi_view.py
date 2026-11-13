@@ -38,7 +38,6 @@ from intrinsic.perception.service.python import pose_estimation_client_utils
 from intrinsic.perception.service.python import pose_estimation_service_client
 from intrinsic.perception.skills.multi_view import estimate_pose_multi_view_pb2
 from intrinsic.perception.skills.multi_view import multi_view_pose_utils
-from intrinsic.platform.pubsub.python import pubsub
 from intrinsic.skills.proto import footprint_pb2
 from intrinsic.skills.python import skill_interface as skl
 from intrinsic.util import decorators
@@ -128,16 +127,6 @@ def _update_object_pose(
 
 class EstimatePoseMultiView(skl.Skill):
   """Estimates poses of all instances of a given part using multiple cameras."""
-
-  def __init__(self, *args, **kwargs):
-    super().__init__(*args, **kwargs)
-    # Set up distributed tracing hooks.
-    otel_tracing.setup_tracing(
-        service_name="estimate_pose_multi_view",
-        service_namespace="ai.intrinsic.ml_onprem_skills",
-    )
-
-  pubsub_ = pubsub.PubSub()
 
   @decorators.overrides(skl.Skill)
   def execute(
@@ -297,3 +286,16 @@ class EstimatePoseMultiView(skl.Skill):
         ])
 
     return footprint
+
+
+def create_skill() -> EstimatePoseMultiView:
+  """Creates an EstimatePoseMultiView skill instance for the skill service."""
+  # `otel_tracing.setup_tracing` already guards against duplicate initialization
+  # within a process; keeping it in `create_skill` rather than `__init__` avoids
+  # global OTel/gRPC instrumentation side effects when tests instantiate
+  # `EstimatePoseMultiView` directly.
+  otel_tracing.setup_tracing(
+      service_name="estimate_pose_multi_view",
+      service_namespace="ai.intrinsic.ml_onprem_skills",
+  )
+  return EstimatePoseMultiView()

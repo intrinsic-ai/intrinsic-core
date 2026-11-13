@@ -69,7 +69,6 @@ py_library(
         ":multi_view_pose_utils",
         "//intrinsic_perception/intrinsic/perception/service/python:pose_estimation_client_utils",
         "//intrinsic_perception/intrinsic/perception/service/python:pose_estimation_service_client",
-        "//intrinsic_sdk/intrinsic/platform/pubsub/python:pubsub",
         "//intrinsic_sdk/intrinsic/skills/python:skill_interface",
         "//intrinsic_sdk/intrinsic/util:decorators",
         "//intrinsic_sdk/intrinsic/world/python:object_world_client",

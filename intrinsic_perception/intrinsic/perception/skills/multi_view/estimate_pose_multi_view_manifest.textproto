@@ -114,7 +114,7 @@ options {
   python_config {
     skill_module: "intrinsic.perception.skills.multi_view.estimate_pose_multi_view"
     proto_module: "intrinsic.perception.skills.multi_view.estimate_pose_multi_view_pb2"
-    create_skill: "intrinsic.perception.skills.multi_view.estimate_pose_multi_view.EstimatePoseMultiView"
+    create_skill: "intrinsic.perception.skills.multi_view.estimate_pose_multi_view.create_skill"
   }
 }
 parameter {
