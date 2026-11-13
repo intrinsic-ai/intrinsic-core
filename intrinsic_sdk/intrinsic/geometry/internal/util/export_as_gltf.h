@@ -44,7 +44,9 @@ absl::StatusOr<std::string> ExportAsGltf(std::string glb_bytes,
 // `colors` is an optional contiguous span of uint8 RGB values formatted in
 // [R0, G0, B0, R1, G1, B1, ...] order. The expected size depends on the
 // geometry type:
-// - PointCloud (N points): 3*N (per-point RGB) or 3 (uniform RGB).
+// - PointCloud (N points): 3*N (per-point RGB) or 3 (uniform RGB). Point cloud
+//   colors are interpreted as sRGB-encoded and decoded to linear space, as
+//   required by glTF.
 // - Single primitive shape: 3 (single RGB tuple).
 // - Compound primitive shapes (M shapes): 3*M (per-primitive RGB) or 3 (uniform
 // RGB).

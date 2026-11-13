@@ -15,7 +15,9 @@
 #include "intrinsic/geometry/internal/point_cloud/pts_to_ai_scene.h"
 
 #include <array>
+#include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <sstream>
@@ -42,6 +44,20 @@
 
 namespace intrinsic::geo {
 namespace {
+
+// Decodes an 8-bit sRGB-encoded color channel into a linear value in [0, 1].
+float SrgbToLinear(uint8_t value) {
+  static const std::array<float, 256> kLookupTable = [] {
+    std::array<float, 256> table{};
+    for (int i = 0; i < 256; ++i) {
+      const float c = static_cast<float>(i) / 255.0f;
+      table[i] =
+          c <= 0.04045f ? c / 12.92f : std::pow((c + 0.055f) / 1.055f, 2.4f);
+    }
+    return table;
+  }();
+  return kLookupTable[value];
+}
 
 template <typename PointFunc, typename ColorFunc>
 absl::StatusOr<std::unique_ptr<aiScene>> ToAiScene(
@@ -161,9 +177,9 @@ absl::StatusOr<std::unique_ptr<aiScene>> PointCloudToAiScene(
         effective_material = Material();
       }
       effective_material->diffuse = {
-          static_cast<float>((*colors)[0]) / 255.0f,
-          static_cast<float>((*colors)[1]) / 255.0f,
-          static_cast<float>((*colors)[2]) / 255.0f,
+          SrgbToLinear((*colors)[0]),
+          SrgbToLinear((*colors)[1]),
+          SrgbToLinear((*colors)[2]),
           1.0f,
       };
     }
@@ -182,10 +198,9 @@ absl::StatusOr<std::unique_ptr<aiScene>> PointCloudToAiScene(
         if (!has_per_point_colors) {
           return std::nullopt;
         }
-        return aiColor4D(static_cast<float>((*colors)[3 * i]) / 255.0f,
-                         static_cast<float>((*colors)[3 * i + 1]) / 255.0f,
-                         static_cast<float>((*colors)[3 * i + 2]) / 255.0f,
-                         1.0f);
+        return aiColor4D(SrgbToLinear((*colors)[3 * i]),
+                         SrgbToLinear((*colors)[3 * i + 1]),
+                         SrgbToLinear((*colors)[3 * i + 2]), 1.0f);
       },
       effective_material);
 }

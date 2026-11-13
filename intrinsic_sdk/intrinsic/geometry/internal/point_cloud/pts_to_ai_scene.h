@@ -37,8 +37,9 @@ absl::StatusOr<std::unique_ptr<aiScene>> PtsFileToAiScene(
 // Returns assimp scene for the given point cloud and optional colors and
 // material.
 //
-// `colors` is an optional contiguous span of uint8 RGB values formatted in
-// [R0, G0, B0, R1, G1, B1, ...] order.
+// `colors` is an optional contiguous span of sRGB-encoded uint8 RGB values
+// formatted in [R0, G0, B0, R1, G1, B1, ...] order (e.g. pixels of a camera
+// image). They are decoded to linear space, as required by glTF.
 // - If size is 3*N (where N is point_cloud.getPoints().size()), per-point
 //   colors are assigned to vertex colors.
 // - If size is 3, a uniform color is applied to the material's diffuse color.
