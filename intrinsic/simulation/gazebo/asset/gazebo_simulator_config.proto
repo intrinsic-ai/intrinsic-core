@@ -34,6 +34,21 @@ message GazeboConfig {
     // updated at the default rate for Gazebo. See
     // https://sdformat.org/spec/1.12/physics/#physics_max_step_size.
     optional int64 physics_update_rate_hz = 1;
+
+    // Controls whether links are simulated kinematically (driven purely by
+    // commanded poses/velocities, ignoring gravity and contact forces) or
+    // dynamically (full rigid-body physics). Kinematic links require the
+    // bullet-featherstone physics engine; other engines ignore this setting.
+    enum PhysicsMode {
+      // Uses the simulator default (dynamic).
+      PHYSICS_MODE_UNSPECIFIED = 0;
+      // All links are kinematic. Nothing falls due to gravity, nothing responds
+      // to contact.
+      PHYSICS_MODE_KINEMATIC = 1;
+      // All links are dynamic.
+      PHYSICS_MODE_DYNAMIC = 2;
+    }
+    PhysicsMode physics_mode = 2;
   }
 
   SimulationOptions simulation_options = 1;

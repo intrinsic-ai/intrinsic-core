@@ -50,6 +50,23 @@ class WorldSdfAdapter {
     // Overrides the physics step size in the generated SDF. If specified, this
     // value must be strictly positive.
     std::optional<absl::Duration> physics_step_size;
+
+    // Which links are simulated kinematically vs. dynamically. See
+    // intrinsic_proto.simulation.gazebo.v1.GazeboConfig.SimulationOptions
+    // .PhysicsMode for the semantics of each mode.
+    enum class PhysicsMode {
+      // Uses the simulator default (dynamic).
+      kUnspecified,
+      // All links dynamic.
+      kDynamic,
+      // All links kinematic.
+      kKinematic,
+    };
+
+    // If set, configures the `<kinematic>` settings of the
+    // `gz::sim::systems::Physics` plugin in the world template. Requires a
+    // world template with a Physics plugin to be present.
+    std::optional<PhysicsMode> physics_mode;
   };
 
   struct Options {

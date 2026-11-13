@@ -127,6 +127,14 @@ ABSL_FLAG(bool, use_dart, false,
           "If true, Gazebo will use the Dart physics engine. "
           "By default, it will use Bullet Featherstone physics engine.");
 
+ABSL_FLAG(std::string, physics_mode, "",
+          "(optional) Overrides the physics mode of the simulation: one of "
+          "'kinematic' or 'dynamic'. See "
+          "intrinsic_proto.simulation.gazebo.v1.GazeboConfig.SimulationOptions"
+          ".PhysicsMode. Kinematic links are only supported by the Bullet "
+          "Featherstone physics engine. If empty, the mode from the service "
+          "config is used.");
+
 ABSL_FLAG(std::string, data_logger_grpc_service_address, "",
           "(optional) Address of the gRPC service to send logs to, in the form "
           "'host:port'.");
@@ -185,6 +193,48 @@ using simulation::GazeboRunner;
 constexpr int kNumRetriesToGetWorldAtInit = 5;
 constexpr int kNumRetriesToGetWorldAtReset = 0;
 
+using PhysicsMode =
+    simulation::WorldSdfAdapter::WorldTemplateOverrides::PhysicsMode;
+using GazeboPhysicsMode = intrinsic_proto::simulation::gazebo::v1::
+    GazeboConfig::SimulationOptions::PhysicsMode;
+
+absl::StatusOr<PhysicsMode> PhysicsModeFromConfig(GazeboPhysicsMode mode) {
+  switch (mode) {
+    case intrinsic_proto::simulation::gazebo::v1::GazeboConfig::
+        SimulationOptions::PHYSICS_MODE_UNSPECIFIED:
+      return PhysicsMode::kUnspecified;
+    case intrinsic_proto::simulation::gazebo::v1::GazeboConfig::
+        SimulationOptions::PHYSICS_MODE_KINEMATIC:
+      return PhysicsMode::kKinematic;
+    case intrinsic_proto::simulation::gazebo::v1::GazeboConfig::
+        SimulationOptions::PHYSICS_MODE_DYNAMIC:
+      return PhysicsMode::kDynamic;
+    default:
+      return absl::InvalidArgumentError(
+          absl::StrCat("Unknown physics_mode: ", mode));
+  }
+}
+
+absl::StatusOr<PhysicsMode> PhysicsModeFromString(absl::string_view mode) {
+  if (mode == "kinematic") return PhysicsMode::kKinematic;
+  if (mode == "dynamic") return PhysicsMode::kDynamic;
+  return absl::InvalidArgumentError(
+      absl::StrCat("Unknown physics mode '", mode,
+                   "', expected one of 'kinematic' or 'dynamic'."));
+}
+
+absl::string_view PhysicsModeName(PhysicsMode mode) {
+  switch (mode) {
+    case PhysicsMode::kUnspecified:
+      return "unspecified (dynamic)";
+    case PhysicsMode::kKinematic:
+      return "kinematic";
+    case PhysicsMode::kDynamic:
+      return "dynamic";
+  }
+  return "unknown";
+}
+
 absl::StatusOr<simulation::WorldSdfAdapter::WorldTemplateOverrides>
 WorldTemplateOverridesFromConfig(
     const intrinsic_proto::simulation::gazebo::v1::GazeboConfig&
@@ -201,7 +251,37 @@ WorldTemplateOverridesFromConfig(
     world_template_overrides.physics_step_size =
         absl::Seconds(1.0 / static_cast<double>(rate_hz));
   }
+  INTR_ASSIGN_OR_RETURN(
+      world_template_overrides.physics_mode,
+      PhysicsModeFromConfig(gazebo_config.simulation_options().physics_mode()));
   return world_template_overrides;
+}
+
+// Applies overrides controlled by command-line flags on top of any overrides
+// from the service config.
+absl::Status ApplyFlagWorldTemplateOverrides(
+    simulation::WorldSdfAdapter::WorldTemplateOverrides&
+        world_template_overrides) {
+  if (const std::string mode = absl::GetFlag(FLAGS_physics_mode);
+      !mode.empty()) {
+    INTR_ASSIGN_OR_RETURN(world_template_overrides.physics_mode,
+                          PhysicsModeFromString(mode),
+                          _ << "Invalid --physics_mode flag.");
+  }
+  if (world_template_overrides.physics_mode.has_value()) {
+    LOG(INFO) << "Simulation physics mode: "
+              << PhysicsModeName(*world_template_overrides.physics_mode);
+    if (*world_template_overrides.physics_mode != PhysicsMode::kDynamic &&
+        *world_template_overrides.physics_mode != PhysicsMode::kUnspecified &&
+        absl::GetFlag(FLAGS_use_dart)) {
+      LOG(WARNING) << "Physics mode '"
+                   << PhysicsModeName(*world_template_overrides.physics_mode)
+                   << "' requires kinematic links, which are only supported "
+                      "by the Bullet Featherstone physics engine, but "
+                      "--use_dart is set. All links will be dynamic.";
+    }
+  }
+  return absl::OkStatus();
 }
 
 simulation::WorldSdfAdapter::Options WorldAdapterOptions(
@@ -749,8 +829,6 @@ int RunGazeboSimulationServerWithServices(int argc, char* argv[]) {
 
   if (!simulator_world_id.empty()) {
     std::string simulator_name = "gazebo";
-    simulation::WorldSdfAdapter::WorldTemplateOverrides
-        world_template_overrides;
     if (runtime_context.ok()) {
       if (!runtime_context->name().empty()) {
         simulator_name = runtime_context->name();
@@ -760,19 +838,24 @@ int RunGazeboSimulationServerWithServices(int argc, char* argv[]) {
         QCHECK(runtime_context->config().UnpackTo(&gazebo_config))
             << "Failed to unpack RuntimeContext config of type "
             << runtime_context->config().type_url() << " to GazeboConfig.";
-        ASSIGN_OR_DIE(world_template_overrides,
-                      WorldTemplateOverridesFromConfig(gazebo_config));
       }
       factory_fn =
-          [intrinsic_runtime = gazebo_config.intrinsic_runtime(),
-           simulation_service_address, simulator_name, world_template_overrides,
+          [gazebo_config, simulation_service_address, simulator_name,
            &gazebo_service, &pubsub](
               const simulation::SimulatorControlService::GazeboRunnerInitParams&
-                  init_params) {
-            return InitGazeboWithWorldService(
-                intrinsic_runtime, simulation_service_address, simulator_name,
-                world_template_overrides, *gazebo_service, pubsub, init_params);
-          };
+                  init_params)
+          -> absl::StatusOr<std::unique_ptr<GazeboRunner>> {
+        INTR_ASSIGN_OR_RETURN(
+            simulation::WorldSdfAdapter::WorldTemplateOverrides
+                world_template_overrides,
+            WorldTemplateOverridesFromConfig(gazebo_config));
+        INTR_RETURN_IF_ERROR(
+            ApplyFlagWorldTemplateOverrides(world_template_overrides));
+        return InitGazeboWithWorldService(
+            gazebo_config.intrinsic_runtime(), simulation_service_address,
+            simulator_name, world_template_overrides, *gazebo_service, pubsub,
+            init_params);
+      };
     } else {
       const char* world_service_address_env = getenv("WORLD_SERVICE_ADDRESS");
       CHECK_NE(world_service_address_env, nullptr)
@@ -788,15 +871,20 @@ int RunGazeboSimulationServerWithServices(int argc, char* argv[]) {
       factory_fn =
           [world_service_address = std::string(world_service_address_env),
            geometry_service_address = std::string(geometry_service_address_env),
-           simulation_service_address, simulator_name, world_template_overrides,
-           &gazebo_service, &pubsub](
+           simulation_service_address, simulator_name, &gazebo_service,
+           &pubsub](
               const simulation::SimulatorControlService::GazeboRunnerInitParams&
-                  init_params) {
-            return InitGazeboWithWorldService(
-                world_service_address, geometry_service_address,
-                simulation_service_address, simulator_name,
-                world_template_overrides, *gazebo_service, pubsub, init_params);
-          };
+                  init_params)
+          -> absl::StatusOr<std::unique_ptr<GazeboRunner>> {
+        simulation::WorldSdfAdapter::WorldTemplateOverrides
+            world_template_overrides;
+        INTR_RETURN_IF_ERROR(
+            ApplyFlagWorldTemplateOverrides(world_template_overrides));
+        return InitGazeboWithWorldService(
+            world_service_address, geometry_service_address,
+            simulation_service_address, simulator_name,
+            world_template_overrides, *gazebo_service, pubsub, init_params);
+      };
     }
   } else {
     // Initialize with path from cmd-line flag.

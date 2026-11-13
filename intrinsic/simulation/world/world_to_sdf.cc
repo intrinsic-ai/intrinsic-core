@@ -1815,6 +1815,89 @@ absl::StatusOr<double> GetPhysicsMaxStepSizeWithOverride(
   return physics->MaxStepSize();
 }
 
+// Sets the `<kinematic>` child element of the `gz::sim::systems::Physics`
+// plugin in the sdformat world:
+//   <kinematic>
+//     <enabled>true|false</enabled>
+//     <contacts><enabled>true|false</enabled></contacts>  <!-- if set -->
+//   </kinematic>
+//
+// The plugin is expected to be provided by the world template. Returns a
+// NotFoundError if the world does not contain a Physics plugin. Plugin contents
+// are free-form XML, so the element tree is edited directly (sdformat keeps
+// unknown plugin children as string-valued elements).
+absl::Status SetPhysicsSystemKinematicSettings(
+    ::sdf::World& sdf_world, bool kinematic_enabled,
+    std::optional<bool> kinematic_contacts) {
+  constexpr absl::string_view kPhysicsSystemName = "gz::sim::systems::Physics";
+  constexpr absl::string_view kKinematicElement = "kinematic";
+  constexpr absl::string_view kEnabledElement = "enabled";
+  constexpr absl::string_view kContactsElement = "contacts";
+
+  ::sdf::ElementPtr world_elem = sdf_world.Element();
+  CHECK_NE(world_elem, nullptr);
+
+  ::sdf::ElementPtr physics_plugin_elem;
+  if (world_elem->HasElement("plugin")) {
+    for (::sdf::ElementPtr plugin_elem = world_elem->GetElement("plugin");
+         plugin_elem != nullptr;
+         plugin_elem = plugin_elem->GetNextElement("plugin")) {
+      if (plugin_elem->Get<std::string>("name") == kPhysicsSystemName) {
+        physics_plugin_elem = plugin_elem;
+        break;
+      }
+    }
+  }
+  if (physics_plugin_elem == nullptr) {
+    return NotFoundErrorBuilder()
+           << "Unable to set kinematic mode: sdf world has no '"
+           << kPhysicsSystemName
+           << "' plugin. Make sure a world template with a Physics plugin is "
+              "provided.";
+  }
+
+  const std::string enabled_str = kinematic_enabled ? "true" : "false";
+  LOG(INFO) << "Overriding " << kKinematicElement << " of "
+            << kPhysicsSystemName
+            << " plugin in sdf world (enabled=" << enabled_str << ", contacts="
+            << (kinematic_contacts.has_value()
+                    ? (*kinematic_contacts ? "true" : "false")
+                    : "default")
+            << ").";
+
+  if (::sdf::ElementPtr existing =
+          physics_plugin_elem->FindElement(std::string(kKinematicElement));
+      existing != nullptr) {
+    physics_plugin_elem->RemoveChild(existing);
+  }
+
+  auto make_bool_elem = [](const ::sdf::ElementPtr& parent,
+                           absl::string_view name, bool val) {
+    auto elem = std::make_shared<::sdf::Element>();
+    elem->SetParent(parent);
+    elem->SetName(std::string(name));
+    elem->AddValue("string", val ? "true" : "false", /*_required=*/true);
+    parent->InsertElement(elem);
+    return elem;
+  };
+
+  auto kinematic_elem = std::make_shared<::sdf::Element>();
+  kinematic_elem->SetParent(physics_plugin_elem);
+  kinematic_elem->SetName(std::string(kKinematicElement));
+  physics_plugin_elem->InsertElement(kinematic_elem);
+
+  make_bool_elem(kinematic_elem, kEnabledElement, kinematic_enabled);
+
+  if (kinematic_contacts.has_value()) {
+    auto contacts_elem = std::make_shared<::sdf::Element>();
+    contacts_elem->SetParent(kinematic_elem);
+    contacts_elem->SetName(std::string(kContactsElement));
+    kinematic_elem->InsertElement(contacts_elem);
+    make_bool_elem(contacts_elem, kEnabledElement, *kinematic_contacts);
+  }
+  return absl::OkStatus();
+}
+
 // Returns `Alias` if set.
 // If alias is not set, this returns the `LocalName` prepended by the entity id
 // to ensure uniqueness.
@@ -2316,6 +2399,40 @@ class WorldToSdfConverter {
                                           sim_step_size_override));
     sim_step_size_ = absl::Seconds(sim_step_size_sec);
 
+    // Configure the kinematic settings of the Physics system according to the
+    // physics mode, if specified in world_template_overrides.
+    if (options_.world_template_overrides.physics_mode.has_value()) {
+      using PhysicsMode = WorldSdfAdapter::WorldTemplateOverrides::PhysicsMode;
+      switch (*options_.world_template_overrides.physics_mode) {
+        case PhysicsMode::kUnspecified:
+        case PhysicsMode::kDynamic:
+          INTR_RETURN_IF_ERROR(SetPhysicsSystemKinematicSettings(
+              *sdf_root.WorldByIndex(0), /*kinematic_enabled=*/false,
+              /*kinematic_contacts=*/std::nullopt));
+          break;
+        case PhysicsMode::kKinematic: {
+          INTR_ASSIGN_OR_RETURN(const std::vector<std::string> ft_sensor_names,
+                                GetForceTorqueSensorNames(world));
+          if (!ft_sensor_names.empty()) {
+            LOG(WARNING)
+                << "Kinematic physics mode is enabled, but the world contains "
+                   "force-torque sensor(s) ["
+                << absl::StrJoin(ft_sensor_names, ", ")
+                << "]. Because all links are kinematic and do not respond to "
+                   "contact forces, force-torque sensor readings will not be "
+                   "valid.";
+          }
+          // Contacts between kinematic links and static or other kinematic
+          // links have no effect on the simulation and only cost collision
+          // detection time, so they are disabled.
+          INTR_RETURN_IF_ERROR(SetPhysicsSystemKinematicSettings(
+              *sdf_root.WorldByIndex(0), /*kinematic_enabled=*/true,
+              /*kinematic_contacts=*/false));
+          break;
+        }
+      }
+    }
+
     auto pretty_sdf_string = sdf_root.Element()->ToString("", false, false);
     convert_span->End();
     return pretty_sdf_string;
@@ -2716,6 +2833,29 @@ class WorldToSdfConverter {
     }
 
     return absl::OkStatus();
+  }
+
+  absl::StatusOr<std::vector<std::string>> GetForceTorqueSensorNames(
+      const World& world) const {
+    std::vector<std::string> names;
+    for (const SensorEntityId sensor_id :
+         world.GetTypedEntityIds<SensorEntityId>()) {
+      INTR_ASSIGN_OR_RETURN(const auto* sensor_entity,
+                            world.GetEntityById(sensor_id));
+      INTR_ASSIGN_OR_RETURN(const auto* sensor,
+                            sensor_entity->GetComponent<SensorComponent>());
+      if (sensor->GetType() != SensorType::kForceTorque) {
+        continue;
+      }
+      if (auto it = entity_id_to_scoped_name_.left.find(sensor_id);
+          it != entity_id_to_scoped_name_.left.end()) {
+        names.push_back(it->second);
+      } else {
+        names.push_back(sensor_entity->GetLocalName());
+      }
+    }
+    std::sort(names.begin(), names.end());
+    return names;
   }
 
   absl::StatusOr<std::string> GetBaseNameForId(EntityId entity_id) {
