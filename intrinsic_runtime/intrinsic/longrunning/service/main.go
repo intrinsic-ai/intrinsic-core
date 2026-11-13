@@ -21,10 +21,11 @@ import (
 	"net"
 
 	"intrinsic/kubernetes/intrinsic"
-	"intrinsic/longrunning/go/proxy"
 	"intrinsic/stats/go/telemetry"
 	intrinsicflag "intrinsic/util/flag"
 	"intrinsic/util/go/shutdown"
+
+	"intrinsic/longrunning/go/proxy"
 
 	log "github.com/golang/glog"
 	"go.opencensus.io/plugin/ocgrpc"

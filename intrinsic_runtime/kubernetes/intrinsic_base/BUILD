@@ -56,7 +56,7 @@ helm_chart(
         "hot_shared_state": "//intrinsic/storage/hot_shared_state:hot-shared-state-image.tar",
         "http_gateway_service": "//intrinsic_runtime/httpjson:http-gateway-image.tar",
         "kvstore_service": "//intrinsic/platform/pubsub/kvstore_grpc:kvservice-image.tar",
-        "operations": "//intrinsic/longrunning/service:operations-image.tar",
+        "operations": "//intrinsic_runtime/intrinsic/longrunning/service:operations-image.tar",
         "proto_builder": "//intrinsic_runtime/intrinsic/proto_tools/builder:proto-builder-image.tar",
         "resource_registry": "//intrinsic/resources/service:resource-registry-image.tar",
         "runtime_db": "//intrinsic/resources/service:runtime-db-image.tar",
@@ -81,7 +81,6 @@ helm_chart(
         "//intrinsic/frontend/onprem:solution-service-template",
         "//intrinsic/geometry/service:geomservice_template",
         "//intrinsic/kubernetes/workcell_spec:workcell-cluster-service-template",
-        "//intrinsic/longrunning/service:operations-template",
         "//intrinsic/platform/pubsub/kvstore_grpc:kvservice-template",
         "//intrinsic/platform/pubsub:fds-template",
         "//intrinsic/resources/service:runtime_db_template",
@@ -92,6 +91,7 @@ helm_chart(
         "//intrinsic/world/binary:world-template",
         "//intrinsic/world/service/updater:world_updater_template",
         "//intrinsic_runtime/httpjson:http-gateway-template",
+        "//intrinsic_runtime/intrinsic/longrunning/service:operations-template",
         "//intrinsic_runtime/intrinsic/proto_tools/templates:proto-builder-template",
         # keep-sorted end
     ] + [

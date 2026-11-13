@@ -180,7 +180,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/kubernetes/acl:clientcontext",
         "//intrinsic/kubernetes/workcell_spec:runtimedbtransfer",
         "@intrinsic_apis//intrinsic/kubernetes/workcell_spec/proto:transfer_go_proto",
-        "//intrinsic/longrunning/go:operations",
+        "//intrinsic_runtime/intrinsic/longrunning/go:operations",
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "//intrinsic/resources/proto:resource_instance_go_proto",
         "//intrinsic/resources/proto:resource_type_runtime_go_proto",

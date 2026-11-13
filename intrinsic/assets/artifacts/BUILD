@@ -20,9 +20,9 @@ go_library(
     importpath = "intrinsic/assets/artifacts/processor",
     visibility = ["//intrinsic:public_api_users"],
     deps = [
-        "//intrinsic/longrunning/go:operations",
         "//intrinsic/storage/content_addressable_storage/pkg/crossproject",
         "//intrinsic/storage/content_addressable_storage/pkg/observability",
+        "//intrinsic_runtime/intrinsic/longrunning/go:operations",
         "//intrinsic_sdk/intrinsic/assets:baseclientutils",
         "//intrinsic_sdk/intrinsic/assets:referenceddata",
         "@com_github_golang_glog//:go_default_library",

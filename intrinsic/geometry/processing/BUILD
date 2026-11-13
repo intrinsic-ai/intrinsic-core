@@ -27,7 +27,7 @@ cc_library(
     hdrs = ["pipeline.h"],
     deps = [
         ":processor",
-        "//intrinsic/longrunning/cc:operation_context",
+        "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_fingerprint",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
@@ -85,7 +85,7 @@ cc_library(
     name = "processor",
     hdrs = ["processor.h"],
     deps = [
-        "//intrinsic/longrunning/cc:operation_context",
+        "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "@abseil-cpp//absl/status:statusor",
     ],

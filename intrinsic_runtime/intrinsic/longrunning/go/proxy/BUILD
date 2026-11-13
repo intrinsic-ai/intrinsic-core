@@ -12,35 +12,24 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# gazelle:prefix intrinsic/longrunning/go/proxy
+
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
-    name = "operations",
+    name = "proxy",
     srcs = [
-        "filter.go",
-        "map.go",
-        "operation.go",
-        "queue.go",
-        "runner.go",
-        "server.go",
+        "set.go",
+        "transient.go",
     ],
-    importpath = "intrinsic/longrunning/go/operations",
-    visibility = [
-        "//intrinsic/assets/artifacts:__pkg__",
-        "//intrinsic/assets/deploy:__pkg__",
-        "//intrinsic/assets/install:__pkg__",
-        "//intrinsic/assets/instances:__pkg__",
-        "//intrinsic/kubernetes/workcell_spec:__pkg__",
-    ],
+    importpath = "intrinsic/longrunning/go/proxy",
+    visibility = ["//intrinsic_runtime/intrinsic/longrunning/service:__pkg__"],
     deps = [
-        "//intrinsic/util/pagination:pagetoken",
-        "@com_github_golang_glog//:go_default_library",
-        "@com_github_pborman_uuid//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
-        "@org_golang_google_grpc//codes:go_default_library",
-        "@org_golang_google_grpc//status:go_default_library",
+        "@org_golang_google_grpc//:grpc",
+        "@org_golang_google_grpc//codes",
+        "@org_golang_google_grpc//status",
         "@org_golang_google_protobuf//proto",
-        "@org_golang_google_protobuf//types/known/anypb",
         "@org_golang_google_protobuf//types/known/emptypb",
     ],
 )
