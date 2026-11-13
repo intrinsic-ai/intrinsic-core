@@ -32,6 +32,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/logging/proto:log_dispatcher_service_go_proto",
+        "//intrinsic_sdk/intrinsic/logging/proto:log_item_go_proto",
         "//intrinsic_sdk/intrinsic/logging/proto:logger_service_go_proto",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:dialerutil",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:solutionutil",
