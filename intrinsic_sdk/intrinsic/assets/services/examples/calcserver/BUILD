@@ -13,10 +13,8 @@
 # limitations under the License.
 
 load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
-load("//bazel:python.bzl", "py_binary", "py_library")
 load("//intrinsic_sdk/intrinsic/assets/services/build_defs:services.bzl", "intrinsic_service")
 load("//intrinsic_sdk/bazel:container.bzl", "container_image")
-load("//intrinsic_sdk/bazel:python_oci_image.bzl", "python_oci_image")
 
 package(default_visibility = [
     "//visibility:public",
@@ -85,52 +83,6 @@ intrinsic_service(
         ":calculator-image.tar",
     ],
     manifest = ":calc_manifest.textproto",
-    deps = [
-        "@intrinsic_apis//intrinsic/assets/services/examples/calcserver:calc_server_proto",
-    ],
-)
-
-py_library(
-    name = "calc_server_py",
-    srcs = ["calc_server.py"],
-    deps = [
-        "//intrinsic_sdk/intrinsic/assets/dependencies:utils_py",
-        "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
-        "@com_google_absl_py//absl/logging",
-        "@intrinsic_apis//intrinsic/assets/services/examples/calcserver:calc_server_py_pb2",
-        "@intrinsic_apis//intrinsic/assets/services/examples/calcserver:calc_server_py_pb2_grpc",
-    ],
-)
-
-py_binary(
-    name = "calc_server_main_py",
-    srcs = ["calc_server_main.py"],
-    main = "calc_server_main.py",
-    deps = [
-        ":calc_server_py",
-        "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
-        "@com_google_absl_py//absl:app",
-        "@com_google_absl_py//absl/flags",
-        "@com_google_absl_py//absl/logging",
-        "@intrinsic_apis//intrinsic/assets/services/examples/calcserver:calc_server_py_pb2",
-        "@intrinsic_apis//intrinsic/assets/services/examples/calcserver:calc_server_py_pb2_grpc",
-        "@intrinsic_apis//intrinsic/resources/proto:runtime_context_py_pb2",
-    ],
-)
-
-python_oci_image(
-    name = "calc_server_py_image",
-    binary = ":calc_server_main_py",
-    data_path = "/",
-)
-
-intrinsic_service(
-    name = "calculator_py",
-    default_config = ":calc_default_config.textproto",
-    images = [
-        ":calc_server_py_image.tar",
-    ],
-    manifest = "calc_manifest_py.textproto",
     deps = [
         "@intrinsic_apis//intrinsic/assets/services/examples/calcserver:calc_server_proto",
     ],
