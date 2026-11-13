@@ -43,7 +43,16 @@ class RtdeUrDriver : public UrDriverInterface {
   ~RtdeUrDriver() override;
 
   // Dashboard Client Control Interface
-  absl::Status ConnectDashboard(absl::string_view robot_ip) override;
+
+  // Connects to the robot dashboard server on port 29999.
+  //
+  // `timeout`: Maximum duration to wait for the TCP socket connection.
+  // The default 2000 ms bound ensures initialization fails fast if the robot
+  // is powered off or unreachable, avoiding Linux TCP SYN retransmission hangs
+  // (typically 20-127 seconds).
+  absl::Status ConnectDashboard(absl::string_view robot_ip,
+                                std::chrono::milliseconds timeout =
+                                    std::chrono::milliseconds(2000)) override;
   void DisconnectDashboard() override;
   void ResetDashboard() override;
   bool CommandAddToLog(absl::string_view message) override;

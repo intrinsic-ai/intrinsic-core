@@ -26,6 +26,16 @@ namespace intrinsic::icon {
 
 // Creates a PrefilterInterface instance for UniversalRobotsModule depending on
 // the build target (Enterprise vs Core).
+//
+// Parameters:
+//   robot_model_name: The robot model identifier (e.g., "UR5", "UR10").
+//   proto_config: Module configuration protobuf containing advanced control
+//                 options.
+//
+// Returns:
+//   A unique_ptr to the constructed PrefilterInterface on success.
+//   Returns `absl::UnimplementedError` on Core builds when custom advanced
+//   control is requested.
 absl::StatusOr<std::unique_ptr<PrefilterInterface>> CreateUrPrefilter(
     absl::string_view robot_model_name,
     const ::intrinsic_proto::icon::UniversalRobotsModuleConfig& proto_config);

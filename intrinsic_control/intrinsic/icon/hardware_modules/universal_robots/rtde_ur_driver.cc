@@ -51,9 +51,11 @@ RtdeUrDriver::~RtdeUrDriver() {
   }
 }
 
-absl::Status RtdeUrDriver::ConnectDashboard(absl::string_view robot_ip) {
+absl::Status RtdeUrDriver::ConnectDashboard(absl::string_view robot_ip,
+                                            std::chrono::milliseconds timeout) {
   auto dashboard_client =
       std::make_unique<urcl::DashboardClient>(std::string(robot_ip));
+  dashboard_client->setConnectTimeout(timeout);
   if (!dashboard_client->connect(kMaxConnectionRetries,
                                  kConnectionRetryInterval)) {
     return absl::UnavailableError(
@@ -138,14 +140,31 @@ bool RtdeUrDriver::CommandCloseSafetyPopup() {
 }
 
 absl::Status RtdeUrDriver::InitializeDriver(const UrDriverConfig& config) {
-  std::unique_ptr<urcl::ToolCommSetup> tool_comm_setup = nullptr;
-  ur_driver_ = std::make_unique<urcl::UrDriver>(
-      config.robot_ip, config.script_file, config.output_recipe,
-      config.input_recipe, config.handle_program_state, config.headless_mode,
-      std::move(tool_comm_setup), config.reverse_port,
-      config.script_sender_port, config.servoj_gain,
-      config.servoj_lookahead_time, config.non_blocking_read, config.reverse_ip,
-      config.trajectory_port, config.script_command_port);
+  urcl::UrDriverConfiguration urcl_config;
+  urcl_config.robot_ip = config.robot_ip;
+  urcl_config.script_file = config.script_file;
+  urcl_config.output_recipe_file = config.output_recipe;
+  urcl_config.input_recipe_file = config.input_recipe;
+  urcl_config.handle_program_state = config.handle_program_state;
+  urcl_config.headless_mode = config.headless_mode;
+  urcl_config.reverse_port = config.reverse_port;
+  urcl_config.script_sender_port = config.script_sender_port;
+  urcl_config.servoj_gain = config.servoj_gain;
+  urcl_config.servoj_lookahead_time = config.servoj_lookahead_time;
+  urcl_config.non_blocking_read = config.non_blocking_read;
+  urcl_config.reverse_ip = config.reverse_ip;
+  urcl_config.trajectory_port = config.trajectory_port;
+  urcl_config.script_command_port = config.script_command_port;
+
+  // Bounded timeouts so initialization fails fast if the robot is unreachable
+  urcl_config.socket_connect_timeout = config.socket_connect_timeout;
+  urcl_config.socket_reconnect_attempts = config.socket_reconnect_attempts;
+  urcl_config.socket_reconnection_timeout = config.socket_reconnection_timeout;
+  urcl_config.rtde_initialization_attempts =
+      config.rtde_initialization_attempts;
+  urcl_config.rtde_initialization_timeout = config.rtde_initialization_timeout;
+
+  ur_driver_ = std::make_unique<urcl::UrDriver>(urcl_config);
   return absl::OkStatus();
 }
 

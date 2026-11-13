@@ -161,10 +161,6 @@ static constexpr absl::Duration kCyclicReadLogWarning =
     absl::Microseconds(2200);  // 1.1x the cycle time.
 static constexpr absl::Duration kApplyCommandLogWarning =
     absl::Microseconds(1000);  // 0.5x the cycle time.
-// A short timeout for retrying to connect to the robot.
-// The integrated retry logic sometimes takes > 2 Minutes to return.
-// See b/293589121. In testing a single retry was enough.
-static constexpr absl::Duration kRetryConnectionTimeout = absl::Seconds(10);
 
 // Read timeout for the reverse socket running in the
 // external control script on the robot. The timeout cannot be higher than 1
@@ -200,8 +196,6 @@ static constexpr absl::string_view kJointPositionCommandName =
     "joint_position_command";
 static constexpr absl::string_view kJointTorqueCommandName =
     "joint_torque_command";
-static constexpr absl::string_view kJointAccelerationCommandName =
-    "joint_acceleration_command";
 static constexpr absl::string_view kStandardDigitalOutputCommandName =
     "standard_digital_output_command";
 static constexpr absl::string_view kConfigurableDigitalOutputCommandName =
@@ -226,7 +220,7 @@ absl::string_view ToString(urcl::SafetyMode safety_mode) {
     case urcl::SafetyMode::SAFEGUARD_STOP:
       return "SAFEGUARD_STOP";
     case urcl::SafetyMode::SYSTEM_EMERGENCY_STOP:
-      return "SAFEGUARD_STOP";
+      return "SYSTEM_EMERGENCY_STOP";
     case urcl::SafetyMode::ROBOT_EMERGENCY_STOP:
       return "ROBOT_EMERGENCY_STOP";
     case urcl::SafetyMode::VIOLATION:
@@ -237,6 +231,26 @@ absl::string_view ToString(urcl::SafetyMode safety_mode) {
       return "VALIDATE_JOINT_ID";
     case urcl::SafetyMode::UNDEFINED_SAFETY_MODE:
       return "UNDEFINED_SAFETY_MODE";
+    case urcl::SafetyMode::AUTOMATIC_MODE_SAFEGUARD_STOP:
+      return "AUTOMATIC_MODE_SAFEGUARD_STOP";
+    case urcl::SafetyMode::SYSTEM_THREE_POSITION_ENABLING_STOP:
+      return "SYSTEM_THREE_POSITION_ENABLING_STOP";
+    case urcl::SafetyMode::TP_THREE_POSITION_ENABLING_STOP:
+      return "TP_THREE_POSITION_ENABLING_STOP";
+    case urcl::SafetyMode::IMMI_EMERGENCY_STOP:
+      return "IMMI_EMERGENCY_STOP";
+    case urcl::SafetyMode::IMMI_SAFEGUARD_STOP:
+      return "IMMI_SAFEGUARD_STOP";
+    case urcl::SafetyMode::PROFISAFE_WAITING_FOR_PARAMETERS:
+      return "PROFISAFE_WAITING_FOR_PARAMETERS";
+    case urcl::SafetyMode::PROFISAFE_AUTOMATIC_MODE_SAFEGUARD_STOP:
+      return "PROFISAFE_AUTOMATIC_MODE_SAFEGUARD_STOP";
+    case urcl::SafetyMode::PROFISAFE_SAFEGUARD_STOP:
+      return "PROFISAFE_SAFEGUARD_STOP";
+    case urcl::SafetyMode::PROFISAFE_EMERGENCY_STOP:
+      return "PROFISAFE_EMERGENCY_STOP";
+    case urcl::SafetyMode::SAFETY_API_SAFEGUARD_STOP:
+      return "SAFETY_API_SAFEGUARD_STOP";
   }
 }
 
@@ -260,14 +274,14 @@ absl::string_view ToString(urcl::rtde_interface::RUNTIME_STATE runtime_state) {
 namespace {
 
 intrinsic_proto::icon::v1::Event::Severity ReportLevelToSeverity(
-    urcl::primary_interface::ReportLevel reportLevel) {
+    urcl::ReportLevel reportLevel) {
   switch (reportLevel) {
-    case urcl::primary_interface::ReportLevel::INFO:
+    case urcl::ReportLevel::INFO:
       return intrinsic_proto::icon::v1::Event::INFO;
-    case urcl::primary_interface::ReportLevel::WARNING:
+    case urcl::ReportLevel::WARNING:
       return intrinsic_proto::icon::v1::Event::WARNING;
-    case urcl::primary_interface::ReportLevel::VIOLATION:
-    case urcl::primary_interface::ReportLevel::FAULT:
+    case urcl::ReportLevel::VIOLATION:
+    case urcl::ReportLevel::FAULT:
       return intrinsic_proto::icon::v1::Event::ERROR;
     default:
       return intrinsic_proto::icon::v1::Event::WARNING;
@@ -532,6 +546,13 @@ intrinsic::icon::SafetyStatus ExtractSafetyStatus(
       break;
     }
     case urcl::SafetyMode::SAFEGUARD_STOP:
+    case urcl::SafetyMode::AUTOMATIC_MODE_SAFEGUARD_STOP:
+    case urcl::SafetyMode::IMMI_SAFEGUARD_STOP:
+    case urcl::SafetyMode::PROFISAFE_SAFEGUARD_STOP:
+    case urcl::SafetyMode::PROFISAFE_AUTOMATIC_MODE_SAFEGUARD_STOP:
+    case urcl::SafetyMode::SAFETY_API_SAFEGUARD_STOP:
+    case urcl::SafetyMode::SYSTEM_THREE_POSITION_ENABLING_STOP:
+    case urcl::SafetyMode::TP_THREE_POSITION_ENABLING_STOP:
     case urcl::SafetyMode::RECOVERY: {
       safety_status.requested_behavior =
           intrinsic_fbs::RequestedBehavior::SAFE_STOP_2_TIME_MONITORED;
@@ -543,12 +564,15 @@ intrinsic::icon::SafetyStatus ExtractSafetyStatus(
     }
     case urcl::SafetyMode::SYSTEM_EMERGENCY_STOP:
     case urcl::SafetyMode::ROBOT_EMERGENCY_STOP:
+    case urcl::SafetyMode::IMMI_EMERGENCY_STOP:
+    case urcl::SafetyMode::PROFISAFE_EMERGENCY_STOP:
       safety_status.estop_button_status = intrinsic_fbs::ButtonStatus::ENGAGED;
       [[fallthrough]];
     case urcl::SafetyMode::PROTECTIVE_STOP:
     case urcl::SafetyMode::VIOLATION:
     case urcl::SafetyMode::FAULT:
     case urcl::SafetyMode::VALIDATE_JOINT_ID:
+    case urcl::SafetyMode::PROFISAFE_WAITING_FOR_PARAMETERS:
     case urcl::SafetyMode::UNDEFINED_SAFETY_MODE: {
       safety_status.requested_behavior =
           intrinsic_fbs::RequestedBehavior::SAFE_STOP_0;
@@ -635,11 +659,12 @@ RealtimeStatus UniversalRobotsModule::GetCyclicLoopStatus() const {
       return UnavailableError("Did not yet receive data from RTDE");
     case CyclicLoopState::kRobotConnectionClosed:
       return FailedPreconditionError(
-          "Robot closed the connection. Was it switched to manual mode?");
+          "Robot connection closed or driver reset.");
     case CyclicLoopState::kNoDataReceived:
       return FailedPreconditionError("Did not receive data from robot.");
     case CyclicLoopState::kProgramNotActive:
-      return FailedPreconditionError("Program not active on the robot");
+      return FailedPreconditionError(
+          "Program not active on the robot. Was it switched to manual mode?");
     case CyclicLoopState::kStoppedSendingCommands:
       return FailedPreconditionError(
           "Cyclic loop was commanded to stop sending robot commands.");
@@ -792,34 +817,6 @@ void UniversalRobotsModule::HandleRobotProgramState(bool program_running) {
   }
 }
 
-absl::Status UniversalRobotsModule::JoinFailedInitThread(
-    absl::Duration timeout) {
-  absl::MutexLock l(init_thread_mutex_);
-  if (!failed_init_thread_disposal_) {
-    LOG(INFO) << "There is no failed init thread to join.";
-    return absl::OkStatus();
-  }
-  if (!failed_init_thread_disposal_->thread->joinable()) {
-    LOG(INFO) << "Failed init thread is not joinable.";
-    return absl::OkStatus();
-  }
-
-  if (!failed_init_thread_disposal_->has_returned
-           .WaitForNotificationWithTimeout(timeout)) {
-    return absl::AbortedError(
-        "Timed out waiting for init_failed_thread to finish retrying. You can "
-        "try again later (likely minutes), or restart the module");
-  }
-
-  LOG(INFO) << "Joining failed init thread.";
-  if (failed_init_thread_disposal_->thread->joinable()) {
-    failed_init_thread_disposal_->thread->join();
-  }
-  LOG(INFO) << "Successfully joined failed init thread.";
-  failed_init_thread_disposal_ = nullptr;
-  return absl::OkStatus();
-}
-
 absl::Status UniversalRobotsModule::ConnectToRobot(const Config& config) {
   try {
     if (!backend_) {
@@ -926,7 +923,7 @@ UniversalRobotsModule::CyclicRead() {
   if (!backend_->IsDriverValid()) {
     return FailedPreconditionError(
         FixedStrCat<RealtimeStatus::kMaxMessageLength>(
-            "Robot closed the connection. Was it switched to manual mode?"));
+            "Robot connection closed or driver reset."));
   }
 
   // UrDriver::getDataPackage timeout is 0 or 100ms - which is 10Hz as worst
@@ -1014,6 +1011,10 @@ UniversalRobotsModule::CyclicRead() {
 
 // Called before `Activate()` is called.
 absl::Status UniversalRobotsModule::Prepare() {
+  motion_enabled_.store(false, std::memory_order_release);
+  resend_robot_program_state_.store(ResendProgramState::kIdle,
+                                    std::memory_order_release);
+
   // Realtime loop can be stopped because ICON does not expect the clock to be
   // ticked yet.
   INTR_RETURN_IF_ERROR(StopRealtimeLoop());
@@ -1059,6 +1060,9 @@ RealtimeStatus UniversalRobotsModule::Deactivate() {
   // TODO(b/383701675): The connection to the robot can be closed here, but it
   // needs to be done in an non realtime thread.
   tick_clock_ = false;
+  motion_enabled_.store(false, std::memory_order_release);
+  resend_robot_program_state_.store(ResendProgramState::kIdle,
+                                    std::memory_order_release);
   return OkStatus();
 }
 
@@ -1154,8 +1158,8 @@ RealtimeStatus UniversalRobotsModule::ApplyCommand() {
           << ::intrinsic::icon::ToString(current_runtime_state)
           << "] program_running[" << (program_running_ ? "yes" : "no") << "]";
     }
-    const RealtimeStatus program_error =
-        FailedPreconditionError("Program not active on the robot");
+    const RealtimeStatus program_error = FailedPreconditionError(
+        "Program not active on the robot. Was it switched to manual mode?");
     SetCyclicLoopRequest(CyclicLoopRequest::kProgramNotActive);
     return program_error;
   }
@@ -1173,18 +1177,8 @@ RealtimeStatus UniversalRobotsModule::ApplyCommand() {
       jcommand[i] = result[i];
     }
     control_mode = urcl::comm::ControlMode::MODE_SERVOJ;
-  } else if (command_validator_.WasUpdatedThisCycle(joint_acceleration_command_)
-                 .ok()) {
-    for (size_t i = 0; i < jcommand.size(); ++i) {
-      jcommand[i] = joint_acceleration_command_->acceleration()->Get(i);
-    }
-    control_mode = urcl::comm::ControlMode::MODE_RESOLVED_ACCELERATION;
-    // Reset the prefilter if the acceleration command is updated so that on the
-    // next position command the prefilter is reinitialized. This ensures that
-    // there are no transients.
-    prefilter_->Reset();
-  } else if (command_validator_.WasUpdatedThisCycle(joint_torque_command_)
-                 .ok()) {
+  }
+  else if (command_validator_.WasUpdatedThisCycle(joint_torque_command_).ok()) {
     for (size_t i = 0; i < jcommand.size(); ++i) {
       jcommand[i] = joint_torque_command_->torque()->Get(i);
     }
@@ -1209,9 +1203,17 @@ RealtimeStatus UniversalRobotsModule::ApplyCommand() {
     // Sending a joint command also pets the watchdog.
     if (!backend_->WriteJointCommand(jcommand, control_mode,
                                      kRobotReceiveTimeout)) {
-      return InternalError(FixedStrCat<RealtimeStatus::kMaxMessageLength>(
-          "Failed to send joint command to ur_robot with control mode ",
-          control_mode));
+      // If the socket write fails, the reverse interface connection was severed
+      // (e.g. user jogged on TP or switched to manual mode). Request connection
+      // closure so stale driver sockets are torn down, and surface
+      // kProgramNotActive.
+      ResendProgramState expected = ResendProgramState::kIdle;
+      resend_robot_program_state_.compare_exchange_strong(
+          expected, ResendProgramState::kCloseConnectionRequested);
+      SetCyclicLoopRequest(CyclicLoopRequest::kProgramNotActive);
+      return FailedPreconditionError(
+          "Failed to send joint command. Was it switched to manual mode or "
+          "jogged on TP?");
     }
 
     // Only sending digital outputs on changes, because sending every cycle
@@ -1504,13 +1506,10 @@ absl::Status UniversalRobotsModule::EnableMotion() {
           }
           if (!resend_program_succeeded) {
             const auto error = absl::FailedPreconditionError(
-                "Failed to send robot program. Setting CriticalError, then "
-                "ClearingFaults");
+                "Failed to send robot program. Verify robot is in Remote "
+                "Control mode on the teach pendant.");
             LOG(WARNING) << error;
-            INTR_RETURN_IF_ERROR(CloseRobotConnection(error.message()));
-            absl::SleepFor(absl::Seconds(1));
-            INTR_RETURN_IF_ERROR(ClearFaults());
-            continue;
+            return error;
           }
           LOG(INFO) << "Robot program send successfully.";
           break;
@@ -1626,8 +1625,12 @@ absl::Status UniversalRobotsModule::ClearFaults() {
   // 3) If connection re-initialization is required below, the resend lifecycle
   //    will be cleanly re-evaluated once RTDE communication starts.
   ResendProgramState expected_resend = ResendProgramState::kFailed;
-  resend_robot_program_state_.compare_exchange_strong(
-      expected_resend, ResendProgramState::kIdle);
+  // If resend failed previously (e.g. C210A0 read-only socket from local
+  // control), record that so we re-initialize the connection with fresh sockets
+  // below.
+  const bool resend_had_failed =
+      resend_robot_program_state_.compare_exchange_strong(
+          expected_resend, ResendProgramState::kIdle);
 
   bool connection_alive = backend_->IsDriverValid();
   if (connection_alive) {
@@ -1646,9 +1649,10 @@ absl::Status UniversalRobotsModule::ClearFaults() {
   }
 
   if (const RealtimeStatus cyclic_loop_status = GetCyclicLoopStatus();
-      !cyclic_loop_status.ok() || !connection_alive) {
-    LOG(INFO) << "Module connection is not alive or in a critical error state. "
-              << "Message: " << cyclic_loop_status.message()
+      !cyclic_loop_status.ok() || !connection_alive || resend_had_failed) {
+    LOG(INFO) << "Module connection is not alive, resend failed, or in a "
+                 "critical error state. Message: "
+              << cyclic_loop_status.message()
               << ". Re-initializing robot connection.";
 
     INTR_RETURN_IF_ERROR(CloseRobotConnection("ClearFaults"));
@@ -1782,12 +1786,19 @@ absl::Status UniversalRobotsModule::ClearFaults() {
 
   INTR_RETURN_IF_ERROR(LogToRobot("Intrinsic: ClearFaults finished."));
 
+  // Ensure resend state is clean when transitioning back to kActivated.
+  resend_robot_program_state_.store(ResendProgramState::kIdle,
+                                    std::memory_order_release);
+
   LOG(INFO) << "Faults cleared.";
   return OkStatus();
 }
 
 absl::Status UniversalRobotsModule::Shutdown() {
   LOG(INFO) << "Shutdown on " << kHwModuleTypeName;
+  motion_enabled_.store(false, std::memory_order_release);
+  resend_robot_program_state_.store(ResendProgramState::kIdle,
+                                    std::memory_order_release);
   LogToRobot("Intrinsic: Shutting down.").IgnoreError();
 
   if (const auto status = StopRealtimeLoop(); !status.ok()) {
@@ -1795,12 +1806,6 @@ absl::Status UniversalRobotsModule::Shutdown() {
   }
   if (const auto status = CloseRobotConnection("Shutdown"); !status.ok()) {
     LOG(WARNING) << "Failed to closing robot connection during shutdown. "
-                    "Expect an unclean shutdown.";
-  }
-
-  if (const auto status = JoinFailedInitThread(kRetryConnectionTimeout);
-      !status.ok()) {
-    LOG(WARNING) << "Failed to join failed_init thread during shutdown. "
                     "Expect an unclean shutdown.";
   }
 
@@ -1831,11 +1836,15 @@ UniversalRobotsModule::~UniversalRobotsModule() {
 
 RealtimeStatus UniversalRobotsModule::Enabled() {
   pet_watchdog_ = false;
+  motion_enabled_.store(true, std::memory_order_release);
   return OkStatus();
 }
 
 RealtimeStatus UniversalRobotsModule::Disabled() {
   pet_watchdog_ = true;
+  motion_enabled_.store(false, std::memory_order_release);
+  resend_robot_program_state_.store(ResendProgramState::kIdle,
+                                    std::memory_order_release);
   return OkStatus();
 }
 
@@ -1990,8 +1999,10 @@ void UniversalRobotsModule::ResendProgramLoop(intrinsic::StopToken stop_token) {
       }
     }
 
-    // Clear pending resend requests if driver connection is invalid.
-    if (!backend_->IsDriverValid()) {
+    // Clear pending resend requests if driver connection is invalid or robot is
+    // not running (e.g. idle or unpowered after an e-stop).
+    if (!backend_->IsDriverValid() ||
+        ur_status_.robot_mode != urcl::RobotMode::RUNNING) {
       ResendProgramState expected = ResendProgramState::kSendProgramRequested;
       resend_robot_program_state_.compare_exchange_strong(
           expected, ResendProgramState::kIdle);
@@ -2047,13 +2058,16 @@ void UniversalRobotsModule::ResendProgramLoop(intrinsic::StopToken stop_token) {
           LOG(WARNING) << "Robot program failed to reach PLAYING state within "
                        << kResendProgramSpinUpTimeout
                        << " deadline after resending.";
-          // Only set kFailed if state is still kSendProgramInProgress. Not
-          // checking the return of compare_exchange_strong, because if it is
-          // false, ClearFaults or connection closure already reset the state to
-          // kIdle and overwriting it with kFailed is intentionally avoided.
+          // Only set kFailed if state is still kSendProgramInProgress and the
+          // arm was still supposed to be RUNNING. If the arm transitioned to
+          // IDLE/POWER_OFF during wait, reset to kIdle instead.
           expected = ResendProgramState::kSendProgramInProgress;
+          const ResendProgramState target_failure_state =
+              (ur_status_.robot_mode == urcl::RobotMode::RUNNING)
+                  ? ResendProgramState::kFailed
+                  : ResendProgramState::kIdle;
           resend_robot_program_state_.compare_exchange_strong(
-              expected, ResendProgramState::kFailed);
+              expected, target_failure_state);
         }
       }
     }
@@ -2181,50 +2195,26 @@ absl::Status UniversalRobotsModule::StopRealtimeLoop() {
 }
 
 absl::Status UniversalRobotsModule::InitializeRobotConnection() {
-  INTR_RETURN_IF_ERROR(JoinFailedInitThread(kRetryConnectionTimeout));
-  const std::string error_message =
-      absl::StrCat("Failed to connect to ", config_.robot_ip, " in ",
-                   absl::FormatDuration(kRetryConnectionTimeout),
-                   ". Ensure the robot is powered on and the IP is correct.");
-  // Stores the init_thread in case it gets stuck because returning without
-  // joining crashes the module.
-  // Can't immediately join the thread because
-  // google3/src/comm/tcp_socket.cpp
-  // is stuck for minutes in the worst case. Releasing the thread, correctly
-  // leads to leak checker failures.
-  auto init_context = std::make_unique<ThreadAndStatus>();
-  init_context->status = absl::DeadlineExceededError(error_message);
-  // Pointer copy remains stable in the lambda capture after moving the
-  // init_context.
-  ThreadAndStatus* context_ptr = init_context.get();
   LOG(INFO) << "Initializing robot connection";
   // Starts the UR driver in a separate thread to set the CPU affinity without
   // influencing the non realtime module thread.
   // Not setting realtime priority because that leads to all UR threads
   // running with realtime priority.
   // Not setting a thread name to use the ones set by UR driver.
+  absl::Status connect_status;
   INTR_ASSIGN_OR_RETURN(
-      *init_context->thread,
+      auto init_thread,
       intrinsic::CreateThread(ThreadOptions().SetAffinity(
                                   config_.module_thread_options.GetCpuSet()),
-                              [this, context_ptr]() {
-                                context_ptr->status = ConnectToRobot(config_);
-                                if (!context_ptr->status.ok()) {
+                              [this, &connect_status]() {
+                                connect_status = ConnectToRobot(config_);
+                                if (!connect_status.ok()) {
                                   LOG(ERROR) << "Failed to connect: "
-                                             << context_ptr->status;
+                                             << connect_status;
                                 }
-                                context_ptr->has_returned.Notify();
                               }));
-  if (!init_context->has_returned.WaitForNotificationWithTimeout(
-          kRetryConnectionTimeout)) {
-    absl::MutexLock l(init_thread_mutex_);
-    failed_init_thread_disposal_ = std::move(init_context);
-    // More specific message takes precedence.
-    INTR_RETURN_IF_ERROR(failed_init_thread_disposal_->status);
-    return absl::DeadlineExceededError(error_message);
-  }
-  init_context->thread->join();
-  INTR_RETURN_IF_ERROR(init_context->status);
+  init_thread.join();
+  INTR_RETURN_IF_ERROR(connect_status);
   SetCyclicLoopRequest(CyclicLoopRequest::kNone);
 
   return absl::OkStatus();
@@ -2240,8 +2230,7 @@ absl::Status UniversalRobotsModule::Init(
   // Validate that, if the ModuleConfig has a control period, it's equivalent to
   // kCycleTime.
   INTR_ASSIGN_OR_RETURN(auto control_period, config.GetControlPeriod());
-  if ((absl::FDivDuration(control_period, absl::Seconds(1)) -
-       kControlFrequencyHz) > 1e-6) {
+  if (std::abs(absl::FDivDuration(control_period, kCycleTime) - 1.0) > 1e-4) {
     return absl::InvalidArgumentError(absl::StrCat(
         "HardwareModuleConfig specifies a control period (", control_period,
         ") that is different from what Universal Robots support (", kCycleTime,
@@ -2264,10 +2253,6 @@ absl::Status UniversalRobotsModule::Init(
       joint_torque_command_,
       interface_registry.AdvertiseInterface<JointTorqueCommand>(
           kJointTorqueCommandName, kNumJoints));
-  INTR_ASSIGN_OR_RETURN(
-      joint_acceleration_command_,
-      interface_registry.AdvertiseInterface<JointAccelerationAndTorqueCommand>(
-          kJointAccelerationCommandName, kNumJoints));
   INTR_ASSIGN_OR_RETURN(
       joint_position_state_,
       interface_registry.AdvertiseMutableInterface<JointPositionState>(
@@ -2401,7 +2386,9 @@ icon::RealtimeStatus UniversalRobotsModule::ReadStatus() {
     return cyclic_loop_status;
   }
 
-  if (resend_robot_program_state_.load() == ResendProgramState::kFailed) {
+  if (motion_enabled_.load(std::memory_order_acquire) &&
+      resend_robot_program_state_.load(std::memory_order_acquire) ==
+          ResendProgramState::kFailed) {
     return FailedPreconditionError("Failed to resend robot program");
   }
 
@@ -2409,7 +2396,22 @@ icon::RealtimeStatus UniversalRobotsModule::ReadStatus() {
 
   const RUNTIME_STATE current_runtime_state =
       runtime_state_.load(std::memory_order_relaxed);
-  if ((ur_status_.safety_mode == urcl::SafetyMode::NORMAL ||
+  // Auto-resending the robot program in ReadStatus is specifically used for
+  // Safeguard Stop (SS2) recovery.
+  // During an SS2 stop (e.g. an operator enters a safety scanner zone), the
+  // robot pauses or stops the URScript program, but drive power remains on and
+  // brakes stay released (robot_mode == RUNNING) while ICON remains in
+  // kMotionEnabled. When the safety zone clears (safety_mode returns to NORMAL
+  // or REDUCED), ReadStatus auto-resends the URScript program so motion resumes
+  // seamlessly without requiring an explicit EnableMotion() call.
+  //
+  // This auto-resend is strictly restricted to when motion is already enabled
+  // (motion_enabled_) AND the arm is RUNNING. In kActivated or after an E-Stop,
+  // the arm is IDLE with brakes engaged and cannot execute URScript; program
+  // upload in those states is owned solely by EnableMotion().
+  if (motion_enabled_.load(std::memory_order_acquire) &&
+      ur_status_.robot_mode == urcl::RobotMode::RUNNING &&
+      (ur_status_.safety_mode == urcl::SafetyMode::NORMAL ||
        ur_status_.safety_mode == urcl::SafetyMode::REDUCED) &&
       (current_runtime_state == RUNTIME_STATE::PAUSED ||
        current_runtime_state == RUNTIME_STATE::STOPPED || !program_running_)) {

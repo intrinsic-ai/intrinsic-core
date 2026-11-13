@@ -15,6 +15,7 @@
 #ifndef INTRINSIC_ICON_HARDWARE_MODULES_UNIVERSAL_ROBOTS_UR_DRIVER_INTERFACE_H_
 #define INTRINSIC_ICON_HARDWARE_MODULES_UNIVERSAL_ROBOTS_UR_DRIVER_INTERFACE_H_
 
+#include <chrono>
 #include <cstdint>
 #include <deque>
 #include <functional>
@@ -38,6 +39,19 @@ struct ErrorCode;
 namespace intrinsic::icon {
 
 // Configuration options for initializing the Universal Robots driver.
+//
+// This struct serves as an Intrinsic domain abstraction rather than using
+// upstream `urcl::UrDriverConfiguration` directly:
+// 1. Decoupling: Keeps `UrDriverInterface` and mock drivers (e.g.
+// `FakeUrDriver`)
+//    vendor-neutral without pulling in heavy URCL driver headers.
+// 2. Compile-time safety: Uses `ABSL_REQUIRE_EXPLICIT_INIT` so callers must
+//    explicitly supply required fields (e.g. `robot_ip`, recipes, callback).
+// 3. Intrinsic invariants: Enforces Intrinsic-specific default values (such as
+//    reverse communication ports and lookahead time tuned for
+//    `DynamicPrefilter`).
+// Concrete drivers (like `RtdeUrDriver`) map these fields to upstream
+// `urcl::UrDriverConfiguration` internally during initialization.
 struct UrDriverConfig {
   // IP address of the robot controller to connect to.
   std::string robot_ip ABSL_REQUIRE_EXPLICIT_INIT;
@@ -87,6 +101,27 @@ struct UrDriverConfig {
   // Host IP address bound for reverse communication. If empty, the driver uses
   // the local interface address connected to the robot controller.
   std::string reverse_ip = "";
+
+  // Bounded timeouts and retry policies to fail fast during driver
+  // initialization if the robot is unreachable or powered off.
+
+  // Maximum time to wait for initial TCP socket connection to the robot.
+  std::chrono::milliseconds socket_connect_timeout =
+      std::chrono::milliseconds(2000);
+
+  // Number of socket reconnection attempts before aborting.
+  size_t socket_reconnect_attempts = 1;
+
+  // Delay between socket reconnection attempts.
+  std::chrono::milliseconds socket_reconnection_timeout =
+      std::chrono::milliseconds(500);
+
+  // Number of attempts to negotiate and initialize the RTDE protocol handshake.
+  size_t rtde_initialization_attempts = 2;
+
+  // Delay between RTDE protocol initialization attempts.
+  std::chrono::milliseconds rtde_initialization_timeout =
+      std::chrono::milliseconds(500);
 };
 
 // Interface abstraction for the Universal Robots hardware driver backend.
@@ -95,7 +130,16 @@ class UrDriverInterface {
   virtual ~UrDriverInterface() = default;
 
   // Dashboard Client Control Interface
-  virtual absl::Status ConnectDashboard(absl::string_view robot_ip) = 0;
+
+  // Connects to the robot dashboard server on port 29999.
+  //
+  // `timeout`: Maximum duration to wait for the TCP socket connection.
+  // The default 2000 ms bound ensures initialization fails fast if the robot
+  // is powered off or unreachable, avoiding Linux TCP SYN retransmission hangs
+  // (typically 20-127 seconds).
+  virtual absl::Status ConnectDashboard(
+      absl::string_view robot_ip,
+      std::chrono::milliseconds timeout = std::chrono::milliseconds(2000)) = 0;
   virtual void DisconnectDashboard() = 0;
   virtual void ResetDashboard() = 0;
   virtual bool CommandAddToLog(absl::string_view message) = 0;

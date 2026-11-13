@@ -74,15 +74,15 @@ namespace intrinsic::icon {
 // https://github.com/UniversalRobots/Universal_Robots_ROS2_Driver and uses
 // https://github.com/UniversalRobots/Universal_Robots_Client_Library.
 //
-// The connection to the robot is established in `Init`. `RealtimeLoop` is
-// responsible for the realtime communication with the robot (reading status and
-// ticking the clock). Commands to the robot are added to a queue in ur_driver
-// in `ApplyCommands`.
-// Taring reports done after one cycle and feedforwards are not supported.
-// The custom payload is set and activated in the `EnableMotion` state. The
-// default payload on the teach pendant does not change, only the custom payload
-// is changed. Do not change the payload on the teach pendant if it is set by
-// the hardware module, use the set_payload skill instead.
+// The connection to the robot is established during Prepare and ClearFault.
+// `RealtimeLoop` is responsible for the realtime communication with the robot
+// (reading status and ticking the clock). Commands to the robot are added to a
+// queue in ur_driver in `ApplyCommands`. Taring reports done after one cycle
+// and feedforwards are not supported. The custom payload is set and activated
+// in the `EnableMotion` state. The default payload on the teach pendant does
+// not change, only the custom payload is changed. Do not change the payload on
+// the teach pendant if it is set by the hardware module, use the set_payload
+// skill instead.
 class UniversalRobotsModule final : public HardwareModuleInterface {
  public:
   struct Config {
@@ -327,8 +327,7 @@ class UniversalRobotsModule final : public HardwareModuleInterface {
     kOk = 0,
     // Status during initialization before RTDE packets begin arriving.
     kUninitialized,
-    // Status when RTDE socket read fails (e.g. disconnection or manual mode
-    // switch).
+    // Status when RTDE socket read fails (e.g. disconnection or driver reset).
     kRobotConnectionClosed,
     // Status when RTDE GetDataPackage() returns null within the timeout
     // interval.
@@ -351,37 +350,6 @@ class UniversalRobotsModule final : public HardwareModuleInterface {
     kFailed,
   };
   static absl::string_view ToString(ResendProgramState state);
-
-  // Thread and related information.
-  // Expects the thread to finish after some time.
-  // Expects the thread to notify `has_returned` when finishing.
-  struct ThreadAndStatus {
-    // Tries to join `thread` for 5 seconds.
-    // The intrinsic::Thread destructor crashes if the thread is not joined.
-    ~ThreadAndStatus() {
-      if (!thread) {
-        return;
-      }
-      if (!thread->joinable()) {
-        return;
-      }
-      const absl::Duration timeout = absl::Seconds(5);
-      if (!has_returned.WaitForNotificationWithTimeout(timeout)) {
-        LOG(ERROR) << "Timed out waiting " << absl::FormatDuration(timeout)
-                   << " for `has_returned` notification. "
-                      "Expect a crash.";
-        return;
-      }
-      if (thread->joinable()) {
-        thread->join();
-      }
-    }
-
-    absl::Notification has_returned;
-    absl::Status status;
-    std::unique_ptr<intrinsic::Thread> thread =
-        std::make_unique<intrinsic::Thread>();
-  };
 
   // Gets notified once the RTDE script is running on the robot.
   // Updates the atomic `program_running_`.
@@ -412,11 +380,6 @@ class UniversalRobotsModule final : public HardwareModuleInterface {
   // robot returns).
   RealtimeStatusOr<intrinsic::Clock::time_point> CyclicRead();
 
-  // Tries to join `init_failed_thread_disposal_`.
-  // Immediately returns if it is a nullptr.
-  // Returns AbortedError if the thread could not be joined within `timeout`.
-  absl::Status JoinFailedInitThread(absl::Duration timeout);
-
   // Logs a message to the Tech Pendants log.
   absl::Status LogToRobot(absl::string_view message);
 
@@ -440,16 +403,6 @@ class UniversalRobotsModule final : public HardwareModuleInterface {
 
   RealtimeClockInterface* realtime_clock_ = nullptr;
 
-  absl::Mutex init_thread_mutex_;
-
-  // Stores an init-thread and related information in case the
-  // ur_client_library gets stuck during init. This thread can be joined after
-  // the internal retry logic is finished.
-  // Joining is also attempted during shutdown (with `kRetryConnectionTimeout`)
-  // to limit the transition time. The module crashes on destruction without
-  // joining, but this is better than blocking for minutes.
-  std::unique_ptr<ThreadAndStatus> ABSL_GUARDED_BY(init_thread_mutex_)
-      failed_init_thread_disposal_ = nullptr;
   std::unique_ptr<intrinsic::Thread> runtime_loop_thread_;
   std::atomic<bool> cancel_runtime_loop_thread_ = false;
   static_assert(decltype(cancel_runtime_loop_thread_)::is_always_lock_free);
@@ -479,6 +432,12 @@ class UniversalRobotsModule final : public HardwareModuleInterface {
   // connected.
   std::atomic<bool> pet_watchdog_ = false;
   static_assert(decltype(pet_watchdog_)::is_always_lock_free);
+
+  // Indicates if motion is currently enabled in ICON (between Enabled() and
+  // Disabled()). Program resend during ReadStatus is only allowed while
+  // motion is enabled; in kActivated, ICON only monitors robot state.
+  std::atomic<bool> motion_enabled_ = false;
+  static_assert(decltype(motion_enabled_)::is_always_lock_free);
   // Stores errors of the realtime loop to export to ICON on
   // ReadStatus/ApplyCommand.
   std::atomic<CyclicLoopState> cyclic_loop_status_{
@@ -502,8 +461,6 @@ class UniversalRobotsModule final : public HardwareModuleInterface {
       joint_position_command_;
   HardwareInterfaceHandle<::intrinsic_fbs::JointTorqueCommand>
       joint_torque_command_;
-  HardwareInterfaceHandle<::intrinsic_fbs::JointAccelerationAndTorqueCommand>
-      joint_acceleration_command_;
   MutableHardwareInterfaceHandle<::intrinsic_fbs::JointPositionState>
       joint_position_state_;
   MutableHardwareInterfaceHandle<::intrinsic_fbs::JointVelocityState>
