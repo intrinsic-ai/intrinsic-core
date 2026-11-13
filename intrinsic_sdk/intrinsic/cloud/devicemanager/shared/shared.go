@@ -70,6 +70,8 @@ const (
 	EtherTypeEtherCAT = 1
 	// EtherTypeIPRealtime is the IP protocol (realtime).
 	EtherTypeIPRealtime = 2
+	// EtherTypeEtherlab is used for Etherlab EtherCAT interfaces.$
+	EtherTypeEtherlab = 3
 )
 
 // Interface represents a network interface configuration.
