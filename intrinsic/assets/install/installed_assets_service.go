@@ -38,6 +38,7 @@ import (
 	"intrinsic/assets/orderedmap"
 	"intrinsic/assets/scene_objects/sceneobjectvalidate"
 	"intrinsic/assets/services/servicevalidate"
+	"intrinsic/assets/solutions/solutionvalidate"
 	"intrinsic/assets/typeutils"
 	"intrinsic/assets/viewutils"
 	"intrinsic/kubernetes/acl/clientcontext"
@@ -69,6 +70,7 @@ import (
 	mdpb "intrinsic/assets/proto/metadata_go_proto"
 	assetpb "intrinsic/assets/proto/v1/asset_go_proto"
 	searchpb "intrinsic/assets/proto/v1/search_go_proto"
+	svpb "intrinsic/assets/proto/v1/solution_validation_policy_go_proto"
 	viewpb "intrinsic/assets/proto/view_go_proto"
 	apb "intrinsic/config/proto/application_go_proto"
 	rspb "intrinsic/config/proto/resource_set_go_proto"
@@ -965,6 +967,7 @@ type setMetadataFn func(warnings *statuspb.ExtendedStatus)
 func (s *installedAssetsService) installAssets(
 	ctx context.Context,
 	policy iapb.UpdatePolicy,
+	rule report.SeverityRule,
 	toInstall *orderedmap.OrderedMap[string, *rtrpb.ResourceTypeRuntime],
 	referencedToInstall map[string]*rtrpb.ResourceTypeRuntime,
 	mustExist map[string]struct{},
@@ -1005,10 +1008,9 @@ func (s *installedAssetsService) installAssets(
 	for _, idv := range actions.remove {
 		delete(expectedRTRs, idv)
 	}
-	es, err := validateDependencies(ctx, actions.app, slices.Collect(maps.Values(expectedRTRs)), slices.Collect(toInstall.Keys()), "Dependency validation errors during Asset installation")
+	es, err := validateDependencies(ctx, actions.app, slices.Collect(maps.Values(expectedRTRs)), slices.Collect(toInstall.Keys()), rule, "installation")
 	if err != nil {
-		log.ErrorContextf(ctx, "dependency validation failed during installation: %v", err)
-		return status.Errorf(codes.FailedPrecondition, "dependency validation failed during installation: %v", err)
+		return err
 	}
 	setMetadata(es)
 
@@ -1101,25 +1103,57 @@ func (s *installedAssetsService) installAssets(
 	return nil
 }
 
-func validateDependencies(ctx context.Context, app *apb.Application, rtrs []*rtrpb.ResourceTypeRuntime, referencesTo []string, errReportTitle string) (*statuspb.ExtendedStatus, error) {
+// validateDependencies validates the dependencies of the expected Solution state and classifies
+// each issue with rule.
+//
+// action describes the operation being validated (e.g., "installation") and is used in error
+// messages and report titles.
+func validateDependencies(ctx context.Context, app *apb.Application, rtrs []*rtrpb.ResourceTypeRuntime, referencesTo []string, rule report.SeverityRule, action string) (*statuspb.ExtendedStatus, error) {
 	sc, err := runtimegraph.NewSolutionContext(ctx, app.GetResources().GetResourceInstances(), rtrs, runtimegraph.WithPlatformRuntime())
 	if err != nil {
+		log.ErrorContextf(ctx, "dependency validation failed during %s: failed to build solution context: %v", action, err)
 		return nil, status.Errorf(codes.Internal, "failed to build solution context for validation: %v", err)
 	}
 
-	r := report.New(report.WithSeverityRule(report.AllWarnings))
+	r := report.New(report.WithSeverityRule(rule))
 	opts := []graph.ValidateGraphOption{graph.WithReport(r)}
 	if len(referencesTo) > 0 {
 		opts = append(opts, graph.WithOnlyReferencesTo(referencesTo...))
 	}
 	if err := graph.ValidateAll(sc, opts...); err != nil {
-		return nil, fmt.Errorf("dependency validation failed: %w", err)
+		log.ErrorContextf(ctx, "dependency validation failed during %s: %v", action, err)
+		return nil, status.Errorf(codes.FailedPrecondition, "dependency validation failed during %s: %v", action, err)
+	}
+
+	title := "Dependency validation errors during Asset " + action
+	if len(r.Errors()) > 0 {
+		log.WarningContextf(ctx, "dependency validation errors during %s: %v", action, r.Errors())
+		return nil, r.ToExtendedStatus(
+			report.WithTitlePrefix(title),
+			report.WithGrpcCode(codes.FailedPrecondition),
+		).Err()
 	}
 	if len(r.Warnings()) == 0 {
 		return nil, nil
 	}
 	log.WarningContextf(ctx, "dependencies validation warnings: %v", r.Warnings())
-	return r.ToExtendedStatus(report.WithTitlePrefix(errReportTitle)).Proto(), nil
+	return r.ToExtendedStatus(report.WithTitlePrefix(title)).Proto(), nil
+}
+
+// severityRule returns the severity rule for the requested Solution validation policy, falling
+// back to a default if unspecified.
+func severityRule(p, defaultPolicy svpb.SolutionValidationPolicy) (report.SeverityRule, error) {
+	if p == svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED {
+		p = defaultPolicy
+	}
+	if p == svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid solution validation policy: %v", p)
+	}
+	rule, err := solutionvalidate.SeverityRuleFor(p)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid solution validation policy: %v", err)
+	}
+	return rule, nil
 }
 
 func appendAssetsToInstall(toInstall map[string]*rtrpb.ResourceTypeRuntime, rtrs []*rtrpb.ResourceTypeRuntime) error {
@@ -1139,13 +1173,15 @@ func appendAssetsToInstall(toInstall map[string]*rtrpb.ResourceTypeRuntime, rtrs
 type createOpts struct {
 	// metadataFrom returns the metadata message of the LRO from its contents -- extended status
 	// in this case, for representing dependency validation errors.
-	metadataFrom     func(warnings *statuspb.ExtendedStatus) proto.Message
-	returnConversion func(*iapb.BatchCreateInstalledAssetsResponse) proto.Message
+	metadataFrom            func(warnings *statuspb.ExtendedStatus) proto.Message
+	returnConversion        func(*iapb.BatchCreateInstalledAssetsResponse) proto.Message
+	defaultValidationPolicy svpb.SolutionValidationPolicy
 }
 
 // batchCreateInstalledAssets is an internal handler for asset creation functions. This supports singular, plural, and batch methods.
 func (s *installedAssetsService) batchCreateInstalledAssets(ctx context.Context, req *iapb.BatchCreateInstalledAssetsRequest, opts createOpts) (*lropb.Operation, error) {
 	policy := req.GetPolicy()
+	validationPolicy := req.GetValidationPolicy()
 
 	// Keep track of the order of Assets as provided in the request in a slice.
 	var toInstallIDs []string
@@ -1160,6 +1196,12 @@ func (s *installedAssetsService) batchCreateInstalledAssets(ctx context.Context,
 				return nil, status.Errorf(codes.InvalidArgument, "conflicting update policies specified: %v and %v", policy, r.GetPolicy())
 			}
 			policy = r.GetPolicy()
+		}
+		if r.GetValidationPolicy() != svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED {
+			if validationPolicy != svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED && validationPolicy != r.GetValidationPolicy() {
+				return nil, status.Errorf(codes.InvalidArgument, "conflicting validation policies specified: %v and %v", validationPolicy, r.GetValidationPolicy())
+			}
+			validationPolicy = r.GetValidationPolicy()
 		}
 
 		a := r.GetAsset()
@@ -1204,9 +1246,15 @@ func (s *installedAssetsService) batchCreateInstalledAssets(ctx context.Context,
 		}
 	}
 
+	rule, err := severityRule(validationPolicy, opts.defaultValidationPolicy)
+	if err != nil {
+		return nil, err
+	}
+
 	return s.gatherAndScheduleInstall(ctx, installScheduleOpts{
 		opPrefix:          "install",
 		policy:            policy,
+		severityRule:      rule,
 		toInstallIDs:      toInstallIDs,
 		mustExist:         nil, // Should only be set for update operations.
 		local:             local,
@@ -1224,6 +1272,7 @@ func (s *installedAssetsService) batchCreateInstalledAssets(ctx context.Context,
 type installScheduleOpts struct {
 	opPrefix          string
 	policy            iapb.UpdatePolicy
+	severityRule      report.SeverityRule
 	toInstallIDs      []string
 	mustExist         map[string]struct{}
 	local             []*rtrpb.ResourceTypeRuntime
@@ -1349,7 +1398,7 @@ func (s *installedAssetsService) gatherAndScheduleInstall(ctx context.Context, o
 				}
 			}
 		}
-		if err := s.installAssets(ctx, opts.policy, orderedToInstall, referencedAssets, opts.mustExist, setMetadata); err != nil {
+		if err := s.installAssets(ctx, opts.policy, opts.severityRule, orderedToInstall, referencedAssets, opts.mustExist, setMetadata); err != nil {
 			return nil, err
 		}
 
@@ -1384,9 +1433,11 @@ func (s *installedAssetsService) CreateInstalledAssets(ctx context.Context, req 
 	}
 
 	return s.batchCreateInstalledAssets(ctx, &iapb.BatchCreateInstalledAssetsRequest{
-		Requests: requests,
-		Policy:   req.GetPolicy(),
+		Requests:         requests,
+		Policy:           req.GetPolicy(),
+		ValidationPolicy: req.GetValidationPolicy(),
 	}, createOpts{
+		defaultValidationPolicy: svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.CreateInstalledAssetsMetadata{
 				Warnings: es,
@@ -1405,9 +1456,11 @@ func (s *installedAssetsService) CreateInstalledAsset(ctx context.Context, req *
 	defer span.End()
 
 	return s.batchCreateInstalledAssets(ctx, &iapb.BatchCreateInstalledAssetsRequest{
-		Requests: []*iapb.CreateInstalledAssetRequest{req},
-		Policy:   req.GetPolicy(),
+		Requests:         []*iapb.CreateInstalledAssetRequest{req},
+		Policy:           req.GetPolicy(),
+		ValidationPolicy: req.GetValidationPolicy(),
 	}, createOpts{
+		defaultValidationPolicy: svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.CreateInstalledAssetMetadata{
 				Warnings: es,
@@ -1424,6 +1477,7 @@ func (s *installedAssetsService) BatchCreateInstalledAssets(ctx context.Context,
 	defer span.End()
 
 	return s.batchCreateInstalledAssets(ctx, req, createOpts{
+		defaultValidationPolicy: svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.BatchCreateInstalledAssetsMetadata{
 				Warnings: es,
@@ -1493,8 +1547,9 @@ func convertPluralAssetToSingular(a *iapb.CreateInstalledAssetsRequest_Asset) (*
 }
 
 type updateOpts struct {
-	metadataFrom     func(warnings *statuspb.ExtendedStatus) proto.Message
-	returnConversion func(*iapb.BatchUpdateInstalledAssetsResponse) proto.Message
+	metadataFrom            func(warnings *statuspb.ExtendedStatus) proto.Message
+	returnConversion        func(*iapb.BatchUpdateInstalledAssetsResponse) proto.Message
+	defaultValidationPolicy svpb.SolutionValidationPolicy
 }
 
 func (s *installedAssetsService) batchUpdateInstalledAssets(ctx context.Context, req *iapb.BatchUpdateInstalledAssetsRequest, opts updateOpts) (*lropb.Operation, error) {
@@ -1507,6 +1562,7 @@ func (s *installedAssetsService) batchUpdateInstalledAssets(ctx context.Context,
 	mustExist := make(map[string]struct{})
 	var local []*rtrpb.ResourceTypeRuntime
 	pullFromCatalog := make(map[string]*idpb.IdVersion)
+	validationPolicy := req.GetValidationPolicy()
 
 	for _, r := range req.GetRequests() {
 		if r.GetPolicy() == iapb.UpdatePolicy_UPDATE_POLICY_ADD_NEW_ONLY {
@@ -1517,6 +1573,12 @@ func (s *installedAssetsService) batchUpdateInstalledAssets(ctx context.Context,
 				return nil, status.Errorf(codes.InvalidArgument, "conflicting update policies specified: %v and %v", policy, r.GetPolicy())
 			}
 			policy = r.GetPolicy()
+		}
+		if r.GetValidationPolicy() != svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED {
+			if validationPolicy != svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED && validationPolicy != r.GetValidationPolicy() {
+				return nil, status.Errorf(codes.InvalidArgument, "conflicting validation policies specified: %v and %v", validationPolicy, r.GetValidationPolicy())
+			}
+			validationPolicy = r.GetValidationPolicy()
 		}
 
 		ia := r.GetInstalledAsset()
@@ -1561,9 +1623,15 @@ func (s *installedAssetsService) batchUpdateInstalledAssets(ctx context.Context,
 		}
 	}
 
+	rule, err := severityRule(validationPolicy, opts.defaultValidationPolicy)
+	if err != nil {
+		return nil, err
+	}
+
 	return s.gatherAndScheduleInstall(ctx, installScheduleOpts{
 		opPrefix:        "update",
 		policy:          policy,
+		severityRule:    rule,
 		toInstallIDs:    toInstallIDs,
 		mustExist:       mustExist,
 		local:           local,
@@ -1582,6 +1650,7 @@ func (s *installedAssetsService) BatchUpdateInstalledAssets(ctx context.Context,
 	defer span.End()
 
 	return s.batchUpdateInstalledAssets(ctx, req, updateOpts{
+		defaultValidationPolicy: svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.BatchUpdateInstalledAssetsMetadata{
 				Warnings: es,
@@ -1598,10 +1667,12 @@ func (s *installedAssetsService) UpdateInstalledAsset(ctx context.Context, req *
 	defer span.End()
 
 	return s.batchUpdateInstalledAssets(ctx, &iapb.BatchUpdateInstalledAssetsRequest{
-		Requests:     []*iapb.UpdateInstalledAssetRequest{req},
-		Policy:       req.GetPolicy(),
-		AllowMissing: req.GetAllowMissing(),
+		Requests:         []*iapb.UpdateInstalledAssetRequest{req},
+		Policy:           req.GetPolicy(),
+		AllowMissing:     req.GetAllowMissing(),
+		ValidationPolicy: req.GetValidationPolicy(),
 	}, updateOpts{
+		defaultValidationPolicy: svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.UpdateInstalledAssetMetadata{
 				Warnings: es,
@@ -1615,7 +1686,7 @@ func (s *installedAssetsService) UpdateInstalledAsset(ctx context.Context, req *
 
 // uninstallAssets will remove the assets specified in the idsToDeleteSet from
 // the solution based on the provided policy.
-func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iapb.DeleteInstalledAssetsRequest_Policy, idsToDelete map[string]struct{}, setMetadata setMetadataFn) error {
+func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iapb.DeleteInstalledAssetsRequest_Policy, rule report.SeverityRule, idsToDelete map[string]struct{}, setMetadata setMetadataFn) error {
 	state, err := s.summarizeState(ctx)
 	if err != nil {
 		return err
@@ -1697,10 +1768,9 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 	expectedRTRs := slices.DeleteFunc(slices.Clone(state.rtrs), func(rtr *rtrpb.ResourceTypeRuntime) bool {
 		return idVersionsToDelete[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())]
 	})
-	es, err := validateDependencies(ctx, expectedApp, expectedRTRs, slices.Collect(maps.Keys(idsToDelete)), "Dependency validation errors during Asset uninstallation")
+	es, err := validateDependencies(ctx, expectedApp, expectedRTRs, slices.Collect(maps.Keys(idsToDelete)), rule, "uninstallation")
 	if err != nil {
-		log.ErrorContextf(ctx, "dependency validation failed during uninstallation: %v", err)
-		return status.Errorf(codes.FailedPrecondition, "dependency validation failed during uninstallation: %v", err)
+		return err
 	}
 	if es != nil {
 		setMetadata(es)
@@ -1737,7 +1807,8 @@ func (s *installedAssetsService) uninstallAssets(ctx context.Context, policy iap
 type deleteOpts struct {
 	// metadataFrom returns the metadata message of the LRO from its contents -- extended status
 	// in this case, for representing dependency validation errors.
-	metadataFrom func(warnings *statuspb.ExtendedStatus) proto.Message
+	metadataFrom            func(warnings *statuspb.ExtendedStatus) proto.Message
+	defaultValidationPolicy svpb.SolutionValidationPolicy
 }
 
 func (s *installedAssetsService) deleteInstalledAssets(ctx context.Context, req *iapb.DeleteInstalledAssetsRequest, opts deleteOpts) (*lropb.Operation, error) {
@@ -1753,11 +1824,16 @@ func (s *installedAssetsService) deleteInstalledAssets(ctx context.Context, req 
 		idsToDelete[id] = struct{}{}
 	}
 
+	rule, err := severityRule(req.GetValidationPolicy(), opts.defaultValidationPolicy)
+	if err != nil {
+		return nil, err
+	}
+
 	// At this point the logic becomes dependent on the state of the cluster,
 	// so handle this within the queue.  There's a single worker, so requests
 	// will be handled sequentially.
 	op := operations.NewWithPrefix("delete")
-	err := s.runner.Schedule(ctx, op, func(ctx context.Context) (proto.Message, error) {
+	err = s.runner.Schedule(ctx, op, func(ctx context.Context) (proto.Message, error) {
 		var setMetadata setMetadataFn = func(es *statuspb.ExtendedStatus) {
 			if opts.metadataFrom != nil {
 				if err := op.SetMetadata(opts.metadataFrom(es)); err != nil {
@@ -1765,7 +1841,7 @@ func (s *installedAssetsService) deleteInstalledAssets(ctx context.Context, req 
 				}
 			}
 		}
-		if err := s.uninstallAssets(ctx, req.GetPolicy(), idsToDelete, setMetadata); err != nil {
+		if err := s.uninstallAssets(ctx, req.GetPolicy(), rule, idsToDelete, setMetadata); err != nil {
 			return nil, err
 		}
 		return &emptypb.Empty{}, nil
@@ -1781,6 +1857,7 @@ func (s *installedAssetsService) DeleteInstalledAssets(ctx context.Context, req 
 	defer span.End()
 
 	return s.deleteInstalledAssets(ctx, req, deleteOpts{
+		defaultValidationPolicy: svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.DeleteInstalledAssetsMetadata{
 				Warnings: es,
@@ -1801,8 +1878,10 @@ func (s *installedAssetsService) DeleteInstalledAsset(ctx context.Context, req *
 		},
 		// We're just forcing the conversion, since the enums mirror each other.
 		// TODO - b/364732263: use DeletePolicy in a BatchDelete method.
-		Policy: iapb.DeleteInstalledAssetsRequest_Policy(int(req.GetPolicy())),
+		Policy:           iapb.DeleteInstalledAssetsRequest_Policy(int(req.GetPolicy())),
+		ValidationPolicy: req.GetValidationPolicy(),
 	}, deleteOpts{
+		defaultValidationPolicy: svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
 		metadataFrom: func(es *statuspb.ExtendedStatus) proto.Message {
 			return &iapb.DeleteInstalledAssetMetadata{
 				Warnings: es,

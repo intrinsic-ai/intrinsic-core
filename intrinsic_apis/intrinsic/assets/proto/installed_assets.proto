@@ -29,6 +29,7 @@ import "intrinsic/assets/proto/metadata.proto";
 import "intrinsic/assets/proto/v1/asset.proto";
 import "intrinsic/assets/proto/v1/reference.proto";
 import "intrinsic/assets/proto/v1/search.proto";
+import "intrinsic/assets/proto/v1/solution_validation_policy.proto";
 import "intrinsic/assets/proto/view.proto";
 import "intrinsic/assets/scene_objects/proto/scene_object_manifest.proto";
 import "intrinsic/assets/services/proto/service_manifest.proto";
@@ -350,11 +351,25 @@ message CreateInstalledAssetRequest {
 
   Asset asset = 1;
   UpdatePolicy policy = 2;
+
+  // Policy that sets which Solution validation issues fail this installation
+  // and which only produce warnings.
+  //
+  // Issues treated as errors fail the operation before any changes are made.
+  // Issues treated as warnings are returned in
+  // `CreateInstalledAssetMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the Solution is changed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 3;
 }
 
 message CreateInstalledAssetMetadata {
   // Warnings associated with the installation of the Asset, including any
-  // associated dependency validation errors.
+  // associated dependency validation issues that the request's
+  // `validation_policy` treats as warnings.
   intrinsic_proto.status.ExtendedStatus warnings = 1;
 }
 
@@ -385,11 +400,25 @@ message CreateInstalledAssetsRequest {
 
   repeated Asset assets = 1;
   UpdatePolicy policy = 2;
+
+  // Policy that sets which Solution validation issues fail this installation
+  // and which only produce warnings.
+  //
+  // Issues treated as errors fail the operation before any changes are made.
+  // Issues treated as warnings are returned in
+  // `CreateInstalledAssetsMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the Solution is changed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 3;
 }
 
 message CreateInstalledAssetsMetadata {
   // Warnings associated with the installation of the Assets, including any
-  // associated dependency validation errors.
+  // associated dependency validation issues that the request's
+  // `validation_policy` treats as warnings.
   intrinsic_proto.status.ExtendedStatus warnings = 1;
 }
 
@@ -410,11 +439,29 @@ message BatchCreateInstalledAssetsRequest {
   // unspecified or set it to the same value, otherwise `INVALID_ARGUMENT` is
   // returned.
   UpdatePolicy policy = 2;
+
+  // Validation policy for the batch, which sets which validation issues fail
+  // this installation and which only produce warnings.
+  //
+  // All requests in the batch share a single effective validation policy.
+  // Individual `requests` should leave `validation_policy` unspecified
+  // or set it to the same value, otherwise `INVALID_ARGUMENT` is returned.
+  //
+  // Issues treated as errors fail the operation before any changes are made.
+  // Issues treated as warnings are returned in
+  // `BatchCreateInstalledAssetsMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the Solution is changed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 3;
 }
 
 message BatchCreateInstalledAssetsMetadata {
   // Warnings associated with the installation of the Assets, including any
-  // associated dependency validation errors.
+  // associated dependency validation issues that the request's
+  // `validation_policy` treats as warnings.
   intrinsic_proto.status.ExtendedStatus warnings = 1;
 }
 
@@ -444,11 +491,25 @@ message UpdateInstalledAssetRequest {
   // solution. If false, attempting to update an asset that is not currently
   // installed will fail with `NOT_FOUND`.
   bool allow_missing = 3;
+
+  // Policy that sets which Solution validation issues fail this update and
+  // which only produce warnings.
+  //
+  // Issues treated as errors fail the operation before any changes are made.
+  // Issues treated as warnings are returned in
+  // `UpdateInstalledAssetMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the Solution is changed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 4;
 }
 
 message UpdateInstalledAssetMetadata {
   // Warnings associated with the update of the Asset, including any
-  // associated dependency validation errors.
+  // associated dependency validation issues that the request's
+  // `validation_policy` treats as warnings.
   intrinsic_proto.status.ExtendedStatus warnings = 1;
 }
 
@@ -468,11 +529,29 @@ message BatchUpdateInstalledAssetsRequest {
   // false, individual `requests` may still set `allow_missing = true` for
   // specific assets.
   bool allow_missing = 3;
+
+  // Validation policy for the batch, which sets which validation issues fail
+  // this update and which only produce warnings.
+  //
+  // All requests in the batch share a single effective validation policy.
+  // Individual `requests` should leave `validation_policy` unspecified
+  // or set it to the same value, otherwise `INVALID_ARGUMENT` is returned.
+  //
+  // Issues treated as errors fail the operation before any changes are made.
+  // Issues treated as warnings are returned in
+  // `BatchUpdateInstalledAssetsMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the Solution is changed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 4;
 }
 
 message BatchUpdateInstalledAssetsMetadata {
   // Warnings associated with the update of the Assets, including any
-  // associated dependency validation errors.
+  // associated dependency validation issues that the request's
+  // `validation_policy` treats as warnings.
   intrinsic_proto.status.ExtendedStatus warnings = 1;
 }
 
@@ -492,11 +571,25 @@ enum DeletePolicy {
 message DeleteInstalledAssetRequest {
   Id asset = 1;
   DeletePolicy policy = 2;
+
+  // Policy that sets which Solution validation issues fail this uninstallation
+  // and which only produce warnings.
+  //
+  // Issues treated as errors fail the operation before any changes are made.
+  // Issues treated as warnings are returned in
+  // `DeleteInstalledAssetMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the Solution is changed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 3;
 }
 
 message DeleteInstalledAssetMetadata {
   // Warnings associated with the uninstallation of the Asset, including any
-  // associated dependency validation errors.
+  // associated dependency validation issues that the request's
+  // `validation_policy` treats as warnings.
   intrinsic_proto.status.ExtendedStatus warnings = 1;
 }
 
@@ -510,10 +603,24 @@ message DeleteInstalledAssetsRequest {
 
   repeated Id assets = 1;
   Policy policy = 2;
+
+  // Policy that sets which Solution validation issues fail this uninstallation
+  // and which only produce warnings.
+  //
+  // Issues treated as errors fail the operation before any changes are made.
+  // Issues treated as warnings are returned in
+  // `DeleteInstalledAssetsMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the Solution is changed, rather than discovering them at runtime.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 3;
 }
 
 message DeleteInstalledAssetsMetadata {
   // Warnings associated with the uninstallation of the Assets, including any
-  // associated dependency validation errors.
+  // associated dependency validation issues that the request's
+  // `validation_policy` treats as warnings.
   intrinsic_proto.status.ExtendedStatus warnings = 1;
 }
