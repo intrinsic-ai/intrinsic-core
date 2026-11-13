@@ -12,6 +12,8 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# gazelle:prefix intrinsic_runtime
+
 load("@rules_pkg//:pkg.bzl", "pkg_tar")
 
 # Releaseable tarball for intrinsic_base and its dependencies.
