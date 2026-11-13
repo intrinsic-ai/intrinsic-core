@@ -32,6 +32,7 @@ import (
 	"intrinsic/assets/deploy/resourcewriter"
 	"intrinsic/assets/errors/report"
 	"intrinsic/assets/idutils"
+	"intrinsic/assets/solutions/solutionvalidate"
 	"intrinsic/kubernetes/acl/clientcontext"
 	"intrinsic/kubernetes/workcell_spec/runtimedbtransfer"
 	"intrinsic/longrunning/go/operations"
@@ -54,6 +55,7 @@ import (
 	adsgrpcpb "intrinsic/assets/proto/asset_deployment_go_proto"
 	pb "intrinsic/assets/proto/asset_deployment_go_proto"
 	idpb "intrinsic/assets/proto/id_go_proto"
+	svpb "intrinsic/assets/proto/v1/solution_validation_policy_go_proto"
 	drpb "intrinsic/assets/services/proto/v1/dynamic_reconfiguration_go_proto"
 	apppb "intrinsic/config/proto/application_go_proto"
 	datafilespb "intrinsic/config/proto/data_files_go_proto"
@@ -262,6 +264,15 @@ func (d *deploy) DeleteResource(ctx context.Context, req *pb.DeleteResourceReque
 
 	log.InfoContextf(ctx, "DeleteResource: %q", req.GetName())
 
+	policy := req.GetValidationPolicy()
+	if policy == svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED {
+		policy = svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE
+	}
+	rule, err := solutionvalidate.SeverityRuleFor(policy)
+	if err != nil {
+		return nil, status.Errorf(codes.InvalidArgument, "invalid solution validation policy: %v", err)
+	}
+
 	op := operations.NewWithPrefix("instance/delete")
 	if err := d.runner.Schedule(ctx, op, func(ctx context.Context) (proto.Message, error) {
 		// The context passed into Enqueue is disconnected from the context
@@ -269,7 +280,7 @@ func (d *deploy) DeleteResource(ctx context.Context, req *pb.DeleteResourceReque
 		// indefinitely if we do not provide a fallback.
 		ctx, cancel := context.WithTimeout(ctx, fallbackOperationTimeout)
 		defer cancel()
-		if err := d.deleteResource(ctx, req, op); err != nil {
+		if err := d.deleteResource(ctx, req, rule, op); err != nil {
 			return nil, err
 		}
 		return &emptypb.Empty{}, nil
@@ -416,7 +427,7 @@ func (d *deploy) create(ctx context.Context, i *instance, worldID string) error 
 	return nil
 }
 
-func (d *deploy) deleteResource(ctx context.Context, req *pb.DeleteResourceRequest, op *operations.Operation) error {
+func (d *deploy) deleteResource(ctx context.Context, req *pb.DeleteResourceRequest, rule report.SeverityRule, op *operations.Operation) error {
 	if req.GetWorldId() == "" {
 		log.InfoContextf(ctx, "world_id not provided, assuming %q", defaultInitWorldID)
 		req.WorldId = defaultInitWorldID
@@ -434,19 +445,24 @@ func (d *deploy) deleteResource(ctx context.Context, req *pb.DeleteResourceReque
 	appClone.GetResources().ResourceInstances = slices.DeleteFunc(appClone.GetResources().GetResourceInstances(), func(ri *ripb.ResourceInstance) bool {
 		return ri.GetName() == name
 	})
-	// Treat all validation errors added to the report as warnings.
-	// This would have to be changed when we introduce different validation policies,
-	// such as STRICT, RELAXED, etc.
-	r := report.New(report.WithSeverityRule(report.AllWarnings))
+	// Issues are classified as errors or warnings according to the requested validation policy.
+	r := report.New(report.WithSeverityRule(rule))
 	if err := d.validateDependencies(ctx, appClone, graph.WithReport(r), graph.WithOnlyReferencesTo(name)); err != nil {
 		log.ErrorContextf(ctx, "dependency validation failed during deletion of instance %q: %v", name, err)
 		return status.Errorf(codes.FailedPrecondition, "dependency validation failed during deletion of instance %q: %v", name, err)
-	} else if len(r.Warnings()) > 0 {
+	}
+	title := fmt.Sprintf("Validation errors when deleting instance %q", name)
+	if len(r.Errors()) > 0 {
+		log.ErrorContextf(ctx, "dependencies validation errors: %v", r.Errors())
+		return r.ToExtendedStatus(
+			report.WithTitlePrefix(title),
+			report.WithGrpcCode(codes.FailedPrecondition),
+		).Err()
+	}
+	if len(r.Warnings()) > 0 {
 		log.WarningContextf(ctx, "dependencies validation warnings: %v", r.Warnings())
 		op.SetMetadata(&pb.DeleteResourceMetadata{
-			Warnings: r.ToExtendedStatus(
-				report.WithTitlePrefix(fmt.Sprintf("Validation errors when deleting instance %q", name)),
-			).Proto(),
+			Warnings: r.ToExtendedStatus(report.WithTitlePrefix(title)).Proto(),
 		})
 	}
 

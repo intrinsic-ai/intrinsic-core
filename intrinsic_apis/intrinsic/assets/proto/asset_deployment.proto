@@ -19,6 +19,7 @@ package intrinsic_proto.assets;
 import "google/longrunning/operations.proto";
 import "google/protobuf/any.proto";
 import "intrinsic/assets/proto/id.proto";
+import "intrinsic/assets/proto/v1/solution_validation_policy.proto";
 import "intrinsic/config/proto/data_files.proto"; 
 import "intrinsic/kubernetes/generator/proto/auth_options.proto";
 import "intrinsic/math/proto/pose.proto";
@@ -159,6 +160,19 @@ message DeleteResourceRequest {
   // unspecified to get default world behavior.  All other values likely
   // consitute an error.
   string world_id = 3 [deprecated = true];
+
+  // Policy that sets which Solution validation issues fail this deletion and
+  // which only produce warnings.
+  //
+  // Issues treated as errors fail the request and the resource instance
+  // is not deleted. Issues treated as warnings are returned in
+  // `DeleteResourceMetadata.warnings`.
+  //
+  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
+  // before the deletion.
+  //
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 4;
 
   reserved 2;
   reserved "deletion_strategy";

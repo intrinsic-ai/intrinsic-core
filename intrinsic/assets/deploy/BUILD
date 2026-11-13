@@ -168,8 +168,10 @@ go_library(
         "//intrinsic/assets/dependencies:resolver",
         "//intrinsic/assets/dependencies:runtimegraph",
         "//intrinsic_sdk/intrinsic/assets/errors:report",
+        "//intrinsic_sdk/intrinsic/assets/solutions:solutionvalidate",
         "@intrinsic_apis//intrinsic/assets/proto:asset_deployment_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:id_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_validation_policy_go_proto",
         # LINT.IfChange(dynamic_reconfiguration_versions)
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:dynamic_reconfiguration_go_proto",
         # LINT.ThenChange(//intrinsic/assets/deploy/renderutil.go:supported_dynamic_reconfiguration_versions)

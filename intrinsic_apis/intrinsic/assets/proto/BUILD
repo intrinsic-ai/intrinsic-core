@@ -49,6 +49,7 @@ proto_library(
         ":id_proto",
         "@com_google_googleapis//google/longrunning:operations_proto",
         "@com_google_protobuf//:any_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_validation_policy_proto",
         "@intrinsic_apis//intrinsic/config/proto:data_files_proto",
         "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_proto",
@@ -82,6 +83,7 @@ go_proto_library(
     deps = [
         ":id_go_proto",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_validation_policy_go_proto",
         "@intrinsic_apis//intrinsic/config/proto:data_files_go_proto",
         "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
