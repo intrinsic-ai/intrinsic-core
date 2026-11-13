@@ -772,7 +772,7 @@ oci.pull(
 )
 oci.pull(
     name = "distroless_static",
-    digest = "sha256:448810357cc8e67b7208988abdba0f5ec3d3aebee0a5b13eb624979792cffc0f",
+    digest = "sha256:1a64f46364620465ef9e9a8f5413757dfdf22695e050bbfd7303eeaf17a59383",
     image = "gcr.io/distroless/static",
     platforms = ["linux/amd64"],
     tag = "latest",  # tag needs to be specified for renovatebot to sync the digest
