@@ -586,8 +586,8 @@ bazel_dep(name = "jq.bzl", version = "0.7.2")
 bazel_dep(name = "jwt-cpp", version = "0.7.0.bcr.1", repo_name = "jwt-cpp")  
 bazel_dep(name = "libarchive", version = "3.8.1.bcr.3", repo_name = "com_github_libarchive")  
 bazel_dep(name = "libmodbus", version = "3.1.12")  
-bazel_dep(name = "libxml2-go", version = "0.0.0-20250331-c934e3f.bcr.1")
-bazel_dep(name = "libxml2", version = "2.14.4.bcr.1")  # TODO(b/441702501): Remove when aravis updates this transitive dependency to 2.14 to support clang 21
+bazel_dep(name = "libxml2-go", version = "0.0.0-20250331-c934e3f.bcr.2")
+bazel_dep(name = "libxml2", version = "2.15.4")
 bazel_dep(name = "libyuv", version = "1787")  
 bazel_dep(name = "libzip", version = "1.12.1")
 bazel_dep(name = "libzmq", version = "4.3.5.bcr.7")  
@@ -1088,12 +1088,6 @@ use_repo(
     "ros2_rmw",
     "ros2_rosbag2",
     "ros2_rosidl",
-)
-
-# TODO(b/567681750): Upstream a fix to libxml2-go to support libxml2@2.15 or newer.
-single_version_override(
-    module_name = "libxml2",
-    version = "2.14.4.bcr.1",
 )
 
 # Naive workaround to work around system_python dependency in Protobuf 33 and later.
