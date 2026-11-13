@@ -26,11 +26,13 @@ import (
 
 	"intrinsic/assets/clientutils"
 	"intrinsic/assets/cmdutils"
+	"intrinsic/assets/errors/report"
 	"intrinsic/tools/inctl/util/agents"
 	"intrinsic/tools/inctl/util/color"
 	"intrinsic/util/status/extstatus"
 
 	"github.com/spf13/cobra"
+	"google.golang.org/grpc/status"
 
 	adgrpcpb "intrinsic/assets/proto/asset_deployment_go_proto"
 	adpb "intrinsic/assets/proto/asset_deployment_go_proto"
@@ -48,6 +50,10 @@ func GetCommand() *cobra.Command {
 		Example: `
 Delete a service instance with the specified name
 $ inctl service delete --project=my_project --cluster=some_cluster my_instance
+
+Delete a service instance, failing on any Solution validation issue
+$ inctl service delete --project=my_project --cluster=some_cluster \
+    --validation_policy=strict my_instance
 `,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
@@ -58,6 +64,10 @@ $ inctl service delete --project=my_project --cluster=some_cluster my_instance
 			ctx, stop := signal.NotifyContext(cmd.Context(), os.Interrupt)
 			defer stop()
 			name := args[0]
+			validationPolicy, err := flags.GetFlagValidationPolicy()
+			if err != nil {
+				return err
+			}
 
 			ctx, conn, _, err := clientutils.DialClusterFromInctl(ctx, flags)
 			if err != nil {
@@ -68,10 +78,11 @@ $ inctl service delete --project=my_project --cluster=some_cluster my_instance
 			log.Printf("Requesting deletion of %q", name)
 			client := adgrpcpb.NewAssetDeploymentServiceClient(conn)
 			op, err := client.DeleteResource(ctx, &adpb.DeleteResourceRequest{
-				Name: name,
+				Name:             name,
+				ValidationPolicy: validationPolicy,
 			})
 			if err != nil {
-				return fmt.Errorf("could not delete service %q: %v", name, err)
+				return wrapError(fmt.Sprintf("could not delete service %q", name), err)
 			}
 
 			lroClient := lrogrpcpb.NewOperationsClient(conn)
@@ -98,8 +109,8 @@ $ inctl service delete --project=my_project --cluster=some_cluster my_instance
 				}
 			}
 
-			if err := op.GetError(); err != nil {
-				return fmt.Errorf("failed to delete %q: %v", name, err)
+			if err := status.ErrorProto(op.GetError()); err != nil {
+				return wrapError(fmt.Sprintf("failed to delete %q", name), err)
 			}
 
 			log.Printf("Deleted service %q", name)
@@ -120,6 +131,23 @@ $ inctl service delete --project=my_project --cluster=some_cluster my_instance
 	flags.SetCommand(cmd)
 	flags.AddFlagsAddressClusterSolution()
 	flags.AddFlagsProjectOrg()
+	flags.AddFlagValidationPolicy()
 
 	return cmd
+}
+
+// wrapError checks if err carries Solution validation errors, and wraps it with those
+// details. Otherwise it just annotates err with msg.
+func wrapError(msg string, err error) error {
+	es, ok := extstatus.FromGRPCError(err)
+	if !ok {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	sc := es.Proto().GetStatusCode()
+	if sc.GetComponent() != report.ComponentName || sc.GetCode() != report.StatusCode {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return fmt.Errorf("%s: Solution validation failed:\n\n%s\n"+
+		"Fix these errors and retry, or re-run with --validation_policy=recoverable to proceed "+
+		"despite non-blocking validation issues.", msg, color.C.Red().Sprintf("%s", es.String()))
 }
