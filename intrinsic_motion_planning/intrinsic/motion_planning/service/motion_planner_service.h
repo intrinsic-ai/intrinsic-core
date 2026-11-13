@@ -16,6 +16,7 @@
 #define INTRINSIC_MOTION_PLANNING_SERVICE_MOTION_PLANNER_SERVICE_H_
 
 #include <cstddef>
+#include <functional>
 #include <memory>
 #include <optional>
 #include <string>
