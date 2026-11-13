@@ -16,4 +16,7 @@
 # limitations under the License.
 
 [type.googleapis.com/intrinsic_proto.ml.inference_service.v1.InferenceServiceConfig] {
+  intrinsic_runtime {
+    name: "intrinsic_runtime"
+  }
 }
