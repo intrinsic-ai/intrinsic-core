@@ -21,6 +21,7 @@ import (
 
 	"intrinsic/assets/clientutils"
 	"intrinsic/assets/cmdutils"
+	"intrinsic/assets/errors/report"
 	"intrinsic/assets/idutils"
 	"intrinsic/tools/inctl/util/color"
 	"intrinsic/util/status/extstatus"
@@ -53,12 +54,22 @@ func GetCommand() *cobra.Command {
   $ inctl asset uninstall <id> --project my_project --address my_address
   or
   $ inctl asset uninstall <id> --project my_project --cluster my_cluster
+
+  Uninstall an asset, failing on any Solution validation issue:
+  $ inctl asset uninstall ai.intrinsic.box \
+      --project my_project \
+      --solution my_solution_id \
+      --validation_policy=strict
 `,
 		Args: cobra.ExactArgs(1),
 		RunE: func(cmd *cobra.Command, args []string) error {
 			ctx := cmd.Context()
 			idString := args[0]
 			id, err := idutils.IDProtoFromString(idString)
+			if err != nil {
+				return err
+			}
+			validationPolicy, err := flags.GetFlagValidationPolicy()
 			if err != nil {
 				return err
 			}
@@ -71,10 +82,11 @@ func GetCommand() *cobra.Command {
 
 			client := iagrpcpb.NewInstalledAssetsClient(conn)
 			op, err := client.DeleteInstalledAsset(ctx, &iapb.DeleteInstalledAssetRequest{
-				Asset: id,
+				Asset:            id,
+				ValidationPolicy: validationPolicy,
 			})
 			if err != nil {
-				return fmt.Errorf("could not uninstall the asset: %w", err)
+				return wrapError("could not uninstall the asset", err)
 			}
 
 			log.Printf("Awaiting completion of the uninstallation")
@@ -89,7 +101,7 @@ func GetCommand() *cobra.Command {
 			}
 
 			if err := status.ErrorProto(op.GetError()); err != nil {
-				return fmt.Errorf("uninstalling failed: %w", err)
+				return wrapError("uninstalling failed", err)
 			}
 			log.Printf("Finished uninstalling %q", idString)
 			if op.GetMetadata() != nil {
@@ -109,6 +121,23 @@ func GetCommand() *cobra.Command {
 	flags.SetCommand(cmd)
 	flags.AddFlagsAddressClusterSolution()
 	flags.AddFlagsProjectOrg()
+	flags.AddFlagValidationPolicy()
 
 	return cmd
+}
+
+// wrapError checks if err carries Solution validation errors, and wraps it with those
+// details. Otherwise it just annotates err with msg.
+func wrapError(msg string, err error) error {
+	es, ok := extstatus.FromGRPCError(err)
+	if !ok {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	sc := es.Proto().GetStatusCode()
+	if sc.GetComponent() != report.ComponentName || sc.GetCode() != report.StatusCode {
+		return fmt.Errorf("%s: %w", msg, err)
+	}
+	return fmt.Errorf("%s: Solution validation failed:\n\n%s\n"+
+		"Fix these errors and retry, or re-run with --validation_policy=recoverable to proceed "+
+		"despite non-blocking validation issues.", msg, color.C.Red().Sprintf("%s", es.String()))
 }

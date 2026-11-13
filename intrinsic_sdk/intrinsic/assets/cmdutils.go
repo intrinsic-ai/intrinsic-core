@@ -33,6 +33,7 @@ import (
 
 	atypepb "intrinsic/assets/proto/asset_type_go_proto"
 	iapb "intrinsic/assets/proto/installed_assets_go_proto"
+	svpb "intrinsic/assets/proto/v1/solution_validation_policy_go_proto"
 	viewpb "intrinsic/assets/proto/view_go_proto"
 )
 
@@ -90,6 +91,8 @@ const (
 	keySolution = "solution"
 	// keyTimeout is the name of the timeout flag.
 	keyTimeout = "timeout"
+	// keyValidationPolicy is the name of the Solution validation policy flag.
+	keyValidationPolicy = "validation_policy"
 	// keyVersion is the name of the version flag.
 	keyVersion = "version"
 	// keyView is the name of the view flag.
@@ -103,6 +106,22 @@ var policyMap = map[string]iapb.UpdatePolicy{
 	"add_new_only":      iapb.UpdatePolicy_UPDATE_POLICY_ADD_NEW_ONLY,
 	"update_unused":     iapb.UpdatePolicy_UPDATE_POLICY_UPDATE_UNUSED,
 	"update_compatible": iapb.UpdatePolicy_UPDATE_POLICY_UPDATE_COMPATIBLE,
+}
+
+// validationPolicyMap maps values of the validation policy flag to Solution validation policies.
+var validationPolicyMap = map[string]svpb.SolutionValidationPolicy{
+	"":            svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED,
+	"strict":      svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_STRICT,
+	"recoverable": svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE,
+}
+
+func validationPolicyNames() []string {
+	names := make([]string, 0, len(validationPolicyMap))
+	for name := range validationPolicyMap {
+		names = append(names, name)
+	}
+	slices.Sort(names)
+	return names
 }
 
 // CmdFlags abstracts interaction with inctl command flags.
@@ -300,6 +319,29 @@ func (cf *CmdFlags) GetFlagPolicy() (iapb.UpdatePolicy, error) {
 	}
 
 	return iapb.UpdatePolicy_UPDATE_POLICY_UNSPECIFIED, fmt.Errorf("%q provided for --%v is invalid; valid values are: %v", policy, keyPolicy, maps.Keys(policyMap))
+}
+
+// AddFlagValidationPolicy adds a flag for the Solution validation policy to apply during the
+// operation.
+func (cf *CmdFlags) AddFlagValidationPolicy() {
+	cf.OptionalString(keyValidationPolicy, "", fmt.Sprintf(
+		"Solution validation policy for this operation: \"strict\" fails on any validation issue; "+
+			"\"recoverable\" reports issues that don't prevent the Solution from being deployed as "+
+			"warnings. If unset, the service chooses its default. Can be: %q",
+		validationPolicyNames()))
+}
+
+// GetFlagValidationPolicy gets the value of the validation policy flag. This flag must be added
+// manually by the utility.
+func (cf *CmdFlags) GetFlagValidationPolicy() (svpb.SolutionValidationPolicy, error) {
+	policy := cf.GetString(keyValidationPolicy)
+	if value, ok := validationPolicyMap[policy]; ok {
+		return value, nil
+	}
+
+	return svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_UNSPECIFIED, fmt.Errorf(
+		"%q provided for --%s is invalid; valid values are: %q",
+		policy, keyValidationPolicy, validationPolicyNames())
 }
 
 // AddFlagOrganizationOptional adds an optional flag for the organization.

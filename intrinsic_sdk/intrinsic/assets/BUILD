@@ -95,6 +95,7 @@ go_library(
         "@intrinsic_apis//intrinsic/assets/proto:asset_type_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:installed_assets_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto:view_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_validation_policy_go_proto",
         "@org_golang_x_exp//maps",
     ],
 )
