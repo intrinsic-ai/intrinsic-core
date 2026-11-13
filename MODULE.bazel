@@ -516,7 +516,7 @@ bazel_dep(name = "boost.logic", version = "1.90.0.bcr.1")  # used by cgal
 bazel_dep(name = "boost.math", version = "1.90.0.bcr.1")  
 bazel_dep(name = "boost.multiprecision", version = "1.90.0.bcr.1")  # used by cgal 
 bazel_dep(name = "boost.regex", version = "1.90.0.bcr.1")  
-bazel_dep(name = "boringssl", version = "0.20261020.0")
+bazel_dep(name = "boringssl", version = "0.20261105.0")
 bazel_dep(name = "brotli_go", version = "1.2.0", repo_name = "org_brotli_go")  
 bazel_dep(name = "brotli", version = "1.2.1", repo_name = "org_brotli")  
 bazel_dep(name = "cel-cpp", version = "0.14.0", repo_name = "com_google_cel_cpp")
