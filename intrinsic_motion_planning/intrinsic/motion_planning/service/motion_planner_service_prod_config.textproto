@@ -17,6 +17,9 @@
 
 # LINT.IfChange(mps_asset_prod_feature_flags)
 [type.googleapis.com/intrinsic_proto.motion_planning.v1.MotionPlannerServiceConfig] {
+  intrinsic_runtime {
+    name: "intrinsic_runtime"
+  }
   flags {
     enable_path_refinement_validation_step: true
     path_refinement_validation_margin_relative_factor: 0.9
