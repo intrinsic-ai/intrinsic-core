@@ -17,7 +17,7 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 go_library(
     name = "find",
     srcs = ["find.go"],
-    importpath = "intrinsic/frontend/solution_service/sequencelist/find",
+    importpath = "intrinsic_runtime/solution_service/sequencelist/find",
     deps = [
         "//intrinsic_sdk/intrinsic/executive/go:behaviortree",
         "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
@@ -27,14 +27,14 @@ go_library(
 go_library(
     name = "sequencelist",
     srcs = ["sequencelist.go"],
-    importpath = "intrinsic/frontend/solution_service/sequencelist",
-    visibility = ["//intrinsic/frontend/solution_service:__subpackages__"],
+    importpath = "intrinsic_runtime/solution_service/sequencelist",
+    visibility = ["//intrinsic_runtime/solution_service:__subpackages__"],
     deps = [
         ":find",
         "//intrinsic_sdk/intrinsic/executive/proto:run_metadata_go_proto",
         "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:sequence_list_go_proto",
         "//intrinsic_sdk/intrinsic/logging/proto:log_item_go_proto",
-        "@com_github_golang_glog//:go_default_library",
+        "@com_github_golang_glog//:glog",
         "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/executive/proto:log_items_go_proto",
         "@org_golang_google_protobuf//types/known/timestamppb",

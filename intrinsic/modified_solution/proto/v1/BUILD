@@ -103,10 +103,10 @@ go_proto_library(
     visibility = [
         "//intrinsic/assets/deploy:__pkg__",
         "//intrinsic/assets/install:__pkg__",
-        "//intrinsic/frontend/solution_service:__pkg__",
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/modified_solution:__subpackages__",
         "//intrinsic/tools/inctl/cmd:__subpackages__",
+        "//intrinsic_runtime/solution_service:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__subpackages__",
     ],
     deps = [

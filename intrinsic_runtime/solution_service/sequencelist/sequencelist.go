@@ -26,8 +26,9 @@ import (
 	executivelogitemspb "intrinsic/executive/proto/log_items_go_proto"
 	runmetadatapb "intrinsic/executive/proto/run_metadata_go_proto"
 	slpb "intrinsic/frontend/solution_service/proto/sequence_list_go_proto"
-	"intrinsic/frontend/solution_service/sequencelist/find"
 	logitempb "intrinsic/logging/proto/log_item_go_proto"
+
+	"intrinsic_runtime/solution_service/sequencelist/find"
 )
 
 type itemState struct {

@@ -30,7 +30,7 @@ spec:
         - name: solution-service
           image: {{ .Values.registry }}{{ .Values.images.solution_service }}
           args:
-            - /intrinsic/frontend/solution_service/solution_service_main
+            - /intrinsic_runtime/solution_service/solution_service_main
             - --port=8082
             - --hss_address=hot-shared-state.app-intrinsic-base.svc.cluster.local:9777
             - --transfer_service_address=workcell-cluster-service.app-intrinsic-base.svc.cluster.local:9957

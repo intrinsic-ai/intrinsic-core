@@ -12,21 +12,23 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+# gazelle:prefix intrinsic_runtime/solution_service
+
 load("//intrinsic_sdk/bazel:container.bzl", "container_image")
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
 
 go_library(
     name = "solutionservice",
     srcs = ["solution_service.go"],
-    importpath = "intrinsic/frontend/solution_service/solutionservice",
+    importpath = "intrinsic_runtime/solution_service/solutionservice",
     deps = [
         "//intrinsic/config/proto:application_go_proto",
         "//intrinsic/config/proto:process_go_proto",
-        "//intrinsic/frontend/solution_service/sequencelist",
         "//intrinsic/kubernetes/workcell_spec/proto:solution_internal_go_proto",
         "//intrinsic/storage/hot_shared_state/proto:application_service_go_proto",
         "//intrinsic/util/pagination:pagesize",
         "//intrinsic/util/pagination:pagetoken",
+        "//intrinsic_runtime/solution_service/sequencelist",
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:solution_service_go_proto",
         "//intrinsic_sdk/intrinsic/kubernetes/acl:clientcontext",
@@ -52,7 +54,7 @@ go_library(
 go_binary(
     name = "solution_service_main",
     srcs = ["solution_service_main.go"],
-    importpath = "intrinsic/frontend/solution_service/solution_service_main",
+    importpath = "intrinsic_runtime/solution_service/solution_service_main",
     deps = [
         ":solutionservice",
         "//intrinsic/kubernetes:intrinsic",

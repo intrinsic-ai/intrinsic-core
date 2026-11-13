@@ -63,7 +63,7 @@ helm_chart(
         "scene_object_import": "//intrinsic/scene/service:scene-object-import-image.tar",
         "simulation_service": "//intrinsic/simulation/service:simulation-service-image.tar",
         "skill_registry": "//intrinsic/skills/tools:skill-registry-image.tar",
-        "solution_service": "//intrinsic/frontend/solution_service:solution-service-image.tar",
+        "solution_service": "//intrinsic_runtime/solution_service:solution-service-image.tar",
         "workcell_spec_service": "//intrinsic/kubernetes/workcell_spec:workcell-spec-service-image.tar",
         "world": "//intrinsic/world/binary:world-image.tar",
         "world_updater": "//intrinsic/world/service/updater:world-updater-image.tar",

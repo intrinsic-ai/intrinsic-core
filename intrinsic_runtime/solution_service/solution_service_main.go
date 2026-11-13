@@ -21,7 +21,8 @@ import (
 	"fmt"
 	"net"
 
-	"intrinsic/frontend/solution_service/solutionservice"
+	"intrinsic_runtime/solution_service/solutionservice"
+
 	"intrinsic/kubernetes/intrinsic"
 	"intrinsic/stats/go/telemetry"
 

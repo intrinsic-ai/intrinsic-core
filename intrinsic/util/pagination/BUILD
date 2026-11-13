@@ -52,7 +52,7 @@ go_library(
     name = "pagesize",
     srcs = ["pagesize.go"],
     importpath = "intrinsic/util/pagination/pagesize",
-    visibility = ["//intrinsic/frontend/solution_service:__pkg__"],
+    visibility = ["//intrinsic_runtime/solution_service:__pkg__"],
 )
 
 go_library(
@@ -62,12 +62,12 @@ go_library(
     visibility = [
         "//intrinsic/assets/install:__pkg__",
         "//intrinsic/assets/instances:__pkg__",
-        "//intrinsic/frontend/solution_service:__subpackages__",
         "//intrinsic/kubernetes/data_store:__subpackages__",
         "//intrinsic/longrunning/go:__pkg__",
         "//intrinsic/resources/service:__pkg__",
         "//intrinsic/skills/internal:__pkg__",
         "//intrinsic/solution_versions:__subpackages__",
+        "//intrinsic_runtime/solution_service:__subpackages__",
         "//intrinsic_sdk/intrinsic/skills/internal:__pkg__",
     ],
     deps = [

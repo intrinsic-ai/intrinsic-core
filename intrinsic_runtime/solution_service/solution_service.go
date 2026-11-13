@@ -46,7 +46,6 @@ import (
 	btpb "intrinsic/executive/proto/behavior_tree_go_proto"
 	svcpb "intrinsic/frontend/solution_service/proto/solution_service_go_proto"
 	spb "intrinsic/frontend/solution_service/proto/status_go_proto"
-	"intrinsic/frontend/solution_service/sequencelist"
 	sigrpcpb "intrinsic/kubernetes/workcell_spec/proto/solution_internal_go_proto"
 	sipb "intrinsic/kubernetes/workcell_spec/proto/solution_internal_go_proto"
 	loggerpb "intrinsic/logging/proto/logger_service_go_proto"
@@ -54,6 +53,8 @@ import (
 	srpb "intrinsic/skills/proto/skill_registry_go_proto"
 	aspb "intrinsic/storage/hot_shared_state/proto/application_service_go_proto"
 	hssagrpcpb "intrinsic/storage/hot_shared_state/proto/application_service_go_proto"
+
+	"intrinsic_runtime/solution_service/sequencelist"
 
 	epb "google.golang.org/protobuf/types/known/emptypb"
 	timestamppb "google.golang.org/protobuf/types/known/timestamppb"
