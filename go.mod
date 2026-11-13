@@ -14,7 +14,7 @@
 
 module github.com/intrinsic-ai/insrc
 
-go 1.27.3
+go 1.27.4
 
 require (
 	cel.dev/expr v0.25.2
