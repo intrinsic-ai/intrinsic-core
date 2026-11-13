@@ -30,7 +30,7 @@ python.toolchain(
     python_version = "3.11",
 )
 
-bazel_dep(name = "aspect_rules_js", version = "3.5.2")
+bazel_dep(name = "aspect_rules_js", version = "3.6.1")
 bazel_dep(name = "grpc", version = "1.81.1", repo_name = "com_github_grpc_grpc")
 bazel_dep(name = "grpc_ecosystem_grpc_gateway", version = "2.29.0.bcr.3", repo_name = "com_github_grpc_ecosystem_grpc_gateway_v2")
 bazel_dep(name = "cel-spec", version = "0.25.3", repo_name = "com_google_cel_spec")
