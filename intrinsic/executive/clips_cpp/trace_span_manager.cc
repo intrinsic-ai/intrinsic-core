@@ -145,6 +145,9 @@ absl::Status TraceSpanManager::RegisterFunctions() {
       std::function([this](int64_t id, int status_code,
                            const std::string& failure_message) {
         TraceSpanReferenceId ref_id(id);
+        if (ref_id == kInvalidTraceSpanReferenceId) {
+          return;
+        }
         if (status_code != 0) {
           absl::Status st = AddSpanAttribute(ref_id, "error.code", status_code);
           if (!st.ok()) {

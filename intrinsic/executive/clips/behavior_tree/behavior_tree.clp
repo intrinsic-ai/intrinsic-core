@@ -470,6 +470,9 @@
 (deffunction tracing-end-canceling-span (?node))
 (deffunction tracing-end-canceling-span-failure (?node ?status-code ?status-msg))
 (deffunction tracing-start-canceling-span (?node))
+(deffunction tracing-end-suspend-span-failure (?node ?status-code ?status-msg))
+(deffunction tracing-end-evaluating-condition-span-failure
+  (?node ?status-code ?status-msg))
 
 ; Defined in behavior-tree/behavior_call_instance.clp
 (deffunction behavior-call-instance-reset (?uid ?keep-counters))
@@ -827,13 +830,21 @@
 ; function completes.
 (deffunction behavior-tree-set-node-canceled (?node)
   (tracing-end-canceling-span ?node)
-  (bind ?node-span-reference-id (fact-slot-value ?node span-reference-id))
-  (span-end-failure ?node-span-reference-id
-                                 ?*TRACING-STATUS-CANCELLED* "Node canceled")
+  (tracing-end-suspend-span-failure
+    ?node ?*TRACING-STATUS-CANCELLED* "Node canceled")
+  (tracing-end-evaluating-condition-span-failure
+    ?node ?*TRACING-STATUS-CANCELLED* "Node canceled")
+  (span-end-failure (fact-slot-value ?node iteration-span-reference-id)
+                    ?*TRACING-STATUS-CANCELLED* "Node canceled")
+  (span-end-failure (fact-slot-value ?node span-reference-id)
+                    ?*TRACING-STATUS-CANCELLED* "Node canceled")
   (bind ?es-proto (fact-slot-value ?node extended-status-proto-id))
   (pb-remove ?es-proto)
   (modify ?node (state CANCELED)
                 (canceling-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+                (suspend-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+                (condition-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+                (iteration-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
                 (span-reference-id ?*TRACING-INVALID-SPAN-ID*)
                 (extended-status-proto-id 0))
 )
@@ -912,14 +923,21 @@
   (if (eq ?reason CONDITION) then
     (bind ?span-status ?*TRACING-STATUS-FAILED-PRECONDITION*)
   )
-  (if (eq (fact-slot-value ?node state) CANCELING) then
-    (tracing-end-canceling-span-failure ?node ?span-status
-                                        "Failed during cancellation"))
-  (bind ?node-span-reference-id (fact-slot-value ?node span-reference-id))
-  (span-end-failure ?node-span-reference-id ?span-status ?message)
+  (tracing-end-canceling-span-failure ?node ?span-status
+                                      "Failed during cancellation")
+  (tracing-end-suspend-span-failure ?node ?span-status ?message)
+  (tracing-end-evaluating-condition-span-failure ?node ?span-status ?message)
+  (span-end-failure (fact-slot-value ?node iteration-span-reference-id)
+                    ?span-status ?message)
+  (span-end-failure (fact-slot-value ?node span-reference-id)
+                    ?span-status ?message)
   (modify ?node (state FAILED)
                 (failure-reason ?reason)
                 (failure-message ?message)
+                (canceling-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+                (suspend-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+                (condition-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+                (iteration-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
                 (span-reference-id ?*TRACING-INVALID-SPAN-ID*)
                 (extended-status-proto-id ?es-proto))
   (return ?set-fail-succeeded)

@@ -370,3 +370,14 @@
     ?*TRACING-STATUS-INTERNAL* ?error-msg)
   (modify ?cf (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
 )
+
+(defrule tracing-condition-canceled
+  "End a tracing span, when a condition is canceled"
+  (declare (salience ?*SALIENCE-TRACING-CONDITIONS*))
+  ?cf <- (behavior-tree-condition (state CANCELED)
+    (span-reference-id ~0))
+ =>
+  (tracing-end-condition-span-failure ?cf
+    ?*TRACING-STATUS-CANCELLED* "Condition canceled")
+  (modify ?cf (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+)
