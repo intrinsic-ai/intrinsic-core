@@ -69,6 +69,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/world/proto:collision_action_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",

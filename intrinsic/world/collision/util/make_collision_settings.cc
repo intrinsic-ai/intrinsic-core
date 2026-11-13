@@ -19,6 +19,7 @@
 #include <string>
 
 #include "absl/log/log.h"
+#include "absl/status/statusor.h"
 #include "google/protobuf/repeated_ptr_field.h"
 #include "intrinsic/world/collision/collision_context.pb.h"
 #include "intrinsic/world/entity_id.h"
@@ -62,11 +63,12 @@ intrinsic_proto::world::ObjectOrEntityReference GetReferenceForEntity(
 
   const auto& entity_world = world.GetEntityWorld();
 
-  // TODO(stoyang): Use the entity id to find the object, avoiding this loop.
-  for (const auto& object : world.GetObjects()) {
-    if (!object->GetEntityIds().contains(entity_id)) {
-      continue;
-    }
+  // The object is looked up through the entity-to-object index of the object
+  // world, which covers all entities of an object including its frames.
+  const absl::StatusOr<const object_world::WorldObject*> member_object =
+      world.GetObjectByMemberEntityId(entity_id);
+  if (member_object.ok()) {
+    const object_world::WorldObject* object = *member_object;
 
     if (object->NameIsGlobalAlias().value_or(false)) {
       result.mutable_object_with_filter()
