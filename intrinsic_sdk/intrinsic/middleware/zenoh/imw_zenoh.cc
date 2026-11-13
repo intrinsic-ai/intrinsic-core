@@ -878,7 +878,10 @@ int IMWZenoh::keyexpr_includes(const char* left, const char* right) {
 
   z_owned_keyexpr_t right_keyexpr;
   result = z_keyexpr_from_str(&right_keyexpr, right);
-  if (result < 0) return result;
+  if (result < 0) {
+    z_keyexpr_drop(z_move(left_keyexpr));
+    return result;
+  }
 
   const bool includes =
       z_keyexpr_includes(z_loan(left_keyexpr), z_loan(right_keyexpr));
@@ -899,7 +902,10 @@ int IMWZenoh::keyexpr_intersects(const char* left, const char* right) {
   if (result < 0) return result;
 
   result = z_keyexpr_from_str(&right_keyexpr, right);
-  if (result < 0) return result;
+  if (result < 0) {
+    z_keyexpr_drop(z_move(left_keyexpr));
+    return result;
+  }
 
   const bool intersects =
       z_keyexpr_intersects(z_loan(left_keyexpr), z_loan(right_keyexpr));
