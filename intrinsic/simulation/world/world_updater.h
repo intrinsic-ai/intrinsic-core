@@ -17,7 +17,6 @@
 
 #include <memory>
 #include <optional>
-#include <variant>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/memory/memory.h"
@@ -27,13 +26,10 @@
 #include "intrinsic/util/thread/stop_token.h"
 #include "intrinsic/util/thread/thread.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
-#include "intrinsic/world/proto/world_updates.pb.h"
 
 namespace intrinsic {
 namespace simulation {
 
-using WorldUpdate = intrinsic_proto::world::WorldUpdate;
-using WorldUpdates = intrinsic_proto::world::WorldUpdates;
 using ObjectWorldUpdate = intrinsic_proto::world::ObjectWorldUpdate;
 using ObjectWorldUpdates = intrinsic_proto::world::ObjectWorldUpdates;
 
@@ -53,12 +49,10 @@ class UpdateGenerator {
 
   // Returns the next pending world update, if one exists. Blocks either until
   // the given deadline is reached or an update is available.
-  std::optional<std::variant<WorldUpdate, ObjectWorldUpdate>> NextWorldUpdate(
-      absl::Time deadline);
+  std::optional<ObjectWorldUpdate> NextWorldUpdate(absl::Time deadline);
 
   // Returns the next pending world update, if one exists without blocking.
-  std::optional<std::variant<WorldUpdate, ObjectWorldUpdate>>
-  NextWorldUpdate() {
+  std::optional<ObjectWorldUpdate> NextWorldUpdate() {
     return NextWorldUpdate(absl::InfinitePast());
   }
 
@@ -75,13 +69,12 @@ class UpdateGenerator {
 
  protected:
   UpdateGenerator();  // Must be subclassed.
-  void PublishUpdate(std::variant<WorldUpdate, ObjectWorldUpdate> update,
+  void PublishUpdate(ObjectWorldUpdate update,
                      absl::Duration enqueue_timeout = absl::InfiniteDuration());
 
  private:
   absl::Mutex pending_update_check_mutex_;
-  ConcurrentQueue<std::variant<WorldUpdate, ObjectWorldUpdate>>
-      pending_updates_;
+  ConcurrentQueue<ObjectWorldUpdate> pending_updates_;
 };
 
 // A trivial update generator is one that never generates any updates.
@@ -92,9 +85,9 @@ class TrivialUpdateGenerator : public UpdateGenerator {};
 // instance.
 //
 // This class takes as an argument an UpdateGenerator, which produces a stream
-// of WorldUpdate protos. This class will then call the child's OnWorldUpdates()
-// with all of the most recently added updates at the frequency specified in the
-// constructor.
+// of ObjectWorldUpdate protos. This class will then call the child's
+// OnWorldUpdates() with all of the most recently added updates at the frequency
+// specified in the constructor.
 //
 // Internally, we spawn a thread to monitor whether or not any updates have been
 // added. This class is therefore meant to be thread safe, so you can assume

@@ -80,7 +80,6 @@ cc_library(
         "@abseil-cpp//absl/time",
         "@intrinsic_apis//intrinsic/world/proto:entity_search_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
-        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 

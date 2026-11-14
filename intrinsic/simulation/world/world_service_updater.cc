@@ -30,7 +30,6 @@
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/proto/object_world_service.pb.h"
-#include "intrinsic/world/proto/world_updates.pb.h"
 #include "intrinsic/world/service/world_service.pb.h"
 
 namespace intrinsic {
@@ -86,10 +85,7 @@ std::string WorldServiceUpdater::GetTargetWorldId() {
 
 void WorldServiceUpdater::UpdateObjectWorldService(
     const ObjectWorldUpdates& updates) {
-  // TODO(b/259728627) Update this check to only see if
-  // `updates.updates().empty()` is true once the PoseGenerator publishes object
-  // world updates instead of entity world updates.
-  if (updates.updates().empty() && updates.entity_updates().empty()) {
+  if (updates.updates().empty()) {
     // Nothing to do here.
     return;
   }

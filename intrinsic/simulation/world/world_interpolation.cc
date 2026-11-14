@@ -33,7 +33,6 @@
 #include "intrinsic/world/objects/object_world_client.h"
 #include "intrinsic/world/proto/object_world_service.pb.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
-#include "intrinsic/world/proto/world_updates.pb.h"
 
 namespace intrinsic::simulation {
 namespace {

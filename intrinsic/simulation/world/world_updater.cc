@@ -17,7 +17,6 @@
 #include <functional>
 #include <optional>
 #include <utility>
-#include <variant>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -26,7 +25,6 @@
 #include "absl/time/time.h"
 #include "intrinsic/util/thread/stop_token.h"
 #include "intrinsic/util/thread/thread.h"
-#include "intrinsic/world/proto/world_updates.pb.h"
 
 namespace intrinsic {
 namespace simulation {
@@ -41,8 +39,8 @@ UpdateGenerator::UpdateGenerator() : pending_updates_(kNumBufferedUpdates) {}
 
 bool UpdateGenerator::HasPendingUpdate() { return !pending_updates_.IsEmpty(); }
 
-std::optional<std::variant<WorldUpdate, ObjectWorldUpdate>>
-UpdateGenerator::NextWorldUpdate(absl::Time deadline) {
+std::optional<ObjectWorldUpdate> UpdateGenerator::NextWorldUpdate(
+    absl::Time deadline) {
   absl::Duration timeout = deadline - absl::Now();
   if (auto pending_update = pending_updates_.Dequeue(timeout);
       pending_update.ok()) {
@@ -51,9 +49,8 @@ UpdateGenerator::NextWorldUpdate(absl::Time deadline) {
   return {};
 }
 
-void UpdateGenerator::PublishUpdate(
-    std::variant<WorldUpdate, ObjectWorldUpdate> new_update,
-    absl::Duration enqueue_timeout) {
+void UpdateGenerator::PublishUpdate(ObjectWorldUpdate new_update,
+                                    absl::Duration enqueue_timeout) {
   if (auto status =
           pending_updates_.Enqueue(std::move(new_update), enqueue_timeout);
       !status.ok()) {
@@ -126,20 +123,12 @@ void WorldUpdater::ThreadMain(StopToken stop_token) {
     CHECK_NE(current_generator, nullptr);
 
     // Collect next pending update
-    std::optional<std::variant<WorldUpdate, ObjectWorldUpdate>> new_update;
+    std::optional<ObjectWorldUpdate> new_update;
     new_update = current_generator->NextWorldUpdate(time_next_update_sent);
 
     const bool got_update = new_update.has_value();
     if (got_update) {
-      if (std::holds_alternative<ObjectWorldUpdate>(new_update.value())) {
-        *world_updates.add_updates() =
-            std::get<ObjectWorldUpdate>(new_update.value());
-      } else if (std::holds_alternative<WorldUpdate>(new_update.value())) {
-        *world_updates.add_entity_updates() =
-            std::get<WorldUpdate>(new_update.value());
-      } else {
-        LOG(FATAL) << "Got an unknown variant index";
-      }
+      *world_updates.add_updates() = *std::move(new_update);
     }
 
     // If it's too early to send the updates, then spin.

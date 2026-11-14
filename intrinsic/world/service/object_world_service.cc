@@ -116,7 +116,6 @@
 #include "intrinsic/world/proto/object_world_service.pb.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
 #include "intrinsic/world/proto/world_entity.pb.h"
-#include "intrinsic/world/proto/world_updates.pb.h"
 #include "intrinsic/world/robot_payload/robot_payload.h"
 #include "intrinsic/world/service/objects/object_world_converter.h"
 #include "intrinsic/world/service/objects/object_world_updates_utils.h"
@@ -124,7 +123,6 @@
 #include "intrinsic/world/service/world_compatibility_service.pb.h"
 #include "intrinsic/world/service/world_mutex.h"
 #include "intrinsic/world/service/world_storage.h"
-#include "intrinsic/world/update_world.h"
 #include "intrinsic/world/util/compose_world_util.h"
 #include "intrinsic/world/world.h"
 #include "opentelemetry/metrics/sync_instruments.h"
@@ -1610,58 +1608,6 @@ ExtractResourceDeletions(const World& baseline_entity_world,
   return deletion_updates;
 }
 
-// TODO(b/259728627) Remove this method once the PoseGenerator publishes object
-// world updates
-absl::Status HandleEntityWorldUpdates(
-    const ::google::protobuf::RepeatedPtrField<
-        ::intrinsic_proto::world::WorldUpdate>& updates,
-    intrinsic::World* world) {
-  if (updates.empty()) {
-    return absl::OkStatus();
-  }
-
-  intrinsic_proto::world::internal::WorldServerUpdates outgoing_entity_updates;
-  for (const intrinsic_proto::world::WorldUpdate& update : updates) {
-    // Need to map from WorldUpdate to WorldServerUpdate, not all updates are
-    // supported.
-    auto* outgoing_update = outgoing_entity_updates.mutable_updates()->Add();
-    if (update.has_set_robot_dof_values()) {
-      *(outgoing_update->mutable_set_robot_dof_values()) =
-          update.set_robot_dof_values();
-    } else if (update.has_reparent_entity()) {
-      *(outgoing_update->mutable_reparent_entity()) = update.reparent_entity();
-    } else if (update.has_update_attachment()) {
-      *(outgoing_update->mutable_update_attachment()) =
-          update.update_attachment();
-    } else if (update.has_set_named_configuration()) {
-      *(outgoing_update->mutable_set_named_configuration()) =
-          update.set_named_configuration();
-    } else if (update.has_add_label()) {
-      *(outgoing_update->mutable_add_label()) = update.add_label();
-    } else if (update.has_remove_label()) {
-      *(outgoing_update->mutable_remove_label()) = update.remove_label();
-    } else if (update.has_set_dof_values()) {
-      *(outgoing_update->mutable_set_dof_values()) = update.set_dof_values();
-    } else {
-      return absl::InvalidArgumentError(
-          absl::StrCat("Unsupported world update: ", update.update_case()));
-    }
-  }
-
-  return intrinsic::UpdateWorld(outgoing_entity_updates, world);
-}
-
-bool IsOnlyStateChange(const ::google::protobuf::RepeatedPtrField<
-                       ::intrinsic_proto::world::WorldUpdate>& updates) {
-  for (const intrinsic_proto::world::WorldUpdate& world_update : updates) {
-    if (!intrinsic::IsOnlyStateChange(world_update)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
 constexpr absl::string_view kRemainingEntitiesAfterResourceExtractionName =
     "intrinsic/object_world_service/"
     "remaining_entities_after_resource_extraction";
@@ -2593,42 +2539,30 @@ grpc::Status ObjectWorldService::UpdateWorldResources(
     intrinsic_proto::world::UpdateWorldResourcesResponse* response) {
   const stats::ScopedSpan span("ObjectWorldService/UpdateWorldResources",
                                context);
+  if (!request->world_updates().entity_updates().empty()) {
+    return grpc::Status(
+        grpc::StatusCode::INVALID_ARGUMENT,
+        "Entity updates (ObjectWorldUpdates.entity_updates) are not supported "
+        "by the object world service. Use ObjectWorldUpdates.updates instead.");
+  }
 
   INTR_ASSIGN_OR_RETURN_GRPC(std::shared_ptr<WorldAndMutex> world_ptr,
                              WorldStore().GetWorld(request->world_id()));
   absl::WriterMutexLock lock(*world_ptr->mtx);
   INTR_ASSIGN_OR_RETURN_GRPC(auto world, world_ptr->GetObjectWorld());
 
-  // TODO(b/259728627) Remove this check once the PoseGenerator publishes object
-  // world updates instead of entity world updates (until this change is made,
-  // this method temporarily supports entity world updates as well since the
-  // WorldServiceUpdater no longer uses the WorldService - it only uses the
-  // ObjectWorldService)
-  if (!request->world_updates().updates().empty() ||
-      !request->world_updates().entity_updates().empty()) {
+  if (!request->world_updates().updates().empty()) {
     // TODO(b/204178012): On an update error, roll back to before first
     // update.
     INTR_RETURN_IF_ERROR_GRPC(HandleObjectWorldUpdates(
         *world, request->world_updates(), GeoLib(context).get(),
         disable_asset_frame_edits_));
 
-    // TODO(b/259728627) Remove this call once the PoseGenerator publishes
-    // object world updates
-    INTR_RETURN_IF_ERROR_GRPC(
-        HandleEntityWorldUpdates(request->world_updates().entity_updates(),
-                                 &world_ptr->world))
-        .LogError();
-
     world_ptr->UpdateTimestamp();
 
     // Skip hash updates if there are only state changes.
-    if (!IsOnlyStateChange(request->world_updates()) ||
-        !IsOnlyStateChange(request->world_updates().entity_updates())) {
+    if (!IsOnlyStateChange(request->world_updates())) {
       world_ptr->UpdateStructureHash();
-    }
-    // Only clear the object world pointer if we had entity updates
-    if (!IsOnlyStateChange(request->world_updates().entity_updates())) {
-      world_ptr->ClearObjectWorld();
     }
     WorldStore().MarkWorldAsChanged(request->world_id(), world_ptr,
                                     /*has_state_change=*/true);

@@ -34,7 +34,6 @@ cc_library(
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
         "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
-        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 
@@ -60,7 +59,6 @@ cc_library(
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",
-        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 
@@ -275,7 +273,6 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
-        "@intrinsic_apis//intrinsic/world/proto:world_updates_cc_proto",
     ],
 )
 

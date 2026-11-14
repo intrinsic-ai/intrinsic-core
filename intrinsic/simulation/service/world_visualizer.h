@@ -35,9 +35,9 @@ namespace simulation {
 // world updates produced from a sequence of skills. When the visualizer is
 // invoked via a call to `Visualize()`, it will estimate the amount of time it
 // takes to move the robot based on the configuration provided in
-// `WorldUpdates`. The visualizer then generates updates over the course of this
-// time period that provide incremental updates to the given world and end with
-// the given updates.
+// `ObjectWorldUpdates`. The visualizer then generates updates over the course
+// of this time period that provide incremental updates to the given world and
+// end with the given updates.
 class WorldVisualizer : public UpdateGenerator {
  public:
   static absl::StatusOr<std::unique_ptr<WorldVisualizer>> Create();

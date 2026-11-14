@@ -46,7 +46,6 @@
 #include "intrinsic/world/proto/entity_search.pb.h"
 #include "intrinsic/world/proto/object_world_service.pb.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
-#include "intrinsic/world/proto/world_updates.pb.h"
 
 namespace intrinsic {
 namespace simulation {
