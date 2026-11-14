@@ -866,8 +866,8 @@ oci.pull(
 )
 oci.pull(
     name = "zenohd",
-    digest = "sha256:7a720411f54349de97151a5619a1cd69c5f3eed537a1f3c79fc3137b878d373c",
-    image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/zenohd:1.8.0",
+    digest = "sha256:4514c3e60239e741a3c7349f9d03cf0c20358193d0c940aa65d534809070b8ef",
+    image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/zenohd:1.10.0",
     platforms = ["linux/amd64"],
 )
 
