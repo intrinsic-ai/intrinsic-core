@@ -296,6 +296,7 @@ py_library(
         "//intrinsic_sdk/intrinsic/util/status:status_exception",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_py_pb2_grpc",
         "//intrinsic_sdk/intrinsic/world/python:object_world_client",
+        "@ai_intrinsic_sdks_pip_deps//opentelemetry_api",
         "@com_github_grpc_grpc//src/python/grpcio/grpc:grpcio",
         "@com_google_absl_py//absl/logging",
         "@com_google_googleapis//google/longrunning:operations_py_proto",

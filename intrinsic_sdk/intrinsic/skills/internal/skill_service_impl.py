@@ -18,12 +18,14 @@ from __future__ import annotations
 
 from collections.abc import Callable
 from concurrent import futures
+import functools  
 import textwrap
 import threading
 import traceback
 from typing import cast
 from typing import NoReturn
 from typing import Optional
+from typing import TypeVar  
 
 from absl import logging
 from google.longrunning import operations_pb2
@@ -34,6 +36,8 @@ from google.protobuf import message as proto_message
 from google.protobuf import message_factory
 from google.rpc import status_pb2
 import grpc
+from opentelemetry import context as otel_context  
+from opentelemetry import propagate  
 
 from intrinsic.assets import id_utils
 from intrinsic.geometry.proto import geometry_service_pb2_grpc
@@ -89,6 +93,33 @@ def _get_context_id(context: context_pb2.Context) -> str:
   if not context.executive_plan_action_id:
     return ''
   return str(context.executive_plan_action_id)
+
+
+
+_T = TypeVar('_T')
+
+
+def _with_caller_trace_context(
+    fn: Callable[[], _T],
+    context: grpc.ServicerContext,
+) -> Callable[[], _T]:
+  """Makes fn run in the caller's trace context.
+
+  The caller (e.g. the executive) sends its trace context in the gRPC metadata.
+  fn runs on another thread, so the context must be attached there.
+  """
+  trace_context = propagate.extract(dict(context.invocation_metadata() or ()))
+
+  @functools.wraps(fn)
+  def fn_with_trace_context() -> _T:
+    token = otel_context.attach(trace_context)
+    try:
+      return fn()
+    finally:
+      otel_context.detach(token)
+
+  return fn_with_trace_context
+
 
 
 class SkillProjectorServicer(skill_service_pb2_grpc.ProjectorServicer):
@@ -206,10 +237,14 @@ class SkillProjectorServicer(skill_service_pb2_grpc.ProjectorServicer):
         context_id=context_id,
     )
 
+    def get_footprint() -> footprint_pb2.Footprint:
+      return skill_project_instance.get_footprint(request, footprint_context)
+
+
+    get_footprint = _with_caller_trace_context(get_footprint, context)
+
     try:
-      skill_footprint = skill_project_instance.get_footprint(
-          request, footprint_context
-      )
+      skill_footprint = get_footprint()
     except Exception as err:  # pylint: disable=broad-except
       error_status = _handle_skill_error(
           err=err,
@@ -369,6 +404,9 @@ class SkillExecutorServicer(skill_service_pb2_grpc.ExecutorServicer):
 
       return skill_service_pb2.ExecuteResult(result=result_any)
 
+
+    execute = _with_caller_trace_context(execute, context)
+
     operation.start(op=execute, op_name='execute', log_context=request.context)
 
     return operation.operation
@@ -467,6 +505,9 @@ class SkillExecutorServicer(skill_service_pb2_grpc.ExecutorServicer):
       return skill_service_pb2.PreviewResult(
           result=result_any, expected_states=skill_context.world_updates
       )
+
+
+    preview = _with_caller_trace_context(preview, context)
 
     operation.start(op=preview, op_name='preview', log_context=request.context)
 
