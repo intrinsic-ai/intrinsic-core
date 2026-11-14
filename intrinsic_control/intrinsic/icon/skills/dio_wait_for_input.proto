@@ -17,10 +17,20 @@ syntax = "proto3";
 package intrinsic_proto.skills;
 
 import "google/protobuf/duration.proto";
+import "intrinsic/assets/proto/field_metadata.proto";
+import "intrinsic/assets/proto/v1/resolved_dependency.proto";
+import "intrinsic/icon/proto/v1/field_metadata.proto";
 
 option go_package = "intrinsic/icon/skills/dio_wait_for_input_go_proto";
 
 message DioWaitForInputParams {
+  // Robot controller to wait for ADIO input on.
+  intrinsic_proto.assets.v1.ResolvedDependency adio = 6
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.icon.v1.IconApi",
+        skill_annotations: { fallback_manifest_dependency_key: "adio" }
+      }];
+
   // Deprecated. Use field `input_block`.
   string block_name = 1 [deprecated = true];
 
@@ -35,7 +45,9 @@ message DioWaitForInputParams {
   google.protobuf.Duration timeout = 4;
 
   // The digital input to wait for.
-  DigitalInputBlock input_block = 5;
+  DigitalInputBlock input_block = 5 [
+    (intrinsic_proto.icon.v1.field_metadata) = { resolved_at_runtime: "adio" }
+  ];
 }
 
 message DigitalInputBlock {

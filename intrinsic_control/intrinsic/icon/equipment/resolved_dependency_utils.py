@@ -33,6 +33,7 @@ from intrinsic.world.python import object_world_ids
 from intrinsic.world.python import object_world_resources
 
 HAL_ARM_PART_TYPE_NAME = "HalArmPart"
+HAL_ADIO_PART_TYPE_NAME = "HalADIOPart"
 
 PartType: TypeAlias = str
 PartName: TypeAlias = str
@@ -164,6 +165,21 @@ class IconResolvedDependency:
         " selected ICON instance are:"
         f" {_format_available_position_parts(position_parts)}."
     )
+
+  def get_adio_part_names(self) -> list[PartName]:
+    """Returns the sorted list of ADIO (`"HalADIOPart"`) part names.
+
+    Returns:
+      The `"HalADIOPart"` part names from `parts` sorted in ascending
+      lexicographical order.
+
+    Raises:
+      ValueError: If no ADIO parts exist in `parts`.
+    """
+    adio_parts = self.parts.get(HAL_ADIO_PART_TYPE_NAME, {})
+    if not adio_parts:
+      raise ValueError("The given ICON instance does not have any ADIO parts.")
+    return sorted(adio_parts.keys())
 
 
 def connect_to_icon_resolved_dependency(

@@ -135,6 +135,23 @@ icon::Condition CreateWaitForInputValueCondition(
 }  // namespace
 
 absl::StatusOr<std::unique_ptr<AnalogDigitalIOInterface>>
+IconAnalogDigitalIO::Create(absl::Span<const std::string> adio_part_names,
+                            std::shared_ptr<ChannelInterface> icon_channel) {
+  icon::Client client(icon_channel);
+  INTR_ASSIGN_OR_RETURN(auto robot_config, client.GetConfig());
+
+  INTR_ASSIGN_OR_RETURN(auto block_to_part_name,
+                        GetBlockToPartNameMap(adio_part_names, robot_config,
+                                              {.digital_in = true,
+                                               .digital_out = true,
+                                               .analog_in = true,
+                                               .analog_out = true}));
+
+  return std::make_unique<IconAnalogDigitalIO>(std::move(icon_channel),
+                                               std::move(block_to_part_name));
+}
+
+absl::StatusOr<std::unique_ptr<AnalogDigitalIOInterface>>
 IconAnalogDigitalIO::Create(
     const intrinsic_proto::icon::Icon2AdioPart& adio_equipment_config,
     const icon::ChannelFactory& channel_factory,
@@ -153,19 +170,10 @@ IconAnalogDigitalIO::Create(
   INTR_ASSIGN_OR_RETURN(
       std::shared_ptr<ChannelInterface> channel,
       channel_factory.MakeChannel(connection, kIconClientTimeout));
-  icon::Client client(channel);
-  INTR_ASSIGN_OR_RETURN(auto robot_config, client.GetConfig());
-
-  INTR_ASSIGN_OR_RETURN(
-      auto block_to_part_name,
-      GetBlockToPartNameMap(adio_equipment_config, robot_config,
-                            {.digital_in = true,
-                             .digital_out = true,
-                             .analog_in = true,
-                             .analog_out = true}));
-
-  return std::make_unique<IconAnalogDigitalIO>(std::move(channel),
-                                               std::move(block_to_part_name));
+  std::vector<std::string> adio_part_names(
+      adio_equipment_config.icon_parts().begin(),
+      adio_equipment_config.icon_parts().end());
+  return Create(adio_part_names, std::move(channel));
 }
 
 IconAnalogDigitalIO::IconAnalogDigitalIO(

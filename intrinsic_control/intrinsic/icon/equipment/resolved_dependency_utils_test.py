@@ -338,6 +338,34 @@ class IconResolvedDependencyMethodsTest(absltest.TestCase):
           mock_world, arm_part
       )
 
+  def test_get_adio_part_names_returns_sorted_names(self):
+    icon_resolved_dependency = resolved_dependency_utils.IconResolvedDependency(
+        client=mock.create_autospec(icon_api.Client, instance=True),
+        parts={
+            "HalADIOPart": {
+                "adio_2": "adio_2",
+                "adio_1": "adio_1",
+            },
+            # Parts of other types must not be returned.
+            "HalArmPart": {"robot_arm": "my_robot"},
+        },
+    )
+
+    self.assertEqual(
+        icon_resolved_dependency.get_adio_part_names(), ["adio_1", "adio_2"]
+    )
+
+  def test_get_adio_part_names_raises_value_error_when_empty(self):
+    icon_resolved_dependency = resolved_dependency_utils.IconResolvedDependency(
+        client=mock.create_autospec(icon_api.Client, instance=True),
+        parts={},
+    )
+
+    with self.assertRaisesRegex(
+        ValueError, "The given ICON instance does not have any ADIO parts"
+    ):
+      icon_resolved_dependency.get_adio_part_names()
+
 
 if __name__ == "__main__":
   absltest.main()

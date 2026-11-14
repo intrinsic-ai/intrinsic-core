@@ -15,22 +15,16 @@
 #include "intrinsic/icon/skills/util/adio_util.h"
 
 #include <string>
-#include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
-#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
-#include "grpcpp/support/time.h"
-#include "intrinsic/hardware/gpio/v1/gpio_service.pb.h"
-#include "intrinsic/icon/actions/adio.pb.h"
+#include "absl/types/span.h"
 #include "intrinsic/icon/cc_client/robot_config.h"
 #include "intrinsic/icon/equipment/icon_equipment.pb.h"
 #include "intrinsic/icon/proto/generic_part_config.pb.h"
-#include "intrinsic/icon/proto/io_block.pb.h"
-#include "intrinsic/resources/proto/resource_handle.pb.h"
-#include "intrinsic/skills/proto/equipment.pb.h"
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic::skills {
@@ -53,13 +47,12 @@ absl::Status AddBlockToMap(
 }  // namespace
 
 absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
-GetBlockToPartNameMap(
-    const intrinsic_proto::icon::Icon2AdioPart& adio_equipment_config,
-    const icon::RobotConfig& robot_config,
-    const BlockTypeOptions& block_type_options) {
+GetBlockToPartNameMap(absl::Span<const std::string> part_names,
+                      const icon::RobotConfig& robot_config,
+                      const BlockTypeOptions& block_type_options) {
   absl::flat_hash_map<std::string, std::string> block_to_part_name;
 
-  for (const auto& part_name : adio_equipment_config.icon_parts()) {
+  for (const auto& part_name : part_names) {
     INTR_ASSIGN_OR_RETURN(intrinsic_proto::icon::GenericPartConfig part_config,
                           robot_config.GetGenericPartConfig(part_name));
     if (!part_config.has_adio_config()) {
@@ -98,6 +91,17 @@ GetBlockToPartNameMap(
   }
 
   return block_to_part_name;
+}
+
+absl::StatusOr<absl::flat_hash_map<std::string, std::string>>
+GetBlockToPartNameMap(
+    const intrinsic_proto::icon::Icon2AdioPart& adio_equipment_config,
+    const icon::RobotConfig& robot_config,
+    const BlockTypeOptions& block_type_options) {
+  std::vector<std::string> part_names(
+      adio_equipment_config.icon_parts().begin(),
+      adio_equipment_config.icon_parts().end());
+  return GetBlockToPartNameMap(part_names, robot_config, block_type_options);
 }
 
 }  // namespace intrinsic::skills

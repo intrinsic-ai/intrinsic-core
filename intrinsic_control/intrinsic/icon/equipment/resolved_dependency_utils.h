@@ -17,6 +17,7 @@
 
 #include <memory>
 #include <string>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
@@ -33,6 +34,7 @@ namespace intrinsic {
 namespace icon {
 
 inline constexpr absl::string_view kHalArmPartTypeName = "HalArmPart";
+inline constexpr absl::string_view kHalAdioPartTypeName = "HalADIOPart";
 
 // Pairs an ICON position part name with its corresponding kinematic object in
 // the object world.
@@ -68,6 +70,11 @@ struct IconResolvedDependency {
   absl::StatusOr<PositionPartWithObject> GetPositionPartAndKinematicObject(
       const world::ObjectWorldClient& world,
       const intrinsic_proto::world::ObjectReference& arm_part = {}) const;
+
+  // Returns the list of ADIO (`"HalADIOPart"`) part names from `parts` sorted
+  // in ascending lexicographical order, or an `InvalidArgumentError` if no
+  // ADIO parts are present.
+  absl::StatusOr<std::vector<PartName>> GetAdioPartNames() const;
 };
 
 // Connects to the ICON Application Layer at `resolved_dependency`, queries

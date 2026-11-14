@@ -69,14 +69,6 @@ options {
     create_skill: "::intrinsic::skills::DioSetOutput::CreateSkill"
   }
 }
-dependencies {
-  required_equipment {
-    key: "adio"
-    value {
-      capability_names: "Icon2AdioPart"
-    }
-  }
-}
 parameter {
   message_full_name: "intrinsic_proto.skills.DioSetOutputParams"
 }

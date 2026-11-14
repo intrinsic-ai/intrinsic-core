@@ -32,6 +32,9 @@ proto_library(
     visibility = dio_read_input_visibility,
     deps = [
         "@com_google_protobuf//:duration_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_proto",
     ],
 )
 
@@ -48,12 +51,16 @@ go_proto_library(
     importpath = "intrinsic/icon/skills/dio_read_input_go_proto",
     protos = [":dio_read_input_proto"],
     visibility = dio_read_input_visibility,
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_go_proto",
+    ],
 )
 
 skill_manifest(
     name = "dio_read_input_cc_manifest",
     src = "dio_read_input_cc_manifest.textproto",
-    incompatible_disallow_manifest_dependencies = False,
     visibility = [
         "//intrinsic:public_asset_users",
         "//intrinsic:release_tooling",
@@ -71,13 +78,11 @@ cc_library(
     deps = [
         ":dio_read_input_cc_proto",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
-        "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
-        "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
+        "//intrinsic_control/intrinsic/icon/equipment:resolved_dependency_utils",
         "//intrinsic_control/intrinsic/icon/skills/util:adio_util",
+        "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
-        "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
         "//intrinsic_sdk/intrinsic/util:proto_time",
-        "//intrinsic_sdk/intrinsic/util/grpc:channel_interface",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
@@ -85,8 +90,8 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
         "@com_google_protobuf//:protobuf",
-        "@intrinsic_apis//intrinsic/icon/equipment:icon_equipment_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto:io_block_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto:part_status_cc_proto",
     ],
@@ -199,6 +204,11 @@ proto_library(
     name = "dio_set_output_proto",
     srcs = ["dio_set_output.proto"],
     visibility = dio_set_output_visibility,
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_proto",
+    ],
 )
 
 cc_proto_library(
@@ -214,12 +224,16 @@ go_proto_library(
     importpath = "intrinsic/icon/skills/dio_set_output_go_proto",
     protos = [":dio_set_output_proto"],
     visibility = dio_set_output_visibility,
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_go_proto",
+    ],
 )
 
 skill_manifest(
     name = "dio_set_output_cc_manifest",
     src = "dio_set_output_cc_manifest.textproto",
-    incompatible_disallow_manifest_dependencies = False,
     visibility = [
         "//intrinsic:public_asset_users",
         "//intrinsic:release_tooling",
@@ -236,7 +250,6 @@ cc_library(
     hdrs = ["dio_set_output.h"],
     deps = [
         ":dio_set_output_cc_proto",
-        "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io_factory",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
@@ -244,7 +257,6 @@ cc_library(
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/skills/proto:footprint_cc_proto",
     ],
@@ -349,6 +361,9 @@ proto_library(
     visibility = dio_wait_for_input_visibility,
     deps = [
         "@com_google_protobuf//:duration_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_proto",
     ],
 )
 
@@ -365,12 +380,16 @@ go_proto_library(
     importpath = "intrinsic/icon/skills/dio_wait_for_input_go_proto",
     protos = [":dio_wait_for_input_proto"],
     visibility = dio_wait_for_input_visibility,
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_go_proto",
+    ],
 )
 
 skill_manifest(
     name = "dio_wait_for_input_cc_manifest",
     src = "dio_wait_for_input_cc_manifest.textproto",
-    incompatible_disallow_manifest_dependencies = False,
     visibility = [
         "//intrinsic:public_asset_users",
         "//intrinsic:release_tooling",
@@ -387,7 +406,6 @@ cc_library(
     hdrs = ["dio_wait_for_input.h"],
     deps = [
         ":dio_wait_for_input_cc_proto",
-        "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io_factory",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",

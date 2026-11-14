@@ -27,7 +27,6 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "google/protobuf/message.h"
-#include "intrinsic/icon/equipment/channel_factory.h"
 #include "intrinsic/icon/skills/dio_wait_for_input.pb.h"
 #include "intrinsic/icon/skills/util/analog_digital_io.h"
 #include "intrinsic/icon/skills/util/analog_digital_io_factory.h"
@@ -41,13 +40,8 @@ namespace intrinsic::skills {
 using ::intrinsic_proto::skills::DigitalInputBlock;
 
 std::unique_ptr<SkillInterface> DioWaitForInput::CreateSkill() {
-  return std::make_unique<DioWaitForInput>(
-      std::make_unique<icon::DefaultChannelFactory>());
+  return std::make_unique<DioWaitForInput>();
 }
-
-DioWaitForInput::DioWaitForInput(
-    std::unique_ptr<icon::ChannelFactory> icon_channel_factory)
-    : icon_channel_factory_(std::move(icon_channel_factory)) {}
 
 absl::StatusOr<intrinsic_proto::skills::Footprint>
 DioWaitForInput::GetFootprint(const GetFootprintRequest& request,
@@ -61,12 +55,6 @@ DioWaitForInput::GetFootprint(const GetFootprintRequest& request,
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 DioWaitForInput::Execute(const ExecuteRequest& request,
                          ExecuteContext& context) {
-  INTR_ASSIGN_OR_RETURN(
-      auto digital_io,
-      CreateAnalogDigitalIO(kEquipmentSlot, context.equipment(),
-                            icon_channel_factory_.get()),
-      _.LogError());
-
   INTR_ASSIGN_OR_RETURN(
       auto params,
       request.params<intrinsic_proto::skills::DioWaitForInputParams>(),
@@ -132,6 +120,9 @@ DioWaitForInput::Execute(const ExecuteRequest& request,
     mask.set(dio_index);
     values.set(dio_index, dio_value);
   }
+
+  INTR_ASSIGN_OR_RETURN(auto digital_io, CreateAnalogDigitalIO(params.adio()),
+                        _.LogError());
 
   const absl::Time deadline = absl::Now() + timeout;
   context.canceller().Ready();

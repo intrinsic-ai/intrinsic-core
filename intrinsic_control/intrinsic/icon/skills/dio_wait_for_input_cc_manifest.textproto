@@ -46,15 +46,6 @@ options {
     create_skill: "::intrinsic::skills::DioWaitForInput::CreateSkill"
   }
 }
-dependencies {
-  required_equipment {
-    key: "adio"
-    value {
-      capability_names: "Icon2AdioPart"
-      sharing_type: READ
-    }
-  }
-}
 parameter {
   message_full_name: "intrinsic_proto.skills.DioWaitForInputParams"
 }

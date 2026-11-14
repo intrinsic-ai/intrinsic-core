@@ -30,10 +30,11 @@
 namespace intrinsic::icon {
 
 intrinsic_proto::icon::v1::PartConfig PartConfigFromPart(
-    absl::string_view name, const RealtimePartInterface& part) {
+    absl::string_view name, const RealtimePartInterface& part,
+    absl::string_view part_type_name) {
   intrinsic_proto::icon::v1::PartConfig part_config;
   part_config.set_name(name);
-  part_config.set_part_type_name("fake_part_for_tests");
+  part_config.set_part_type_name(part_type_name);
   part_config.set_hardware_resource_name("fake_hardware_resource_for_tests");
   for (const intrinsic_proto::icon::v1::FeatureInterfaceTypes&
            feature_interface :

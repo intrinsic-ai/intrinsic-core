@@ -17,6 +17,8 @@
 #include <cstdint>
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
@@ -24,18 +26,16 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/time/time.h"
 #include "google/protobuf/message.h"
+#include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/icon/cc_client/client.h"
-#include "intrinsic/icon/equipment/channel_factory.h"
-#include "intrinsic/icon/equipment/equipment_utils.h"
-#include "intrinsic/icon/equipment/icon_equipment.pb.h"
+#include "intrinsic/icon/equipment/resolved_dependency_utils.h"
 #include "intrinsic/icon/proto/io_block.pb.h"
 #include "intrinsic/icon/proto/part_status.pb.h"
 #include "intrinsic/icon/skills/dio_read_input.pb.h"
 #include "intrinsic/icon/skills/util/adio_util.h"
 #include "intrinsic/skills/cc/skill_interface.h"
-#include "intrinsic/skills/cc/skill_utils.h"
-#include "intrinsic/util/grpc/channel_interface.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -63,8 +63,7 @@ absl::Status CopyOrderedSignals(
 }  // namespace
 
 std::unique_ptr<SkillInterface> DioReadInput::CreateSkill() {
-  return std::make_unique<DioReadInput>(
-      std::make_unique<icon::DefaultChannelFactory>());
+  return std::make_unique<DioReadInput>();
 }
 
 absl::StatusOr<intrinsic_proto::skills::Footprint> DioReadInput::GetFootprint(
@@ -88,31 +87,22 @@ DioReadInput::Execute(const ExecuteRequest& request, ExecuteContext& context) {
                  << params.robot_name();
   }
 
-  INTR_ASSIGN_OR_RETURN(const auto timeout, ToAbslDuration(params.timeout()));
+  absl::Duration timeout = connect::kGrpcClientConnectDefaultTimeout;
+  if (params.has_timeout()) {
+    INTR_ASSIGN_OR_RETURN(timeout, ToAbslDuration(params.timeout()));
+  }
 
-  INTR_ASSIGN_OR_RETURN(const auto& handle,
-                        context.equipment().GetHandle(kEquipmentSlot));
-  INTR_ASSIGN_OR_RETURN(const auto connection_config,
-                        skills::GetConnectionParamsFromHandle(handle));
   INTR_ASSIGN_OR_RETURN(
-      std::shared_ptr<ChannelInterface> channel,
-      icon_channel_factory_->MakeChannel(connection_config, timeout));
-  icon::Client icon_client(channel);
+      icon::IconResolvedDependency adio_resolved_dependency,
+      icon::ConnectToIconResolvedDependency(params.adio(), timeout));
+  INTR_ASSIGN_OR_RETURN(std::vector<std::string> adio_part_names,
+                        adio_resolved_dependency.GetAdioPartNames());
+  icon::Client icon_client(adio_resolved_dependency.channel);
   INTR_ASSIGN_OR_RETURN(auto config, icon_client.GetConfig());
 
-  auto config_it = handle.resource_data().find(icon::kIcon2AdioPartKey);
-  if (config_it == handle.resource_data().end()) {
-    return absl::NotFoundError("ADIO config not found for resource handle.");
-  }
-  const auto& equipment_config = config_it->second;
-  intrinsic_proto::icon::Icon2AdioPart adio_equipment_config;
-  if (!equipment_config.contents().UnpackTo(&adio_equipment_config)) {
-    return absl::InvalidArgumentError("Failed to unpack equipment config.");
-  }
-
-  INTR_ASSIGN_OR_RETURN(auto block_to_part_name,
-                        GetBlockToPartNameMap(adio_equipment_config, config,
-                                              {.digital_in = true}));
+  INTR_ASSIGN_OR_RETURN(
+      auto block_to_part_name,
+      GetBlockToPartNameMap(adio_part_names, config, {.digital_in = true}));
 
   auto it = block_to_part_name.find(params.block_name());
   if (it == block_to_part_name.end()) {

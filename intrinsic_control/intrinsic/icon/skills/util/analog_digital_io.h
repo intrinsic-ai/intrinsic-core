@@ -117,6 +117,12 @@ class AnalogDigitalIOInterface {
 // `WaitForInput()` can also be called when the ADIO part is already in use.
 class IconAnalogDigitalIO : public AnalogDigitalIOInterface {
  public:
+  // Creates an instance of `IconAnalogDigitalIO` for the given ADIO part names
+  // and `icon_channel`.
+  static absl::StatusOr<std::unique_ptr<AnalogDigitalIOInterface>> Create(
+      absl::Span<const std::string> adio_part_names,
+      std::shared_ptr<ChannelInterface> icon_channel);
+
   // Creates an instance of the class and establishes a connection with the
   // specified piece of DIO equipment.  `connection_info` is optional. Address
   // information from `connection_info` will be prioritized, if available.

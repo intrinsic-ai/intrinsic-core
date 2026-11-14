@@ -16,12 +16,25 @@ syntax = "proto3";
 
 package intrinsic_proto.skills;
 
+import "intrinsic/assets/proto/field_metadata.proto";
+import "intrinsic/assets/proto/v1/resolved_dependency.proto";
+import "intrinsic/icon/proto/v1/field_metadata.proto";
+
 option go_package = "intrinsic/icon/skills/dio_set_output_go_proto";
 
 message DioSetOutputParams {
+  // Robot controller to set ADIO outputs on.
+  intrinsic_proto.assets.v1.ResolvedDependency adio = 5
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.icon.v1.IconApi",
+        skill_annotations: { fallback_manifest_dependency_key: "adio" }
+      }];
+
   // Digital IO output blocks to set. Each block must have a unique
   // `block_name`. Returns `ALREADY_EXISTS` error on duplicate names.
-  repeated DioOutputBlock dio_output_blocks = 4;
+  repeated DioOutputBlock dio_output_blocks = 4 [
+    (intrinsic_proto.icon.v1.field_metadata) = { resolved_at_runtime: "adio" }
+  ];
 
   reserved 1, 2, 3;
   reserved "block_name", "indices", "values";

@@ -19,6 +19,7 @@
 
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/icon/equipment/channel_factory.h"
 #include "intrinsic/icon/skills/util/analog_digital_io.h"
 #include "intrinsic/resources/proto/resource_handle.pb.h"
@@ -26,6 +27,12 @@
 #include "intrinsic/skills/proto/equipment.pb.h"
 
 namespace intrinsic::skills {
+
+// Creates an instance of `AnalogDigitalIOInterface` from an ICON
+// `ResolvedDependency`.
+absl::StatusOr<std::unique_ptr<AnalogDigitalIOInterface>> CreateAnalogDigitalIO(
+    const intrinsic_proto::assets::v1::ResolvedDependency& resolved_dependency);
+
 absl::StatusOr<std::unique_ptr<AnalogDigitalIOInterface>> CreateAnalogDigitalIO(
     absl::string_view equipment_slot,
     const google::protobuf::Map<std::string,

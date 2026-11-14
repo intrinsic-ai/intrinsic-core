@@ -55,6 +55,7 @@ constexpr double kControlFrequencyHz = 1000;
 using ::absl_testing::StatusIs;
 using ::testing::_;
 using ::testing::DoAll;
+using ::testing::ElementsAre;
 using ::testing::HasSubstr;
 using ::testing::Pair;
 using ::testing::Return;
@@ -348,6 +349,32 @@ TEST(GetPositionPartAndKinematicObjectTest,
                          "Available (part_name, object_name) pairs for the "
                          "selected ICON instance are: (robot_arm_1, "
                          "my_robot_1), (robot_arm_2, my_robot_2).")));
+}
+
+TEST(GetAdioPartNamesTest, ReturnsSortedAdioPartNames) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {
+      {"HalADIOPart",
+       {
+           {"adio_2", "adio_2"},
+           {"adio_1", "adio_1"},
+       }},
+      // Parts of other types must not be returned.
+      {"HalArmPart", {{"robot_arm", "my_robot"}}},
+  };
+
+  ASSERT_OK_AND_ASSIGN(std::vector<std::string> adio_parts,
+                       icon_resolved_dependency.GetAdioPartNames());
+  EXPECT_THAT(adio_parts, ElementsAre("adio_1", "adio_2"));
+}
+
+TEST(GetAdioPartNamesTest, ErrorsWhenEmptyAdioParts) {
+  IconResolvedDependency icon_resolved_dependency;
+
+  EXPECT_THAT(icon_resolved_dependency.GetAdioPartNames(),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The given ICON instance does not have any "
+                                 "ADIO parts")));
 }
 
 }  // namespace

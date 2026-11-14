@@ -16,20 +16,37 @@
 
 #include <memory>
 #include <string>
+#include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/icon/equipment/channel_factory.h"
 #include "intrinsic/icon/equipment/equipment_utils.h"
 #include "intrinsic/icon/equipment/icon_equipment.pb.h"
+#include "intrinsic/icon/equipment/resolved_dependency_utils.h"
 #include "intrinsic/icon/skills/util/analog_digital_io.h"
 #include "intrinsic/resources/proto/resource_handle.pb.h"
 #include "intrinsic/skills/cc/equipment_pack.h"
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic::skills {
+
+absl::StatusOr<std::unique_ptr<AnalogDigitalIOInterface>> CreateAnalogDigitalIO(
+    const intrinsic_proto::assets::v1::ResolvedDependency&
+        resolved_dependency) {
+  INTR_ASSIGN_OR_RETURN(
+      icon::IconResolvedDependency adio_resolved_dependency,
+      icon::ConnectToIconResolvedDependency(resolved_dependency));
+  INTR_ASSIGN_OR_RETURN(std::vector<std::string> adio_part_names,
+                        adio_resolved_dependency.GetAdioPartNames());
+  return IconAnalogDigitalIO::Create(
+      adio_part_names, std::move(adio_resolved_dependency.channel));
+}
+
 absl::StatusOr<std::unique_ptr<AnalogDigitalIOInterface>> CreateAnalogDigitalIO(
     absl::string_view equipment_slot,
     const google::protobuf::Map<std::string,

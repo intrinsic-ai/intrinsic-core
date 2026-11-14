@@ -111,6 +111,7 @@ IconResolvedDependency::GetPositionPartAndKinematicObject(
     const intrinsic_proto::world::ObjectReference& arm_part) const {
   const auto it = parts.find(kHalArmPartTypeName);
   if (it == parts.end() || it->second.empty()) {
+    // Return an error here so callers don't need to check for missing parts.
     return absl::InvalidArgumentError(
         "The given ICON instance does not have any position parts.");
   }
@@ -152,6 +153,24 @@ IconResolvedDependency::GetPositionPartAndKinematicObject(
       "instance selected. Available (part_name, object_name) pairs for the ",
       "selected ICON instance are: ",
       FormatAvailablePositionParts(position_parts), "."));
+}
+
+absl::StatusOr<std::vector<IconResolvedDependency::PartName>>
+IconResolvedDependency::GetAdioPartNames() const {
+  const auto it = parts.find(kHalAdioPartTypeName);
+  if (it == parts.end() || it->second.empty()) {
+    // Return an error instead of an empty list so callers don't need to check
+    // for missing parts.
+    return absl::InvalidArgumentError(
+        "The given ICON instance does not have any ADIO parts.");
+  }
+  std::vector<PartName> adio_parts;
+  adio_parts.reserve(it->second.size());
+  for (const auto& [part_name, _] : it->second) {
+    adio_parts.push_back(part_name);
+  }
+  std::sort(adio_parts.begin(), adio_parts.end());
+  return adio_parts;
 }
 
 }  // namespace icon

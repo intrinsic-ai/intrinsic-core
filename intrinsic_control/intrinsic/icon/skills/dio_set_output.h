@@ -19,7 +19,6 @@
 
 #include "absl/status/statusor.h"
 #include "google/protobuf/message.h"
-#include "intrinsic/icon/equipment/channel_factory.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
 
@@ -27,13 +26,9 @@ namespace intrinsic::skills {
 
 class DioSetOutput final : public SkillInterface {
  public:
-  static constexpr char kEquipmentSlot[] = "adio";
-
   static std::unique_ptr<SkillInterface> CreateSkill();
 
-  explicit DioSetOutput(
-      std::unique_ptr<icon::ChannelFactory> icon_channel_factory);
-
+  DioSetOutput() = default;
   ~DioSetOutput() override = default;
 
   absl::StatusOr<intrinsic_proto::skills::Footprint> GetFootprint(
@@ -45,9 +40,6 @@ class DioSetOutput final : public SkillInterface {
 
   absl::StatusOr<std::unique_ptr<google::protobuf::Message>> Preview(
       const PreviewRequest& request, PreviewContext& context) override;
-
- private:
-  std::unique_ptr<icon::ChannelFactory> icon_channel_factory_;
 };
 
 }  // namespace intrinsic::skills

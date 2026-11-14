@@ -32,7 +32,8 @@ namespace intrinsic::icon {
 // interface contains the number of joints, but the feature interface itself has
 // no way of getting that information.
 intrinsic_proto::icon::v1::PartConfig PartConfigFromPart(
-    absl::string_view name, const RealtimePartInterface& part);
+    absl::string_view name, const RealtimePartInterface& part,
+    absl::string_view part_type_name = "fake_part_for_tests");
 
 // Checks whether the joint position trajectories are withtin the expected
 // limits up to a desired tolerance [`lower_limit_value`-`tolerance`,

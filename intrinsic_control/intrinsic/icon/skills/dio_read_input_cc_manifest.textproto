@@ -63,14 +63,6 @@ options {
     create_skill: "::intrinsic::skills::DioReadInput::CreateSkill"
   }
 }
-dependencies {
-  required_equipment {
-    key: "adio"
-    value {
-      capability_names: "Icon2AdioPart"
-    }
-  }
-}
 parameter {
   message_full_name: "intrinsic_proto.skills.DioReadInputParams"
   default_value {

@@ -23,9 +23,7 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "google/protobuf/message.h"
-#include "intrinsic/icon/equipment/channel_factory.h"
 #include "intrinsic/icon/skills/dio_set_output.pb.h"
 #include "intrinsic/icon/skills/util/analog_digital_io.h"
 #include "intrinsic/icon/skills/util/analog_digital_io_factory.h"
@@ -36,13 +34,8 @@
 namespace intrinsic::skills {
 
 std::unique_ptr<SkillInterface> DioSetOutput::CreateSkill() {
-  return std::make_unique<DioSetOutput>(
-      std::make_unique<icon::DefaultChannelFactory>());
+  return std::make_unique<DioSetOutput>();
 }
-
-DioSetOutput::DioSetOutput(
-    std::unique_ptr<icon::ChannelFactory> icon_channel_factory)
-    : icon_channel_factory_(std::move(icon_channel_factory)) {}
 
 absl::StatusOr<intrinsic_proto::skills::Footprint> DioSetOutput::GetFootprint(
     const GetFootprintRequest& request, GetFootprintContext& context) const {
@@ -54,12 +47,6 @@ absl::StatusOr<intrinsic_proto::skills::Footprint> DioSetOutput::GetFootprint(
 
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 DioSetOutput::Execute(const ExecuteRequest& request, ExecuteContext& context) {
-  INTR_ASSIGN_OR_RETURN(
-      std::unique_ptr<AnalogDigitalIOInterface> digital_io,
-      CreateAnalogDigitalIO(kEquipmentSlot, context.equipment(),
-                            icon_channel_factory_.get()),
-      _.LogError());
-
   INTR_ASSIGN_OR_RETURN(
       auto params,
       request.params<intrinsic_proto::skills::DioSetOutputParams>(),
@@ -92,6 +79,8 @@ DioSetOutput::Execute(const ExecuteRequest& request, ExecuteContext& context) {
     output_blocks.emplace_back(std::move(block));
   }
 
+  INTR_ASSIGN_OR_RETURN(std::unique_ptr<AnalogDigitalIOInterface> digital_io,
+                        CreateAnalogDigitalIO(params.adio()), _.LogError());
   INTR_RETURN_IF_ERROR(digital_io->SetDigitalOutputs(output_blocks)).LogError();
 
   return nullptr;
