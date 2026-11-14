@@ -18,6 +18,7 @@ load("//bazel:cc_macros.bzl", "cc_library")
 
 package(default_visibility = [
     "//intrinsic/geometry:__subpackages__",
+    "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
     "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
 ])
 
@@ -83,6 +84,7 @@ cc_library(
     visibility = [
         "//intrinsic/geometry:__subpackages__",
         "//intrinsic/scene/service:__pkg__",
+        "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene/usd:__subpackages__",
     ],
@@ -121,6 +123,7 @@ cc_library(
         "//intrinsic/geometry:__subpackages__",
         "//intrinsic/scene:__subpackages__",
         "//intrinsic/world/conversion:__subpackages__",
+        "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [

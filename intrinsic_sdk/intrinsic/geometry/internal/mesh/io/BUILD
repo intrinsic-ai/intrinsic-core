@@ -40,7 +40,6 @@ cc_library(
     hdrs = ["load_ai_scene_from_buffer.h"],
     visibility = [
         "//intrinsic/geometry/api:__pkg__",
-        "//intrinsic/geometry/internal/legacy/mesh/io:__pkg__",
         "//intrinsic/geometry/internal/legacy/point_cloud:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/api:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
@@ -80,7 +79,6 @@ cc_library(
     srcs = ["load_ai_scene_from_file.cc"],
     hdrs = ["load_ai_scene_from_file.h"],
     visibility = [
-        "//intrinsic/geometry/internal/legacy/mesh/io:__pkg__",
         "//intrinsic/geometry/internal/legacy/point_cloud:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/api:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
@@ -107,8 +105,8 @@ cc_library(
     srcs = ["load_mesh_from_file.cc"],
     hdrs = ["load_mesh_from_file.h"],
     visibility = [
-        "//intrinsic/geometry/internal/legacy/mesh/io:__pkg__",
         "//intrinsic/scene/sdf:__pkg__",
+        "//intrinsic_runtime/intrinsic/geometry/internal/io:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
     ],
@@ -130,7 +128,6 @@ cc_library(
     srcs = ["mesh_to_ai_scene.cc"],
     hdrs = ["mesh_to_ai_scene.h"],
     visibility = [
-        "//intrinsic/geometry/internal/legacy/mesh/io:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/util:__pkg__",
     ],

@@ -31,7 +31,7 @@
 #include "intrinsic/geometry/api/io.h"
 #include "intrinsic/geometry/api/renderable_generation.h"
 #include "intrinsic/geometry/compatibility/io.h"
-#include "intrinsic/geometry/internal/legacy/mesh/io/save_mesh_to_stl_file.h"
+#include "intrinsic/geometry/internal/io/save_mesh_to_stl_file.h"
 #include "intrinsic/geometry/internal/util/scale_shape.h"
 #include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
 #include "intrinsic/geometry/proto/v1/material.pb.h"
@@ -246,7 +246,7 @@ absl::StatusOr<std::string> GeometryToMeshSdf(
         std::string full_path,
         SaveToUniquePath(options.save_geopath, fingerprint, ".stl",
                          [&mesh_ref](const std::string& path) {
-                           return geo::legacy::SaveMeshToBinaryStlFile(
+                           return geo::SaveMeshToBinaryStlFile(
                                path, mesh_ref.Value());
                          }));
     std::string result;

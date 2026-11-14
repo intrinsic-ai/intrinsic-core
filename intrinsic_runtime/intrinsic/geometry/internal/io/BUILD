@@ -12,9 +12,12 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-""" Intrinsic package geometry/legacy/mesh/io. """
+""" Intrinsic package geometry/internal/io. """
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load(
+    "//bazel:cc_macros.bzl",
+    "cc_library",
+)
 
 cc_library(
     name = "save_mesh_to_stl_file",

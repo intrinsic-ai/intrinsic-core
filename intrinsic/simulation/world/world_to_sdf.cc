@@ -56,7 +56,7 @@
 #include "intrinsic/geometry/api/geometry_fingerprint.h"
 #include "intrinsic/geometry/api/is_convex.h"
 #include "intrinsic/geometry/api/renderable_generation.h"
-#include "intrinsic/geometry/internal/legacy/mesh/io/save_mesh_to_stl_file.h"
+#include "intrinsic/geometry/internal/io/save_mesh_to_stl_file.h"
 #include "intrinsic/geometry/internal/util/scale_shape.h"
 #include "intrinsic/geometry/shapes/shape_base.h"
 #include "intrinsic/geometry/shapes/shapes.h"
@@ -1550,7 +1550,7 @@ absl::StatusOr<GeneratedLinkInfo> WorldEntityToLink(
 
             if (!file_exists) {
               INTR_ASSIGN_OR_RETURN(auto mesh_ref, shape.GetMesh());
-              INTR_RETURN_IF_ERROR(geo::legacy::SaveMeshToBinaryStlFile(
+              INTR_RETURN_IF_ERROR(geo::SaveMeshToBinaryStlFile(
                   full_mesh_path, mesh_ref.Value()));
             }
           } else {

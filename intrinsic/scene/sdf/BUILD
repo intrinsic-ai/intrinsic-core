@@ -30,8 +30,8 @@ cc_library(
     deps = [
         "//intrinsic/geometry/api:geometric_transform",
         "//intrinsic/geometry/compatibility:io",
-        "//intrinsic/geometry/internal/legacy/mesh/io:save_mesh_to_stl_file",
         "//intrinsic/util:full_precision",
+        "//intrinsic_runtime/intrinsic/geometry/internal/io:save_mesh_to_stl_file",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/eigenmath:rotation_utils",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
