@@ -299,7 +299,7 @@ func convertResourceTypeRuntimeToInstalledAssetView(rtr *rtrpb.ResourceTypeRunti
 }
 
 type assetInfo struct {
-	parts     *idutils.IDVersionParts
+	id        string
 	instances []string
 }
 
@@ -530,7 +530,7 @@ func planActions(s *solutionState, toInstall *orderedmap.OrderedMap[string, *rtr
 		}
 	}
 	for _, ri := range actions.app.GetResources().GetResourceInstances() {
-		if rt, replace := toInstall.Get(s.installed[ri.GetTypeIdVersion()].parts.ID()); replace {
+		if rt, replace := toInstall.Get(s.installed[ri.GetTypeIdVersion()].id); replace {
 			ri.TypeIdVersion = idutils.IDVersionFromProtoUnchecked(rt.GetMetadata().GetIdVersion())
 		}
 	}
@@ -806,22 +806,20 @@ func (s *installedAssetsService) BatchGetInstalledAssets(ctx context.Context, re
 // summarizeState gathers information about the current state of the solution
 // against which actions can be generated.
 func (s *installedAssetsService) summarizeState(ctx context.Context) (*solutionState, error) {
-	idvs, _, err := s.rtrClient.List(ctx)
+	rtrs, err := resourcetyperuntime.GetAll(ctx, s.rtrClient)
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "unable to list assets: %v", err)
+		return nil, status.Errorf(codes.Internal, "failed to fetch current runtime types: %v", err)
 	}
 
-	installed := make(map[string]*assetInfo)
-	versions := make(map[string][]string)
-	for _, idv := range idvs {
-		parts, err := idutils.NewIDVersionParts(idv)
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "invalid state in cache: %v", err)
-		}
+	installed := make(map[string]*assetInfo, len(rtrs))
+	versions := make(map[string][]string, len(rtrs))
+	for _, rtr := range rtrs {
+		id := idutils.IDFromProtoUnchecked(rtr.GetMetadata().GetIdVersion().GetId())
+		idv := idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())
 		installed[idv] = &assetInfo{
-			parts: parts,
+			id: id,
 		}
-		versions[parts.ID()] = append(versions[parts.ID()], idv)
+		versions[id] = append(versions[id], idv)
 	}
 
 	resp, err := s.appClient.GetCurrentApplication(ctx, &aspb.GetCurrentApplicationRequest{})
@@ -837,11 +835,6 @@ func (s *installedAssetsService) summarizeState(ctx context.Context) (*solutionS
 		} else {
 			return nil, status.Errorf(codes.Internal, "solution is in an invalid state as %q points to %q which is not installed", ri.GetName(), ri.GetTypeIdVersion())
 		}
-	}
-
-	rtrs, err := resourcetyperuntime.GetAll(ctx, s.rtrClient)
-	if err != nil {
-		return nil, status.Errorf(codes.Internal, "failed to fetch current runtime types: %v", err)
 	}
 
 	return &solutionState{app, rtrs, revisionToken, installed, versions}, nil
