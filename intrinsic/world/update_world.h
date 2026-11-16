@@ -62,12 +62,6 @@ absl::Status UpdateWorld(const intrinsic_proto::world::RemoveLabel& label_spec,
 // Applies the given update to the world, and returns an error if there was a
 // problem updating the world.
 absl::Status UpdateWorld(
-    const intrinsic_proto::world::GroupCollisionExclusion& exclusions,
-    World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
     const intrinsic_proto::world::SetDofValues& dof_value_change, World* world);
 
 // Applies the given update to the world, and returns an error if there was a
@@ -79,18 +73,7 @@ absl::Status UpdateWorld(
 // Applies the given update to the world, and returns an error if there was a
 // problem updating the world.
 absl::Status UpdateWorld(
-    const intrinsic_proto::world::DisableRobot& disable_robot, World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
     const intrinsic_proto::world::SelfExclusions& self_exclusions,
-    World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::RobotSelfExclusions& robot_self_exclusions,
     World* world);
 
 // Applies the given update to the world, and returns an error if there was a
@@ -108,11 +91,6 @@ absl::Status UpdateWorld(
 // problem updating the world.
 absl::Status UpdateWorld(const intrinsic_proto::world::AddEntity& add_entity,
                          World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::DeleteEntity& delete_entity, World* world);
 
 // Applies the given update to the world, and returns an error if there was a
 // problem updating the world.
@@ -158,12 +136,6 @@ absl::Status UpdateWorld(
 // problem updating the world
 absl::Status UpdateWorld(
     const intrinsic_proto::world::RenameGroup& rename_group, World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world
-absl::Status UpdateWorld(const intrinsic_proto::world::AppendToDefaultRuleSet&
-                             append_to_default_rule_set,
-                         World* world);
 
 // Sanity check for the imported kinematics. Returns INTERNAL_ERROR if the
 // kinematics are not consistent.

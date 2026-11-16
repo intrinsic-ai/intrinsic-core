@@ -331,7 +331,6 @@ proto_library(
     name = "world_updates_proto",
     srcs = ["world_updates.proto"],
     deps = [
-        ":collision_settings_proto",
         ":entity_search_proto",
         "@intrinsic_apis//intrinsic/math/proto:pose_proto",
     ],

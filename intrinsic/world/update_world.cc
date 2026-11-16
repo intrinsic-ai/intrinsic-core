@@ -15,7 +15,6 @@
 #include "intrinsic/world/update_world.h"
 
 #include <cstddef>
-#include <iterator>
 #include <memory>
 #include <set>
 #include <string>
@@ -26,7 +25,6 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/strings/str_cat.h"
-#include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
 #include "intrinsic/eigenmath/types.h"
@@ -40,11 +38,9 @@
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/collision/coal_collision_checker.h"
-#include "intrinsic/world/collision/util/make_rule_set.h"
 #include "intrinsic/world/component/attachment_component.h"
 #include "intrinsic/world/component/collections_component.h"
 #include "intrinsic/world/component/geometry_component.h"
-#include "intrinsic/world/component/kinematics_component.h"
 #include "intrinsic/world/component/robot_component.h"
 #include "intrinsic/world/dof_kinematic_view.h"
 #include "intrinsic/world/entity.h"
@@ -53,13 +49,10 @@
 #include "intrinsic/world/grouping.h"
 #include "intrinsic/world/hashing/hashing.h"
 #include "intrinsic/world/labels.h"
-#include "intrinsic/world/objects/object_world.h"
 #include "intrinsic/world/proto/entity_search.pb.h"
-#include "intrinsic/world/proto/kinematics_component.pb.h"
 #include "intrinsic/world/proto/world_updates.pb.h"
 #include "intrinsic/world/service/world_service.pb.h"
 #include "intrinsic/world/util/entity_search_util.h"
-#include "intrinsic/world/util/walk_attachment_tree.h"
 #include "intrinsic/world/world.h"
 
 namespace intrinsic {
@@ -123,46 +116,30 @@ absl::Status UpdateWorld(
       return UpdateWorld(world_update.move_group(), world);
     case intrinsic_proto::world::WorldUpdate::kAddLabel:
       return UpdateWorld(world_update.add_label(), world);
-    case intrinsic_proto::world::WorldUpdate::kRemoveLabel:
-      return UpdateWorld(world_update.remove_label(), world);
-    case intrinsic_proto::world::WorldUpdate::kGroupCollisionExclusions:
-      return UpdateWorld(world_update.group_collision_exclusions(), world);
     case intrinsic_proto::world::WorldUpdate::kSetDofValues:
       return UpdateWorld(world_update.set_dof_values(), world);
     case intrinsic_proto::world::WorldUpdate::kSetRobotDofValues:
       return UpdateWorld(world_update.set_robot_dof_values(), world);
-    case intrinsic_proto::world::WorldUpdate::kDisableRobots:
-      return UpdateWorld(world_update.disable_robots(), world);
     case intrinsic_proto::world::WorldUpdate::kSelfExclusions:
       return UpdateWorld(world_update.self_exclusions(), world);
-    case intrinsic_proto::world::WorldUpdate::kRobotSelfExclusions:
-      return UpdateWorld(world_update.robot_self_exclusions(), world);
     case intrinsic_proto::world::WorldUpdate::kSetAlias:
       return UpdateWorld(world_update.set_alias(), world);
     case intrinsic_proto::world::WorldUpdate::kSetObjectNames:
       return UpdateWorld(world_update.set_object_names(), world);
     case intrinsic_proto::world::WorldUpdate::kAddEntity:
       return UpdateWorld(world_update.add_entity(), world);
-    case intrinsic_proto::world::WorldUpdate::kDeleteEntity:
-      return UpdateWorld(world_update.delete_entity(), world);
     case intrinsic_proto::world::WorldUpdate::kSetRobotIkSolverKey:
       return UpdateWorld(world_update.set_robot_ik_solver_key(), world);
     case intrinsic_proto::world::WorldUpdate::kCollisionExclusions:
       return UpdateWorld(world_update.collision_exclusions(), world);
     case intrinsic_proto::world::WorldUpdate::kSetRobotTip:
       return UpdateWorld(world_update.set_robot_tip(), world);
-    case intrinsic_proto::world::WorldUpdate::kUpdateAttachment:
-      return UpdateWorld(world_update.update_attachment(), world);
-    case intrinsic_proto::world::WorldUpdate::kReparentEntity:
-      return UpdateWorld(world_update.reparent_entity(), world);
     case intrinsic_proto::world::WorldUpdate::kRenameEntity:
       return UpdateWorld(world_update.rename_entity(), world);
     case intrinsic_proto::world::WorldUpdate::kSetNamedConfiguration:
       return UpdateWorld(world_update.set_named_configuration(), world);
     case intrinsic_proto::world::WorldUpdate::kRenameGroup:
       return UpdateWorld(world_update.rename_group(), world);
-    case intrinsic_proto::world::WorldUpdate::kAppendToDefaultRuleSet:
-      return UpdateWorld(world_update.append_to_default_rule_set(), world);
     case intrinsic_proto::world::WorldUpdate::UPDATE_NOT_SET: {
       break;
     }
@@ -409,141 +386,6 @@ absl::Status UpdateWorld(
   return absl::OkStatus();
 }
 
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::RobotSelfExclusions& robot_self_exclusions,
-    World* world) {
-  INTR_ASSIGN_OR_RETURN(
-      const auto raw_robot_id,
-      GetSingleEntity(*world, robot_self_exclusions.entity()));
-  INTR_ASSIGN_OR_RETURN(
-      const auto robot_id,
-      world->ValidateEntity<RobotComponentType>(raw_robot_id));
-  INTR_ASSIGN_OR_RETURN(
-      const auto* robot_collection,
-      world->GetComponentByEntityId<CollectionsComponent>(robot_id));
-
-  const auto robot_members = robot_collection->GetAllCollectionMembers();
-  WorldHashSet<PhysicalEntityId> robot_members_set;
-  for (const auto& member_id : robot_members) {
-    robot_members_set.emplace(member_id.value());
-  }
-
-  INTR_RETURN_IF_ERROR(AddSelfExclusionPairs(robot_members_set, world));
-
-  if (robot_self_exclusions.also_exclude_link_groups()) {
-    const auto joint_ids =
-        robot_collection->GetCollectionMembers(CollectionsComponent::kJoints);
-    WorldHashSet<AttachmentEntityId> joint_ids_set;
-    for (const auto& joint_id : joint_ids) {
-      joint_ids_set.emplace(joint_id.value());
-    }
-
-    INTR_ASSIGN_OR_RETURN(auto link_sets,
-                          GetRigidlyAttachedEntitiesMap(*world, joint_ids_set));
-
-    for (auto& [joint_id, child_link_set] : link_sets) {
-      for (auto lhs_itr = child_link_set.begin();
-           lhs_itr != child_link_set.end(); ++lhs_itr) {
-        if (!robot_members_set.contains(PhysicalEntityId(lhs_itr->value()))) {
-          // We only add exclude entities that are part of the same input
-          // collection
-          continue;
-        }
-
-        for (auto rhs_itr = std::next(lhs_itr); rhs_itr != child_link_set.end();
-             ++rhs_itr) {
-          if (!robot_members_set.contains(PhysicalEntityId(rhs_itr->value()))) {
-            // We only add exclude entities that are part of the same input
-            // collection
-            continue;
-          }
-
-          INTR_RETURN_IF_ERROR(
-              world->AddExclusionPair(PhysicalEntityId(lhs_itr->value()),
-                                      PhysicalEntityId(rhs_itr->value())));
-        }
-      }
-    }
-  }
-
-  return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::GroupCollisionExclusion& exclusions,
-    World* world) {
-  auto& grouping = world->As<Grouping>();
-
-  GroupId group1(exclusions.group1());
-  GroupId group2(exclusions.group2());
-
-  if (!grouping.CheckGroupExists(group1)) {
-    return absl::NotFoundError(absl::StrFormat(
-        "Could not find group '%s' in the world when attempting to exclude "
-        "collisions between groups '%s' and '%s'.",
-        group1.value(), group1.value(), group2.value()));
-  }
-  if (!grouping.CheckGroupExists(group2)) {
-    return absl::NotFoundError(absl::StrFormat(
-        "Could not find group '%s' in the world when attempting to exclude "
-        "collisions between groups '%s' and '%s'.",
-        group2.value(), group1.value(), group2.value()));
-  }
-
-  auto objects1 = grouping.GetObjectIds(group1);
-  auto objects2 = grouping.GetObjectIds(group2);
-
-  for (const auto& object1 : objects1) {
-    for (const auto& object2 : objects2) {
-      if (object1 == object2) {
-        INTR_ASSIGN_OR_RETURN(const auto* entity1,
-                              world->GetEntityById(object1));
-        VLOG(2) << absl::StrFormat(
-            "Object '%s' appears in both groups ('%s' and '%s') you are "
-            "excluding collisions between. This should only happen if the "
-            "groups are nested.",
-            entity1->GetLocalName(), group1.value(), group2.value());
-        continue;
-      }
-
-      INTR_RETURN_IF_ERROR(world->AddExclusionPair(object1, object2));
-    }
-  }
-
-  return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::DisableRobot& disable_robot, World* world) {
-  VLOG(1) << "Disabling robot '" << disable_robot.robot_id() << "'.";
-  GroupId robot_group_id(disable_robot.robot_id());
-  // Retrieve the group's robot collections entities.
-  INTR_ASSIGN_OR_RETURN(
-      const std::vector<RobotCollectionsEntityId>* robot_collections_ids,
-      world->GetRobotCollectionsEntityIdsForRobotGroupId(robot_group_id));
-
-  // Go through each robot collections entity to convert its joints to fixed.
-  for (auto robot_collections_id : *robot_collections_ids) {
-    auto joint_ids_or =
-        world->ValidateCollectionMembers<CollectionsMemberEntityId>(
-            robot_collections_id, CollectionsComponent::kJoints);
-    if (!joint_ids_or.ok()) {
-      continue;
-    }
-    for (auto joint_id : joint_ids_or.value()) {
-      INTR_ASSIGN_OR_RETURN(
-          auto* kinematics,
-          world->GetComponentByEntityId<KinematicsComponent>(joint_id));
-      kinematics->SetMotionType(
-          intrinsic_proto::world::KinematicsComponent::MOTION_TYPE_FIXED);
-    }
-  }
-
-  // Clear the group's robot collections entities.
-  world->SetRobotCollectionsEntityIdsForRobotGroupId(robot_group_id, {});
-  return absl::OkStatus();
-}
-
 absl::Status UpdateWorld(const intrinsic_proto::world::SetAlias& set_alias,
                          World* world) {
   INTR_ASSIGN_OR_RETURN(const EntityId entity,
@@ -637,53 +479,6 @@ absl::Status UpdateWorld(const intrinsic_proto::world::AddEntity& add_entity,
 
   if (!add_entity.local_name().empty()) {
     INTR_RETURN_IF_ERROR(entity->SetLocalName(add_entity.local_name()));
-  }
-
-  return absl::OkStatus();
-}
-
-absl::Status DeleteHelper(EntityId ent, World* world, bool remove_children) {
-  auto attachment_ent_id_or = world->ValidateEntity<AttachmentEntityId>(ent);
-  if (attachment_ent_id_or.ok()) {
-    AttachmentEntityId attachment_ent_id = attachment_ent_id_or.value();
-    auto children = world->GetChildrenOf(attachment_ent_id);
-    if (!children.empty() && !remove_children) {
-      return absl::FailedPreconditionError(
-          "Cannot remove entity because it still has children");
-    }
-
-    // At this point either children is empty or we are allowed to remove them.
-    if (remove_children) {
-      for (const auto& child : children) {
-        INTR_RETURN_IF_ERROR(DeleteHelper(child, world, remove_children));
-      }
-    }
-
-    // TODO(b/163417102): Also remove the geometry from the geometry service.
-    // Use reference counting or similar to know when it is safe to delete
-    // geometry from the geometry service.
-    INTR_RETURN_IF_ERROR(world->DeleteAttachmentComponent(attachment_ent_id));
-  }
-
-  INTR_RETURN_IF_ERROR(world->RemoveEntity(ent));
-  return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::DeleteEntity& delete_entity, World* world) {
-  INTR_ASSIGN_OR_RETURN(const auto entities,
-                        GetEntities(*world, delete_entity.entities(),
-                                    delete_entity.apply_to_multiple()));
-
-  for (const auto& ent : entities) {
-    if (!world->HasEntity(ent)) {
-      // If this entity was already removed we can skip trying to delete it
-      // again in this iteration of the loop.
-      continue;
-    }
-
-    INTR_RETURN_IF_ERROR(
-        DeleteHelper(ent, world, delete_entity.remove_children()));
   }
 
   return absl::OkStatus();
@@ -904,23 +699,6 @@ absl::Status UpdateWorld(
   return absl::OkStatus();
 }
 
-absl::Status UpdateWorld(const intrinsic_proto::world::AppendToDefaultRuleSet&
-                             append_to_default_rule_set,
-                         World* world) {
-  INTR_ASSIGN_OR_RETURN(auto object_world,
-                        object_world::ObjectWorld::CreateView(*world));
-
-  auto rule_set = world->GetDefaultRuleSet();
-  INTR_ASSIGN_OR_RETURN(
-      auto converted_rules,
-      MakeRuleSet(append_to_default_rule_set.collision_settings(),
-                  *object_world));
-  rule_set.MergeFrom(converted_rules);
-
-  INTR_RETURN_IF_ERROR(world->SetDefaultRuleSet(rule_set));
-  return absl::OkStatus();
-}
-
 bool IsOnlyStateChange(
     const intrinsic_proto::world::WorldUpdates& world_updates) {
   for (const auto& world_update : world_updates.updates()) {
@@ -940,8 +718,6 @@ bool IsOnlyStateChange(
     case intrinsic_proto::world::WorldUpdate::kSetRobotDofValues:
       ABSL_FALLTHROUGH_INTENDED;
     case intrinsic_proto::world::WorldUpdate::UPDATE_NOT_SET:
-      ABSL_FALLTHROUGH_INTENDED;
-    case intrinsic_proto::world::WorldUpdate::kUpdateAttachment:
       return true;
     default: {
       return false;

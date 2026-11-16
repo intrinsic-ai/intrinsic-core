@@ -18,7 +18,6 @@ package intrinsic_proto.world;
 
 import "intrinsic/math/proto/pose.proto";
 import "intrinsic/world/proto/entity_search.proto";
-import "intrinsic/world/proto/collision_settings.proto";
 
 option go_package = "intrinsic/world/proto/world_updates_go_proto";
 
@@ -28,25 +27,17 @@ message WorldUpdate {
   oneof update {
     MoveGroup move_group = 1;
     RenameGroup rename_group = 22;
-    GroupCollisionExclusion group_collision_exclusions = 3;
     SetRobotDofValues set_robot_dof_values = 21;
-    DisableRobot disable_robots = 5;
-    RobotSelfExclusions robot_self_exclusions = 25;
     AddLabel add_label = 7;
-    RemoveLabel remove_label = 20;
     SetAlias set_alias = 8;
     SetObjectNames set_object_names = 23;
     AddEntity add_entity = 9;
-    DeleteEntity delete_entity = 10;
     SetRobotIkSolverKey set_robot_ik_solver_key = 11;
     CollisionExclusion collision_exclusions = 12;
-    ReparentEntities reparent_entity = 14;
-    UpdateAttachmentPose update_attachment = 15;
     RenameEntity rename_entity = 16;
     SetNamedConfiguration set_named_configuration = 17;
-    AppendToDefaultRuleSet append_to_default_rule_set = 24;
 
-    // Deprecated. Use RobotSelfExclusions instead.
+    // Deprecated. Collision exclusions are specified on scene objects instead.
     // TODO(b/283374158): This is blocking worlds from removing group id.
     SelfExclusions self_exclusions = 6 [deprecated = true];
 
@@ -58,8 +49,10 @@ message WorldUpdate {
     SetRobotTip set_robot_tip = 13 [deprecated = true];
   }
 
-  reserved 2, 19, 18;
-  reserved "additional_label", "set_resource";
+  reserved 2, 3, 5, 10, 14, 15, 18, 19, 20, 24, 25;
+  reserved "additional_label", "set_resource", "group_collision_exclusions",
+      "disable_robots", "delete_entity", "reparent_entity", "update_attachment",
+      "remove_label", "append_to_default_rule_set", "robot_self_exclusions";
 }
 
 // Updates to make to the world. Things like adding labels or setting dofs.
@@ -80,18 +73,6 @@ message AddEntity {
 
   reserved 4, 5, 6;
   reserved "parent_t_this_old", "collision_geo", "visual_geo";
-}
-
-message DeleteEntity {
-  // The search criteria to use when finding the entities to delete.
-  intrinsic_proto.world.EntitySearchCriteria entities = 1;
-  // If set to true and more than one entity is found, this will delete all of
-  // the entities that match the search criteria. If there are multiple matches
-  // found and apply_to_multiple is false an error will be returned.
-  bool apply_to_multiple = 2;
-
-  // If set the children of the found entities will be removed as well.
-  bool remove_children = 3;
 }
 
 // Add additional labels to entities in the world.
@@ -139,12 +120,6 @@ message RenameGroup {
   string new_group_id = 2;
 }
 
-// Exclude all collisions between pairs of objects from each group.
-message GroupCollisionExclusion {
-  string group1 = 1;
-  string group2 = 2;
-}
-
 // Set the dof values of the robots to the given value.
 message SetDofValues {
   string robot_id = 1;
@@ -174,35 +149,11 @@ message SetRobotDofValues {
   bool skip_limit_enforcement = 5;
 }
 
-// Disable the given robot by changing all of its joints to fixed joints.
-//
-// Note: This operation is currently irreversible.
-message DisableRobot {
-  string robot_id = 1;
-}
-
 // Add exclusion pairs for all pairs of objects for the robot that are currently
 // in collision, assuming that in the current position nothing should be in
 // collision.
 message SelfExclusions {
   string robot_id = 1;
-}
-
-// Add exclusion pairs for all pairs of objects for the robot that are currently
-// in collision, assuming that in the current position nothing should be in
-// collision.
-message RobotSelfExclusions {
-  // The search criteria to use when finding the robot entity to update.
-  intrinsic_proto.world.EntitySearchCriteria entity = 1;
-
-  // If set we will also mark multiple links connected rigidly within the robot
-  // as excluded from collision with each other. For example if we have the
-  // elbow link of a robot that contains an extra attachment adapter plate, the
-  // plate and the elbow are attached to each other with no joint between them.
-  // This means they cannot move relative to each other and are part of the same
-  // conceptual link. The entities that are conceptually connected like this
-  // will be excluded from collisions with other.
-  bool also_exclude_link_groups = 2;
 }
 
 // Sets the alias for an entity in the world. This alias must be unique within
@@ -333,8 +284,4 @@ message SetNamedConfiguration {
 
   // The dof values representing the configuration.
   repeated double dof_values = 3;
-}
-
-message AppendToDefaultRuleSet {
-  intrinsic_proto.world.CollisionSettings collision_settings = 1;
 }
