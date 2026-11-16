@@ -1219,6 +1219,81 @@ ClipsSkillDispatcher::PreviewSkill(
   return prediction;
 }
 
+// Performs the GetFootprint part of projection.
+// The function reports state for action_id (e.g., FAILED/PROJECTED) to CLIPS
+// and returns a non-OK status if anything in the call failed.
+// This function runs inside the skill project thread.
+absl::Status ClipsSkillDispatcher::PerformGetFootprint(
+    absl::string_view action_id, SkillInstance& skill_instance,
+    absl::string_view world_id, clips::ProtoMessageId behavior_call_proto_id,
+    const intrinsic_proto::executive::BehaviorCall& behavior_call_proto,
+    const std::optional<absl::Duration>& project_timeout,
+    const intrinsic_proto::data_logger::Context& context_proto) {
+  // actual get footprint call, this is potentially long-running
+  absl::StatusOr<intrinsic_proto::skills::GetFootprintResult> footprint_result =
+      skill_instance.GetClient()->GetFootprint(
+          world_id, behavior_call_proto.parameters(),
+          project_timeout, context_proto);
+
+  absl::MutexLock clips_lock(*assert_facade_->GetClipsMutex());
+  if (!footprint_result.ok()) {
+    intrinsic_proto::status::ExtendedStatus skill_es =
+        GetExtendedStatusForSkillResult(
+            footprint_result.status(),
+            skill_instance.GetInstanceProto().id_version(),
+            SkillAction::FootprintChecking);
+    clips::ProtoMessageId es_proto_id =
+        proto_manager_->AddGeneratedProto(skill_es);
+
+    // Assert fact to indicate success (if unimplemented) or
+    // failure
+    ReportClipsStatus(assert_facade_, action_id, kSkillStatusFailed,
+                      {.message = footprint_result.status().ToString(),
+                       .extended_status_proto_id = es_proto_id});
+    return footprint_result.status();
+  }
+
+  if (absl::Status status = ValidateFootprintVolumeReservations(
+          footprint_result->footprint(), behavior_call_proto.skill_id());
+      !status.ok()) {
+    intrinsic_proto::status::ExtendedStatus es_proto =
+        CreateExtendedStatus(18101, status.message(),
+                             {.debug_message = absl::StrFormat(
+                                  "Internal action id: %s", action_id)});
+    clips::ProtoMessageId es_proto_id =
+        proto_manager_->AddGeneratedProto(es_proto);
+    ReportClipsStatus(assert_facade_, action_id, kSkillStatusFailed,
+                      {.message = status.ToString(),
+                       .extended_status_proto_id = es_proto_id});
+    return status;
+  }
+
+  clips::ProtoMessageId footprint_proto_id =
+      proto_manager_->AddGeneratedProto(footprint_result->footprint());
+  clips::ScopedProto footprint_proto(footprint_proto_id, proto_manager_);
+  if (absl::Status s = proto_manager_->SetFieldValue(
+          behavior_call_proto_id, "skill_execution_data.footprint",
+          clips::Value(footprint_proto_id.value()));
+      !s.ok()) {
+    intrinsic_proto::status::ExtendedStatus es_proto = CreateExtendedStatus(
+        18104,
+        absl::StrFormat("Failed to record footprint for skill "
+                        "'%s' during projection. Error: %s",
+                        behavior_call_proto.skill_id(), s.message()),
+        {.debug_message =
+             absl::StrFormat("Internal action id: %s", action_id)});
+    clips::ProtoMessageId es_proto_id =
+        proto_manager_->AddGeneratedProto(es_proto);
+    ReportClipsStatus(
+        assert_facade_, action_id, kSkillStatusFailed,
+        {.message = s.ToString(), .extended_status_proto_id = es_proto_id});
+    return s;
+  }
+
+  ReportClipsStatus(assert_facade_, action_id, kSkillStatusProjected);
+  return absl::OkStatus();
+}
+
 void ClipsSkillDispatcher::StartSkillProjection(
     absl::string_view action_id, absl::string_view world_id,
     clips::ProtoMessageId behavior_call_proto_id,
@@ -1249,108 +1324,43 @@ void ClipsSkillDispatcher::StartSkillProjection(
     parent_context = *status_or_context;
   }
 
-  if (auto status = bundle_->Schedule([this, action_id = std::string(action_id),
-                                       world_id = std::string(world_id),
-                                       behavior_call_proto_id,
-                                       original_behavior_call_proto =
-                                           behavior_call_proto,
-                                       context_proto, parent_context,
-                                       descriptor_pool_id]() {
-        intrinsic_proto::executive::BehaviorCall behavior_call_proto =
-            original_behavior_call_proto;
-        const stats::ScopedSpan span(
-            StartSkillSpan(behavior_call_proto.skill_id(), parent_context,
-                           SkillAction::Projection));
+  if (auto status = bundle_->Schedule(
+          [this, action_id = std::string(action_id),
+           world_id = std::string(world_id), behavior_call_proto_id,
+           original_behavior_call_proto = behavior_call_proto, context_proto,
+           parent_context, descriptor_pool_id]() {
+            intrinsic_proto::executive::BehaviorCall behavior_call_proto =
+                original_behavior_call_proto;
+            const stats::ScopedSpan span(
+                StartSkillSpan(behavior_call_proto.skill_id(), parent_context,
+                               SkillAction::Projection));
 
-        // Get Skill info, also creates client, hence do within bundle
-        INTR_ASSIGN_OR_RETURN(
-            SkillInstance skill_instance,
-            CreateSkillInstanceOrReportError(
-                assert_facade_, proto_manager_, skill_client_generator_,
-                action_id, SkillAction::Projection, behavior_call_proto,
-                descriptor_pool_id),
-            _.With(ReturnVoid()));
+            // Get Skill info, also creates client, hence do within bundle
+            INTR_ASSIGN_OR_RETURN(
+                SkillInstance skill_instance,
+                CreateSkillInstanceOrReportError(
+                    assert_facade_, proto_manager_, skill_client_generator_,
+                    action_id, SkillAction::Projection, behavior_call_proto,
+                    descriptor_pool_id),
+                _.With(ReturnVoid()));
 
-        std::optional<absl::Duration> project_timeout =
-            GetProjectTimeoutOrDefault(behavior_call_proto);
+            std::optional<absl::Duration> project_timeout =
+                GetProjectTimeoutOrDefault(behavior_call_proto);
 
-        skill_instance.GetClient()->InitConcurrentLogging();
-        absl::Cleanup cleanup_conclog = [&skill_instance] {
-          skill_instance.GetClient()->TearDownConcurrentLogging();
-        };
+            skill_instance.GetClient()->InitConcurrentLogging();
+            absl::Cleanup cleanup_conclog = [&skill_instance] {
+              skill_instance.GetClient()->TearDownConcurrentLogging();
+            };
 
-        LOG(INFO) << "Calling skill " << behavior_call_proto.skill_id()
-                  << " (Projecting)";
-        // actual get footprint call, this is potentially long-running
-        absl::StatusOr<intrinsic_proto::skills::GetFootprintResult>
-            footprint_result = skill_instance.GetClient()->GetFootprint(
-                world_id, behavior_call_proto.parameters(),
-                project_timeout, context_proto);
+            LOG(INFO) << "Calling skill " << behavior_call_proto.skill_id()
+                      << " (Projecting)";
 
-        {
-          absl::MutexLock clips_lock(*assert_facade_->GetClipsMutex());
-          if (!footprint_result.ok()) {
-            intrinsic_proto::status::ExtendedStatus skill_es =
-                GetExtendedStatusForSkillResult(
-                    footprint_result.status(),
-                    skill_instance.GetInstanceProto().id_version(),
-                    SkillAction::FootprintChecking);
-            clips::ProtoMessageId es_proto_id =
-                proto_manager_->AddGeneratedProto(skill_es);
-
-            // Assert fact to indicate success (if unimplemented) or
-            // failure
-            ReportClipsStatus(assert_facade_, action_id, kSkillStatusFailed,
-                              {.message = footprint_result.status().ToString(),
-                               .extended_status_proto_id = es_proto_id});
-            return;
-          }
-
-          if (absl::Status status = ValidateFootprintVolumeReservations(
-                  footprint_result->footprint(),
-                  behavior_call_proto.skill_id());
-              !status.ok()) {
-            intrinsic_proto::status::ExtendedStatus es_proto =
-                CreateExtendedStatus(
-                    18101, status.message(),
-                    {.debug_message =
-                         absl::StrFormat("Internal action id: %s", action_id)});
-            clips::ProtoMessageId es_proto_id =
-                proto_manager_->AddGeneratedProto(es_proto);
-            ReportClipsStatus(assert_facade_, action_id, kSkillStatusFailed,
-                              {.message = status.ToString(),
-                               .extended_status_proto_id = es_proto_id});
-            return;
-          }
-
-          clips::ProtoMessageId footprint_proto_id =
-              proto_manager_->AddGeneratedProto(footprint_result->footprint());
-          clips::ScopedProto footprint_proto(footprint_proto_id,
-                                             proto_manager_);
-          if (absl::Status s = proto_manager_->SetFieldValue(
-                  behavior_call_proto_id, "skill_execution_data.footprint",
-                  clips::Value(footprint_proto_id.value()));
-              !s.ok()) {
-            intrinsic_proto::status::ExtendedStatus es_proto =
-                CreateExtendedStatus(
-                    18104,
-                    absl::StrFormat("Failed to record footprint for skill "
-                                    "'%s' during projection. Error: %s",
-                                    behavior_call_proto.skill_id(),
-                                    s.message()),
-                    {.debug_message =
-                         absl::StrFormat("Internal action id: %s", action_id)});
-            clips::ProtoMessageId es_proto_id =
-                proto_manager_->AddGeneratedProto(es_proto);
-            ReportClipsStatus(assert_facade_, action_id, kSkillStatusFailed,
-                              {.message = s.ToString(),
-                               .extended_status_proto_id = es_proto_id});
-            return;
-          }
-
-          ReportClipsStatus(assert_facade_, action_id, kSkillStatusProjected);
-        }
-      });
+            INTR_RETURN_IF_ERROR(
+                PerformGetFootprint(action_id, skill_instance, world_id,
+                                    behavior_call_proto_id, behavior_call_proto,
+                                    project_timeout, context_proto))
+                .With(ReturnVoid());
+          });
       !status.ok()) {
     intrinsic_proto::status::ExtendedStatus extended_status =
         CreateExtendedStatus(

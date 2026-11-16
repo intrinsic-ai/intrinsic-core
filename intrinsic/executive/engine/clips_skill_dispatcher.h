@@ -160,6 +160,15 @@ class ClipsSkillDispatcher {
       const opentelemetry::trace::SpanContext& parent_context,
       SkillAction skill_action);
 
+  // Performs the GetFootprint part of projection.
+  // This function runs inside the skill project thread.
+  absl::Status PerformGetFootprint(
+      absl::string_view action_id, SkillInstance& skill_instance,
+      absl::string_view world_id, clips::ProtoMessageId behavior_call_proto_id,
+      const intrinsic_proto::executive::BehaviorCall& behavior_call_proto,
+      const std::optional<absl::Duration>& project_timeout,
+      const intrinsic_proto::data_logger::Context& context_proto);
+
   // Preview execution of the skill.
   //
   // The result is returned as a Prediction, so it can be passed to
