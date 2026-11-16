@@ -22,7 +22,9 @@
 #include <utility>
 #include <vector>
 
+#include "absl/algorithm/container.h"
 #include "absl/base/nullability.h"
+#include "absl/cleanup/cleanup.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -31,7 +33,6 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "google/protobuf/util/message_differencer.h"
 #include "grpcpp/server_context.h"
 #include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
@@ -42,6 +43,7 @@
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
 #include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
+#include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/logging/sensor_image.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/camera_identifier.h"
@@ -56,12 +58,7 @@
 #include "opentelemetry/metrics/meter.h"
 #include "opentelemetry/metrics/sync_instruments.h"
 
-ABSL_FLAG(
-    bool, camera_service_enable_streaming_debug_stats, false,
-    "Whether to enable camera streaming debug stat collection and printing.");
-
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 namespace metrics_logging {
 namespace {
@@ -207,43 +204,6 @@ grpc::Status CameraServiceImpl::Capture(
   return grpc::Status::OK;
 }
 
-absl::StatusOr<ImageSourceInterface::CaptureCallback>
-CameraServiceImpl::GetMetricsCallback(
-    const CameraIdentifier& camera_identifier) {
-  struct SessionStats {
-    bool is_started = false;
-    absl::Time last_capture_time;
-  };
-
-  std::shared_ptr<SessionStats> session_stats =
-      std::make_shared<SessionStats>();
-
-  LOG(INFO) << "Generating capture callback to track metrics.";
-  return [camera_identifier, session_stats = session_stats](
-             const CaptureResult& capture) -> absl::Status {
-    if (!session_stats->is_started) {
-      session_stats->last_capture_time = capture.capture_at;
-      session_stats->is_started = true;
-    } else {
-      absl::Duration last_capture_duration =
-          capture.capture_at - session_stats->last_capture_time;
-      session_stats->last_capture_time = capture.capture_at;
-
-      // Record the instant rate to the OpenTelemetry metrics.
-      // TODO(b/442910605): The metrics are not currently propagated to pantheon
-      metrics_logging::LogFramesProcessed().Add(1);
-      if (last_capture_duration > absl::ZeroDuration()) {
-        metrics_logging::LogFramesProcessingRate().Record(
-            1.0 / absl::ToDoubleSeconds(last_capture_duration));
-      }
-      metrics_logging::LogTimeToProcessFrame().Add(absl::ToInt64Nanoseconds(
-          std::max(absl::ZeroDuration(), last_capture_duration)));
-    }
-
-    return absl::OkStatus();
-  };
-}
-
 grpc::Status CameraServiceImpl::ReadCameraSettingAccess(
     grpc::ServerContext* absl_nonnull context,
     const intrinsic_proto::perception::v1::
@@ -330,5 +290,4 @@ grpc::Status CameraServiceImpl::UpdateCameraSetting(
   return grpc::Status::OK;
 }
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception

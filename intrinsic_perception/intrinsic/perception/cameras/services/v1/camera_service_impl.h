@@ -20,6 +20,7 @@
 #include <optional>
 #include <string>
 #include <string_view>
+#include <vector>
 
 #include "absl/base/nullability.h"
 #include "absl/base/thread_annotations.h"
@@ -30,14 +31,15 @@
 #include "grpcpp/support/sync_stream.h"
 #include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
-#include "intrinsic/perception/cameras/image_source_interface.h"
+#include "intrinsic/perception/cameras/capture_result.h"
+#include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
+#include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/core/single_thread_executor.h"
 #include "intrinsic/perception/proto/v1/camera_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 // Registers instruments and eagerly initializes metrics. Must be called in
 // main() after intrinsic::OpenCensusPlugin is constructed.
@@ -106,31 +108,8 @@ class CameraServiceImpl final
   const PubSub pubsub_;
   const SingleThreadExecutor executor_;
 
-  struct StreamingSession {
-    // The request that started the streaming session.
-    intrinsic_proto::perception::v1::CaptureRequest request;
-
-    absl::Mutex mutex;
-    std::optional<std::function<void()>> cleanup ABSL_GUARDED_BY(mutex) =
-        std::nullopt;
-
-    ~StreamingSession() {
-      if (cleanup.has_value()) {
-        (*cleanup)();
-      }
-    }
-  };
-
-  absl::Mutex streaming_mutex_;
-  std::weak_ptr<StreamingSession> streaming_session_
-      ABSL_GUARDED_BY(streaming_mutex_);
-
-  // Adds the metrics callback to the image source.
-  absl::StatusOr<ImageSourceInterface::CaptureCallback> GetMetricsCallback(
-      const CameraIdentifier& camera_identifier);
 };
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception
 
 #endif  // INTRINSIC_PERCEPTION_CAMERAS_SERVICES_V1_CAMERA_SERVICE_IMPL_H_

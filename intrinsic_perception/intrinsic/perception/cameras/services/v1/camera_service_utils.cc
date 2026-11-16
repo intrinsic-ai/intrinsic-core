@@ -15,8 +15,10 @@
 #include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
 
 #include <cstddef>
+#include <memory>
 #include <string>
 #include <utility>
+#include <vector>
 
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -31,6 +33,7 @@
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/core/dimensions.h"
+#include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/proto/v1/camera_config.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
 #include "intrinsic/perception/proto/v1/capture_result.pb.h"
@@ -72,6 +75,26 @@ absl::StatusOr<int> WaitForKeyDeletion(KeyValueStore& kvstore,
       absl::StrCat("Timed out waiting for key deletion to propagate: ", key));
 }
 
+absl::Status PublishCaptureResult(
+    const Publisher& publisher, const CaptureResult& capture,
+    const EncodingBySensorId& encoding_by_sensor_id = {}) {
+  INTR_ASSIGN_OR_RETURN(
+      intrinsic_proto::perception::v1::CaptureResult capture_result_proto,
+      intrinsic_proto::perception::v1::ToProto(capture, encoding_by_sensor_id),
+      _.LogError());
+
+  LOG_EVERY_N_SEC(INFO, 10)
+      << "Publishing images on topic: " << publisher.TopicName();
+  if (const absl::Status status =
+          publisher.Publish(capture_result_proto, capture.capture_at);
+      !status.ok()) {
+    LOG(WARNING) << "Failed to publish image on topic: "
+                 << publisher.TopicName() << " with error: " << status;
+  }
+
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 absl::StatusOr<ParsedCaptureRequest> ParseCaptureRequest(
@@ -105,6 +128,23 @@ absl::StatusOr<ParsedCaptureRequest> ParseCaptureRequest(
   };
 }
 
+std::unique_ptr<ConsumerStreamState> AllocateConsumerStreamState(
+    absl::string_view base_topic, EncodingBySensorId encoding_by_sensor_id,
+    std::vector<bool>& occupied_slots) {
+  size_t slot_index = 0;
+  while (slot_index < occupied_slots.size() && occupied_slots[slot_index]) {
+    ++slot_index;
+  }
+  if (slot_index == occupied_slots.size()) {
+    occupied_slots.push_back(true);
+  } else {
+    occupied_slots[slot_index] = true;
+  }
+  return std::make_unique<ConsumerStreamState>(
+      absl::StrCat(base_topic, "/stream_", slot_index + 1),
+      std::move(encoding_by_sensor_id), slot_index);
+}
+
 absl::StatusOr<ImageSourceInterface::CaptureCallback>
 CreateBaseTopicPublishingCaptureCallback(const PubSub& pubsub,
                                          absl::string_view base_topic) {
@@ -117,21 +157,37 @@ CreateBaseTopicPublishingCaptureCallback(const PubSub& pubsub,
   LOG(INFO) << "Generating base topic publishing capture callback for topic: "
             << base_topic;
   return [publisher = std::move(publisher)](
-             const CaptureResult& capture) -> absl::Status {
-    INTR_ASSIGN_OR_RETURN(
-        intrinsic_proto::perception::v1::CaptureResult capture_result_proto,
-        intrinsic_proto::perception::v1::ToProto(capture), _.LogError());
-
-    LOG_EVERY_N_SEC(INFO, 10)
-        << "Publishing raw images on base topic: " << publisher.TopicName();
-    if (const absl::Status status =
-            publisher.Publish(capture_result_proto, capture.capture_at);
-        !status.ok()) {
-      LOG(WARNING) << "Failed to publish image on base topic: "
-                   << publisher.TopicName() << " with error: " << status;
+             const CaptureResult& capture) mutable -> absl::Status {
+    const absl::StatusOr<bool> has_subscribers =
+        publisher.HasMatchingSubscribers();
+    if (!has_subscribers.ok()) {
+      LOG_EVERY_N_SEC(WARNING, 10)
+          << "Failed to check for matching subscribers on base topic "
+          << publisher.TopicName() << ": " << has_subscribers.status();
+      return absl::OkStatus();
     }
+    if (!*has_subscribers) {
+      return absl::OkStatus();
+    }
+    return PublishCaptureResult(publisher, capture);
+  };
+}
 
-    return absl::OkStatus();
+absl::StatusOr<ImageSourceInterface::CaptureCallback>
+CreatePublishingCaptureCallback(const PubSub& pubsub,
+                                const ConsumerStreamState& consumer_state) {
+  INTR_ASSIGN_OR_RETURN(
+      Publisher publisher,
+      pubsub.CreatePublisher(consumer_state.topic_name(),
+                             TopicConfig{.topic_qos = TopicConfig::Sensor}),
+      _.LogError() << "Failed to create publisher.");
+
+  LOG(INFO) << "Generating publishing capture callback for topic: "
+            << consumer_state.topic_name();
+  return [publisher = std::move(publisher),
+          encoding_state = consumer_state.encoding_state()](
+             const CaptureResult& capture) -> absl::Status {
+    return PublishCaptureResult(publisher, capture, encoding_state->Get());
   };
 }
 
