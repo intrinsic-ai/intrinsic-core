@@ -22,7 +22,6 @@
 #include "google/protobuf/message.h"
 #include "intrinsic/motion_planning/proto/v1/geometric_constraints.pb.h"
 #include "intrinsic/perception/proto/v1/calibration_service.grpc.pb.h"
-#include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
 
@@ -52,8 +51,6 @@ class CollectCalibrationData : public SkillInterface {
   struct InputParameters;
 
  private:
-  PubSub pubsub_;
-
   absl::Status CollectDataWithCalibrationService(
       const InputParameters& input_params, ExecuteContext& context,
       std::unique_ptr<

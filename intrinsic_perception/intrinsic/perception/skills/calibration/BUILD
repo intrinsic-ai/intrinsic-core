@@ -199,7 +199,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/motion_planning:motion_planner_client",
-        "//intrinsic_sdk/intrinsic/platform/pubsub",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
         "//intrinsic_sdk/intrinsic/util:eigen",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
