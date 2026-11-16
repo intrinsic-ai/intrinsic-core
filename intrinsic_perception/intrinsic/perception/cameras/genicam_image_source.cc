@@ -171,6 +171,13 @@ bool ParameterControlsFrameRateEnable(absl::string_view parameter_name) {
   return Contains(kFrameRateEnableValues, parameter_name);
 }
 
+bool ParameterIsManagedByActiveStream(absl::string_view parameter_name) {
+  return parameter_name == genicam::kAcquisitionMode ||
+         parameter_name == genicam::kTriggerMode ||
+         parameter_name == genicam::kTriggerSource ||
+         ParameterControlsFrameRateEnable(parameter_name);
+}
+
 void LogCameraInfos(ArvCamera* arv_camera) {
   LOG(INFO) << "Successfully opened camera.";
   LOG(INFO) << "vendor name             = " << GetVendorName(arv_camera);
@@ -603,7 +610,10 @@ absl::Status GenicamImageSource::AcquisitionStream::ScopedAcquisition::Stop() {
     return absl::OkStatus();
   }
   GError* error = nullptr;
-  arv_camera_stop_acquisition(source->camera_.get(), &error);
+  {
+    absl::MutexLock camera_lock(source->camera_mutex_);
+    arv_camera_stop_acquisition(source->camera_.get(), &error);
+  }
   INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
   LOG(INFO) << absl::StrFormat(
       "Stopped streaming acquisition for camera with ID %s.",
@@ -634,8 +644,11 @@ absl::Status GenicamImageSource::AcquisitionStream::Start() {
   // acquisition and then repurposed once image data has been copied. The
   // buffers depend on the PayloadSize and hence need to be recreated whenever
   // acquisition is restarted and the PayloadSize changed.
-  const int payload_size =
-      arv_camera_get_payload(source_.camera_.get(), &error);
+  int payload_size = 0;
+  {
+    absl::MutexLock camera_lock(source_.camera_mutex_);
+    payload_size = arv_camera_get_payload(source_.camera_.get(), &error);
+  }
   INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
   if (payload_size_ != payload_size) {
     arv_stream_delete_buffers(arv_stream_.get());
@@ -646,7 +659,10 @@ absl::Status GenicamImageSource::AcquisitionStream::Start() {
     payload_size_ = payload_size;
   }
 
-  arv_camera_start_acquisition(source_.camera_.get(), &error);
+  {
+    absl::MutexLock camera_lock(source_.camera_mutex_);
+    arv_camera_start_acquisition(source_.camera_.get(), &error);
+  }
   INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
   active_acquisition_.emplace(source_);
   return absl::OkStatus();
@@ -870,9 +886,9 @@ absl::StatusOr<CaptureResult> GenicamImageSource::CaptureImpl(
     absl::Duration timeout, const absl::flat_hash_set<int64_t>& sensor_ids) {
   const stats::ScopedSpan span("GenicamImageSource::CaptureImpl");
   {
-    // We do not allow streaming and capturing at the same time. This can be
-    // problematic if the camera parameters are not the same. See the TDD for
-    // more details: go/intrinsic-camera-streaming-design
+    // Concurrent `ImageSource::Capture` calls piggyback on the active stream in
+    // `ImageSource::TryCaptureFromActiveStream`, so `CaptureImpl` and
+    // `StartStreamImpl` are never interleaved on the hardware stream.
     absl::MutexLock lock(mutex_);
     if (streaming_state_.has_value()) {
       return absl::FailedPreconditionError(
@@ -1626,6 +1642,17 @@ absl::StatusOr<CameraSetting> GenicamImageSource::ReadCameraSettingImpl(
     return software_hdr_->ReadCameraSetting(name);
   }
 
+  if (name == genicam::kExposureTime) {
+    absl::MutexLock state_lock(mutex_);
+    if (streaming_state_.has_value() && streaming_state_->is_active &&
+        streaming_state_->hdr.has_value() &&
+        !streaming_state_->hdr->exposure_times.empty()) {
+      return CreateCameraSetting(
+          name, absl::ToDoubleMicroseconds(
+                    streaming_state_->hdr->exposure_times.front()));
+    }
+  }
+
   absl::MutexLock lock(camera_mutex_);
   GError* error = nullptr;
 
@@ -1705,17 +1732,13 @@ absl::StatusOr<CameraSetting> GenicamImageSource::ReadCameraSettingImpl(
 absl::Status GenicamImageSource::UpdateCameraSettingImpl(
     const CameraSetting& camera_setting) {
   {
-    // We do not allow streaming and setting updates at the same time. This can
-    // be problematic if the camera parameters are not the same. See the TDD for
-    // more details: go/intrinsic-camera-streaming-design
     absl::MutexLock lock(mutex_);
-    if (streaming_state_.has_value()) {
+    if (streaming_state_.has_value() && !streaming_state_->is_active) {
       return absl::FailedPreconditionError(
-          "We do not allow updating the camera setting while there is a stream "
-          "running.");
+          "Cannot update camera settings while stream startup or teardown is "
+          "in progress.");
     }
   }
-
   return UpdateCameraSettingInternal(camera_setting);
 }
 
@@ -1726,9 +1749,135 @@ absl::Status GenicamImageSource::UpdateCameraSettingInternal(
   }
   INTR_RETURN_IF_ERROR(GetFaultsStatus());
 
-  return RetryOnPermissionDeniedOrTimeoutOrBusy([this, &camera_setting] {
-    return UpdateCameraSettingOnce(camera_setting);
-  });
+  absl::Status status =
+      RetryOnPermissionDeniedOrTimeoutOrBusy([this, &camera_setting] {
+        return UpdateCameraSettingOnce(camera_setting);
+      });
+  if (!status.ok()) {
+    if (ParameterRequiresAcquisitionRestart(camera_setting.name) ||
+        !stream_.has_value()) {
+      if (const absl::Status recovery_status = RecoverActiveStreamAcquisition();
+          !recovery_status.ok()) {
+        LOG(WARNING) << "Failed to recover active stream after failed setting "
+                        "update: "
+                     << recovery_status;
+      }
+    }
+    return status;
+  }
+  return absl::OkStatus();
+}
+
+absl::Status GenicamImageSource::RefreshStreamingHdrState() {
+  bool was_hdr_active = false;
+  {
+    absl::MutexLock lock(mutex_);
+    if (!streaming_state_.has_value() || !streaming_state_->is_active) {
+      return absl::OkStatus();
+    }
+    was_hdr_active = streaming_state_->hdr.has_value();
+  }
+
+  INTR_ASSIGN_OR_RETURN(const std::vector<absl::Duration> hdr_exposure_times,
+                        GetHdrExposureTimes());
+  if (!hdr_exposure_times.empty()) {
+    INTR_ASSIGN_OR_RETURN(const HdrOperator hdr_operator,
+                          software_hdr_->HdrOperator());
+    std::vector<CameraSetting> new_auto_settings_to_restore;
+    if (!was_hdr_active) {
+      INTR_ASSIGN_OR_RETURN(
+          const std::vector<CameraSetting> active_auto_settings,
+          GetActiveAutoSettings());
+      for (const CameraSetting& auto_setting : active_auto_settings) {
+        INTR_ASSIGN_OR_RETURN(const std::string enum_value,
+                              GetEnumerationValue(auto_setting));
+        if (enum_value == kContinuous) {
+          new_auto_settings_to_restore.push_back(auto_setting);
+        }
+        INTR_RETURN_IF_ERROR(
+            RetryOnPermissionDeniedOrTimeoutOrBusy([this, &auto_setting] {
+              return UpdateCameraSettingOnce(
+                  CreateEnumCameraSetting(auto_setting.name, kOff));
+            }));
+      }
+    }
+    absl::MutexLock lock(mutex_);
+    if (!streaming_state_.has_value() || !streaming_state_->is_active) {
+      return absl::OkStatus();
+    }
+    streaming_state_->hdr = StreamingHdrState{
+        .exposure_times = hdr_exposure_times,
+        .auto_settings_to_restore =
+            streaming_state_->hdr.has_value()
+                ? std::move(streaming_state_->hdr->auto_settings_to_restore)
+                : std::move(new_auto_settings_to_restore),
+        .hdr_operator = hdr_operator,
+    };
+    streaming_state_->pending_frame.reset();
+    // Hold `mutex_` while locking `camera_mutex_`
+    // (`ABSL_ACQUIRED_AFTER(mutex_)`) so the `streaming_state_->hdr` reset and
+    // initial bracket `SetExposureTime` are atomic with respect to
+    // `QueueStreamingFrame` on the stream thread.
+    absl::MutexLock camera_lock(camera_mutex_);
+    return SetExposureTime(camera_.get(),
+                           streaming_state_->hdr->exposure_times.front(),
+                           exposure_time_props_);
+  }
+
+  std::vector<CameraSetting> auto_settings_to_restore;
+  absl::Status status;
+  {
+    absl::MutexLock lock(mutex_);
+    if (!streaming_state_.has_value() || !streaming_state_->is_active ||
+        !streaming_state_->hdr.has_value()) {
+      return absl::OkStatus();
+    }
+    const absl::Duration base_exposure_time =
+        streaming_state_->hdr->exposure_times.front();
+    auto_settings_to_restore =
+        std::move(streaming_state_->hdr->auto_settings_to_restore);
+    streaming_state_->hdr.reset();
+    streaming_state_->pending_frame.reset();
+    // Hold `mutex_` while locking `camera_mutex_`
+    // (`ABSL_ACQUIRED_AFTER(mutex_)`) so `streaming_state_->hdr.reset()` and
+    // restoring `base_exposure_time` are atomic with respect to
+    // `QueueStreamingFrame` on the stream thread.
+    absl::MutexLock camera_lock(camera_mutex_);
+    status = SetExposureTime(camera_.get(), base_exposure_time,
+                             exposure_time_props_);
+  }
+  status.Update(RestoreAutoSettings(auto_settings_to_restore));
+  return status;
+}
+
+absl::Status GenicamImageSource::RecoverActiveStreamAcquisition() {
+  if (camera_ == nullptr) {
+    return absl::OkStatus();
+  }
+  std::optional<absl::Duration> exposure_time_to_set;
+  {
+    absl::MutexLock lock(mutex_);
+    if (!streaming_state_.has_value() || !streaming_state_->is_active) {
+      return absl::OkStatus();
+    }
+    streaming_state_->pending_frame.reset();
+    if (streaming_state_->hdr.has_value() &&
+        !streaming_state_->hdr->exposure_times.empty()) {
+      streaming_state_->hdr->ldr_frames.clear();
+      streaming_state_->hdr->num_tries = 0;
+      exposure_time_to_set = streaming_state_->hdr->exposure_times.front();
+    }
+  }
+  {
+    absl::MutexLock camera_lock(camera_mutex_);
+    INTR_RETURN_IF_ERROR(ConfigurePtpSyncAndStreamingTrigger(camera_.get()));
+    if (exposure_time_to_set.has_value()) {
+      INTR_RETURN_IF_ERROR(SetExposureTime(camera_.get(), *exposure_time_to_set,
+                                           exposure_time_props_));
+    }
+  }
+  use_software_trigger_ = false;
+  return StartAsyncAcquisition();
 }
 
 absl::Status GenicamImageSource::UpdateCameraSettingOnce(
@@ -1742,19 +1891,65 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnce(
       return intrinsic::FailedPreconditionErrorBuilder()
              << "Software HDR is unavailable.";
     }
-    return software_hdr_->UpdateCameraSetting(camera_setting);
+    INTR_RETURN_IF_ERROR(software_hdr_->UpdateCameraSetting(camera_setting));
+    return RefreshStreamingHdrState();
   }
 
-  if (ParameterRequiresAcquisitionRestart(camera_setting.name)) {
-    // Stops the camera acquisition while keeping the current stream allocated.
+  // While streaming is active, `GenicamImageSource` owns the acquisition
+  // transport settings (`AcquisitionMode`, `TriggerMode`, `TriggerSource`, and
+  // `AcquisitionFrameRateEnable`). Ignore external updates to those settings so
+  // callers re-applying an idle `CameraConfig` or reverting HTTP stream
+  // settings do not switch hardware back to software trigger mid-stream.
+  if (ParameterIsManagedByActiveStream(camera_setting.name)) {
+    absl::MutexLock lock(mutex_);
+    if (streaming_state_.has_value() && streaming_state_->is_active) {
+      LOG(WARNING) << "Ignoring stream-transport setting (" << camera_setting
+                   << ") on camera " << device_id_
+                   << " while streaming is active.";
+      return absl::OkStatus();
+    }
+  }
+
+  // Software-triggered 3D scanners (such as Photoneo PhoXi) report
+  // AcquisitionFrameRate = 0.0 when queried via ReadCameraSetting. Ignore
+  // non-positive frame rate updates early without pausing the stream or
+  // calling arv_camera_set_frame_rate.
+  if (ParameterControlsFrameRate(camera_setting.name)) {
+    if (const auto* float_val =
+            std::get_if<CameraSetting::Float>(&camera_setting.value);
+        float_val != nullptr && float_val->value <= 0.0) {
+      LOG(WARNING) << "Ignoring non-positive frame rate setting '"
+                   << camera_setting.name << "' (" << float_val->value
+                   << ") on camera " << device_id_ << ".";
+      return absl::OkStatus();
+    }
+  }
+
+  const bool requires_restart =
+      ParameterRequiresAcquisitionRestart(camera_setting.name);
+  if (requires_restart) {
+    // Stops the camera acquisition while keeping the current stream allocated,
+    // unless GevSCPSPacketSize is changing (which ArvGvStream caches at stream
+    // creation time).
     INTR_RETURN_IF_ERROR(StopAsyncAcquisition());
+    if (camera_setting.name == genicam::kGevSCPSPacketSize) {
+      stream_.reset();
+    }
   }
 
   // Temporarily stop the thread responsible for streaming, so we can quickly
   // change our parameter.
   INTR_RETURN_IF_ERROR(PauseStream());
   absl::Status status = UpdateCameraSettingOnceWithPausedStream(camera_setting);
+  if (status.ok() && camera_setting.name == genicam::kExposureTime) {
+    status.Update(RefreshStreamingHdrState());
+  }
   status.Update(ResumeStream());
+
+  if ((requires_restart || !stream_.has_value()) &&
+      !absl::IsPermissionDenied(status)) {
+    status.Update(RecoverActiveStreamAcquisition());
+  }
   return status;
 }
 
@@ -1767,6 +1962,7 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
               -> absl::Status {
             INTR_ASSIGN_OR_RETURN(const int64_t integer_value,
                                   GetValue<int64_t>(camera_setting));
+            absl::MutexLock camera_lock(camera_mutex_);
             if (camera_setting.name == genicam::kGevSCPSPacketSize &&
                 arv_camera_is_gv_device(camera_.get())) {
               arv_camera_gv_set_packet_size(camera_.get(), integer_value,
@@ -1781,6 +1977,7 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
               -> absl::Status {
             INTR_ASSIGN_OR_RETURN(const double float_value,
                                   GetValue<double>(camera_setting));
+            absl::MutexLock camera_lock(camera_mutex_);
             // Different camera vendors have different ways to set the exposure
             // time, gain, and frame rate, use aravis to handle this.
             if (camera_setting.name == genicam::kExposureTime) {
@@ -1811,7 +2008,13 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
                        << " when setting the frame rate. Please downgrade "
                           "your version.";
               }
+              const bool restore_software_trigger = this->use_software_trigger_;
               arv_camera_set_frame_rate(camera_.get(), float_value, &error);
+              INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+              if (restore_software_trigger) {
+                INTR_RETURN_IF_ERROR(SetSoftwareTrigger(camera_.get()));
+              }
+              return absl::OkStatus();
             } else {
               arv_camera_set_float(camera_.get(), camera_setting.name.c_str(),
                                    float_value, &error);
@@ -1822,6 +2025,7 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
               -> absl::Status {
             INTR_ASSIGN_OR_RETURN(const bool bool_value,
                                   GetValue<bool>(camera_setting));
+            absl::MutexLock camera_lock(camera_mutex_);
             if (ParameterControlsFrameRateEnable(camera_setting.name)) {
               arv_camera_set_frame_rate_enable(camera_.get(), bool_value,
                                                &error);
@@ -1835,6 +2039,7 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
               -> absl::Status {
             INTR_ASSIGN_OR_RETURN(const std::string string_value,
                                   GetValue<std::string>(camera_setting));
+            absl::MutexLock camera_lock(camera_mutex_);
             arv_camera_set_string(camera_.get(), camera_setting.name.c_str(),
                                   string_value.c_str(), &error);
             return ValidateAndNullArvError(error);
@@ -1843,21 +2048,49 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
               -> absl::Status {
             INTR_ASSIGN_OR_RETURN(const std::string enum_value,
                                   GetEnumerationValue(camera_setting));
-            if (camera_setting.name == genicam::kTriggerMode) {
-              if (enum_value == "On") {
-                // Make sure that the camera is in software trigger mode.
-                // Otherwise the option "On" might not be available. See
-                // b/341888014.
-                return SetSoftwareTrigger(camera_.get());
-              } else if (enum_value == "Off") {
-                return SetFreeRunningTrigger(camera_.get());
+            {
+              absl::MutexLock camera_lock(camera_mutex_);
+              if (camera_setting.name == genicam::kTriggerMode) {
+                if (enum_value == "On") {
+                  // Make sure that the camera is in software trigger mode.
+                  // Otherwise the option "On" might not be available. See
+                  // b/341888014.
+                  return SetSoftwareTrigger(camera_.get());
+                } else if (enum_value == "Off") {
+                  return SetFreeRunningTrigger(camera_.get());
+                }
+              }
+              // In Aravis, enumerations are also set through
+              // arv_camera_set_string()
+              arv_camera_set_string(camera_.get(), camera_setting.name.c_str(),
+                                    enum_value.c_str(), &error);
+              INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+            }
+            if (Contains(kAutoNames, camera_setting.name)) {
+              absl::MutexLock lock(mutex_);
+              if (streaming_state_.has_value() && streaming_state_->is_active &&
+                  streaming_state_->hdr.has_value()) {
+                // Keep auto settings in `Off` mode on hardware while HDR
+                // exposure bracketing is active so they do not conflict with
+                // `SetExposureTime`, and update `auto_settings_to_restore` for
+                // when HDR or the stream stops.
+                if (enum_value != kOff) {
+                  absl::MutexLock camera_lock(camera_mutex_);
+                  arv_camera_set_string(
+                      camera_.get(), camera_setting.name.c_str(), kOff, &error);
+                  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+                }
+                std::erase_if(streaming_state_->hdr->auto_settings_to_restore,
+                              [&](const CameraSetting& setting) {
+                                return setting.name == camera_setting.name;
+                              });
+                if (enum_value == kContinuous) {
+                  streaming_state_->hdr->auto_settings_to_restore.push_back(
+                      camera_setting);
+                }
               }
             }
-            // In Aravis, enumerations are also set through
-            // arv_camera_set_string()
-            arv_camera_set_string(camera_.get(), camera_setting.name.c_str(),
-                                  enum_value.c_str(), &error);
-            return ValidateAndNullArvError(error);
+            return absl::OkStatus();
           },
           [&](const intrinsic::perception::CameraSetting::Command&)
               -> absl::Status {
@@ -1866,6 +2099,7 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
             if (camera_setting.name == genicam::kDeviceReset) {
               INTR_RETURN_IF_ERROR(Init(/*requires_device_reset=*/true));
             } else {
+              absl::MutexLock camera_lock(camera_mutex_);
               arv_camera_execute_command(camera_.get(),
                                          camera_setting.name.c_str(), &error);
             }
@@ -1877,9 +2111,13 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
           }},
       camera_setting.value));
 
-  INTR_ASSIGN_OR_RETURN(
-      bool use_software_trigger,
-      intrinsic::perception::UsesSoftwareTrigger(this->camera_.get()));
+  bool use_software_trigger = false;
+  {
+    absl::MutexLock camera_lock(camera_mutex_);
+    INTR_ASSIGN_OR_RETURN(
+        use_software_trigger,
+        intrinsic::perception::UsesSoftwareTrigger(this->camera_.get()));
+  }
   if (this->use_software_trigger_ != use_software_trigger) {
     this->use_software_trigger_ = use_software_trigger;
     LOG(INFO) << "Software trigger: " << (use_software_trigger ? "On" : "Off");
@@ -1892,7 +2130,17 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
   }
 
   absl::MutexLock lock(mutex_);
-  if (camera_setting.name == genicam::kGevSCPSPacketSize) {
+  if (camera_setting.name == genicam::kExposureTime) {
+    if (streaming_state_.has_value() && streaming_state_->hdr.has_value() &&
+        !streaming_state_->hdr->exposure_times.empty()) {
+      INTR_ASSIGN_OR_RETURN(const double float_value,
+                            GetValue<double>(camera_setting));
+      streaming_state_->hdr->exposure_times.front() = absl::Microseconds(
+          exposure_time_props_.has_value()
+              ? ClampAndRoundToIncrement(float_value, *exposure_time_props_)
+              : float_value);
+    }
+  } else if (camera_setting.name == genicam::kGevSCPSPacketSize) {
     INTR_ASSIGN_OR_RETURN(this->state_.packet_size,
                           GetValue<int>(camera_setting));
     LOG(INFO) << "Packet size: " << this->state_.packet_size;
@@ -1903,8 +2151,11 @@ absl::Status GenicamImageSource::UpdateCameraSettingOnceWithPausedStream(
     INTR_ASSIGN_OR_RETURN(this->state_.dimensions_by_sensor_id[sensor_id].rows,
                           GetValue<int32_t>(camera_setting));
   } else if (camera_setting.name == genicam::kPixelFormat) {
-    ArvPixelFormat pixel_format =
-        arv_camera_get_pixel_format(camera_.get(), &error);
+    ArvPixelFormat pixel_format;
+    {
+      absl::MutexLock camera_lock(camera_mutex_);
+      pixel_format = arv_camera_get_pixel_format(camera_.get(), &error);
+    }
     INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
     this->state_.pixel_format_by_sensor_id[sensor_id] = pixel_format;
   } else if (camera_setting.name == genicam::kComponentEnable) {
@@ -1956,13 +2207,11 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
     camera->buffer_callback_time_ = onb_start;
 
     // Only if we are not currently streaming (or while `StartStream` is still
-    // converging auto settings) do we notify the capture callback that we have
-    // handled the buffer. Once streaming is active, frames are handed off to
-    // `stream_dispatch_thread_` via `streaming_state_->pending_frame`.
-    //
-    // Since we do not allow capture calls and streaming calls to be
-    // interleaved, we can avoid an extra copy and consume the buffer directly.
-    // See go/intrinsic-camera-streaming-design for more details.
+    // converging auto settings) do we notify `GetCaptureResultAsync` that we
+    // have handled the buffer. Once streaming is active, frames are handed off
+    // to `stream_dispatch_thread_` via `streaming_state_->pending_frame` (and
+    // concurrent `ImageSource::Capture` calls piggyback on the active stream in
+    // `ImageSource::TryCaptureFromActiveStream`).
     camera->new_buffer_handled_ = !camera->streaming_state_.has_value() ||
                                   !camera->streaming_state_->is_active;
 
@@ -2001,10 +2250,21 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
     const bool should_use_stream_callbacks =
         camera->streaming_state_.has_value() &&
         camera->streaming_state_->is_active;
-    const absl::flat_hash_set<int64_t> requested_sensor_ids =
+    const bool streaming_hdr_active = should_use_stream_callbacks &&
+                                      camera->streaming_state_->hdr.has_value();
+    absl::flat_hash_set<int64_t> requested_sensor_ids =
         should_use_stream_callbacks ? absl::flat_hash_set<int64_t>{}
                                     : camera->state_.requested_sensor_ids;
     camera->mutex_.unlock();
+    // Query active stream sensor IDs outside camera->mutex_ so we do not nest
+    // ImageSource locks (callback_mutex_, sensor_info_mutex_) inside mutex_.
+    // Streaming HDR keeps all sensors unfiltered across bracket frames because
+    // `FuseLdrCaptureResults` expects the intensity image at
+    // `sensor_images.front()`; per-consumer `sensor_ids` filtering still runs
+    // afterward in `InvokeCaptureCallbacks` / `PostCaptureImplProcessing`.
+    if (should_use_stream_callbacks && !streaming_hdr_active) {
+      requested_sensor_ids = camera->GetActiveStreamSensorIds();
+    }
     // Create a new capture result. This will be moved from the receiving thread
     // to the thread owning the camera and later from there to the client. This
     // is important as we will move the 'camera->capture_result_' to the client
@@ -2035,7 +2295,8 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
     // reading packets.
     if (should_use_stream_callbacks) {
       status = camera->QueueStreamingFrame(*std::move(capture_result),
-                                           exposure_time, frame_id);
+                                           exposure_time, frame_id,
+                                           std::move(requested_sensor_ids));
       if (!status.ok()) {
         LOG(ERROR)
             << "Skipping callbacks! Failed to process streaming HDR frame: "
@@ -2120,7 +2381,8 @@ void GenicamImageSource::StorePendingStreamFrame(
 
 absl::Status GenicamImageSource::QueueHdrStreamingFrame(
     CaptureResult capture_result,
-    std::optional<absl::Duration> received_exposure, int64_t frame_id) {
+    std::optional<absl::Duration> received_exposure, int64_t frame_id,
+    absl::flat_hash_set<int64_t> captured_sensor_ids) {
   StreamingHdrState& hdr = *streaming_state_->hdr;
   const int num_exposures = hdr.exposure_times.size();
   const int current_idx = hdr.ldr_frames.size();
@@ -2161,6 +2423,7 @@ absl::Status GenicamImageSource::QueueHdrStreamingFrame(
   StorePendingStreamFrame(PendingStreamFrame{
       .frames = std::move(hdr.ldr_frames),
       .hdr_operator = hdr.hdr_operator,
+      .captured_sensor_ids = std::move(captured_sensor_ids),
   });
   hdr.ldr_frames.clear();
   hdr.ldr_frames.reserve(hdr.exposure_times.size());
@@ -2169,7 +2432,8 @@ absl::Status GenicamImageSource::QueueHdrStreamingFrame(
 
 absl::Status GenicamImageSource::QueueStreamingFrame(
     CaptureResult capture_result,
-    std::optional<absl::Duration> received_exposure, int64_t frame_id) {
+    std::optional<absl::Duration> received_exposure, int64_t frame_id,
+    absl::flat_hash_set<int64_t> captured_sensor_ids) {
   absl::MutexLock lock(mutex_);
   if (!streaming_state_.has_value() || !streaming_state_->is_active) {
     return absl::OkStatus();
@@ -2177,11 +2441,12 @@ absl::Status GenicamImageSource::QueueStreamingFrame(
   if (!streaming_state_->hdr.has_value()) {
     StorePendingStreamFrame(PendingStreamFrame{
         .frames = {std::move(capture_result)},
+        .captured_sensor_ids = std::move(captured_sensor_ids),
     });
     return absl::OkStatus();
   }
   return QueueHdrStreamingFrame(std::move(capture_result), received_exposure,
-                                frame_id);
+                                frame_id, std::move(captured_sensor_ids));
 }
 
 void GenicamImageSource::RunStreamDispatchLoop(
@@ -2226,7 +2491,8 @@ void GenicamImageSource::RunStreamDispatchLoop(
       frame_to_dispatch = std::move(pending_frame->frames.front());
     }
 
-    InvokeCaptureCallbacks(std::move(frame_to_dispatch), streaming_params);
+    InvokeCaptureCallbacks(std::move(frame_to_dispatch), streaming_params,
+                           pending_frame->captured_sensor_ids);
   }
 }
 
@@ -2451,31 +2717,35 @@ absl::Status GenicamImageSource::StopStreamImpl() {
 
 absl::Status GenicamImageSource::StartAsyncAcquisition() {
   if (!stream_.has_value()) {
-    // Disable packet socket, as it leads to high latencies on
-    // docker/kubernetes, see also:
-    // https://github.com/AravisProject/aravis/issues/691#issuecomment-1194287752
-    // https://github.com/AravisProject/aravis/issues/613#issuecomment-1054222737
-    if (arv_camera_is_gv_device(camera_.get())) {
-      arv_camera_gv_set_stream_options(
-          camera_.get(), ARV_GV_STREAM_OPTION_PACKET_SOCKET_DISABLED);
-    }
-
     GError* error = nullptr;
-    GObjectPtr<ArvStream> new_stream(arv_camera_create_stream(
-        camera_.get(), /*callback=*/nullptr, /*user_data=*/nullptr,
-        /*destroy=*/nullptr, &error));
-    INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-    if (new_stream == nullptr) {
-      return absl::InternalError("Failed to create Aravis stream.");
-    }
+    GObjectPtr<ArvStream> new_stream;
+    {
+      absl::MutexLock camera_lock(camera_mutex_);
+      // Disable packet socket, as it leads to high latencies on
+      // docker/kubernetes, see also:
+      // https://github.com/AravisProject/aravis/issues/691#issuecomment-1194287752
+      // https://github.com/AravisProject/aravis/issues/613#issuecomment-1054222737
+      if (arv_camera_is_gv_device(camera_.get())) {
+        arv_camera_gv_set_stream_options(
+            camera_.get(), ARV_GV_STREAM_OPTION_PACKET_SOCKET_DISABLED);
+      }
 
-    // Try to avoid lost packets because of a full buffer under heavy CPU load,
-    // see also
-    // https://aravisproject.github.io/aravis/aravis-stable/ethernet.html#socket-buffer-size.
-    if (arv_camera_is_gv_device(camera_.get())) {
-      g_object_set(new_stream.get(), "socket-buffer",
-                   ARV_GV_STREAM_SOCKET_BUFFER_AUTO, "socket-buffer-size", 0,
-                   nullptr);
+      new_stream.reset(arv_camera_create_stream(
+          camera_.get(), /*callback=*/nullptr, /*user_data=*/nullptr,
+          /*destroy=*/nullptr, &error));
+      INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+      if (new_stream == nullptr) {
+        return absl::InternalError("Failed to create Aravis stream.");
+      }
+
+      // Try to avoid lost packets because of a full buffer under heavy CPU
+      // load, see also
+      // https://aravisproject.github.io/aravis/aravis-stable/ethernet.html#socket-buffer-size.
+      if (arv_camera_is_gv_device(camera_.get())) {
+        g_object_set(new_stream.get(), "socket-buffer",
+                     ARV_GV_STREAM_SOCKET_BUFFER_AUTO, "socket-buffer-size", 0,
+                     nullptr);
+      }
     }
 
     absl::SleepFor(absl::Milliseconds(10));

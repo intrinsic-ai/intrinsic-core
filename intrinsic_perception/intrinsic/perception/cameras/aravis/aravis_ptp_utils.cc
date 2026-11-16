@@ -126,6 +126,30 @@ absl::StatusOr<bool> WaitForPtpLock(ArvCamera* absl_nonnull camera,
   }
 }
 
+absl::Status ConfigureFreeRunningStreamingTrigger(
+    ArvCamera* absl_nonnull camera) {
+  GError* error = nullptr;
+  if (GetVendorName(camera) == kBasler &&
+      GetModelName(camera).starts_with(kBaslerAcePrefix) &&
+      arv_camera_is_feature_available(camera, kBaslerAceSyncFreeRunTimerEnable,
+                                      nullptr)) {
+    arv_camera_set_boolean(camera, kBaslerAceSyncFreeRunTimerEnable, 0, &error);
+    INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+    if (arv_camera_is_feature_available(
+            camera, kBaslerAceSyncFreeRunTimerUpdate, nullptr)) {
+      arv_camera_execute_command(camera, kBaslerAceSyncFreeRunTimerUpdate,
+                                 &error);
+      INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+    }
+  }
+  INTR_RETURN_IF_ERROR(SetFreeRunningTrigger(camera));
+  // arv_camera_set_frame_rate_enable checks feature availability across vendor
+  // variants (e.g. AcquisitionFrameRateEnable vs. AcquisitionFrameRateEnabled)
+  // and is a no-op if unsupported.
+  arv_camera_set_frame_rate_enable(camera, true, &error);
+  return ValidateAndNullArvError(error);
+}
+
 absl::Status ConfigureBaslerAcePtpSync(ArvCamera* absl_nonnull camera,
                                        absl::Duration ptp_lock_timeout) {
   INTR_ASSIGN_OR_RETURN(
@@ -133,7 +157,7 @@ absl::Status ConfigureBaslerAcePtpSync(ArvCamera* absl_nonnull camera,
       WaitForPtpLock(camera, kBaslerAceGevIEEE1588DataSetLatch,
                      genicam::kGevIEEE1588Status, ptp_lock_timeout));
   if (!ptp_locked) {
-    return SetFreeRunningTrigger(camera);
+    return ConfigureFreeRunningStreamingTrigger(camera);
   }
 
   GError* error = nullptr;
@@ -201,7 +225,7 @@ absl::Status ConfigureBaslerAce2PtpSync(ArvCamera* absl_nonnull camera,
                         WaitForPtpLock(camera, genicam::kPtpDataSetLatch,
                                        genicam::kPtpStatus, ptp_lock_timeout));
   if (!ptp_locked) {
-    return SetFreeRunningTrigger(camera);
+    return ConfigureFreeRunningStreamingTrigger(camera);
   }
 
   GError* error = nullptr;
@@ -240,23 +264,22 @@ absl::Status ConfigurePtpSyncAndStreamingTrigger(
       arv_camera_get_boolean(camera, genicam::kPtpEnable, nullptr) ||
       arv_camera_get_boolean(camera, genicam::kGevIEEE1588, nullptr);
 
-  if (!ptp_sync) {
-    return SetFreeRunningTrigger(camera);
-  }
-
-  // Specific Vendor/Model combinations support PTP via different settings and
-  // the trigger modes which must be set in different orders.
-  if (GetVendorName(camera) == kBasler &&
-      GetModelName(camera).starts_with(kBaslerAcePrefix)) {
-    return ConfigureBaslerAcePtpSync(camera, ptp_lock_timeout);
-  } else if (GetVendorName(camera) == kBasler &&
-             GetModelName(camera).starts_with(kBaslerAce2Prefix)) {
-    return ConfigureBaslerAce2PtpSync(camera, ptp_lock_timeout);
-  } else {
+  if (ptp_sync) {
+    // Specific Vendor/Model combinations support PTP via different settings and
+    // the trigger modes which must be set in different orders.
+    if (GetVendorName(camera) == kBasler &&
+        GetModelName(camera).starts_with(kBaslerAcePrefix)) {
+      return ConfigureBaslerAcePtpSync(camera, ptp_lock_timeout);
+    }
+    if (GetVendorName(camera) == kBasler &&
+        GetModelName(camera).starts_with(kBaslerAce2Prefix)) {
+      return ConfigureBaslerAce2PtpSync(camera, ptp_lock_timeout);
+    }
     LOG(WARNING) << "PTP camera stream synchronisation is enabled but is not "
                     "supported for this camera.";
-    return SetFreeRunningTrigger(camera);
   }
+
+  return ConfigureFreeRunningStreamingTrigger(camera);
 }
 
 }  // namespace perception

@@ -111,6 +111,7 @@ class GenicamImageSource : public ImageSource {
   struct PendingStreamFrame {
     std::vector<CaptureResult> frames;
     std::optional<HdrOperator> hdr_operator;
+    absl::flat_hash_set<int64_t> captured_sensor_ids;
   };
   struct StreamingState {
     // True once StartStream() has finished configuring the camera and while
@@ -207,7 +208,8 @@ class GenicamImageSource : public ImageSource {
   // - When software HDR is active, delegates to `QueueHdrStreamingFrame`.
   absl::Status QueueStreamingFrame(
       CaptureResult capture_result,
-      std::optional<absl::Duration> received_exposure, int64_t frame_id)
+      std::optional<absl::Duration> received_exposure, int64_t frame_id,
+      absl::flat_hash_set<int64_t> captured_sensor_ids)
       ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
 
   // Advances the streaming software HDR state machine (`streaming_state_->hdr`)
@@ -219,7 +221,8 @@ class GenicamImageSource : public ImageSource {
   // dispatch the HDR image off the Aravis packet thread.
   absl::Status QueueHdrStreamingFrame(
       CaptureResult capture_result,
-      std::optional<absl::Duration> received_exposure, int64_t frame_id)
+      std::optional<absl::Duration> received_exposure, int64_t frame_id,
+      absl::flat_hash_set<int64_t> captured_sensor_ids)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_) ABSL_LOCKS_EXCLUDED(camera_mutex_);
 
   // Writes `pending_frame` into the single-slot
@@ -276,15 +279,28 @@ class GenicamImageSource : public ImageSource {
   // without triggering the external streaming-state guard.
   absl::Status UpdateCameraSettingInternal(const CameraSetting& camera_setting);
 
+  // Updates `streaming_state_->hdr` when `ExposureTime` or a `SoftwareHdr`
+  // setting is modified during an active stream.
+  absl::Status RefreshStreamingHdrState()
+      ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
+
+  // Reconfigures the streaming trigger (including PTP sync) and restarts
+  // asynchronous acquisition when `streaming_state_->is_active` is true after
+  // acquisition was stopped or `stream_` was reset.
+  absl::Status RecoverActiveStreamAcquisition()
+      ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
+
   // Sets a value of the specified camera setting.
   // The name in the camera setting specifies the exact feature which is updated
   // and it must refer to a feature listed in the Standard Feature Naming
   // Convention (SFNC) from the GenICam standard.
-  absl::Status UpdateCameraSettingOnce(const CameraSetting& camera_setting);
+  absl::Status UpdateCameraSettingOnce(const CameraSetting& camera_setting)
+      ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
 
   // Performs the actual setting update while the acquisition stream is paused.
   absl::Status UpdateCameraSettingOnceWithPausedStream(
-      const CameraSetting& camera_setting);
+      const CameraSetting& camera_setting)
+      ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
 
   absl::StatusOr<std::vector<SensorInformation>> DescribeCameraSensorsImpl()
       const override;
