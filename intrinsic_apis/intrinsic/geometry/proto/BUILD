@@ -366,6 +366,37 @@ py_proto_library(
 )
 
 proto_library(
+    name = "oriented_bounding_box_with_surfaces_proto",
+    srcs = ["oriented_bounding_box_with_surfaces.proto"],
+    deps = [
+        "@intrinsic_apis//intrinsic/math/proto:pose_proto",
+        "@intrinsic_apis//intrinsic/math/proto:vector3_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "oriented_bounding_box_with_surfaces_cc_proto",
+    deps = [":oriented_bounding_box_with_surfaces_proto"],
+)
+
+go_proto_library(
+    name = "oriented_bounding_box_with_surfaces_go_proto",
+    importpath = "intrinsic/geometry/proto/oriented_bounding_box_with_surfaces_go_proto",
+    protos = [":oriented_bounding_box_with_surfaces_proto"],
+    deps = [
+        "@intrinsic_apis//intrinsic/math/proto:point_go_proto",
+        "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
+        "@intrinsic_apis//intrinsic/math/proto:quaternion_go_proto",
+        "@intrinsic_apis//intrinsic/math/proto:vector3_go_proto",
+    ],
+)
+
+py_proto_library(
+    name = "oriented_bounding_box_with_surfaces_py_pb2",
+    deps = [":oriented_bounding_box_with_surfaces_proto"],
+)
+
+proto_library(
     name = "transformed_geometry_storage_refs_proto",
     srcs = ["transformed_geometry_storage_refs.proto"],
     deps = [
