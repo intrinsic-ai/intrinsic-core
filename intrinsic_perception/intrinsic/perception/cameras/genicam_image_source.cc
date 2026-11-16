@@ -81,7 +81,9 @@
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/util/thread/stop_token.h"
 #include "intrinsic/util/thread/sysinfo.h"
+#include "intrinsic/util/thread/thread.h"
 #include "intrinsic/util/time/deadline_timeout.h"
 #include "intrinsic/util/version.h"
 
@@ -727,6 +729,7 @@ GenicamImageSource::~GenicamImageSource() {
   if (stream_ != nullptr) {
     arv_stream_set_emit_signals(stream_.get(), FALSE);
   }
+  StopStreamDispatchThread();
   if (const absl::Status status = GetFaultsStatus(); !status.ok()) {
     LOG(ERROR) << status;
     return;
@@ -1870,8 +1873,8 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
 
     // Only if we are not currently streaming (or while `StartStream` is still
     // converging auto settings) do we notify the capture callback that we have
-    // handled the buffer. Once streaming is active, we handle the processing
-    // directly in this callback.
+    // handled the buffer. Once streaming is active, frames are handed off to
+    // `stream_dispatch_thread_` via `streaming_state_->pending_frame`.
     //
     // Since we do not allow capture calls and streaming calls to be
     // interleaved, we can avoid an extra copy and consume the buffer directly.
@@ -1904,19 +1907,16 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
     // https://aravisproject.github.io/aravis/aravis-stable/thread-safety.html.
     // Frame decoding uses cached fallback parameters rather than querying
     // `camera_`, and any `camera_` access during streaming (such as updating
-    // `ExposureTime` in `ProcessStreamingHdrFrame` or reading camera settings)
+    // `ExposureTime` in `QueueStreamingFrame` or reading camera settings)
     // is serialized under `camera_mutex_`.
     camera->mutex_.lock();
     const absl::flat_hash_map<int64_t, Dimensions> fallback_dimensions =
         camera->state_.dimensions_by_sensor_id;
     const absl::flat_hash_map<int64_t, ArvPixelFormat> fallback_pixel_format =
         camera->state_.pixel_format_by_sensor_id;
-    const std::optional<CaptureArgs> streaming_params =
-        (camera->streaming_state_.has_value() &&
-         camera->streaming_state_->is_active)
-            ? std::make_optional(camera->streaming_state_->params)
-            : std::nullopt;
-    const bool should_use_stream_callbacks = streaming_params.has_value();
+    const bool should_use_stream_callbacks =
+        camera->streaming_state_.has_value() &&
+        camera->streaming_state_->is_active;
     camera->mutex_.unlock();
     // Create a new capture result. This will be moved from the receiving thread
     // to the thread owning the camera and later from there to the client. This
@@ -1939,40 +1939,29 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
       return;
     }
 
-    // If we are in the middle of a streaming session, we need to notify the
-    // client about the new frame. We also consume the buffer directly here to
-    // prevent an additional copy as we know there is no capture callback
-    // waiting for this result.
-    if (should_use_stream_callbacks) {
-      if (!streaming_params.has_value()) {
-        LOG(ERROR) << "Skipping callbacks! No streaming params found.";
-        return;
-      }
+    const std::optional<absl::Duration> exposure_time =
+        camera->buffer_helper_.GetExposureTime(buffer);
 
-      absl::StatusOr<std::optional<CaptureResult>> maybe_hdr_result =
-          camera->ProcessStreamingHdrFrame(
-              *std::move(capture_result),
-              camera->buffer_helper_.GetExposureTime(buffer), frame_id);
-      status = maybe_hdr_result.status();
+    // If we are in the middle of a streaming session, hand off the decoded
+    // frame to `stream_dispatch_thread_` via the latest-frame slot so Aravis's
+    // packet-receiving thread can immediately return the buffer and keep
+    // reading packets.
+    if (should_use_stream_callbacks) {
+      status = camera->QueueStreamingFrame(*std::move(capture_result),
+                                           exposure_time, frame_id);
       if (!status.ok()) {
         LOG(ERROR)
             << "Skipping callbacks! Failed to process streaming HDR frame: "
             << status;
         return;
       }
-      if (!maybe_hdr_result->has_value()) {
-        return;
-      }
-
-      camera->InvokeCaptureCallbacks(**std::move(maybe_hdr_result),
-                                     *streaming_params);
     } else {
       // If we are not in the middle of a streaming session we can return the
       // capture result back to a waiting thread.
       absl::MutexLock lock(camera->mutex_);
       camera->capture_result_ = {
           .capture_result = *std::move(capture_result),
-          .exposure_time = camera->buffer_helper_.GetExposureTime(buffer),
+          .exposure_time = exposure_time,
       };
     }
   } else {
@@ -2030,62 +2019,145 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
   }
 }
 
-absl::StatusOr<std::optional<CaptureResult>>
-GenicamImageSource::ProcessStreamingHdrFrame(
+void GenicamImageSource::StorePendingStreamFrame(
+    PendingStreamFrame pending_frame) {
+  if (streaming_state_->pending_frame.has_value()) {
+    ++streaming_state_->dropped_frames;
+    LOG_EVERY_N_SEC(WARNING, 5)
+        << "Overwriting undispatched streaming frame (slow consumer; "
+        << streaming_state_->dropped_frames
+        << " frame(s) dropped in current stream).";
+  }
+  streaming_state_->pending_frame = std::move(pending_frame);
+}
+
+absl::Status GenicamImageSource::QueueHdrStreamingFrame(
     CaptureResult capture_result,
     std::optional<absl::Duration> received_exposure, int64_t frame_id) {
-  std::vector<CaptureResult> ldr_frames_to_fuse;
-  HdrOperator hdr_operator = HdrOperator::kMertens;
+  StreamingHdrState& hdr = *streaming_state_->hdr;
+  const int num_exposures = hdr.exposure_times.size();
+  const int current_idx = hdr.ldr_frames.size();
+  INTR_RET_CHECK(current_idx < num_exposures);
+  const absl::Duration expected_exposure = hdr.exposure_times[current_idx];
+  ++hdr.num_tries;
+  if (const absl::Status verify_status = VerifyExposureTime(
+          received_exposure, expected_exposure, hdr.num_tries);
+      !verify_status.ok()) {
+    if (hdr.num_tries >= kMaxNumFramesToConverge) {
+      LOG_EVERY_N_SEC(WARNING, 5)
+          << "Repeated exposure mismatch during streaming HDR after "
+          << hdr.num_tries << " frames (" << verify_status.message()
+          << "); re-applying target exposure " << expected_exposure << ".";
+      {
+        absl::MutexLock camera_lock(camera_mutex_);
+        INTR_RETURN_IF_ERROR(SetExposureTime(camera_.get(), expected_exposure,
+                                             exposure_time_props_));
+      }
+      hdr.num_tries = 0;
+    } else {
+      VLOG(1) << "Skipping frame " << frame_id
+              << " during streaming HDR: " << verify_status.message();
+    }
+    return absl::OkStatus();
+  }
+  const int next_idx = (current_idx + 1) % num_exposures;
+  {
+    absl::MutexLock camera_lock(camera_mutex_);
+    INTR_RETURN_IF_ERROR(SetExposureTime(
+        camera_.get(), hdr.exposure_times[next_idx], exposure_time_props_));
+  }
+  hdr.num_tries = 0;
+  hdr.ldr_frames.push_back(std::move(capture_result));
+  if (hdr.ldr_frames.size() < hdr.exposure_times.size()) {
+    return absl::OkStatus();
+  }
+  StorePendingStreamFrame(PendingStreamFrame{
+      .frames = std::move(hdr.ldr_frames),
+      .hdr_operator = hdr.hdr_operator,
+  });
+  hdr.ldr_frames.clear();
+  hdr.ldr_frames.reserve(hdr.exposure_times.size());
+  return absl::OkStatus();
+}
+
+absl::Status GenicamImageSource::QueueStreamingFrame(
+    CaptureResult capture_result,
+    std::optional<absl::Duration> received_exposure, int64_t frame_id) {
+  absl::MutexLock lock(mutex_);
+  if (!streaming_state_.has_value() || !streaming_state_->is_active) {
+    return absl::OkStatus();
+  }
+  if (!streaming_state_->hdr.has_value()) {
+    StorePendingStreamFrame(PendingStreamFrame{
+        .frames = {std::move(capture_result)},
+    });
+    return absl::OkStatus();
+  }
+  return QueueHdrStreamingFrame(std::move(capture_result), received_exposure,
+                                frame_id);
+}
+
+void GenicamImageSource::RunStreamDispatchLoop(
+    intrinsic::StopToken stop_token, const CaptureArgs& streaming_params) {
+  while (!stop_token.stop_requested()) {
+    std::optional<PendingStreamFrame> pending_frame;
+    {
+      absl::MutexLock lock(mutex_);
+      const auto has_work_or_stopped =
+          [this, &stop_token]() ABSL_SHARED_LOCKS_REQUIRED(mutex_) {
+            return stop_token.stop_requested() ||
+                   !streaming_state_.has_value() ||
+                   !streaming_state_->is_active ||
+                   streaming_state_->pending_frame.has_value();
+          };
+      mutex_.Await(absl::Condition(&has_work_or_stopped));
+      if (stop_token.stop_requested() || !streaming_state_.has_value() ||
+          !streaming_state_->is_active) {
+        return;
+      }
+      pending_frame = std::move(streaming_state_->pending_frame);
+      streaming_state_->pending_frame.reset();
+    }
+
+    if (pending_frame->frames.empty()) {
+      LOG(ERROR) << "Skipping callbacks! Pending stream frame contains no "
+                    "images.";
+      continue;
+    }
+
+    CaptureResult frame_to_dispatch;
+    if (pending_frame->hdr_operator.has_value()) {
+      absl::StatusOr<CaptureResult> fused_result = FuseLdrCaptureResults(
+          pending_frame->frames, *pending_frame->hdr_operator);
+      if (!fused_result.ok()) {
+        LOG(ERROR) << "Skipping callbacks! Failed to fuse streaming HDR frame: "
+                   << fused_result.status();
+        continue;
+      }
+      frame_to_dispatch = *std::move(fused_result);
+    } else {
+      frame_to_dispatch = std::move(pending_frame->frames.front());
+    }
+
+    InvokeCaptureCallbacks(std::move(frame_to_dispatch), streaming_params);
+  }
+}
+
+void GenicamImageSource::StopStreamDispatchThread() {
+  std::optional<intrinsic::Thread> dispatch_thread;
   {
     absl::MutexLock lock(mutex_);
-    if (!streaming_state_.has_value() || !streaming_state_->is_active) {
-      return std::nullopt;
+    if (stream_dispatch_thread_.has_value()) {
+      stream_dispatch_thread_->request_stop();
+      dispatch_thread = std::move(stream_dispatch_thread_);
+      stream_dispatch_thread_.reset();
     }
-    if (!streaming_state_->hdr.has_value()) {
-      return std::move(capture_result);
+    if (streaming_state_.has_value()) {
+      streaming_state_->is_active = false;
+      streaming_state_->pending_frame.reset();
     }
-    StreamingHdrState& hdr = *streaming_state_->hdr;
-    const int num_exposures = hdr.exposure_times.size();
-    const int current_idx = hdr.ldr_frames.size();
-    const absl::Duration expected_exposure = hdr.exposure_times[current_idx];
-    ++hdr.num_tries;
-    if (const absl::Status verify_status = VerifyExposureTime(
-            received_exposure, expected_exposure, hdr.num_tries);
-        !verify_status.ok()) {
-      if (hdr.num_tries >= kMaxNumFramesToConverge) {
-        LOG_EVERY_N_SEC(WARNING, 5)
-            << "Repeated exposure mismatch during streaming HDR after "
-            << hdr.num_tries << " frames (" << verify_status.message()
-            << "); re-applying target exposure " << expected_exposure << ".";
-        {
-          absl::MutexLock camera_lock(camera_mutex_);
-          INTR_RETURN_IF_ERROR(SetExposureTime(camera_.get(), expected_exposure,
-                                               exposure_time_props_));
-        }
-        hdr.num_tries = 0;
-      } else {
-        VLOG(1) << "Skipping frame " << frame_id
-                << " during streaming HDR: " << verify_status.message();
-      }
-      return std::nullopt;
-    }
-    const int next_idx = (current_idx + 1) % num_exposures;
-    {
-      absl::MutexLock camera_lock(camera_mutex_);
-      INTR_RETURN_IF_ERROR(SetExposureTime(
-          camera_.get(), hdr.exposure_times[next_idx], exposure_time_props_));
-    }
-    hdr.num_tries = 0;
-    hdr.ldr_frames.push_back(std::move(capture_result));
-    if (hdr.ldr_frames.size() < hdr.exposure_times.size()) {
-      return std::nullopt;
-    }
-    ldr_frames_to_fuse = std::move(hdr.ldr_frames);
-    hdr.ldr_frames.clear();
-    hdr.ldr_frames.reserve(hdr.exposure_times.size());
-    hdr_operator = hdr.hdr_operator;
   }
-  return FuseLdrCaptureResults(ldr_frames_to_fuse, hdr_operator);
+  dispatch_thread.reset();
 }
 
 void GenicamImageSource::OnControlLost(ArvDevice* arv_device, void* data) {
@@ -2129,7 +2201,7 @@ absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
       return absl::FailedPreconditionError(
           "Stream is already running. Call StopStream() first.");
     }
-    streaming_state_ = StreamingState{.params = params};
+    streaming_state_.emplace();
   }
   std::optional<StreamingHdrState> hdr_state;
   bool stream_started = false;
@@ -2138,7 +2210,7 @@ absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
       {
         absl::MutexLock lock(mutex_);
         if (!streaming_state_.has_value()) {
-          streaming_state_ = StreamingState{.params = params};
+          streaming_state_.emplace();
         }
         if (!streaming_state_->hdr.has_value()) {
           streaming_state_->hdr = std::move(hdr_state);
@@ -2206,7 +2278,7 @@ absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
       // first streamed frame already has that exposure time (unless an earlier
       // frame from `ConvergeAutoSettings` was already in flight, which will be
       // skipped if `ChunkExposureTime` is available). Subsequent bracket
-      // transitions in `ProcessStreamingHdrFrame` reset `num_tries = 0` so
+      // transitions in `QueueStreamingFrame` reset `num_tries = 0` so
       // cameras without `ChunkExposureTime` skip 1 in-flight frame
       // (`num_tries == 1`) before accepting the next frame (`num_tries == 2`).
       hdr_state->exposure_times = hdr_exposure_times;
@@ -2229,8 +2301,14 @@ absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
     }
     streaming_state_->is_active = true;
     streaming_state_->hdr = std::move(hdr_state);
+    streaming_state_->pending_frame.reset();
+    streaming_state_->dropped_frames = 0;
     new_buffer_handled_ = false;
     capture_result_ = {};
+    stream_dispatch_thread_.emplace(
+        [this, params](intrinsic::StopToken stop_token) {
+          RunStreamDispatchLoop(std::move(stop_token), params);
+        });
   }
   INTR_RETURN_IF_ERROR(StartAsyncAcquisition());
   stream_started = true;
@@ -2245,7 +2323,6 @@ absl::Status GenicamImageSource::StopStream() {
     if (!streaming_state_.has_value()) {
       return absl::OkStatus();
     }
-    streaming_state_->is_active = false;
     if (streaming_state_->hdr.has_value()) {
       if (!streaming_state_->hdr->exposure_times.empty()) {
         base_exposure_time = streaming_state_->hdr->exposure_times.front();
@@ -2254,6 +2331,7 @@ absl::Status GenicamImageSource::StopStream() {
           std::move(streaming_state_->hdr->auto_settings_to_restore);
     }
   }
+  StopStreamDispatchThread();
 
   absl::Status status = StopAsyncAcquisition();
   if (base_exposure_time.has_value()) {

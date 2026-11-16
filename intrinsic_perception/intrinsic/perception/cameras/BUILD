@@ -299,6 +299,8 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/status:ret_check",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/thread",
+        "//intrinsic_sdk/intrinsic/util/thread:stop_token",
         "//intrinsic_sdk/intrinsic/util/thread:sysinfo",
         "//intrinsic_sdk/intrinsic/util/time:deadline_timeout",
         "@abseil-cpp//absl/algorithm:container",

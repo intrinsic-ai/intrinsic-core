@@ -50,6 +50,8 @@
 #include "intrinsic/perception/core/dimensions.h"
 #include "intrinsic/perception/core/hdr_utils.h"
 #include "intrinsic/stats/scoped_span.h"
+#include "intrinsic/util/thread/stop_token.h"
+#include "intrinsic/util/thread/thread.h"
 
 namespace intrinsic::perception {
 
@@ -98,13 +100,23 @@ class GenicamImageSource : public ImageSource {
     HdrOperator hdr_operator = HdrOperator::kMertens;
     std::vector<CaptureResult> ldr_frames;
   };
+  // Payload queued for `stream_dispatch_thread_`. Held in a single-slot buffer
+  // (`StreamingState::pending_frame`) where the latest frame overwrites any
+  // undispatched frame ("latest frame wins").
+  struct PendingStreamFrame {
+    std::vector<CaptureResult> frames;
+    std::optional<HdrOperator> hdr_operator;
+  };
   struct StreamingState {
-    CaptureArgs params;
     // True once StartStream() has finished configuring the camera and while
     // streaming acquisition is active; false while StartStream() is setting up
     // or StopStream() is tearing down the stream.
     bool is_active = false;
     std::optional<StreamingHdrState> hdr;
+    // Single-slot handoff buffer to `stream_dispatch_thread_`; latest frame
+    // wins when the dispatch thread is still busy with an earlier frame.
+    std::optional<PendingStreamFrame> pending_frame;
+    int64_t dropped_frames = 0;
   };
 
   absl::StatusOr<std::vector<CameraSetting>> GetActiveAutoSettings() const;
@@ -135,18 +147,34 @@ class GenicamImageSource : public ImageSource {
   absl::StatusOr<std::vector<CaptureResult>> GetLdrCaptureResults(
       absl::Duration timeout);
 
-  // Processes a newly captured frame during streaming, advancing the HDR
-  // exposure bracket and updating the camera's ExposureTime when streaming HDR
-  // is active. Returns `std::nullopt` if the stream has stopped, the frame's
-  // exposure time does not match the current bracket step, or the frame was
-  // buffered as an intermediate LDR bracket frame. Returns a populated
-  // `CaptureResult` containing the fused HDR image once all bracket exposures
-  // are collected, or the unmodified `capture_result` when streaming HDR is
-  // inactive.
-  absl::StatusOr<std::optional<CaptureResult>> ProcessStreamingHdrFrame(
+  // Called from `OnNewBuffer` on Aravis's stream thread to hand off a decoded
+  // frame to `stream_dispatch_thread_` without blocking packet reception.
+  // - When software HDR is inactive, immediately queues `capture_result` in
+  //   `streaming_state_->pending_frame`.
+  // - When software HDR is active, delegates to `QueueHdrStreamingFrame`.
+  absl::Status QueueStreamingFrame(
       CaptureResult capture_result,
       std::optional<absl::Duration> received_exposure, int64_t frame_id)
       ABSL_LOCKS_EXCLUDED(mutex_, camera_mutex_);
+
+  // Advances the streaming software HDR state machine (`streaming_state_->hdr`)
+  // for a newly captured LDR frame: verifies that `received_exposure` matches
+  // the current bracket target (skipping stale in-flight frames), programs the
+  // next bracket `ExposureTime` on the camera, and—once all bracket exposures
+  // are collected—queues the full LDR bracket in
+  // `streaming_state_->pending_frame` so `stream_dispatch_thread_` can fuse and
+  // dispatch the HDR image off the Aravis packet thread.
+  absl::Status QueueHdrStreamingFrame(
+      CaptureResult capture_result,
+      std::optional<absl::Duration> received_exposure, int64_t frame_id)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_) ABSL_LOCKS_EXCLUDED(camera_mutex_);
+
+  // Writes `pending_frame` into the single-slot
+  // `streaming_state_->pending_frame` buffer (overwriting any undispatched
+  // frame and incrementing `dropped_frames` if the consumer is slower than
+  // acquisition).
+  void StorePendingStreamFrame(PendingStreamFrame pending_frame)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
 
   // Retries the passed function until write permission is granted or the device
   // is ready again (after a timeout or being busy). Waiting for permission is
@@ -235,6 +263,11 @@ class GenicamImageSource : public ImageSource {
   static void OnNewBuffer(ArvStream* arv_stream, void* data);
   static void OnControlLost(ArvDevice* arv_device, void* data);
 
+  void RunStreamDispatchLoop(intrinsic::StopToken stop_token,
+                             const CaptureArgs& streaming_params)
+      ABSL_LOCKS_EXCLUDED(mutex_);
+  void StopStreamDispatchThread() ABSL_LOCKS_EXCLUDED(mutex_);
+
   GObjectPtr<ArvCamera> camera_;
   GObjectPtr<ArvStream> stream_;
   BufferHelper buffer_helper_;
@@ -320,6 +353,9 @@ class GenicamImageSource : public ImageSource {
   };
   std::map<absl::Duration, AcquisitionMeasurement>
       acquisition_measurements_per_exposure_time_;
+
+  std::optional<intrinsic::Thread> stream_dispatch_thread_
+      ABSL_GUARDED_BY(mutex_);
 };
 
 }  // namespace intrinsic::perception
