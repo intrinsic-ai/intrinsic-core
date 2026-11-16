@@ -804,7 +804,8 @@ GenicamImageSource::DescribeCameraSensorsImpl() const {
 }
 
 absl::StatusOr<CaptureResult> GenicamImageSource::CaptureImpl(
-    absl::Duration timeout) {
+    absl::Duration timeout,
+    const absl::flat_hash_set<int64_t>& /*sensor_ids*/) {
   const stats::ScopedSpan span("GenicamImageSource::CaptureImpl");
   {
     // We do not allow streaming and capturing at the same time. This can be
@@ -2195,6 +2196,9 @@ absl::Status GenicamImageSource::ClearFaults() {
 }
 
 absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
+  if (!IsUnique(params.sensor_ids)) {
+    return absl::InvalidArgumentError("Duplicate sensor_ids are not allowed.");
+  }
   {
     absl::MutexLock lock(mutex_);
     if (streaming_state_.has_value()) {

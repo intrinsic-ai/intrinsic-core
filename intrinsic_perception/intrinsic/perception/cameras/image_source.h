@@ -15,6 +15,7 @@
 #ifndef INTRINSIC_PERCEPTION_CAMERAS_IMAGE_SOURCE_H_
 #define INTRINSIC_PERCEPTION_CAMERAS_IMAGE_SOURCE_H_
 
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -23,6 +24,7 @@
 #include "absl/base/no_destructor.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/functional/function_ref.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -101,7 +103,12 @@ class ImageSource : public ImageSourceInterface {
       const final;
 
  protected:
-  virtual absl::StatusOr<CaptureResult> CaptureImpl(absl::Duration timeout) {
+  // Captures raw sensor data from the driver, waiting up to `timeout`. When
+  // `sensor_ids` is empty, captures from all available sensors; when
+  // non-empty, drivers may restrict capture to those sensors (and
+  // `PostCaptureImplProcessing` filters `sensor_images` afterward).
+  virtual absl::StatusOr<CaptureResult> CaptureImpl(
+      absl::Duration timeout, const absl::flat_hash_set<int64_t>& sensor_ids) {
     return intrinsic::UnimplementedErrorBuilder() << "CaptureImpl";
   }
 

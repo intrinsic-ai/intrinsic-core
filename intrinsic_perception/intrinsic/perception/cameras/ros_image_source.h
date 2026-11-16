@@ -78,7 +78,9 @@ class RosImageSource : public ImageSource {
   absl::StatusOr<std::vector<SensorInformation>> DescribeCameraSensorsImpl()
       const override;
 
-  absl::StatusOr<CaptureResult> CaptureImpl(absl::Duration timeout) override;
+  absl::StatusOr<CaptureResult> CaptureImpl(
+      absl::Duration timeout,
+      const absl::flat_hash_set<int64_t>& sensor_ids) override;
 
   absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccessImpl(
       absl::string_view name) const override;

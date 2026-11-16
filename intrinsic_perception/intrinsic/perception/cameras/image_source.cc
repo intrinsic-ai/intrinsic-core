@@ -15,6 +15,7 @@
 #include "intrinsic/perception/cameras/image_source.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <memory>
 #include <optional>
 #include <string>
@@ -25,6 +26,7 @@
 #include "absl/algorithm/container.h"
 #include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -66,6 +68,15 @@ constexpr int kCallbackThreadPoolSize = 4;
 // callback do not deadlock waiting for `InvokeCaptureCallbacks` to finish.
 thread_local const ImageSource* current_callback_source = nullptr;
 
+absl::StatusOr<absl::flat_hash_set<int64_t>> BuildUniqueSensorIdSet(
+    absl::Span<const int64_t> sensor_ids) {
+  absl::flat_hash_set<int64_t> unique_ids(sensor_ids.begin(), sensor_ids.end());
+  if (unique_ids.size() != sensor_ids.size()) {
+    return absl::InvalidArgumentError("Duplicate sensor_ids are not allowed.");
+  }
+  return unique_ids;
+}
+
 }  // namespace
 
 absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
@@ -80,6 +91,9 @@ absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
     }
   }
 
+  INTR_ASSIGN_OR_RETURN(const absl::flat_hash_set<int64_t> sensor_ids,
+                        BuildUniqueSensorIdSet(args.sensor_ids));
+
   {
     const stats::ScopedSpan span("ImageSource::Capture::UpdateSettings");
     INTR_RETURN_IF_ERROR(
@@ -87,7 +101,7 @@ absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
   }
 
   INTR_ASSIGN_OR_RETURN(CaptureResult capture_result,
-                        CaptureImpl(args.timeout));
+                        CaptureImpl(args.timeout, sensor_ids));
 
   {
     const stats::ScopedSpan span("ImageSource::Capture::PostProcess");
@@ -130,7 +144,10 @@ absl::Status ImageSource::ApplyCameraSettings(
 absl::StatusOr<CaptureResult> ImageSource::PostCaptureImplProcessing(
     CaptureResult capture_result, const CaptureArgs& args) {
   if (!args.sensor_ids.empty()) {
-    INTR_RET_CHECK(IsUnique(args.sensor_ids));
+    if (!IsUnique(args.sensor_ids)) {
+      return absl::InvalidArgumentError(
+          "Duplicate sensor_ids are not allowed.");
+    }
     std::erase_if(capture_result.sensor_images, [&args](const SensorImage& i) {
       return !absl::c_contains(args.sensor_ids, i.sensor_id());
     });
@@ -373,6 +390,8 @@ absl::Status ImageSource::RemoveCaptureCallback(CallbackToken token) {
 }
 
 absl::Status ImageSource::StartStream(const CaptureArgs& params) {
+  INTR_ASSIGN_OR_RETURN(absl::flat_hash_set<int64_t> sensor_ids,
+                        BuildUniqueSensorIdSet(params.sensor_ids));
   {
     absl::MutexLock lock(streaming_mutex_);
     if (streaming_thread_.has_value() || is_stream_starting_ ||
@@ -393,11 +412,12 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
   absl::MutexLock lock(streaming_mutex_);
   std::move(reset_stream_starting).Cancel();
   is_stream_starting_ = false;
-  streaming_thread_.emplace([this, params](intrinsic::StopToken stop_token) {
+  streaming_thread_.emplace([this, params, sensor_ids = std::move(sensor_ids)](
+                                intrinsic::StopToken stop_token) {
     LOG(INFO) << "ImageSource::Thread: Starting streaming thread.";
     while (!stop_token.stop_requested()) {
       absl::StatusOr<CaptureResult> capture_result =
-          CaptureImpl(params.timeout);
+          CaptureImpl(params.timeout, sensor_ids);
       if (!capture_result.ok()) {
         LOG(WARNING) << "Failed to capture image: " << capture_result.status();
         continue;

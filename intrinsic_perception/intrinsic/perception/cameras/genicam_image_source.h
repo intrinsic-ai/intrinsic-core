@@ -193,7 +193,9 @@ class GenicamImageSource : public ImageSource {
   // frame.
   absl::Duration MimimalAcquisitionTimeout(absl::Duration exposure_time) const;
 
-  absl::StatusOr<CaptureResult> CaptureImpl(absl::Duration timeout) override;
+  absl::StatusOr<CaptureResult> CaptureImpl(
+      absl::Duration timeout,
+      const absl::flat_hash_set<int64_t>& sensor_ids) override;
 
   // Reads the access to a camera setting.
   absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccessImpl(

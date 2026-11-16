@@ -21,6 +21,7 @@
 #include <string_view>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/time/time.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
@@ -82,7 +83,9 @@ class FileImageSource final : public ImageSource {
                   Dimensions dimensions);
 
   // Note: This class does currently not implement 'timeout' functionality.
-  absl::StatusOr<CaptureResult> CaptureImpl(absl::Duration timeout) override;
+  absl::StatusOr<CaptureResult> CaptureImpl(
+      absl::Duration timeout,
+      const absl::flat_hash_set<int64_t>& sensor_ids) override;
 
   // Reads and returns the currently configured camera settings.
   // For a FileImageSource, only the Width and Height can be queried, as these

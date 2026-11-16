@@ -27,6 +27,7 @@
 #include <vector>
 
 #include "absl/container/flat_hash_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/functional/overload.h"
 #include "absl/log/log.h"
 #include "absl/memory/memory.h"
@@ -328,7 +329,7 @@ FileImageSource::FileImageSource(
       clock_(util::Clock::RealClock()) {}
 
 absl::StatusOr<CaptureResult> FileImageSource::CaptureImpl(
-    absl::Duration timeout) {
+    absl::Duration timeout, const absl::flat_hash_set<int64_t>& sensor_ids) {
   if (next_file_ < 0) {
     return absl::InternalError("next_file_ invalid negative index!");
   }

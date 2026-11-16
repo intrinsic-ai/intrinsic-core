@@ -29,6 +29,7 @@
 
 #include "absl/algorithm/container.h"
 #include "absl/container/btree_map.h"
+#include "absl/container/flat_hash_set.h"
 #include "absl/functional/overload.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -543,7 +544,8 @@ RosImageSource::DescribeCameraSensorsImpl() const {
 }
 
 absl::StatusOr<CaptureResult> RosImageSource::CaptureImpl(
-    const absl::Duration timeout) {
+    const absl::Duration timeout,
+    const absl::flat_hash_set<int64_t>& /*sensor_ids*/) {
   VLOG(2) << "RosImageSource::CaptureImpl(" << timeout << ")";
   const absl::Time start_at = absl::Now();
   const absl::Time deadline_at = start_at + timeout;
