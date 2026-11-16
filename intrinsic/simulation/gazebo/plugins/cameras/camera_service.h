@@ -35,6 +35,8 @@
 #include "grpcpp/support/sync_stream.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
+#include "intrinsic/perception/cameras/capture_result.h"
+#include "intrinsic/perception/cameras/image_source.h"
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/core/pixel_type.h"
@@ -45,7 +47,6 @@
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/util/thread/stop_token.h"
-#include "intrinsic/util/thread/thread.h"
 
 namespace intrinsic {
 namespace perception {
@@ -57,6 +58,11 @@ inline constexpr double kGazeboCameraActiveUpdateRate = 1000.0;
 // Instead of fully deactivating the camera the update rate is reduced to an
 // amount that doesn't eat up too much computation time.
 inline constexpr double kGazeboCameraDeactiveUpdateRate = 0.1;
+
+// Default timeout for waiting on new sensor images in Gazebo, where rendering
+// can occasionally take a long time.
+inline constexpr absl::Duration kGazeboDefaultCaptureTimeout =
+    absl::Seconds(120);
 
 // See https://www.emva.org/wp-content/uploads/GenICam_SFNC_v2_7.pdf#page=129
 // for the ids.
@@ -84,7 +90,7 @@ inline constexpr std::string_view SensorDisplayNameByPixelType(
 // Defines the connection between the GazeboCameraGrpcService and Gazebo
 // plugins. It synchronizes the frame transfer, manual triggering and holds
 // configuration information about the camera.
-class GazeboCameraConnection {
+class GazeboCameraConnection : public ImageSource {
  public:
   // Function to activate / deactivate sensor[s]. The first argument
   // sets the active state. The 2nd argument is a list of sensors to
@@ -98,7 +104,7 @@ class GazeboCameraConnection {
       const intrinsic_proto::perception::v1::CameraConfig& camera_config,
       const SetActiveFunction& set_active_function);
 
-  ~GazeboCameraConnection();
+  ~GazeboCameraConnection() override;
 
   // The service will call this method after successful registration to
   // allow the connection to unregister itself on destruction.
@@ -111,8 +117,7 @@ class GazeboCameraConnection {
   // the default timeout is set quite high.
   absl::StatusOr<std::vector<intrinsic::perception::SensorImage>>
   WaitForNewSensorImages(const absl::flat_hash_set<int64_t>& sensor_ids,
-                         std::optional<StopToken> stop_token = std::nullopt,
-                         absl::Duration timeout = absl::Seconds(120))
+                         absl::Duration timeout = kGazeboDefaultCaptureTimeout)
       ABSL_LOCKS_EXCLUDED(mutex_, request_mutex_);
 
   // The plugin will call this method to update the current sensors images which
@@ -128,29 +133,25 @@ class GazeboCameraConnection {
   // Returns a hardware unique identifier for a specific camera.
   const std::string& camera_handle() const;
 
-  absl::StatusOr<CameraSettingProperties> ReadCameraSettingProperties(
-      absl::string_view name) const ABSL_LOCKS_EXCLUDED(mutex_);
+ protected:
+  absl::StatusOr<CaptureResult> CaptureImpl(
+      absl::Duration timeout,
+      const absl::flat_hash_set<int64_t>& sensor_ids) override
+      ABSL_LOCKS_EXCLUDED(mutex_, request_mutex_);
 
-  absl::StatusOr<CameraSetting> ReadCameraSetting(absl::string_view name) const
+  absl::Status StartStreamImpl(const CaptureArgs& params) override
       ABSL_LOCKS_EXCLUDED(mutex_);
 
-  absl::Status UpdateCameraSetting(const CameraSetting& camera_setting)
-      ABSL_LOCKS_EXCLUDED(mutex_);
+  absl::Status StopStreamImpl() override ABSL_LOCKS_EXCLUDED(mutex_);
 
-  // Add a callback that will receive new capture results while a stream is
-  // running.
-  absl::StatusOr<ImageSourceInterface::CallbackToken> AddStreamCallback(
-      ImageSourceInterface::CaptureCallback callback);
+  absl::StatusOr<CameraSettingProperties> ReadCameraSettingPropertiesImpl(
+      absl::string_view name) const override ABSL_LOCKS_EXCLUDED(mutex_);
 
-  // Remove a previously registered callback.
-  void RemoveStreamCallback(ImageSourceInterface::CallbackToken token);
+  absl::StatusOr<CameraSetting> ReadCameraSettingImpl(
+      absl::string_view name) const override ABSL_LOCKS_EXCLUDED(mutex_);
 
-  // Starts a stream for the given sensor ids and returns the images back into
-  // any registered callbacks. Only one stream is supported at a time.
-  absl::Status StartStream(const absl::flat_hash_set<int64_t>& sensor_ids);
-
-  // Stops any currently running streams, no-op if there is no stream running.
-  absl::Status StopStream();
+  absl::Status UpdateCameraSettingImpl(
+      const CameraSetting& camera_setting) override ABSL_LOCKS_EXCLUDED(mutex_);
 
  private:
   UnregisterFunction unregister_function_;
@@ -163,21 +164,14 @@ class GazeboCameraConnection {
   absl::flat_hash_map<std::string, CameraSetting> settings_
       ABSL_GUARDED_BY(mutex_);
   bool stopped_ ABSL_GUARDED_BY(mutex_) = false;
+  bool is_streaming_ ABSL_GUARDED_BY(mutex_) = false;
+  int stream_stopping_count_ ABSL_GUARDED_BY(mutex_) = 0;
 
   intrinsic_proto::perception::v1::DescribeCameraResponse camera_description_;
   intrinsic_proto::perception::v1::CameraConfig camera_config_;
   SetActiveFunction set_active_function_;
 
   std::string camera_handle_;
-
-  absl::Mutex callback_mutex_;
-  absl::flat_hash_map<ImageSourceInterface::CallbackToken,
-                      ImageSourceInterface::CaptureCallback>
-      stream_callbacks_ ABSL_GUARDED_BY(callback_mutex_);
-
-  absl::Mutex streaming_mutex_;
-  std::optional<intrinsic::Thread> streaming_thread_
-      ABSL_GUARDED_BY(streaming_mutex_);
 };
 
 // gRpc service emulating a CameraService to send out the image data.

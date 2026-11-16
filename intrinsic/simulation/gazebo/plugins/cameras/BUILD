@@ -215,6 +215,7 @@ cc_library(
         "//intrinsic_perception/intrinsic/perception/cameras:camera_setting_properties",
         "//intrinsic_perception/intrinsic/perception/cameras:capture_result",
         "//intrinsic_perception/intrinsic/perception/cameras:capture_result_helper",
+        "//intrinsic_perception/intrinsic/perception/cameras:image_source",
         "//intrinsic_perception/intrinsic/perception/cameras:image_source_interface",
         "//intrinsic_perception/intrinsic/perception/cameras:sensor_image",
         "//intrinsic_perception/intrinsic/perception/cameras/genicam:feature_names",

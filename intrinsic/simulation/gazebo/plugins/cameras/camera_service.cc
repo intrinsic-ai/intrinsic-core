@@ -15,7 +15,6 @@
 #include "intrinsic/simulation/gazebo/plugins/cameras/camera_service.h"
 
 #include <algorithm>
-#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <functional>
@@ -52,6 +51,7 @@
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/cameras/capture_result_helper.h"
 #include "intrinsic/perception/cameras/genicam/feature_names.h"
+#include "intrinsic/perception/cameras/image_source.h"
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
@@ -219,8 +219,7 @@ GazeboCameraConnection::~GazeboCameraConnection() {
 
 absl::StatusOr<std::vector<intrinsic::perception::SensorImage>>
 GazeboCameraConnection::WaitForNewSensorImages(
-    const absl::flat_hash_set<int64_t>& sensor_ids,
-    std::optional<StopToken> stop_token, absl::Duration timeout) {
+    const absl::flat_hash_set<int64_t>& sensor_ids, absl::Duration timeout) {
   // We allow only one thread at a time to query sensor images since we don't
   // expect many clients to pull images in parallel. If that assumption changes
   // we have to reiterate on this approach.
@@ -242,6 +241,21 @@ GazeboCameraConnection::WaitForNewSensorImages(
                    << " is not present in the simulated camera description.";
     }
   }
+  if (!sensor_ids.empty() && filtered_sensor_ids.empty()) {
+    return std::vector<intrinsic::perception::SensorImage>{};
+  }
+
+  {
+    absl::MutexLock data_lock(mutex_);
+    if (stopped_) {
+      return absl::AbortedError(
+          "Camera connection stopped, cannot get new sensor images.");
+    }
+    if (stream_stopping_count_ > 0) {
+      return absl::CancelledError(
+          "Cancelled while waiting for new sensor images.");
+    }
+  }
 
   // Activate the sensor and make sure we deactivate immediately after we
   // receive sensor images.
@@ -257,7 +271,7 @@ GazeboCameraConnection::WaitForNewSensorImages(
                                              &filtered_sensor_ids] {
     mutex_.AssertReaderHeld();
 
-    if (stopped_) {
+    if (stopped_ || stream_stopping_count_ > 0) {
       return true;
     }
 
@@ -275,32 +289,29 @@ GazeboCameraConnection::WaitForNewSensorImages(
     return true;
   };
   absl::Condition cond(&sensor_images_are_ready_or_stopped);
-  absl::Time deadline = absl::Now() + timeout;
-  while (absl::Now() < deadline) {
-    if (stop_token.has_value() && stop_token->stop_requested()) {
+  if (mutex_.AwaitWithTimeout(cond, timeout)) {
+    if (stopped_) {
+      return absl::AbortedError(
+          "Camera connection stopped, cannot get new sensor images.");
+    }
+    if (stream_stopping_count_ > 0) {
       return absl::CancelledError(
           "Cancelled while waiting for new sensor images.");
     }
-    if (mutex_.AwaitWithTimeout(cond, absl::Milliseconds(100))) {
-      if (stopped_) {
-        return absl::AbortedError(
-            "Camera connection stopped, cannot get new sensor images.");
-      }
 
-      std::vector<intrinsic::perception::SensorImage> sensor_images;
-      std::swap(sensor_images, last_sensor_images_);
+    std::vector<intrinsic::perception::SensorImage> sensor_images;
+    std::swap(sensor_images, last_sensor_images_);
 
-      // If we have sensor ids list we should only return sensor images for
-      // those ids.
-      if (!filtered_sensor_ids.empty()) {
-        std::erase_if(sensor_images, [&filtered_sensor_ids](
-                                         const SensorImage& sensor_image) {
-          return !filtered_sensor_ids.contains(sensor_image.sensor_id());
-        });
-      }
-
-      return sensor_images;
+    // If we have sensor ids list we should only return sensor images for
+    // those ids.
+    if (!filtered_sensor_ids.empty()) {
+      std::erase_if(sensor_images, [&filtered_sensor_ids](
+                                       const SensorImage& sensor_image) {
+        return !filtered_sensor_ids.contains(sensor_image.sensor_id());
+      });
     }
+
+    return sensor_images;
   }
   return absl::DeadlineExceededError("No new sensors images available");
 }
@@ -326,7 +337,7 @@ const std::string& GazeboCameraConnection::camera_handle() const {
 }
 
 absl::StatusOr<CameraSettingProperties>
-GazeboCameraConnection::ReadCameraSettingProperties(
+GazeboCameraConnection::ReadCameraSettingPropertiesImpl(
     absl::string_view name) const {
   if (IsDimensionSetting(name)) {
     INTR_ASSIGN_OR_RETURN(const int64_t value,
@@ -376,7 +387,7 @@ GazeboCameraConnection::ReadCameraSettingProperties(
   };
 }
 
-absl::StatusOr<CameraSetting> GazeboCameraConnection::ReadCameraSetting(
+absl::StatusOr<CameraSetting> GazeboCameraConnection::ReadCameraSettingImpl(
     absl::string_view name) const {
   if (IsDimensionSetting(name)) {
     INTR_ASSIGN_OR_RETURN(const int64_t value,
@@ -396,11 +407,8 @@ absl::StatusOr<CameraSetting> GazeboCameraConnection::ReadCameraSetting(
   return it->second;
 }
 
-absl::Status GazeboCameraConnection::UpdateCameraSetting(
+absl::Status GazeboCameraConnection::UpdateCameraSettingImpl(
     const CameraSetting& camera_setting) {
-  if (camera_setting.name.empty()) {
-    return absl::InvalidArgumentError("Camera setting 'name' cannot be empty.");
-  }
   if (IsDimensionSetting(camera_setting.name)) {
     return absl::InvalidArgumentError(absl::StrFormat(
         "Cannot write read-only parameter '%s'.", camera_setting.name));
@@ -414,75 +422,69 @@ absl::Status GazeboCameraConnection::UpdateCameraSetting(
   return absl::OkStatus();
 }
 
-absl::StatusOr<ImageSourceInterface::CallbackToken>
-GazeboCameraConnection::AddStreamCallback(
-    ImageSourceInterface::CaptureCallback callback) {
-  absl::MutexLock lock(callback_mutex_);
-  static std::atomic<int> global_id = 0;
-  ImageSourceInterface::CallbackToken callback_token(
-      absl::StrCat(absl::Now(), global_id++));
-  DCHECK(!stream_callbacks_.contains(callback_token))
-      << "Callback with id " << callback_token << " already exists.";
-  stream_callbacks_[callback_token] = std::move(callback);
-  return callback_token;
-}
-
-void GazeboCameraConnection::RemoveStreamCallback(
-    ImageSourceInterface::CallbackToken token) {
-  absl::MutexLock lock(callback_mutex_);
-  stream_callbacks_.erase(token);
-}
-
-absl::Status GazeboCameraConnection::StartStream(
-    const absl::flat_hash_set<int64_t>& sensor_ids) {
-  absl::MutexLock lock(streaming_mutex_);
-  if (streaming_thread_.has_value()) {
-    return absl::FailedPreconditionError("Stream already started.");
-  }
-
-  streaming_thread_.emplace([this,
-                             sensor_ids](intrinsic::StopToken stop_token) {
-    LOG(INFO) << "GazeboCameraConnection::Thread: Starting streaming thread.";
-
-    while (!stop_token.stop_requested()) {
-      auto sensor_images = WaitForNewSensorImages(sensor_ids, stop_token);
-      if (!sensor_images.ok()) {
-        LOG(WARNING) << "Failed to capture image: " << sensor_images.status();
-        absl::SleepFor(absl::Milliseconds(100));
-        continue;
-      }
-
-      absl::Time capture_at;
-      if (!sensor_images->empty()) {
-        capture_at = sensor_images->at(0).acquisition_time();
-      }
-
-      CaptureResult capture_result = {
-          .capture_at = capture_at,
-          .sensor_images = std::move(sensor_images).value(),
-      };
-
-      absl::MutexLock lock(callback_mutex_);
-      for (auto& [_, callback] : stream_callbacks_) {
-        if (absl::Status status = callback(capture_result); !status.ok()) {
-          LOG(ERROR) << "Callback returned error status: " << status;
-        }
-      }
+absl::StatusOr<CaptureResult> GazeboCameraConnection::CaptureImpl(
+    absl::Duration timeout, const absl::flat_hash_set<int64_t>& sensor_ids) {
+  absl::StatusOr<std::vector<SensorImage>> sensor_images =
+      WaitForNewSensorImages(sensor_ids, timeout);
+  if (!sensor_images.ok()) {
+    // If sensor activation fails immediately (`UnavailableError`), back off
+    // briefly so `ImageSource`'s streaming loop does not busy-spin.
+    if (absl::IsUnavailable(sensor_images.status())) {
+      absl::SleepFor(absl::Milliseconds(100));
     }
-  });
-
-  return absl::OkStatus();
+    return sensor_images.status();
+  }
+  if (!sensor_ids.empty() && sensor_images->empty()) {
+    bool throttle_empty_stream_capture = false;
+    {
+      absl::MutexLock lock(mutex_);
+      throttle_empty_stream_capture =
+          is_streaming_ && !stopped_ && stream_stopping_count_ == 0;
+    }
+    if (throttle_empty_stream_capture) {
+      absl::SleepFor(absl::Milliseconds(100));
+      return absl::InvalidArgumentError(
+          "None of the requested sensor IDs are present in the simulated "
+          "camera description.");
+    }
+  }
+  const absl::Time capture_at = sensor_images->empty()
+                                    ? absl::Time()
+                                    : (*sensor_images)[0].acquisition_time();
+  return CaptureResult{
+      .capture_at = capture_at,
+      .sensor_images = *std::move(sensor_images),
+  };
 }
 
-absl::Status GazeboCameraConnection::StopStream() {
-  absl::MutexLock lock(streaming_mutex_);
-  if (streaming_thread_.has_value()) {
-    // This will deallocate the streaming thread and that will request a stop on
-    // the stop token, which will then exit, and join before completing the
-    // destructor call.
-    streaming_thread_.reset();
+absl::Status GazeboCameraConnection::StartStreamImpl(
+    const CaptureArgs& params) {
+  {
+    absl::MutexLock lock(mutex_);
+    is_streaming_ = true;
   }
-  return absl::OkStatus();
+  absl::Status status = ImageSource::StartStreamImpl(params);
+  if (!status.ok()) {
+    absl::MutexLock lock(mutex_);
+    is_streaming_ = false;
+  }
+  return status;
+}
+
+absl::Status GazeboCameraConnection::StopStreamImpl() {
+  {
+    absl::MutexLock lock(mutex_);
+    ++stream_stopping_count_;
+  }
+  const absl::Status status = ImageSource::StopStreamImpl();
+  {
+    absl::MutexLock lock(mutex_);
+    --stream_stopping_count_;
+    if (stream_stopping_count_ == 0) {
+      is_streaming_ = false;
+    }
+  }
+  return status;
 }
 
 grpc::Status GazeboCameraGrpcService::ListAvailableCameras(
