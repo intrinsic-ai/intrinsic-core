@@ -33,7 +33,6 @@ import (
 	"intrinsic/kubernetes/workcell_spec/repositorybasename"
 	"intrinsic/production/imagepublisher"
 
-	"dario.cat/mergo"
 	log "github.com/golang/glog"
 	"github.com/googlecloudrobotics/core/src/go/pkg/apis/apps/v1alpha1"
 	"github.com/pkg/errors"
@@ -199,10 +198,8 @@ func getDomainForCluster(project string, clusterName string, cloudRoboticsConfig
 	return environments.Domain(project)
 }
 
-// BuildValues assembles the Helm values from the various sources they can come from.
-// It differentiates between default values (coming from the chart assignment or the wrapped tarball) and runtime values (specified as `extraValues` or dynamically set by inctl).
-// It returns the runtime values.
-func BuildValues(project string, clusterName string, location string, extraValues string, cloudRoboticsConfig map[string]string) (v1alpha1.ConfigValues, error) {
+// ParseExtraValues parses the comma-separated YAML values passed via --values.
+func ParseExtraValues(extraValues string) (v1alpha1.ConfigValues, error) {
 	// Strip extraValues of any surrounding quotes.
 	// We have seen this when running the lint test on Guitar (http://yaqs/413207464834498560).
 	// err is nil on successful stripping, otherwise the return value should not be used.
@@ -211,16 +208,32 @@ func BuildValues(project string, clusterName string, location string, extraValue
 		extraValues = u
 	}
 
-	runtimeValues := make(v1alpha1.ConfigValues)
+	parsed := make(v1alpha1.ConfigValues)
 	// Parse the passed values. This will verify that the format is a valid YAML
 	// string. We have to wrap it in {} to support multiple values on one line (eg
 	// "a: b, c: d"), otherwise we get "mapping values are not allowed in this
 	// context".
-	if err := Parse([]byte("{"+extraValues+"}"), &runtimeValues); err != nil {
+	if err := Parse([]byte("{"+extraValues+"}"), &parsed); err != nil {
 		return nil, errors.Wrap(err, "parsing --values")
 	}
+	return parsed, nil
+}
+
+// BuildValues assembles the Helm values from the various sources they can come from.
+// It differentiates between default values (coming from the chart assignment or the wrapped tarball) and runtime values (specified as `extraValues` or dynamically set by inctl).
+// It returns the runtime values.
+func BuildValues(project string, clusterName string, location string, extraValues string, cloudRoboticsConfig map[string]string) (v1alpha1.ConfigValues, error) {
+	runtimeValues := make(v1alpha1.ConfigValues)
 	setCommonValues(project, clusterName, location, runtimeValues)
 	runtimeValues["domain"] = getDomainForCluster(project, clusterName, cloudRoboticsConfig)
+
+	parsedExtra, err := ParseExtraValues(extraValues)
+	if err != nil {
+		return nil, err
+	}
+	if err := Merge(parsedExtra, &runtimeValues); err != nil {
+		return nil, errors.Wrap(err, "merging --values")
+	}
 
 	return runtimeValues, nil
 }
@@ -296,11 +309,48 @@ func ReadFile(path string, values *v1alpha1.ConfigValues) error {
 	return nil
 }
 
-// Merge merges `values` into `result`.
-func Merge(values v1alpha1.ConfigValues, result *v1alpha1.ConfigValues) error {
-	if err := mergo.Merge(result, values, mergo.WithOverride); err != nil {
-		return errors.Wrap(err, "merging")
+func asStringMap(v any) (map[string]any, bool) {
+	switch m := v.(type) {
+	case map[string]any:
+		return m, true
+	case v1alpha1.ConfigValues:
+		return m, true
+	default:
+		return nil, false
 	}
+}
+
+func mergeMaps(src, dst map[string]any) {
+	for key, srcVal := range src {
+		if srcMap, srcIsMap := asStringMap(srcVal); srcIsMap {
+			if dstMap, dstIsMap := asStringMap(dst[key]); dstIsMap && dstMap != nil {
+				mergeMaps(srcMap, dstMap)
+				continue
+			}
+			cloned := make(map[string]any, len(srcMap))
+			mergeMaps(srcMap, cloned)
+			if _, isConfigValues := srcVal.(v1alpha1.ConfigValues); isConfigValues {
+				dst[key] = v1alpha1.ConfigValues(cloned)
+			} else {
+				dst[key] = cloned
+			}
+			continue
+		}
+		dst[key] = srcVal
+	}
+}
+
+// Merge merges `values` into `result`, matching Helm's deep-merge semantics
+// (nested maps are merged recursively; scalars, slices, and zero values such as
+// false/""/0 override existing entries).
+func Merge(values v1alpha1.ConfigValues, result *v1alpha1.ConfigValues) error {
+	if result == nil {
+		return errors.New("merging into nil ConfigValues pointer")
+	}
+	if *result == nil {
+		*result = make(v1alpha1.ConfigValues)
+	}
+	mergeMaps(values, *result)
 	return nil
 }
 

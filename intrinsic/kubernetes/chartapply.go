@@ -20,6 +20,7 @@ import (
 	"compress/gzip"
 	"context"
 	"crypto/sha256"
+	"encoding/json"
 	"fmt"
 	"io/fs"
 	"slices"
@@ -34,7 +35,6 @@ import (
 	"intrinsic/tools/internal/k8sclientutil"
 
 	"cloud.google.com/go/storage"
-	"dario.cat/mergo"
 	log "github.com/golang/glog"
 	"github.com/googlecloudrobotics/core/src/go/pkg/apis/apps/v1alpha1"
 	crversioned "github.com/googlecloudrobotics/core/src/go/pkg/client/versioned"
@@ -63,9 +63,13 @@ import (
 )
 
 const (
-	imageRegistry       = "us-central1-docker.pkg.dev/intrinsic-artifacts-dev/cloud-chart-images"
-	helmDriver          = "memory" // This seems to be the only case imported into google3
-	resourceTrackingKey = "argocd.argoproj.io/tracking-id"
+	imageRegistry                 = "us-central1-docker.pkg.dev/intrinsic-artifacts-dev/cloud-chart-images"
+	helmDriver                    = "memory" // This seems to be the only case imported into google3
+	resourceTrackingKey           = "argocd.argoproj.io/tracking-id"
+	argoCDManagementNamespace     = "app-cluster-management"
+	argoCDManagementConfigMapName = "argocd-management"
+	argoCDManagedDataKey          = "argocdManaged"
+	argoCDClusterValuesDataKey    = "values.yaml"
 )
 
 var protectedNamespaces = []string{"argo", "argocd", "default", "kube-node-lease", "kube-public", "kube-system"}
@@ -142,18 +146,47 @@ func CreateGCRClient(ctx context.Context, opts []option.ClientOption) (imagepubl
 	return gcrClient, nil
 }
 
-// generateRuntimeValues merges values from various sources into a single map, and validates that
-// any custom value overrides passed in match ones already in values.yaml.
-func generateRuntimeValues(ctx context.Context, clusterConfig *ClusterConfig, chart *helmchart.Chart, commaSeparatedValues string) (v1alpha1.ConfigValues, error) {
-	runtimeValues, err := values.BuildValues(clusterConfig.Project, clusterConfig.UniqueClusterName, clusterConfig.Location, commaSeparatedValues, clusterConfig.CRCConfig)
+// parseAndValidateFlagValues parses the user-supplied --values string and validates
+// that each override matches a value defined in the chart's values.yaml.
+func parseAndValidateFlagValues(chart *helmchart.Chart, commaSeparatedValues string) (v1alpha1.ConfigValues, error) {
+	flagValues, err := values.ParseExtraValues(commaSeparatedValues)
 	if err != nil {
 		return nil, err
 	}
-
-	if err := values.ValidateFlagValuesChart(chart, runtimeValues); err != nil {
+	if err := values.ValidateFlagValuesChart(chart, flagValues); err != nil {
 		return nil, err
 	}
-	return runtimeValues, nil
+	return flagValues, nil
+}
+
+// getClusterValues loads ArgoCD-rendered cluster values from the cluster-management ConfigMap,
+// if present. Returns nil without error if the ConfigMap or values.yaml entry does not exist.
+func getClusterValues(ctx context.Context, kubeClient kubernetes.Interface) (v1alpha1.ConfigValues, error) {
+	if kubeClient == nil {
+		return nil, nil
+	}
+	configMap, err := kubeClient.CoreV1().ConfigMaps(argoCDManagementNamespace).Get(ctx, argoCDManagementConfigMapName, metav1.GetOptions{})
+	if err != nil {
+		if errors.IsNotFound(err) {
+			return nil, nil
+		}
+		return nil, fmt.Errorf("failed to get ConfigMap '%s/%s': %w", argoCDManagementNamespace, argoCDManagementConfigMapName, err)
+	}
+
+	rawValues := strings.TrimSpace(configMap.Data[argoCDClusterValuesDataKey])
+	if rawValues == "" {
+		return nil, nil
+	}
+
+	clusterValues := make(v1alpha1.ConfigValues)
+	if err := values.Parse([]byte(rawValues), &clusterValues); err != nil {
+		return nil, fmt.Errorf("failed to parse %q from ConfigMap '%s/%s': %w", argoCDClusterValuesDataKey, argoCDManagementNamespace, argoCDManagementConfigMapName, err)
+	}
+	if len(clusterValues) == 0 {
+		return nil, nil
+	}
+	fmt.Printf("Loaded %d ArgoCD cluster value entries from ConfigMap '%s/%s'.\n", len(clusterValues), argoCDManagementNamespace, argoCDManagementConfigMapName)
+	return clusterValues, nil
 }
 
 // LoadChart loads a chart from a tarball.
@@ -288,28 +321,86 @@ func buildClusterConfig(ctx context.Context, opts []option.ClientOption, restCon
 	}, nil
 }
 
-func finalizeChart(ctx context.Context, chart *helmchart.Chart, images []*imagepublisher.ImageInfo, runtimeValues v1alpha1.ConfigValues, project string, featureOptions string) error {
+// applyFeatureOptions merges CLI --feature_options overrides on top of any existing
+// cluster feature_options_overrides JSON (preserving sibling cluster keys) and writes
+// the resulting JSON string back to mergedValues["feature_options_overrides"].
+func applyFeatureOptions(project, cliOverrides string, mergedValues v1alpha1.ConfigValues) error {
+	existingRaw, _ := mergedValues["feature_options_overrides"].(string)
+	existingTrimmed := strings.TrimSpace(existingRaw)
+	cliTrimmed := strings.TrimSpace(cliOverrides)
+
+	if existingTrimmed == "" {
+		return values.SetFeatureOptions(project, cliOverrides, mergedValues)
+	}
+	if cliTrimmed == "" {
+		mergedValues["feature_options_overrides"] = existingTrimmed
+		return nil
+	}
+
+	existingMap := make(v1alpha1.ConfigValues)
+	if err := json.Unmarshal([]byte(existingTrimmed), &existingMap); err != nil {
+		return fmt.Errorf("parsing existing feature_options_overrides JSON: %w", err)
+	}
+	cliMap, err := values.ParseExtraValues(cliOverrides)
+	if err != nil {
+		return fmt.Errorf("parsing --feature_options: %w", err)
+	}
+	if err := values.Merge(cliMap, &existingMap); err != nil {
+		return fmt.Errorf("merging --feature_options: %w", err)
+	}
+	mergedJSON, err := json.Marshal(existingMap)
+	if err != nil {
+		return fmt.Errorf("marshaling merged feature_options_overrides: %w", err)
+	}
+	mergedValues["feature_options_overrides"] = string(mergedJSON)
+	return nil
+}
+
+func finalizeChart(ctx context.Context, chart *helmchart.Chart, images []*imagepublisher.ImageInfo, clusterConfig *ClusterConfig, clusterValues v1alpha1.ConfigValues, cliValues v1alpha1.ConfigValues, featureOptions string) error {
 	fmt.Printf("Finalizing chart: %s\n", chart.Name())
-	// Set the target registry for the chart images
-	chart.Values["registry"] = imageRegistry
-	// Set the feature options overrides for the chart
-	values.SetFeatureOptions(project, featureOptions, chart.Values)
-	// Set the hybrid build images values for the chart
+	if chart.Values == nil {
+		chart.Values = make(map[string]any)
+	}
+	mergedValues := v1alpha1.ConfigValues(chart.Values)
+
+	// 1. Merge auto-detected runtime defaults (project, location, robot.name, domain fallback, etc.).
+	autoValues, err := values.BuildValues(clusterConfig.Project, clusterConfig.UniqueClusterName, clusterConfig.Location, "", clusterConfig.CRCConfig)
+	if err != nil {
+		return fmt.Errorf("build auto runtime values: %w", err)
+	}
+	if err := values.Merge(autoValues, &mergedValues); err != nil {
+		return fmt.Errorf("merging values.yaml with auto runtime values: %w", err)
+	}
+
+	// 2. Merge ArgoCD cluster values (values.yaml + <cluster>.yaml from the deployment repo).
+	if len(clusterValues) > 0 {
+		if err := values.Merge(clusterValues, &mergedValues); err != nil {
+			return fmt.Errorf("merging values.yaml with cluster values: %w", err)
+		}
+	}
+
+	// 3. Apply dev-deploy build artifacts (target registry, pushed hybrid images, and feature options).
+	mergedValues["registry"] = imageRegistry
 	for _, image := range images {
-		imagesMap, ok := chart.Values["images"].(map[string]any)
+		imagesMap, ok := mergedValues["images"].(map[string]any)
 		if !ok || imagesMap == nil {
 			imagesMap = make(map[string]any)
-			chart.Values["images"] = imagesMap
+			mergedValues["images"] = imagesMap
 		}
 		imagesMap[image.ImageAbstractionName] = image.ImageReference()
 	}
-	// Convert type in order to merge with same type
-	var overrideValues map[string]interface{} = runtimeValues
-
-	// Merge the runtime values with the chart values
-	if err := mergo.Merge(&chart.Values, overrideValues, mergo.WithOverride); err != nil {
-		return fmt.Errorf("merging values.yaml with runtime values: %w", err)
+	if err := applyFeatureOptions(clusterConfig.Project, featureOptions, mergedValues); err != nil {
+		return fmt.Errorf("setting feature options: %w", err)
 	}
+
+	// 4. Merge user CLI --values overrides last so they can override any value.
+	if len(cliValues) > 0 {
+		if err := values.Merge(cliValues, &mergedValues); err != nil {
+			return fmt.Errorf("merging values.yaml with CLI values: %w", err)
+		}
+	}
+
+	chart.Values = mergedValues
 	return nil
 }
 
@@ -490,15 +581,23 @@ func applyManifest(ctx context.Context, manifest string, chartName string, clust
 
 // ApplyChart applies a chart to a cluster.
 func ApplyChart(ctx context.Context, chart *helmchart.Chart, newImages []*imagepublisher.ImageInfo, clusterConfig *ClusterConfig, flagValues string, flagFeatureOptions string, flagDryRun bool, overrideNamespace string) error {
-	// Build and validate runtime values.
-	// Should these merge before or after feature options?
-	runtimeValues, err := generateRuntimeValues(ctx, clusterConfig, chart, flagValues)
+	// Parse and validate user-supplied --values against chart defaults.
+	cliValues, err := parseAndValidateFlagValues(chart, flagValues)
 	if err != nil {
-		return fmt.Errorf("generate runtime values: %w", err)
+		return fmt.Errorf("parse and validate --values: %w", err)
 	}
 
-	// Set registry, feature options, and hybrid build images values for the chart
-	err = finalizeChart(ctx, chart, newImages, runtimeValues, clusterConfig.Project, flagFeatureOptions)
+	// Load ArgoCD-managed cluster values from the cluster-management ConfigMap, if available.
+	var clusterValues v1alpha1.ConfigValues
+	if clusterConfig.KubeCS != nil {
+		clusterValues, err = getClusterValues(ctx, clusterConfig.KubeCS)
+		if err != nil {
+			return fmt.Errorf("load cluster values: %w", err)
+		}
+	}
+
+	// Merge values and apply registry, feature options, and hybrid build images for the chart.
+	err = finalizeChart(ctx, chart, newImages, clusterConfig, clusterValues, cliValues, flagFeatureOptions)
 	if err != nil {
 		return fmt.Errorf("unable to finalize chart: %w", err)
 	}
@@ -758,24 +857,17 @@ func DeleteChart(ctx context.Context, chartName string, clusterConfig *ClusterCo
 func IsArgoCDManagedCluster(ctx context.Context, clusterConfig *ClusterConfig) (bool, error) {
 	kubeClient := clusterConfig.KubeCS
 
-	namespace := "app-cluster-management"
-	configMapName := "argocd-management"
+	fmt.Printf("Reading ConfigMap '%s' in namespace '%s'...\n", argoCDManagementConfigMapName, argoCDManagementNamespace)
 
-	fmt.Printf("Reading ConfigMap '%s' in namespace '%s'...\n", configMapName, namespace)
-
-	configMap, err := kubeClient.CoreV1().ConfigMaps(namespace).Get(ctx, configMapName, metav1.GetOptions{})
+	configMap, err := kubeClient.CoreV1().ConfigMaps(argoCDManagementNamespace).Get(ctx, argoCDManagementConfigMapName, metav1.GetOptions{})
 	if err != nil {
-		return false, fmt.Errorf("failed to get ConfigMap '%s': %w", configMapName, err)
+		return false, fmt.Errorf("failed to get ConfigMap '%s': %w", argoCDManagementConfigMapName, err)
 	}
 
-	// The data is stored in a map[string]string.
-	fmt.Println("Data from ConfigMap:")
-	for key, value := range configMap.Data {
-		fmt.Printf("\t%s: %s\n", key, value)
-	}
-	managed, err := strconv.ParseBool(configMap.Data["argocdManaged"])
+	fmt.Printf("ConfigMap '%s/%s': %s=%s\n", argoCDManagementNamespace, argoCDManagementConfigMapName, argoCDManagedDataKey, configMap.Data[argoCDManagedDataKey])
+	managed, err := strconv.ParseBool(configMap.Data[argoCDManagedDataKey])
 	if err != nil {
-		return false, fmt.Errorf("failed to parse argocdManaged value: %w", err)
+		return false, fmt.Errorf("failed to parse %s value: %w", argoCDManagedDataKey, err)
 	}
 	return managed, nil
 }
