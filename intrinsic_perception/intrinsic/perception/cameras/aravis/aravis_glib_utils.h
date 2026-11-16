@@ -43,6 +43,35 @@ struct GObjectDeleter {
 template <typename T>
 using GObjectPtr = std::unique_ptr<T, GObjectDeleter>;
 
+// Connects a GLib signal handler to `instance` and disconnects it upon
+// destruction, retaining a reference to `instance` for the lifetime of the
+// handler.
+class ScopedGSignalHandler {
+ public:
+  ScopedGSignalHandler(gpointer instance, const char* detailed_signal,
+                       GCallback handler, gpointer data)
+      : instance_(instance != nullptr ? G_OBJECT(g_object_ref(instance))
+                                      : nullptr),
+        handler_id_(instance_ != nullptr
+                        ? g_signal_connect_data(instance_.get(),
+                                                detailed_signal, handler, data,
+                                                nullptr, G_CONNECT_DEFAULT)
+                        : 0) {}
+
+  ScopedGSignalHandler(const ScopedGSignalHandler&) = delete;
+  ScopedGSignalHandler& operator=(const ScopedGSignalHandler&) = delete;
+
+  ~ScopedGSignalHandler() {
+    if (instance_ != nullptr && handler_id_ > 0) {
+      g_signal_handler_disconnect(instance_.get(), handler_id_);
+    }
+  }
+
+ private:
+  GObjectPtr<GObject> instance_;
+  gulong handler_id_ = 0;
+};
+
 }  // namespace perception
 }  // namespace intrinsic
 

@@ -124,6 +124,54 @@ class GenicamImageSource : public ImageSource {
     int64_t dropped_frames = 0;
   };
 
+  // Owns the `ArvStream`, its `"new-buffer"` signal connection, buffer pool,
+  // and active camera acquisition state.
+  class AcquisitionStream {
+   public:
+    AcquisitionStream(GenicamImageSource& source,
+                      GObjectPtr<ArvStream> arv_stream);
+    AcquisitionStream(const AcquisitionStream&) = delete;
+    AcquisitionStream& operator=(const AcquisitionStream&) = delete;
+    ~AcquisitionStream();
+
+    // Ensures stream buffers match the current payload size and starts camera
+    // acquisition if not already active.
+    absl::Status Start();
+
+    // Stops camera acquisition if active, keeping the ArvStream and its buffer
+    // pool allocated for subsequent Start() calls.
+    absl::Status Stop();
+
+    // Pauses/resumes the host ArvStream receiving thread if acquisition is
+    // active; no-op otherwise.
+    absl::Status Pause();
+    absl::Status Resume();
+
+   private:
+    // RAII guard for an active arv_camera_start_acquisition() session.
+    class ScopedAcquisition {
+     public:
+      explicit ScopedAcquisition(GenicamImageSource& source);
+      ScopedAcquisition(const ScopedAcquisition&) = delete;
+      ScopedAcquisition& operator=(const ScopedAcquisition&) = delete;
+      ~ScopedAcquisition();
+
+      absl::Status Stop();
+
+     private:
+      GenicamImageSource* source_ = nullptr;
+    };
+
+    GenicamImageSource& source_;
+    GObjectPtr<ArvStream> arv_stream_;
+    ScopedGSignalHandler new_buffer_handler_;
+    int payload_size_ = 0;
+    // Declared last so it is destroyed first in ~AcquisitionStream(), stopping
+    // camera acquisition before disconnecting the signal handler and finalizing
+    // arv_stream_.
+    std::optional<ScopedAcquisition> active_acquisition_;
+  };
+
   absl::StatusOr<std::vector<CameraSetting>> GetActiveAutoSettings() const;
   // Switches any `Continuous` settings in `active_auto_settings` to `Once`
   // (appending the original `Continuous` settings to `auto_settings_to_restore`
@@ -249,7 +297,7 @@ class GenicamImageSource : public ImageSource {
       absl::Time deadline) ABSL_LOCKS_EXCLUDED(mutex_);
 
   // Creates a stream w/ buffers and starts the camera acquisition.
-  // Post-condition: stream_ != nullptr.
+  // Post-condition: stream_.has_value().
   absl::Status StartAsyncAcquisition();
 
   // Stops the camera acquisition while keeping the current stream and its
@@ -275,7 +323,6 @@ class GenicamImageSource : public ImageSource {
   void StopStreamDispatchThread() ABSL_LOCKS_EXCLUDED(mutex_);
 
   GObjectPtr<ArvCamera> camera_;
-  GObjectPtr<ArvStream> stream_;
   BufferHelper buffer_helper_;
 
   mutable absl::Mutex mutex_;
@@ -291,16 +338,6 @@ class GenicamImageSource : public ImageSource {
   bool use_software_trigger_ = true;
 
   std::optional<StreamingState> streaming_state_ ABSL_GUARDED_BY(mutex_);
-
-  // Stores the id of the lost control callback handler.
-  uint32_t lost_control_handler_id_ = 0;
-
-  // Tracks the acquisition state.
-  struct AcquisitionState {
-    bool is_started = false;
-    int payload_size = 0;
-  };
-  AcquisitionState acquisition_state_;
 
   absl::flat_hash_set<int64_t> all_sensor_ids_;
 
@@ -366,6 +403,12 @@ class GenicamImageSource : public ImageSource {
   std::map<absl::Duration, AcquisitionMeasurement>
       acquisition_measurements_per_exposure_time_;
 
+  // Declared last so `stream_`, `control_lost_handler_`, and
+  // `stream_dispatch_thread_` are destroyed before `mutex_`, `state_`,
+  // `capture_result_`, and `device_id_` (which `OnNewBuffer`, `OnControlLost`,
+  // and `~AcquisitionStream` access).
+  std::optional<AcquisitionStream> stream_;
+  std::optional<ScopedGSignalHandler> control_lost_handler_;
   std::optional<intrinsic::Thread> stream_dispatch_thread_
       ABSL_GUARDED_BY(mutex_);
 };

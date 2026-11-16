@@ -556,32 +556,6 @@ absl::Status GenicamImageSource::ConfigureCameraDefaults(
                    {genicam::kWidth, genicam::kHeight, genicam::kPixelFormat,
                     genicam::kExposureTime, genicam::kTimestamp});
 
-  // Disable packet socket, as it leads to high latencies on docker/kubernetes,
-  // see also:
-  // https://github.com/AravisProject/aravis/issues/691#issuecomment-1194287752
-  // https://github.com/AravisProject/aravis/issues/613#issuecomment-1054222737
-  if (arv_camera_is_gv_device(aravis_camera.camera_.get())) {
-    arv_camera_gv_set_stream_options(
-        aravis_camera.camera_.get(),
-        ARV_GV_STREAM_OPTION_PACKET_SOCKET_DISABLED);
-  }
-
-  aravis_camera.stream_ = GObjectPtr<ArvStream>(arv_camera_create_stream(
-      aravis_camera.camera_.get(), /*callback=*/nullptr, /*user_data=*/nullptr,
-      /*destroy=*/nullptr, &error));
-  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-
-  aravis_camera.acquisition_state_ = {.is_started = false, .payload_size = 0};
-
-  // Try to avoid lost packets because of a full buffer under heavy CPU load,
-  // see also
-  // https://aravisproject.github.io/aravis/aravis-stable/ethernet.html#socket-buffer-size.
-  if (arv_camera_is_gv_device(aravis_camera.camera_.get())) {
-    g_object_set(aravis_camera.stream_.get(), "socket-buffer",
-                 ARV_GV_STREAM_SOCKET_BUFFER_AUTO, "socket-buffer-size", 0,
-                 nullptr);
-  }
-
   if (arv_camera_is_gv_device(aravis_camera.camera_.get())) {
     // See
     // https://www.emva.org/wp-content/uploads/GenICam_SFNC_v2_7.pdf#page=448
@@ -595,23 +569,108 @@ absl::Status GenicamImageSource::ConfigureCameraDefaults(
     }
   }
 
-  absl::SleepFor(absl::Milliseconds(10));
-  g_signal_connect_data(aravis_camera.stream_.get(), "new-buffer",
-                        reinterpret_cast<GCallback>(OnNewBuffer),
-                        &aravis_camera, nullptr, G_CONNECT_DEFAULT);
-  arv_stream_set_emit_signals(aravis_camera.stream_.get(), 1);
-
-  // Connect control lost callback.
-  aravis_camera.lost_control_handler_id_ = g_signal_connect_data(
+  aravis_camera.control_lost_handler_.emplace(
       arv_camera_get_device(aravis_camera.camera_.get()), "control-lost",
-      reinterpret_cast<GCallback>(OnControlLost), &aravis_camera, nullptr,
-      G_CONNECT_DEFAULT);
+      reinterpret_cast<GCallback>(OnControlLost), &aravis_camera);
 
   absl::MutexLock lock(aravis_camera.mutex_);
   aravis_camera.state_.packet_size = packet_size;
   aravis_camera.state_.lost_control = false;
 
   return absl::OkStatus();
+}
+
+GenicamImageSource::AcquisitionStream::ScopedAcquisition::ScopedAcquisition(
+    GenicamImageSource& source)
+    : source_(&source) {
+  LOG(INFO) << absl::StrFormat(
+      "Started streaming acquisition for camera with ID %s.",
+      source.device_id_);
+}
+
+GenicamImageSource::AcquisitionStream::ScopedAcquisition::~ScopedAcquisition() {
+  if (source_ == nullptr) return;
+  const std::string device_id = source_->device_id_;
+  if (const absl::Status status = Stop(); !status.ok()) {
+    LOG(WARNING) << "Failed to stop acquisition for camera with ID "
+                 << device_id << ": " << status;
+  }
+}
+
+absl::Status GenicamImageSource::AcquisitionStream::ScopedAcquisition::Stop() {
+  GenicamImageSource* source = std::exchange(source_, nullptr);
+  if (source == nullptr || !source->GetFaultsStatus().ok()) {
+    return absl::OkStatus();
+  }
+  GError* error = nullptr;
+  arv_camera_stop_acquisition(source->camera_.get(), &error);
+  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+  LOG(INFO) << absl::StrFormat(
+      "Stopped streaming acquisition for camera with ID %s.",
+      source->device_id_);
+  return absl::OkStatus();
+}
+
+GenicamImageSource::AcquisitionStream::AcquisitionStream(
+    GenicamImageSource& source, GObjectPtr<ArvStream> arv_stream)
+    : source_(source),
+      arv_stream_(std::move(arv_stream)),
+      new_buffer_handler_(arv_stream_.get(), "new-buffer",
+                          reinterpret_cast<GCallback>(OnNewBuffer), &source) {
+  DCHECK(arv_stream_ != nullptr);
+  arv_stream_set_emit_signals(arv_stream_.get(), TRUE);
+}
+
+GenicamImageSource::AcquisitionStream::~AcquisitionStream() {
+  active_acquisition_.reset();
+  arv_stream_set_emit_signals(arv_stream_.get(), FALSE);
+}
+
+absl::Status GenicamImageSource::AcquisitionStream::Start() {
+  if (active_acquisition_.has_value()) return absl::OkStatus();
+
+  GError* error = nullptr;
+  // Here, we are creating Aravis' buffer queue. It is retrieved during frame
+  // acquisition and then repurposed once image data has been copied. The
+  // buffers depend on the PayloadSize and hence need to be recreated whenever
+  // acquisition is restarted and the PayloadSize changed.
+  const int payload_size =
+      arv_camera_get_payload(source_.camera_.get(), &error);
+  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+  if (payload_size_ != payload_size) {
+    arv_stream_delete_buffers(arv_stream_.get());
+    payload_size_ = 0;
+    arv_stream_create_buffers(arv_stream_.get(), kNumStreamBuffers, nullptr,
+                              nullptr, &error);
+    INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+    payload_size_ = payload_size;
+  }
+
+  arv_camera_start_acquisition(source_.camera_.get(), &error);
+  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
+  active_acquisition_.emplace(source_);
+  return absl::OkStatus();
+}
+
+absl::Status GenicamImageSource::AcquisitionStream::Stop() {
+  if (!active_acquisition_.has_value()) return absl::OkStatus();
+  absl::Status status = active_acquisition_->Stop();
+  active_acquisition_.reset();
+  return status;
+}
+
+absl::Status GenicamImageSource::AcquisitionStream::Pause() {
+  if (!active_acquisition_.has_value()) return absl::OkStatus();
+  GError* error = nullptr;
+  arv_stream_stop_acquisition(arv_stream_.get(), &error);
+  return ValidateAndNullArvError(error);
+}
+
+absl::Status GenicamImageSource::AcquisitionStream::Resume() {
+  if (!active_acquisition_.has_value()) return absl::OkStatus();
+  GError* error = nullptr;
+  arv_stream_start_acquisition(arv_stream_.get(), &error);
+  return ValidateAndNullArvError(error);
 }
 
 absl::Status GenicamImageSource::RetryOnPermissionDeniedOrTimeoutOrBusy(
@@ -636,8 +695,13 @@ absl::Status GenicamImageSource::RetryOnPermissionDeniedOrTimeoutOrBusy(
           }
         }
         LOG(WARNING) << "Rediscovering camera " << device_id_ << ".";
+        control_lost_handler_.reset();
+        stream_.reset();
         camera_.reset();
         INTR_ASSIGN_OR_RETURN(camera_, DiscoverCamera(device_id_));
+        control_lost_handler_.emplace(
+            arv_camera_get_device(camera_.get()), "control-lost",
+            reinterpret_cast<GCallback>(OnControlLost), this);
         break;
       }
       // This is mainly caused by a device such as Photoneo still being busy
@@ -667,11 +731,7 @@ absl::Status GenicamImageSource::Init(bool requires_device_reset) {
   // before applying any default values.
   if (requires_device_reset) {
     INTR_RETURN_IF_ERROR(RetryOnPermissionDeniedOrTimeoutOrBusy([this] {
-      if (lost_control_handler_id_ > 0) {
-        g_signal_handler_disconnect(arv_camera_get_device(camera_.get()),
-                                    lost_control_handler_id_);
-        lost_control_handler_id_ = 0;
-      }
+      control_lost_handler_.reset();
       GError* error = nullptr;
       arv_camera_execute_command(camera_.get(), genicam::kDeviceReset, &error);
       return ValidateAndNullArvError(error);
@@ -679,6 +739,7 @@ absl::Status GenicamImageSource::Init(bool requires_device_reset) {
 
     LOG(INFO) << "Camera was reset to its power up state and needs to be "
                  "rediscovered.";
+    stream_.reset();
     camera_.reset();
     INTR_ASSIGN_OR_RETURN(camera_,
                           DiscoverCamera(device_id_, kDeviceResetTimeout));
@@ -731,20 +792,17 @@ GenicamImageSource::GenicamImageSource(std::string_view device_id)
     : device_id_(device_id) {}
 
 GenicamImageSource::~GenicamImageSource() {
-  if (stream_ != nullptr) {
-    arv_stream_set_emit_signals(stream_.get(), FALSE);
-  }
+  control_lost_handler_.reset();
   StopStreamDispatchThread();
   if (const absl::Status status = GetFaultsStatus(); !status.ok()) {
     LOG(ERROR) << status;
+    stream_.reset();
     return;
   }
   if (const absl::Status status = StopStreamImpl(); !status.ok()) {
     LOG(ERROR) << status;
   }
-  if (const absl::Status status = StopAsyncAcquisition(); !status.ok()) {
-    LOG(ERROR) << status;
-  }
+  stream_.reset();
 }
 
 absl::Duration GenicamImageSource::MimimalAcquisitionTimeout(
@@ -1206,6 +1264,11 @@ absl::StatusOr<CaptureResult> GenicamImageSource::GetLdrCaptureResult(
   CHECK(!status.ok());
 
   if (absl::IsDeadlineExceeded(status)) {
+    // Timed out waiting for a buffer from ArvStream. Reset `stream_` so the
+    // next Capture() or StartStream() creates a fresh ArvStream (recovering if
+    // the host ArvGvStream UDP socket wedged and discarding any late packets
+    // from the timed-out frame).
+    stream_.reset();
     // Append additional information to the status message, so the user knows
     // what the currently used timeout is.
     std::string error_message(status.message());
@@ -1886,7 +1949,7 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
     if (buffer != nullptr) {
       // We can now give back the buffer to the camera queue after copying all
       // image data from it.
-      arv_stream_push_buffer(camera->stream_.get(), buffer);
+      arv_stream_push_buffer(arv_stream, buffer);
     }
     absl::MutexLock lock(camera->mutex_);
     camera->status_ = status;
@@ -1904,13 +1967,13 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
                                   !camera->streaming_state_->is_active;
 
     VLOG(1) << "Buffer conversion took: " << absl::Now() - onb_start;
-    if (ABSL_VLOG_IS_ON(1) && camera->streaming_state_.has_value() &&
-        !status.ok()) {
-      LOG(ERROR) << "Error while streaming: " << status;
+    if (camera->streaming_state_.has_value() && !status.ok()) {
+      LOG_EVERY_N_SEC(WARNING, 5)
+          << "Error while streaming (" << camera->device_id_ << "): " << status;
     }
   };
 
-  buffer = arv_stream_pop_buffer(camera->stream_.get());
+  buffer = arv_stream_pop_buffer(arv_stream);
   VLOG(1) << "Retrieved buffer from stream.";
   if (buffer == nullptr) {
     status = absl::DataLossError("No buffer received.");
@@ -2203,11 +2266,16 @@ absl::Status GenicamImageSource::ClearFaults() {
   {
     absl::MutexLock lock(mutex_);
     if (!state_.lost_control) return absl::OkStatus();
+  }
+  control_lost_handler_.reset();
+  stream_.reset();
+  camera_.reset();
+  {
+    absl::MutexLock lock(mutex_);
     // As the lost control flag is queried recursively during camera
     // initialization, we already need to disable it here.
     state_.lost_control = false;
   }
-  camera_.reset();
   absl::Status status = Init(/*requires_device_reset=*/false);
   if (!status.ok()) {
     status = intrinsic::DataLossErrorBuilder()
@@ -2382,54 +2450,53 @@ absl::Status GenicamImageSource::StopStreamImpl() {
 }
 
 absl::Status GenicamImageSource::StartAsyncAcquisition() {
-  if (acquisition_state_.is_started) return absl::OkStatus();
-  GError* error = nullptr;
+  if (!stream_.has_value()) {
+    // Disable packet socket, as it leads to high latencies on
+    // docker/kubernetes, see also:
+    // https://github.com/AravisProject/aravis/issues/691#issuecomment-1194287752
+    // https://github.com/AravisProject/aravis/issues/613#issuecomment-1054222737
+    if (arv_camera_is_gv_device(camera_.get())) {
+      arv_camera_gv_set_stream_options(
+          camera_.get(), ARV_GV_STREAM_OPTION_PACKET_SOCKET_DISABLED);
+    }
 
-  // Here, we are creating Aravis' buffer queue. It is retrieved during frame
-  // acquisition and then repurposed once image data has been copied. The
-  // buffers depend on the PayloadSize and hence need to be recreated whenever
-  // acquisition is restarted and the PayloadSize changed.
-  int payload_size = arv_camera_get_payload(camera_.get(), &error);
-  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-  if (acquisition_state_.payload_size != payload_size) {
-    arv_stream_delete_buffers(stream_.get());
-    arv_stream_create_buffers(stream_.get(), kNumStreamBuffers, nullptr,
-                              nullptr, &error);
+    GError* error = nullptr;
+    GObjectPtr<ArvStream> new_stream(arv_camera_create_stream(
+        camera_.get(), /*callback=*/nullptr, /*user_data=*/nullptr,
+        /*destroy=*/nullptr, &error));
     INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-    acquisition_state_.payload_size = payload_size;
-  }
+    if (new_stream == nullptr) {
+      return absl::InternalError("Failed to create Aravis stream.");
+    }
 
-  arv_camera_start_acquisition(camera_.get(), &error);
-  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-  LOG(INFO) << absl::StrFormat(
-      "Started streaming acquisition for camera with ID %s.", device_id_);
-  acquisition_state_.is_started = true;
-  return absl::OkStatus();
+    // Try to avoid lost packets because of a full buffer under heavy CPU load,
+    // see also
+    // https://aravisproject.github.io/aravis/aravis-stable/ethernet.html#socket-buffer-size.
+    if (arv_camera_is_gv_device(camera_.get())) {
+      g_object_set(new_stream.get(), "socket-buffer",
+                   ARV_GV_STREAM_SOCKET_BUFFER_AUTO, "socket-buffer-size", 0,
+                   nullptr);
+    }
+
+    absl::SleepFor(absl::Milliseconds(10));
+    stream_.emplace(*this, std::move(new_stream));
+  }
+  return stream_->Start();
 }
 
 absl::Status GenicamImageSource::StopAsyncAcquisition() {
-  if (!acquisition_state_.is_started) return absl::OkStatus();
-  GError* error = nullptr;
-  arv_camera_stop_acquisition(camera_.get(), &error);
-  INTR_RETURN_IF_ERROR(ValidateAndNullArvError(error));
-  LOG(INFO) << absl::StrFormat(
-      "Stopped streaming acquisition for camera with ID %s.", device_id_);
-  acquisition_state_.is_started = false;
-  return absl::OkStatus();
+  if (!stream_.has_value()) return absl::OkStatus();
+  return stream_->Stop();
 }
 
 absl::Status GenicamImageSource::PauseStream() {
-  if (!acquisition_state_.is_started) return absl::OkStatus();
-  GError* error = nullptr;
-  arv_stream_stop_acquisition(stream_.get(), &error);
-  return ValidateAndNullArvError(error);
+  if (!stream_.has_value()) return absl::OkStatus();
+  return stream_->Pause();
 }
 
 absl::Status GenicamImageSource::ResumeStream() {
-  if (!acquisition_state_.is_started) return absl::OkStatus();
-  GError* error = nullptr;
-  arv_stream_start_acquisition(stream_.get(), &error);
-  return ValidateAndNullArvError(error);
+  if (!stream_.has_value()) return absl::OkStatus();
+  return stream_->Resume();
 }
 
 REGISTER_IMAGE_SOURCE(GenicamImageSource, "genicam",
