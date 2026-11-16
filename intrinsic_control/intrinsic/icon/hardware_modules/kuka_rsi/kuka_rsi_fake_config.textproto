@@ -16,6 +16,9 @@
 # limitations under the License.
 
 [type.googleapis.com/intrinsic_proto.icon.HardwareModuleConfig] {
+  intrinsic_runtime {
+    name: "intrinsic_runtime"
+  }
   # Configures a fake HW module to match the interfaces exposed by the real
   # hardware.
   name: "kuka_rsi_hal_module"

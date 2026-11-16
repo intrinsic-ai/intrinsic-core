@@ -16,6 +16,9 @@
 # limitations under the License.
 
 
+intrinsic_runtime {
+  name: "intrinsic_runtime"
+}
 name: "ur_module"
 module_config {
   [type.googleapis.com/intrinsic_proto.icon.UniversalRobotsModuleConfig] {

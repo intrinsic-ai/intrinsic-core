@@ -17,6 +17,9 @@
 
 
 [type.googleapis.com/intrinsic_proto.icon.HardwareModuleConfig] {
+  intrinsic_runtime {
+    name: "intrinsic_runtime"
+  }
   name: "kuka_rsi_hal_module"
   module_config {
     [type.googleapis.com/intrinsic_proto.icon.KukaRsiModule] {
