@@ -122,6 +122,9 @@ proto_library(
     visibility = aio_read_input_visibility,
     deps = [
         "@com_google_protobuf//:duration_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_proto",
     ],
 )
 
@@ -138,12 +141,16 @@ go_proto_library(
     importpath = "intrinsic/icon/skills/aio_read_input_go_proto",
     protos = [":aio_read_input_proto"],
     visibility = aio_read_input_visibility,
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_go_proto",
+    ],
 )
 
 skill_manifest(
     name = "aio_read_input_cc_manifest",
     src = "aio_read_input_cc_manifest.textproto",
-    incompatible_disallow_manifest_dependencies = False,
     visibility = [
         "//intrinsic:public_asset_users",
         "//intrinsic:release_tooling",
@@ -161,13 +168,11 @@ cc_library(
     deps = [
         ":aio_read_input_cc_proto",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
-        "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
-        "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
+        "//intrinsic_control/intrinsic/icon/equipment:resolved_dependency_utils",
         "//intrinsic_control/intrinsic/icon/skills/util:adio_util",
+        "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
-        "//intrinsic_sdk/intrinsic/skills/cc:skill_utils",
         "//intrinsic_sdk/intrinsic/util:proto_time",
-        "//intrinsic_sdk/intrinsic/util/grpc:channel_interface",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
@@ -175,8 +180,8 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
         "@com_google_protobuf//:protobuf",
-        "@intrinsic_apis//intrinsic/icon/equipment:icon_equipment_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto:io_block_cc_proto",
         "@intrinsic_apis//intrinsic/icon/proto:part_status_cc_proto",
     ],
@@ -284,6 +289,11 @@ proto_library(
     name = "aio_set_output_proto",
     srcs = ["aio_set_output.proto"],
     visibility = aio_set_output_visibility,
+    deps = [
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_proto",
+    ],
 )
 
 cc_proto_library(
@@ -300,14 +310,15 @@ go_proto_library(
     protos = [":aio_set_output_proto"],
     visibility = aio_set_output_visibility,
     deps = [
-        "@intrinsic_apis//intrinsic/motion_planning/proto:motion_target_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:field_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:resolved_dependency_go_proto",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:field_metadata_go_proto",
     ],
 )
 
 skill_manifest(
     name = "aio_set_output_cc_manifest",
     src = "aio_set_output_cc_manifest.textproto",
-    incompatible_disallow_manifest_dependencies = False,
     visibility = [
         "//intrinsic:public_asset_users",
         "//intrinsic:release_tooling",
@@ -324,7 +335,6 @@ cc_library(
     hdrs = ["aio_set_output.h"],
     deps = [
         ":aio_set_output_cc_proto",
-        "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io",
         "//intrinsic_control/intrinsic/icon/skills/util:analog_digital_io_factory",
         "//intrinsic_sdk/intrinsic/skills/cc:skill_interface",
@@ -332,7 +342,6 @@ cc_library(
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
         "@com_google_protobuf//:protobuf",
     ],
 )

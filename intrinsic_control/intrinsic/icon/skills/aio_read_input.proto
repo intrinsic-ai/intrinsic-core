@@ -17,19 +17,31 @@ syntax = "proto3";
 package intrinsic_proto.skills;
 
 import "google/protobuf/duration.proto";
+import "intrinsic/assets/proto/field_metadata.proto";
+import "intrinsic/assets/proto/v1/resolved_dependency.proto";
+import "intrinsic/icon/proto/v1/field_metadata.proto";
 
 option go_package = "intrinsic/icon/skills/aio_read_input_go_proto";
 
 message AioReadInputParams {
+  // Robot controller to read ADIO inputs from.
+  intrinsic_proto.assets.v1.ResolvedDependency adio = 3
+      [(intrinsic_proto.assets.field_metadata).dependency = {
+        requires: "grpc://intrinsic_proto.icon.v1.IconApi",
+        skill_annotations: { fallback_manifest_dependency_key: "adio" }
+      }];
+
   // Specifies the name of the AIO (Analog Input/Output) block from which
   // values will be read. You can look up the list of block names, indices, and
   // current values of analog inputs in the Services panel, on the settings
   // page of the real-time control or robot control service, in the 'I/O
   // mapping' window.
-  string block_name = 1;
+  string block_name = 1 [
+    (intrinsic_proto.icon.v1.field_metadata) = { resolved_at_runtime: "adio" }
+  ];
 
   // Duration after which the skill will create a timeout error if the desired
-  // if the desired AIOs could not be read.
+  // AIOs could not be read. Defaults to 5 seconds.
   optional google.protobuf.Duration timeout = 2;
 }
 

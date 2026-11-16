@@ -28,8 +28,6 @@ _LISTS = {
         "//intrinsic/manipulation/skills/force:move_to_contact_manifest",
         "//intrinsic/skills/apps/icon2:homing_manifest",
         "//intrinsic/skills/examples:adder_skill_manifest",
-        "//intrinsic_control/intrinsic/icon/skills:aio_read_input_cc_manifest",
-        "//intrinsic_control/intrinsic/icon/skills:aio_set_output_cc_manifest",
         "//intrinsic_control/intrinsic/icon/skills:enable_realtime_control_manifest",
         "//intrinsic_control/intrinsic/icon/skills:move_gripper_joints_manifest_cc",
         "//intrinsic_control/intrinsic/icon/skills:set_payload_manifest",
