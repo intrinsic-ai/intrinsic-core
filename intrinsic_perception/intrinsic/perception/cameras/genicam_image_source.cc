@@ -804,8 +804,7 @@ GenicamImageSource::DescribeCameraSensorsImpl() const {
 }
 
 absl::StatusOr<CaptureResult> GenicamImageSource::CaptureImpl(
-    absl::Duration timeout,
-    const absl::flat_hash_set<int64_t>& /*sensor_ids*/) {
+    absl::Duration timeout, const absl::flat_hash_set<int64_t>& sensor_ids) {
   const stats::ScopedSpan span("GenicamImageSource::CaptureImpl");
   {
     // We do not allow streaming and capturing at the same time. This can be
@@ -823,11 +822,27 @@ absl::StatusOr<CaptureResult> GenicamImageSource::CaptureImpl(
 
   INTR_RETURN_IF_ERROR(GetFaultsStatus());
 
+  const bool hdr_enabled =
+      software_hdr_.has_value() && software_hdr_->IsEnabled();
+  {
+    absl::MutexLock lock(mutex_);
+    // Skip early sensor filtering when software HDR is enabled: HDR fusion
+    // (`FuseLdrCaptureResults` and the intensity-component `INTR_RET_CHECK`
+    // before it) requires the full unfiltered `CaptureResult` with the
+    // intensity image at `sensor_images.front()`. Requested `sensor_ids` are
+    // still filtered afterward in `ImageSource::PostCaptureImplProcessing`.
+    state_.requested_sensor_ids =
+        hdr_enabled ? absl::flat_hash_set<int64_t>{} : sensor_ids;
+  }
+  const absl::Cleanup clear_requested_sensors = [this] {
+    absl::MutexLock lock(mutex_);
+    state_.requested_sensor_ids.clear();
+  };
+
   // Store any initial `Once` and `Continuous` auto settings when software
   // triggering or software HDR is active.
   std::vector<CameraSetting> auto_settings;
-  if (use_software_trigger_ ||
-      (software_hdr_.has_value() && software_hdr_->IsEnabled())) {
+  if (use_software_trigger_ || hdr_enabled) {
     const stats::ScopedSpan span("GenicamImageSource::CaptureImpl::StoreAuto");
     INTR_ASSIGN_OR_RETURN(auto_settings, GetActiveAutoSettings());
   }
@@ -856,7 +871,7 @@ absl::StatusOr<CaptureResult> GenicamImageSource::CaptureImpl(
                             GetLdrCaptureResult(ToTimeout(deadline)));
     }
 
-    if (software_hdr_.has_value() && software_hdr_->IsEnabled()) {
+    if (hdr_enabled) {
       INTR_ASSIGN_OR_RETURN(ldr_capture_results,
                             GetLdrCaptureResults(ToTimeout(deadline)));
     }
@@ -1268,7 +1283,7 @@ GenicamImageSource::GetCaptureResultAsync(absl::Time deadline) {
     mutex_.unlock();
 
     absl::Time aravis_buffer_reception_time =
-        local_capture.capture_result.sensor_images.front().acquisition_time();
+        local_capture.capture_result.capture_at;
     absl::Time buffer_finished_time = absl::Now();
 
     // Time between triggering and having the final image available.
@@ -1918,6 +1933,9 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
     const bool should_use_stream_callbacks =
         camera->streaming_state_.has_value() &&
         camera->streaming_state_->is_active;
+    const absl::flat_hash_set<int64_t> requested_sensor_ids =
+        should_use_stream_callbacks ? absl::flat_hash_set<int64_t>{}
+                                    : camera->state_.requested_sensor_ids;
     camera->mutex_.unlock();
     // Create a new capture result. This will be moved from the receiving thread
     // to the thread owning the camera and later from there to the client. This
@@ -1930,7 +1948,7 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
       capture_result = camera->buffer_helper_.ToCaptureResult(
           buffer, camera->factory_camera_params_by_sensor_id_,
           camera->camera_t_sensor_by_sensor_id_, fallback_dimensions,
-          fallback_pixel_format, camera->distance_scale_);
+          fallback_pixel_format, camera->distance_scale_, requested_sensor_ids);
     }
     status = capture_result.status();
 

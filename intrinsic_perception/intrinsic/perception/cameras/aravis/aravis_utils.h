@@ -77,6 +77,9 @@ class BufferHelper {
       ArvBuffer* absl_nonnull buffer) const;
 
   // Copies an Aravis buffer to a capture result containing sensor images.
+  // If `sensor_ids` is non-empty, only sensors whose ID (part component ID for
+  // multipart buffers, or `ImageSourceInterface::kFallbackSensorId` for
+  // single-part buffers) is in `sensor_ids` are decoded.
   //
   // The Aravis buffer has to be mutable because the signature of the underlying
   // Aravis methods takes a mutable pointer. Side effects are not expected.
@@ -88,7 +91,8 @@ class BufferHelper {
           fallback_dimensions_by_sensor_id,
       const absl::flat_hash_map<int64_t, ArvPixelFormat>&
           fallback_pixel_format_by_sensor_id,
-      double distance_scale);
+      double distance_scale,
+      const absl::flat_hash_set<int64_t>& sensor_ids = {});
 
  private:
   // Retrieves the acquisition timestamp of the buffer, preferring the chunk

@@ -1368,7 +1368,7 @@ absl::StatusOr<CaptureResult> BufferHelper::ToCaptureResult(
         fallback_dimensions_by_sensor_id,
     const absl::flat_hash_map<int64_t, ArvPixelFormat>&
         fallback_pixel_format_by_sensor_id,
-    double distance_scale) {
+    double distance_scale, const absl::flat_hash_set<int64_t>& sensor_ids) {
   INTR_RET_CHECK_NE(buffer, nullptr);
 
   const auto buffer_status = arv_buffer_get_status(buffer);
@@ -1394,6 +1394,9 @@ absl::StatusOr<CaptureResult> BufferHelper::ToCaptureResult(
     const guint component_id = is_multipart
                                    ? arv_buffer_get_part_component_id(buffer, i)
                                    : ImageSourceInterface::kFallbackSensorId;
+    if (!sensor_ids.empty() && !sensor_ids.contains(component_id)) {
+      continue;
+    }
     std::optional<CameraParams> optional_camera_params =
         OptionalCopyAt(camera_params_by_sensor_id, component_id);
 
@@ -1435,9 +1438,7 @@ absl::StatusOr<CaptureResult> BufferHelper::ToCaptureResult(
   }
 
   return CaptureResult{
-      .capture_at = sensor_images.empty()
-                        ? absl::UnixEpoch()
-                        : sensor_images.front().acquisition_time(),
+      .capture_at = acquisition_time,
       .sensor_images = std::move(sensor_images),
       .capture_duration = std::nullopt,
   };

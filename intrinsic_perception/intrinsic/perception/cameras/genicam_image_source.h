@@ -92,6 +92,10 @@ class GenicamImageSource : public ImageSource {
 
   absl::Status Init(bool requires_device_reset);
 
+  absl::StatusOr<CaptureResult> CaptureImpl(
+      absl::Duration timeout,
+      const absl::flat_hash_set<int64_t>& sensor_ids) override;
+
  private:
   struct StreamingHdrState {
     std::vector<absl::Duration> exposure_times;
@@ -192,10 +196,6 @@ class GenicamImageSource : public ImageSource {
   // to guarantee that we have a chance of successfully acquiring an image
   // frame.
   absl::Duration MimimalAcquisitionTimeout(absl::Duration exposure_time) const;
-
-  absl::StatusOr<CaptureResult> CaptureImpl(
-      absl::Duration timeout,
-      const absl::flat_hash_set<int64_t>& sensor_ids) override;
 
   // Reads the access to a camera setting.
   absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccessImpl(
@@ -312,6 +312,9 @@ class GenicamImageSource : public ImageSource {
     absl::flat_hash_map<int64_t, Dimensions> dimensions_by_sensor_id;
     absl::flat_hash_map<int64_t, ArvPixelFormat> pixel_format_by_sensor_id;
     absl::flat_hash_map<int64_t, bool> disabled_by_sensor_id;
+    // Non-empty only during non-HDR `CaptureImpl` calls; empty means decode all
+    // sensors.
+    absl::flat_hash_set<int64_t> requested_sensor_ids;
     int packet_size = 0;
     bool lost_control = false;
   };

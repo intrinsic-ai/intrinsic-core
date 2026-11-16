@@ -347,6 +347,9 @@ absl::StatusOr<CaptureResult> FileImageSource::CaptureImpl(
 
   for (const ImageFileReference& file_ref : filenames_[next_file_]) {
     INTR_RET_CHECK(file_ref.sensor_id.has_value());
+    if (!sensor_ids.empty() && !sensor_ids.contains(*file_ref.sensor_id)) {
+      continue;
+    }
     INTR_ASSIGN_OR_RETURN(
         SensorImage sensor_image,
         ReadSensorImage(file_ref, file_ref.sensor_id.value(), capture_at,

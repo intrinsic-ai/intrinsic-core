@@ -545,7 +545,7 @@ RosImageSource::DescribeCameraSensorsImpl() const {
 
 absl::StatusOr<CaptureResult> RosImageSource::CaptureImpl(
     const absl::Duration timeout,
-    const absl::flat_hash_set<int64_t>& /*sensor_ids*/) {
+    const absl::flat_hash_set<int64_t>& sensor_ids) {
   VLOG(2) << "RosImageSource::CaptureImpl(" << timeout << ")";
   const absl::Time start_at = absl::Now();
   const absl::Time deadline_at = start_at + timeout;
@@ -578,6 +578,9 @@ absl::StatusOr<CaptureResult> RosImageSource::CaptureImpl(
                        image_snapshot.topic_name));
     }
     const int64_t sensor_id = it_sensor_id->second;
+    if (!sensor_ids.empty() && !sensor_ids.contains(sensor_id)) {
+      continue;
+    }
     const auto it_sensor_info = sensor_info_by_id_.find(sensor_id);
     INTR_RET_CHECK(it_sensor_info != sensor_info_by_id_.end());
 
@@ -599,6 +602,9 @@ absl::StatusOr<CaptureResult> RosImageSource::CaptureImpl(
         sensor_id_by_topic_.find(point_cloud_snapshot.topic_name);
     INTR_RET_CHECK(it_sensor_id != sensor_id_by_topic_.end());
     const int64_t sensor_id = it_sensor_id->second;
+    if (!sensor_ids.empty() && !sensor_ids.contains(sensor_id)) {
+      continue;
+    }
     const auto it_sensor_info = sensor_info_by_id_.find(sensor_id);
     INTR_RET_CHECK(it_sensor_info != sensor_info_by_id_.end());
 
