@@ -27,7 +27,7 @@ import (
 	"time"
 
 	"intrinsic/assets/deploy/render"
-	"intrinsic/config/environments"
+	"intrinsic/kubernetes/projects/labels/labels"
 	chartassignment "intrinsic/kubernetes/workcell_spec/chartassignment"
 	"intrinsic/stats/go/telemetry"
 
@@ -104,7 +104,7 @@ func (s *TransferService) updateCommonValues(ca *v1alpha1.ChartAssignment) error
 		"robot":    map[string]any{"name": ca.Spec.ClusterName},
 		"project":  s.clusterInfo.GCPProject,
 		"registry": s.clusterInfo.Registry,
-		"domain":   environments.Domain(s.clusterInfo.GCPProject),
+		"domain":   labels.ProjectDomain(s.clusterInfo.GCPProject, nil),
 	}); err != nil {
 		return errors.Wrap(err, "merge common")
 	}

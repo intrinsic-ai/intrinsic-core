@@ -162,8 +162,8 @@ go_library(
     deps = [
         ":chartassignment",
         "//intrinsic/assets/deploy:render",
+        "//intrinsic/kubernetes/projects/labels",
         "//intrinsic/kubernetes/workcell_spec/proto:solution_internal_go_proto",
-        "//intrinsic_sdk/intrinsic/config:environments",
         "//intrinsic_sdk/intrinsic/stats/go:telemetry",
         "@cat_dario_mergo//:go_default_library",
         "@com_github_golang_glog//:go_default_library",
