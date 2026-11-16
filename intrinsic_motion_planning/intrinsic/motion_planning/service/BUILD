@@ -25,6 +25,7 @@ package(default_visibility = [
 exports_files(
     srcs = [
         "motion_planner_service_prod_config.textproto",
+        "motion_planner_service_prod_no_path_refinement_validation_config.textproto",
     ],
     visibility = [
         "//visibility:public",
