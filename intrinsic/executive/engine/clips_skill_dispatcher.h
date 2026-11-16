@@ -115,6 +115,13 @@ class ClipsSkillDispatcher {
   // 'action_id' is an action UID (see uid slot in plan-action template).
   void AbandonSkillExecution(const std::string& action_id);
 
+  // Removes the SkillInstance registered for `action_id`, if any, and releases
+  // it asynchronously in a worker thread. Releasing a skill instance can block
+  // (see ~SkillInstance), so this must not happen in the calling CLIPS thread.
+  // Non-blocking.
+  // 'action_id' is an action UID (see uid slot in plan-action template).
+  void RemoveSkillInstance(absl::string_view action_id);
+
   // Non-blocking.
   // This will run a "what-if" request to the skill service to determine the
   // nominal outcome world, a footprint, and possibly internal_data (e.g., a

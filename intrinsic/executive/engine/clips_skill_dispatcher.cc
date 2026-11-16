@@ -26,6 +26,7 @@
 #include "absl/base/nullability.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/cleanup/cleanup.h"
+#include "absl/container/node_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -739,6 +740,11 @@ absl::Status ClipsSkillDispatcher::Init(
         AbandonSkillExecution(action_id);
       })));
   INTR_RETURN_IF_ERROR(function_facade->AddFunction(
+      "skill-instance-remove-async",
+      std::function([this](const std::string& action_id) {
+        RemoveSkillInstance(action_id);
+      })));
+  INTR_RETURN_IF_ERROR(function_facade->AddFunction(
       "skill-project-async",
       std::function(
           [this](const std::string& action_id, const std::string& world_id,
@@ -768,6 +774,25 @@ absl::Status ClipsSkillDispatcher::Init(
 absl::Status ClipsSkillDispatcher::TearDown() {
   // Invokes the dtor for all threads and cancels prior to joining.
   bundle_.reset();
+
+  // All skill threads are done now. Release the skill instances that are
+  // still registered, e.g., because their action never executed. Take them
+  // out of the map under the lock, but release them outside of it:
+  // Destroying a skill instance tears down its concurrent logging, which can
+  // take significant time.
+  absl::node_hash_map<std::string, std::shared_ptr<SkillInstance>>
+      remaining_instances;
+  {
+    absl::MutexLock lock(action_id_to_skill_instance_mutex_);
+    remaining_instances = std::move(action_id_to_skill_instance_);
+    action_id_to_skill_instance_.clear();
+  }
+  // Avoid an empty span when there is nothing to release.
+  if (!remaining_instances.empty()) {
+    const stats::ScopedSpan span("TearDown/ReleaseSkillInstances");
+    remaining_instances.clear();
+  }
+
   return absl::OkStatus();
 }
 
@@ -821,11 +846,9 @@ ClipsSkillDispatcher::GetOrCreateSkillInstanceOrReportError(
                                        skill_action, behavior_call_proto));
   auto new_skill_instance =
       std::make_shared<SkillInstance>(std::move(skill_instance_to_move));
-  new_skill_instance->GetClient()->InitConcurrentLogging();
 
-  // CreateSkillInstanceOrReportError and InitConcurrentLogging might take some
-  // (ideally short) time. Thus do *not* do this under the lock as that blocks
-  // all skill calls.
+  // CreateSkillInstanceOrReportError might take some (ideally short) time.
+  // Thus do *not* do this under the lock as that blocks all skill calls.
   // However, once we have this skill instance created, a concurrent call could
   // have already inserted a skill instance for the same action. In that case
   // use the already existing one for this action id and tear down and remove
@@ -845,8 +868,12 @@ ClipsSkillDispatcher::GetOrCreateSkillInstanceOrReportError(
     }
   }
   if (existing_instance != nullptr) {
-    const stats::ScopedSpan span("TearDownDuplicateConcurrentLogging");
-    new_skill_instance->GetClient()->TearDownConcurrentLogging();
+    // Release the obsolete new instance. This destroys it, which tears down
+    // its concurrent logging.
+    const stats::ScopedSpan span(
+        "GetOrCreateSkillInstanceOrReportError/"
+        "TearDownDuplicateConcurrentLogging");
+    new_skill_instance.reset();
     return existing_instance;
   }
   return new_skill_instance;
@@ -1085,22 +1112,27 @@ void ClipsSkillDispatcher::StartSkillExecution(
                                   action_id, skill_action, behavior_call_proto),
                               _.With(ReturnVoid()));
         // The execution thread is the last part where the skill instance is
-        // being used. Thus clean it up once done.
+        // being used. Thus it is safe to clean it up once done.
         absl::Cleanup cleanup_skill_instance =
-            [skill_instance, action_id = std::string(action_id), this] {
-              // Retain the skill_instance shared_ptr here to be able to call
-              // TearDownConcurrentLogging, but already remove the entry from
-              // the map, so that concurrent threads already know that this
-              // skill call has concluded.
-              // TearDownConcurrentLogging must happen at the very end and
-              // outside a lock as this sometimes can take significant time.
+            [&skill_instance, action_id = std::string(action_id), this] {
+              // Remove the entry from the map first, so that concurrent
+              // threads already know that this skill call has concluded and
+              // cannot open new requests (e.g., cancel).
               {
                 absl::MutexLock lock(action_id_to_skill_instance_mutex_);
                 action_id_to_skill_instance_.erase(action_id);
               }
-
-              const stats::ScopedSpan span("TearDownConcurrentLogging");
-              skill_instance->GetClient()->TearDownConcurrentLogging();
+              // Releasing the skill instance destroys it, if this was the
+              // last reference. The destructor tears down concurrent
+              // logging, which can take significant time. Thus this must
+              // happen at the very end and outside the lock.
+              // Usually this is the last reference and the teardown is
+              // covered by this span. If another thread is still holding the
+              // instance, e.g., a concurrent cancel or abandon call
+              // (unlikely), it is destroyed in that thread instead.
+              const stats::ScopedSpan span(
+                  "StartSkillExecution/ReleaseSkillInstance");
+              skill_instance.reset();
             };
 
         INTR_ASSIGN_OR_RETURN(
@@ -1230,6 +1262,13 @@ void ClipsSkillDispatcher::CancelSkillExecution(const std::string& action_id,
     return;
   }
 
+  // Destroying a skill_instance here (which could take time) would block the
+  // main CLIPS thread. However, this cannot happen. Either the shared ptr is
+  // passed to the bundle (which if destroyed there is another thread) or when
+  // Schedule fails destroyed only the shared_ptr is destroyed here. This will
+  // never destroy the object as there is still a shared_ptr in the
+  // action_id_to_skill_instance_ map and we hold the lock for this whole
+  // function.
   std::shared_ptr<SkillInstance> skill_instance = itr->second;
   LOG(INFO) << "Trying to cancel action '" << action_id << "'.";
   INTR_RETURN_IF_ERROR(
@@ -1263,11 +1302,52 @@ void ClipsSkillDispatcher::AbandonSkillExecution(const std::string& action_id) {
     return;
   }
 
+  // Destroying a skill_instance here (which could take time) would block the
+  // main CLIPS thread. However, this cannot happen. Either the shared ptr is
+  // passed to the bundle (which if destroyed there is another thread) or when
+  // Schedule fails destroyed only the shared_ptr is destroyed here. This will
+  // never destroy the object as there is still a shared_ptr in the
+  // action_id_to_skill_instance_ map and we hold the lock for this whole
+  // function.
   std::shared_ptr<SkillInstance> skill_instance = itr->second;
   LOG(INFO) << "Trying to abandon call for action '" << action_id << "'.";
 
   INTR_RETURN_IF_ERROR(
       bundle_->Schedule([skill_instance] { skill_instance->AbandonCall(); }))
+      .LogError()
+      .With(ReturnVoid());
+}
+
+void ClipsSkillDispatcher::RemoveSkillInstance(absl::string_view action_id) {
+  // Extract the skill_instance under lock, but do not reset/destroy when
+  // holding the lock as that might take time.
+  std::shared_ptr<SkillInstance> skill_instance;
+  {
+    absl::MutexLock lock(action_id_to_skill_instance_mutex_);
+    auto itr = action_id_to_skill_instance_.find(action_id);
+    if (itr == action_id_to_skill_instance_.end()) {
+      return;
+    }
+    skill_instance = std::move(itr->second);
+    action_id_to_skill_instance_.erase(itr);
+  }
+
+  if (!bundle_.has_value()) {
+    // The dispatcher is torn down and there is no thread pool to hand the
+    // skill instance to. When returning the skill instance might be destroyed
+    // here, which may block. This is acceptable during shutdown.
+    return;
+  }
+
+  // Release the skill instance in a worker thread and not in the calling CLIPS
+  // thread: Releasing the last reference destroys the skill instance, which
+  // tears down concurrent logging and can take significant time.
+  // If scheduling fails (thread pool is shutting down), it is released here.
+  INTR_RETURN_IF_ERROR(bundle_->Schedule([skill_instance = std::move(
+                                              skill_instance)]() mutable {
+    const stats::ScopedSpan span("RemoveSkillInstance/ReleaseSkillInstance");
+    skill_instance.reset();
+  }))
       .LogError()
       .With(ReturnVoid());
 }
@@ -1432,11 +1512,6 @@ void ClipsSkillDispatcher::StartSkillProjection(
             std::optional<absl::Duration> project_timeout =
                 GetProjectTimeoutOrDefault(behavior_call_proto);
 
-            skill_instance.GetClient()->InitConcurrentLogging();
-            absl::Cleanup cleanup_conclog = [&skill_instance] {
-              skill_instance.GetClient()->TearDownConcurrentLogging();
-            };
-
             LOG(INFO) << "Calling skill " << behavior_call_proto.skill_id()
                       << " (Projecting)";
 
@@ -1501,9 +1576,10 @@ absl::Status ClipsSkillDispatcher::ResetSkillInstanceIds() {
 }
 
 void ClipsSkillDispatcher::WaitForFinishAll() {
-  // We are not clearing the bundle here, since semantically we just want
-  // to wait for all threads to finish.
-  bundle_.reset();
+  // Stop the bundle, wait for all threads to finish and create a new thread
+  // pool. This is required here since semantically we just want to wait for all
+  // jobs to finish. The ThreadPool itself does not offer this API.
+  bundle_.emplace(50);
 }
 
 }  // namespace executive

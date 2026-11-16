@@ -62,6 +62,14 @@ CreateSkillServiceClient(
 
 SkillInstance::SkillInstance() : mutex_(std::make_unique<absl::Mutex>()) {}
 
+SkillInstance::~SkillInstance() {
+  // client_ is null if this instance was moved from or if Create failed before
+  // the client was created. In both cases there is nothing to tear down.
+  if (client_ != nullptr) {
+    client_->TearDownConcurrentLogging();
+  }
+}
+
 absl::StatusOr<SkillInstance> SkillInstance::Create(
     const intrinsic_proto::executive::BehaviorCall& behavior_call,
     const CreationContext& context) {
@@ -82,6 +90,13 @@ absl::StatusOr<SkillInstance> SkillInstance::Create(
                         CreateSkillServiceClient(
                             skill_instance.instance_, context.connect_timeout,
                             context.skill_service_client_creator_mock));
+
+  // Concurrent logging belongs to the lifetime of the instance: It is
+  // initialized here and torn down in the destructor.
+  // The instance is moved after this point as it is returned by value. This
+  // does not affect logging: Only the pointer to the client moves, not the
+  // client itself with its logging thread.
+  skill_instance.client_->InitConcurrentLogging();
 
   return skill_instance;
 }

@@ -58,7 +58,17 @@ class SkillInstance {
 
  public:
   SkillInstance(SkillInstance&&) = default;
-  SkillInstance& operator=(SkillInstance&&) = default;
+  // Not move-assignable: This would drop the client of the assigned-to instance
+  // without tearing down its concurrent logging (and doing that can take
+  // significant time).
+  SkillInstance& operator=(SkillInstance&&) = delete;
+
+  // Tears down concurrent logging of the skill service client.
+  // NOTE: This makes destroying a SkillInstance a potentially long blocking
+  // operation, as it waits for the logging thread to finish. Whoever releases
+  // the last reference to a SkillInstance must thus do so outside of locks and
+  // not in the CLIPS thread.
+  ~SkillInstance();
 
   struct CreationContext {
     intrinsic_proto::assets::v1alpha1::InternalSkillData::GrpcTargets
@@ -77,6 +87,8 @@ class SkillInstance {
   // instance name is generated.
   // The old-style resources field of the behavior call is stored in the
   // instance proto for skill calls.
+  // Concurrent logging of the skill service client is initialized on creation
+  // and torn down when the SkillInstance is destroyed.
   static absl::StatusOr<SkillInstance> Create(
       const intrinsic_proto::executive::BehaviorCall& behavior_call,
       const CreationContext& context);

@@ -14,6 +14,11 @@
 
 ; Plan representation and handling
 
+; ---------------------------- FORWARD DECLARATIONS ----------------------------
+
+; From behavior_tree.clp
+(deffunction skill-instance-remove (?action-uid))
+
 ; --------------------------------- TEMPLATES ---------------------------------
 
 (deftemplate plan
@@ -250,6 +255,7 @@
         "Span running when plan-action-remove was called.")
     )
     (pb-remove ?pa:extended-status-proto-id)
+    (skill-instance-remove ?uid)
     (retract ?pa)
   )
 )
@@ -346,4 +352,22 @@
   ?pa <- (plan-action (state CANCELED) (span-reference-id ~0))
  =>
   (tracing-end-action-span ?pa)
+)
+
+; A FAILED or CANCELED plan-action is never projected or executed again. Thus
+; its skill instance can be released as soon as a terminal state is reached.
+; This also covers actions that never reached execution (e.g., failed
+; projection, footprint conflict, canceled while waiting), where no skill
+; execution thread cleans up the instance. SUCCEEDED is skipped on purpose: An
+; action can only succeed through the skill execution thread, which always
+; removes its skill instance itself. Add it here if succeeding ever becomes
+; possible without executing the skill. The rule fires again whenever a terminal
+; plan-action is modified (e.g., by logging). This is fine as removing a skill
+; instance is idempotent.
+(defrule plan-action-remove-skill-instance-when-done
+  "Release the skill instance of a plan-action that failed or was canceled."
+  (declare (salience ?*SALIENCE-LOW*))
+  (plan-action (uid ?uid) (state FAILED|CANCELED))
+ =>
+  (skill-instance-remove ?uid)
 )

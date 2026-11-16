@@ -1253,6 +1253,16 @@
   (return ?scopes)
 )
 
+; Defined here to provide a way to break cyclic dependencies.
+; Redirects to the C++ function skill-instance-remove-async as that is already
+; registered in the context of this file.
+; Other consumers loaded earlier (before the C++ function) cannot forward
+; declare the C++ function, but instead forward declare skill-instance-remove
+; and use that.
+(deffunction skill-instance-remove (?action-uid)
+  (skill-instance-remove-async ?action-uid)
+)
+
 ; ----------------------------------- RULES -----------------------------------
 
 (defrule behavior-tree-finished
