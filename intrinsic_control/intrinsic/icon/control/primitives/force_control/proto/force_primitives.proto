@@ -143,15 +143,18 @@ message Push {
     // The frequency of the oscillation in Hz. Defaults to 1 Hz.
     optional double frequency = 1;
 
-    // The amplitude of the oscillation in radians. Defaults to 0.01 radians.
+    // The amplitude of the oscillation in radians. Defaults to 0.17 radians
+    // (approximately 10 degrees).
     optional double amplitude = 2;
   }
 
   message TranslationalOscillationParams {
-    // The amplitude of the oscillation in meters. Defaults to 0.5 mm.
+    // The peak-to-peak width (size of the 2D search rectangle) of the
+    // oscillation in meters. Defaults to 0.0005 m.
     optional double amplitude = 1;
 
-    // The maximum velocity of the oscillation in meters/s. Defaults to 5 mm/s.
+    // The maximum velocity of the oscillation in meters/s. Defaults to 0.01
+    // m/s.
     optional double motion_velocity = 2;
   }
 
@@ -166,13 +169,14 @@ message Push {
   }
 
   // An oscillation around the motion direction axis. Useful to avoid jamming
-  // the tool. Disabled by default. If `rotational_stiffness` is set but empty,
-  // the default values in `RotationalOscillationParams` are used.
+  // the tool. Disabled by default. If `rotational_oscillation` is set but
+  // empty, the default values in `RotationalOscillationParams` are used.
   optional RotationalOscillationParams rotational_oscillation = 3;
 
   // An oscillation orthogonal to the motion direction axis. Useful to avoid
-  // jamming the tool. Disabled by default. If `translational_stiffness` is set
-  // but empty, the default values in `TranslationalOscillationParams` are used.
+  // jamming the tool. Disabled by default. If `translational_oscillation` is
+  // set but empty, the default values in `TranslationalOscillationParams` are
+  // used.
   optional TranslationalOscillationParams translational_oscillation = 4;
 
   optional ControllerParams controller_params = 5;

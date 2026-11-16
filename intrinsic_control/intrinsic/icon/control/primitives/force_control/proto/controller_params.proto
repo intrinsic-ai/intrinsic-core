@@ -29,7 +29,7 @@ message ControllerParams {
 
   oneof translational_stiffness {
     // The translational stiffness of the Cartesian impedance controller
-    // orthogonal to the controlled direction. Defaults to 100.0 N/m.
+    // orthogonal to the controlled direction. Defaults to 300.0 N/m.
     //
     // If the tool is moving in z-Direction, this parameter controls the
     // stiffness of a translation in the x- and y-direction.
@@ -42,7 +42,7 @@ message ControllerParams {
 
   oneof rotational_stiffness {
     // The rotational stiffness of the Cartesian impedance controller orthogonal
-    // to the controlled direction. Defaults to 100.0 Nm/rad.
+    // to the controlled direction. Defaults to 300.0 Nm/rad.
     //
     // If the tool is moving in z-Direction, this parameter controls the
     // stiffness of a rotation around the x- and y-axis.
