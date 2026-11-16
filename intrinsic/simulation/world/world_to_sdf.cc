@@ -1234,12 +1234,19 @@ absl::StatusOr<std::string> GetInertial(
   return result;
 }
 
+// Converts the link entity `attachment_id` into a `<link>` SDF element.
+//
+// `kinematic_override` is the per-link kinematic override derived by the
+// caller (e.g. false for links that should be dynamic in hybrid mode). If
+// unset, no `<kinematic>` element is emitted and the Physics plugin default
+// applies.
 absl::StatusOr<GeneratedLinkInfo> WorldEntityToLink(
     const std::shared_ptr<opentelemetry::trace::Span>& parent_span,
     const World& world, AttachmentEntityId attachment_id,
     AttachmentEntityId pose_reference_id, std::string_view parent_model_name,
     const WorldSdfAdapter::Options& conversion_options,
-    std::optional<uint32_t> collision_mask) {
+    std::optional<uint32_t> collision_mask,
+    std::optional<bool> kinematic_override = std::nullopt) {
   intrinsic::stats::ScopedSpan entity_span(
       "WorldToSdfConverter/WorldEntityToLink", parent_span);
   INTR_ASSIGN_OR_RETURN(const auto* entity, world.GetEntityById(attachment_id));
@@ -1253,6 +1260,11 @@ absl::StatusOr<GeneratedLinkInfo> WorldEntityToLink(
   absl::StrAppend(&result, "<link name='", link_name, "'>");
   absl::StrAppend(&result, Pose3ToPoseString(world.GetTransform(
                                pose_reference_id, attachment_id)));
+
+  if (kinematic_override.has_value()) {
+    absl::StrAppend(&result, "<kinematic>",
+                    *kinematic_override ? "true" : "false", "</kinematic>");
+  }
 
   bool has_collision_geo = false;
 
@@ -1954,10 +1966,52 @@ absl::Status CheckUniqueSensorTopicNames(
   return absl::OkStatus();
 }
 
+// Returns the ids of all entities in the attachment subtrees below the parents
+// of force-torque sensors.
+//
+// A force-torque sensor sits on a joint and measures the wrench transmitted
+// through it. For contacts on the tool side to produce that wrench, links
+// downstream of the sensor's joint must be dynamic. The attachment tree is
+// global, so the walk crosses collection boundaries (e.g. from a force-torque
+// sensor into an attached gripper and a grasped part).
+absl::StatusOr<absl::flat_hash_set<AttachmentEntityId>>
+EntitiesBelowForceTorqueSensors(const World& world) {
+  absl::flat_hash_set<AttachmentEntityId> result;
+  for (const SensorEntityId sensor_id :
+       world.GetTypedEntityIds<SensorEntityId>()) {
+    INTR_ASSIGN_OR_RETURN(const auto* sensor_entity,
+                          world.GetEntityById(sensor_id));
+    INTR_ASSIGN_OR_RETURN(const auto* sensor,
+                          sensor_entity->GetComponent<SensorComponent>());
+    if (sensor->GetType() != SensorType::kForceTorque) {
+      continue;
+    }
+    INTR_ASSIGN_OR_RETURN(const auto* attachment,
+                          sensor_entity->GetComponent<AttachmentComponent>());
+    std::vector<AttachmentEntityId> pending = {attachment->GetParentId()};
+    while (!pending.empty()) {
+      const AttachmentEntityId current = pending.back();
+      pending.pop_back();
+      for (const AttachmentEntityId child : world.GetChildrenOf(current)) {
+        if (child == sensor_id) {
+          continue;
+        }
+        if (result.insert(child).second) {
+          pending.push_back(child);
+        }
+      }
+    }
+  }
+  return result;
+}
+
 class WorldToSdfConverter {
  public:
   explicit WorldToSdfConverter(const WorldSdfAdapter::Options& options)
-      : options_(options) {}
+      : options_(options),
+        hybrid_physics_mode_(
+            options.world_template_overrides.physics_mode ==
+            WorldSdfAdapter::WorldTemplateOverrides::PhysicsMode::kHybrid) {}
 
   absl::StatusOr<std::string> Convert(const World& world_orig) {
     // Converting World entities into an SDF string. A World generated from
@@ -2007,6 +2061,20 @@ class WorldToSdfConverter {
     // Make sure to set the collision masks first since we need them when
     // serializing links to SDF
     INTR_ASSIGN_OR_RETURN(collision_masks_, ProcessCollisionExclusions(world));
+
+    // In hybrid physics mode, links are kinematic by default while selected
+    // links (such as those below force-torque sensors) are dynamic.
+    if (hybrid_physics_mode_) {
+      INTR_ASSIGN_OR_RETURN(dynamic_entity_ids_,
+                            EntitiesBelowForceTorqueSensors(world));
+      if (dynamic_entity_ids_.empty()) {
+        LOG(INFO) << "Hybrid physics mode: no dynamic links identified, all "
+                     "links are kinematic.";
+      } else {
+        LOG(INFO) << "Hybrid physics mode: " << dynamic_entity_ids_.size()
+                  << " entities identified as dynamic.";
+      }
+    }
 
     absl::flat_hash_map<EntityId, absl::flat_hash_map<std::string, double>>
         robot_collection_id_to_dof_value_map;
@@ -2084,7 +2152,8 @@ class WorldToSdfConverter {
           GeneratedLinkInfo link_info,
           WorldEntityToLink(convert_span, world, entity_id,
                             /*pose_reference_id=*/kRootEntityId, model_name,
-                            options_, /*collision_mask=*/{}));
+                            options_, /*collision_mask=*/{},
+                            GetLinkKinematicOverride(entity_id)));
       if (!link_info.topic_infos.empty()) {
         object_topics_[model_name] = std::move(link_info.topic_infos);
       }
@@ -2275,8 +2344,9 @@ class WorldToSdfConverter {
                           base_name, "</child></joint>");
         } else if (!is_robot) {
           // Add ObjectInteractionModerator plugin for floating non-robot
-          // object.
-          if (options_.enable_object_interaction_moderator) {
+          // object when it is dynamic.
+          if (options_.enable_object_interaction_moderator &&
+              IsLinkDynamic(base_id)) {
             absl::StrAppend(
                 &model_node->prelude,
                 "<plugin "
@@ -2422,15 +2492,25 @@ class WorldToSdfConverter {
                    "contact forces, force-torque sensor readings will not be "
                    "valid.";
           }
+          ABSL_FALLTHROUGH_INTENDED;
+        }
+        case PhysicsMode::kHybrid: {
           // Contacts between kinematic links and static or other kinematic
           // links have no effect on the simulation and only cost collision
-          // detection time, so they are disabled.
+          // detection time, so they are disabled. Contacts involving dynamic
+          // links in hybrid mode are always detected.
           INTR_RETURN_IF_ERROR(SetPhysicsSystemKinematicSettings(
               *sdf_root.WorldByIndex(0), /*kinematic_enabled=*/true,
               /*kinematic_contacts=*/false));
           break;
         }
       }
+    }
+
+    if (hybrid_physics_mode_) {
+      LOG(INFO) << "Hybrid physics mode: " << dynamic_link_names_.size()
+                << " link(s) emitted as dynamic: "
+                << absl::StrJoin(dynamic_link_names_, ", ");
     }
 
     auto pretty_sdf_string = sdf_root.Element()->ToString("", false, false);
@@ -2498,7 +2578,8 @@ class WorldToSdfConverter {
           GeneratedLinkInfo link_info,
           WorldEntityToLink(collection_to_model_span.span(), world, link_id,
                             /*pose_reference_id=*/base_id, model_name, options_,
-                            collision_masks_[link_id]));
+                            collision_masks_[link_id],
+                            GetLinkKinematicOverride(link_id)));
       model_topics_list.reserve(model_topics_list.size() +
                                 link_info.topic_infos.size());
       std::ranges::move(link_info.topic_infos,
@@ -2510,6 +2591,9 @@ class WorldToSdfConverter {
           model_name, link_info.name, options_.name_scope_separator);
       entity_id_to_scoped_name_.left.insert(
           std::make_pair(link_id, scoped_link_name));
+      if (GetLinkKinematicOverride(link_id) == false) {
+        dynamic_link_names_.push_back(scoped_link_name);
+      }
 
       for (const auto& sensor_entity_id : link_info.sensor_ids) {
         INTR_ASSIGN_OR_RETURN(const auto* sensor_entity,
@@ -2858,6 +2942,33 @@ class WorldToSdfConverter {
     return names;
   }
 
+  // Returns the per-link kinematic override derived from the physics mode:
+  // false for links that should be dynamic in hybrid mode, unset otherwise (the
+  // Physics plugin default applies).
+  std::optional<bool> GetLinkKinematicOverride(
+      AttachmentEntityId link_id) const {
+    if (hybrid_physics_mode_ && dynamic_entity_ids_.contains(link_id)) {
+      return false;
+    }
+    return std::nullopt;
+  }
+
+  // Returns true if `link_id` is simulated as a dynamic rigid body.
+  bool IsLinkDynamic(AttachmentEntityId link_id) const {
+    using PhysicsMode = WorldSdfAdapter::WorldTemplateOverrides::PhysicsMode;
+    switch (options_.world_template_overrides.physics_mode.value_or(
+        PhysicsMode::kDynamic)) {
+      case PhysicsMode::kUnspecified:
+      case PhysicsMode::kDynamic:
+        return true;
+      case PhysicsMode::kKinematic:
+        return false;
+      case PhysicsMode::kHybrid:
+        return GetLinkKinematicOverride(link_id) == false;
+    }
+    return true;
+  }
+
   absl::StatusOr<std::string> GetBaseNameForId(EntityId entity_id) {
     const auto& id_to_name = entity_id_to_scoped_name_.left;
     if (id_to_name.find(entity_id) == id_to_name.end()) {
@@ -2889,6 +3000,13 @@ class WorldToSdfConverter {
   }
 
   WorldSdfAdapter::Options options_;
+  // True if the physics mode is kHybrid; see GetLinkKinematicOverride().
+  const bool hybrid_physics_mode_;
+  // Entities that should be dynamic in hybrid physics mode.
+  absl::flat_hash_set<AttachmentEntityId> dynamic_entity_ids_;
+  // Scoped names of the links emitted as dynamic in hybrid physics mode, for
+  // logging.
+  std::vector<std::string> dynamic_link_names_;
   absl::flat_hash_map<AttachmentEntityId, CollectionsEntityId>
       link_id_to_coll_id_;
   absl::flat_hash_map<CollectionsEntityId, AttachmentEntityId>

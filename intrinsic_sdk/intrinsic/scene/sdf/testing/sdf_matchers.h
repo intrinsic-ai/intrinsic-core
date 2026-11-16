@@ -15,6 +15,7 @@
 #ifndef INTRINSIC_SCENE_SDF_TESTING_SDF_MATCHERS_H_
 #define INTRINSIC_SCENE_SDF_TESTING_SDF_MATCHERS_H_
 
+#include <optional>
 #include <string>
 
 #include "gmock/gmock.h"
@@ -394,6 +395,20 @@ MATCHER_P(HasDensity, double_matcher, "") {
   double actual = arg->Density().value();
   *result_listener << "whose density is " << actual;
   return ExplainMatchResult(double_matcher, actual, result_listener);
+}
+
+MATCHER_P(HasKinematic, kinematic_matcher, "") {
+  if (arg == nullptr || arg->Element() == nullptr) {
+    *result_listener << "is nullptr";
+    return false;
+  }
+  std::optional<bool> actual;
+  if (arg->Element()->HasElement("kinematic")) {
+    actual = arg->Kinematic();
+  }
+  *result_listener << "whose kinematic element is "
+                   << ::testing::PrintToString(actual);
+  return ExplainMatchResult(kinematic_matcher, actual, result_listener);
 }
 
 }  // namespace sdf

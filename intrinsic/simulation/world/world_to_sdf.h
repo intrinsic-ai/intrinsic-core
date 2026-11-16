@@ -61,6 +61,8 @@ class WorldSdfAdapter {
       kDynamic,
       // All links kinematic.
       kKinematic,
+      // Links can be kinematic or dynamic.
+      kHybrid,
     };
 
     // If set, configures the `<kinematic>` settings of the

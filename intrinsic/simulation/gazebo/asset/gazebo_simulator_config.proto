@@ -35,18 +35,31 @@ message GazeboConfig {
     // https://sdformat.org/spec/1.12/physics/#physics_max_step_size.
     optional int64 physics_update_rate_hz = 1;
 
-    // Controls whether links are simulated kinematically (driven purely by
-    // commanded poses/velocities, ignoring gravity and contact forces) or
+    // Controls which links are simulated kinematically (driven purely by
+    // commanded poses/velocities, ignoring gravity and contact forces) versus
     // dynamically (full rigid-body physics). Kinematic links require the
     // bullet-featherstone physics engine; other engines ignore this setting.
+    //
+    // Physics Modes:
+    // - Use PHYSICS_MODE_DYNAMIC (default) when full rigid-body contact forces
+    //   and gravity interactions are needed across the scene.
+    // - Use PHYSICS_MODE_KINEMATIC for motion-only workflows where contact
+    //   forces and force-torque sensor readings are not needed, to maximize
+    //   simulation speed and stability.
+    // - Use PHYSICS_MODE_HYBRID when only specific links or objects need to be
+    //   dynamic (e.g. end-effector links for force-torque sensing/contact
+    //   compliance, or scene objects that should respond to gravity and contact
+    //   forces) while keeping the rest of the scene kinematic for performance.
     enum PhysicsMode {
       // Uses the simulator default (dynamic).
       PHYSICS_MODE_UNSPECIFIED = 0;
+      // All links are dynamic.
+      PHYSICS_MODE_DYNAMIC = 1;
       // All links are kinematic. Nothing falls due to gravity, nothing responds
       // to contact.
-      PHYSICS_MODE_KINEMATIC = 1;
-      // All links are dynamic.
-      PHYSICS_MODE_DYNAMIC = 2;
+      PHYSICS_MODE_KINEMATIC = 2;
+      // Links can be kinematic or dynamic.
+      PHYSICS_MODE_HYBRID = 3;
     }
     PhysicsMode physics_mode = 2;
   }

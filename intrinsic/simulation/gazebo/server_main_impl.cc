@@ -129,7 +129,7 @@ ABSL_FLAG(bool, use_dart, false,
 
 ABSL_FLAG(std::string, physics_mode, "",
           "(optional) Overrides the physics mode of the simulation: one of "
-          "'kinematic' or 'dynamic'. See "
+          "'hybrid', 'kinematic' or 'dynamic'. See "
           "intrinsic_proto.simulation.gazebo.v1.GazeboConfig.SimulationOptions"
           ".PhysicsMode. Kinematic links are only supported by the Bullet "
           "Featherstone physics engine. If empty, the mode from the service "
@@ -204,6 +204,9 @@ absl::StatusOr<PhysicsMode> PhysicsModeFromConfig(GazeboPhysicsMode mode) {
         SimulationOptions::PHYSICS_MODE_UNSPECIFIED:
       return PhysicsMode::kUnspecified;
     case intrinsic_proto::simulation::gazebo::v1::GazeboConfig::
+        SimulationOptions::PHYSICS_MODE_HYBRID:
+      return PhysicsMode::kHybrid;
+    case intrinsic_proto::simulation::gazebo::v1::GazeboConfig::
         SimulationOptions::PHYSICS_MODE_KINEMATIC:
       return PhysicsMode::kKinematic;
     case intrinsic_proto::simulation::gazebo::v1::GazeboConfig::
@@ -216,17 +219,20 @@ absl::StatusOr<PhysicsMode> PhysicsModeFromConfig(GazeboPhysicsMode mode) {
 }
 
 absl::StatusOr<PhysicsMode> PhysicsModeFromString(absl::string_view mode) {
+  if (mode == "hybrid") return PhysicsMode::kHybrid;
   if (mode == "kinematic") return PhysicsMode::kKinematic;
   if (mode == "dynamic") return PhysicsMode::kDynamic;
   return absl::InvalidArgumentError(
       absl::StrCat("Unknown physics mode '", mode,
-                   "', expected one of 'kinematic' or 'dynamic'."));
+                   "', expected one of 'hybrid', 'kinematic' or 'dynamic'."));
 }
 
 absl::string_view PhysicsModeName(PhysicsMode mode) {
   switch (mode) {
     case PhysicsMode::kUnspecified:
       return "unspecified (dynamic)";
+    case PhysicsMode::kHybrid:
+      return "hybrid";
     case PhysicsMode::kKinematic:
       return "kinematic";
     case PhysicsMode::kDynamic:
