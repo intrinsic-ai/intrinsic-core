@@ -124,6 +124,14 @@ class ImageSourceInterface {
   virtual absl::Status UpdateCaptureCallbackOptions(
       const CallbackToken& token, CaptureCallbackOptions options) = 0;
 
+  // Validates that `settings` are compatible with the active stream's effective
+  // settings when streaming is active. Returns `absl::OkStatus()` if `settings`
+  // are compatible or if no stream is active, `FAILED_PRECONDITION` if any
+  // setting conflicts or cannot be verified against hardware, or
+  // `UNIMPLEMENTED` if the driver does not support compatibility checks.
+  virtual absl::Status CheckStreamSettingsCompatibility(
+      absl::Span<const CameraSetting> settings) const = 0;
+
   // Remove a previously registered callback. Blocks until any in-flight
   // invocation of the callback returns, except when called reentrantly from
   // within any capture callback of the same `ImageSourceInterface`.

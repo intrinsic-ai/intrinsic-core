@@ -30,6 +30,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/time.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
@@ -357,6 +358,13 @@ absl::Status RemoteImageSource::UpdateCaptureCallbackOptions(
     const CallbackToken& /*token*/, CaptureCallbackOptions /*options*/) {
   return absl::UnimplementedError(
       "UpdateCaptureCallbackOptions is not supported on RemoteImageSource.");
+}
+
+absl::Status RemoteImageSource::CheckStreamSettingsCompatibility(
+    absl::Span<const CameraSetting> /*settings*/) const {
+  return absl::UnimplementedError(
+      "CheckStreamSettingsCompatibility is not supported on "
+      "RemoteImageSource.");
 }
 
 absl::Status RemoteImageSource::RemoveCaptureCallback(CallbackToken token) {

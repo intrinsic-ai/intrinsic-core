@@ -153,6 +153,13 @@ class Camera {
       const ImageSourceInterface::CallbackToken& token,
       CaptureCallbackOptions options);
 
+  // Validates that `settings` are compatible with the active stream's effective
+  // settings when streaming is active. Returns `OkStatus` if compatible or if
+  // no stream is active, `FAILED_PRECONDITION` on conflict or hardware readback
+  // failure, and `UNIMPLEMENTED` for remote cameras (`RemoteImageSource`).
+  absl::Status CheckStreamSettingsCompatibility(
+      absl::Span<const CameraSetting> settings) const;
+
   // Remove a previously registered callback.
   absl::Status RemoveCaptureCallback(ImageSourceInterface::CallbackToken token);
 

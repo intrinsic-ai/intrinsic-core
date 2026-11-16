@@ -225,6 +225,28 @@ cc_library(
 )
 
 cc_library(
+    name = "effective_camera_settings",
+    srcs = ["effective_camera_settings.cc"],
+    hdrs = ["effective_camera_settings.h"],
+    deps = [
+        ":camera_setting",
+        "//intrinsic_perception/intrinsic/perception/cameras/genicam:feature_names",
+        "//intrinsic_sdk/intrinsic/util/status:status_builder",
+        "@abseil-cpp//absl/algorithm:container",
+        "@abseil-cpp//absl/base:no_destructor",
+        "@abseil-cpp//absl/container:btree",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/types:span",
+    ],
+)
+
+cc_library(
     name = "file_image_source",
     srcs = ["file_image_source.cc"],
     hdrs = [
@@ -276,6 +298,7 @@ cc_library(
         ":camera_setting_properties",
         ":camera_setting_utils",
         ":capture_result",
+        ":effective_camera_settings",
         ":image_source",
         ":sensor_image",
         ":sensor_information",
@@ -349,6 +372,7 @@ cc_library(
         ":camera_setting_properties",
         ":capture_result",
         ":capture_result_helper",
+        ":effective_camera_settings",
         ":image_source_interface",
         ":sensor_image",
         ":sensor_information",
@@ -459,6 +483,7 @@ cc_library(
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",
+        "@abseil-cpp//absl/types:span",
         "@com_github_grpc_grpc//:grpc++",
         "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_state_cc_grpc_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:camera_service_cc_grpc",

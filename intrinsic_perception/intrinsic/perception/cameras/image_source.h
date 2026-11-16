@@ -38,6 +38,7 @@
 #include "intrinsic/perception/cameras/camera_setting_access.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
 #include "intrinsic/perception/cameras/capture_result.h"
+#include "intrinsic/perception/cameras/effective_camera_settings.h"
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
 #include "intrinsic/perception/core/coordinate.h"
@@ -82,10 +83,13 @@ class ImageSource : public ImageSourceInterface {
   absl::Status UpdateCaptureCallbackOptions(
       const CallbackToken& token, CaptureCallbackOptions options) final;
 
+  absl::Status CheckStreamSettingsCompatibility(
+      absl::Span<const CameraSetting> settings) const final
+      ABSL_LOCKS_EXCLUDED(streaming_mutex_);
   absl::Status RemoveCaptureCallback(CallbackToken token) final;
 
-  absl::Status StartStream(const CaptureArgs& params) override;
-  absl::Status StopStream() override;
+  absl::Status StartStream(const CaptureArgs& params) final;
+  absl::Status StopStream() final;
 
   // Sets the user specified parameters.
   // This function performs a partial validation and checks if the specified
@@ -157,6 +161,22 @@ class ImageSource : public ImageSourceInterface {
         "Camera driver doesn't provide sensor information.");
   }
 
+  // Returns device-specific `selected_feature -> {selector_features}` mappings
+  // for `EffectiveCameraSettings` (empty by default).
+  virtual EffectiveCameraSettings::SelectorMap GetSelectorsBySelectedFeature()
+      const {
+    return EffectiveCameraSettings::SelectorMap{};
+  }
+
+  // Starts streaming after `StartStream()` validates sensor IDs and applies
+  // settings (default: polling thread calling `CaptureImpl()`). Subclasses
+  // overriding this must also override `StopStreamImpl()`.
+  virtual absl::Status StartStreamImpl(const CaptureArgs& params)
+      ABSL_LOCKS_EXCLUDED(streaming_mutex_);
+  // Stops streaming (default: joins `streaming_thread_`). Subclass overrides
+  // should be a no-op when idle.
+  virtual absl::Status StopStreamImpl() ABSL_LOCKS_EXCLUDED(streaming_mutex_);
+
   absl::StatusOr<Dimensions> ReadDimensions() const;
 
   absl::Status UpdateOffset(const Coordinate& offset);
@@ -215,12 +235,17 @@ class ImageSource : public ImageSourceInterface {
       ABSL_GUARDED_BY(callback_mutex_);
 
   mutable absl::Mutex streaming_mutex_;
-  // Used internally to prevent deadlocks when starting a stream but still have
-  // all of the relevant settings update.
+  // Guards against concurrent `StartStream()` calls while initial stream
+  // settings are being applied outside `streaming_mutex_`.
   bool is_stream_starting_ ABSL_GUARDED_BY(streaming_mutex_) = false;
   bool is_stream_stopping_ ABSL_GUARDED_BY(streaming_mutex_) = false;
+  uint64_t stream_generation_ ABSL_GUARDED_BY(streaming_mutex_) = 0;
   absl::flat_hash_set<int64_t> initial_stream_sensor_ids_
       ABSL_GUARDED_BY(streaming_mutex_);
+  mutable std::optional<EffectiveCameraSettings> active_effective_settings_
+      ABSL_GUARDED_BY(streaming_mutex_);
+  // Declared last so `~ImageSource()` joins the streaming thread before
+  // destroying any mutexes or state accessed by the thread loop.
   std::optional<intrinsic::Thread> streaming_thread_
       ABSL_GUARDED_BY(streaming_mutex_);
 };

@@ -44,6 +44,7 @@
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/cameras/capture_result_helper.h"
+#include "intrinsic/perception/cameras/effective_camera_settings.h"
 #include "intrinsic/perception/cameras/genicam/feature_names.h"
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
@@ -55,6 +56,7 @@
 #include "intrinsic/perception/core/range_tools.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/status/ret_check.h"
+#include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/thread/stop_token.h"
 #include "intrinsic/util/thread/thread.h"
@@ -268,7 +270,7 @@ absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
     // problematic if the camera parameters are not the same. See the TDD for
     // more details: go/intrinsic-camera-streaming-design
     absl::MutexLock lock(streaming_mutex_);
-    if (streaming_thread_.has_value() || is_stream_stopping_) {
+    if (active_effective_settings_.has_value() || is_stream_stopping_) {
       return absl::FailedPreconditionError(
           "We do not allow Capture calls while there is a stream running.");
     }
@@ -372,6 +374,102 @@ absl::StatusOr<CaptureResult> ImageSource::PostCaptureImplProcessing(
   }
   return CropAndResize(std::move(capture_result),
                        args.post_processing_by_sensor_id);
+}
+
+absl::Status ImageSource::CheckStreamSettingsCompatibility(
+    absl::Span<const CameraSetting> settings) const {
+  absl::flat_hash_map<std::string, CameraSetting> hardware_reads;
+  auto read_hardware_cached =
+      [this, &hardware_reads](
+          absl::string_view name) -> absl::StatusOr<CameraSetting> {
+    if (auto it = hardware_reads.find(name); it != hardware_reads.end()) {
+      return it->second;
+    }
+    INTR_ASSIGN_OR_RETURN(CameraSetting current, ReadCameraSetting(name));
+    hardware_reads.emplace(name, current);
+    return current;
+  };
+
+  while (true) {
+    uint64_t generation = 0;
+    std::vector<EffectiveCameraSettings::UnconfiguredSetting> unconfigured;
+    {
+      absl::MutexLock lock(streaming_mutex_);
+      if (!active_effective_settings_.has_value()) {
+        return absl::OkStatus();
+      }
+      absl::StatusOr<std::vector<EffectiveCameraSettings::UnconfiguredSetting>>
+          found =
+              active_effective_settings_->FindUnconfiguredSettings(settings);
+      if (!found.ok()) {
+        return found.status();
+      }
+      if (found->empty()) {
+        return absl::OkStatus();
+      }
+      generation = stream_generation_;
+      unconfigured = *std::move(found);
+    }
+
+    std::vector<
+        std::pair<EffectiveCameraSettings::SettingKey, CameraSetting::Value>>
+        verified_entries;
+    verified_entries.reserve(unconfigured.size());
+    for (const auto& entry : unconfigured) {
+      for (const auto& [sel_name, sel_val] : entry.key.active_selectors) {
+        const CameraSetting requested_selector{.name = sel_name,
+                                               .value = sel_val};
+        const absl::StatusOr<CameraSetting> current_selector =
+            read_hardware_cached(sel_name);
+        if (!current_selector.ok()) {
+          return intrinsic::FailedPreconditionErrorBuilder()
+                 << "Requested camera setting (" << requested_selector
+                 << ") is not configured on active stream and could not be "
+                    "read from hardware: "
+                 << current_selector.status();
+        }
+        if (!current_selector->IsApprox(requested_selector)) {
+          return intrinsic::FailedPreconditionErrorBuilder()
+                 << "Requested camera setting (" << requested_selector
+                 << ") conflicts with current hardware setting ("
+                 << *current_selector << ").";
+        }
+      }
+
+      const CameraSetting requested_setting{.name = entry.key.name,
+                                            .value = entry.requested_value};
+      const absl::StatusOr<CameraSetting> current_setting =
+          read_hardware_cached(entry.key.name);
+      if (!current_setting.ok()) {
+        return intrinsic::FailedPreconditionErrorBuilder()
+               << "Requested camera setting (" << requested_setting
+               << ") is not configured on active stream and could not be read "
+                  "from hardware: "
+               << current_setting.status();
+      }
+      if (!current_setting->IsApprox(requested_setting)) {
+        return intrinsic::FailedPreconditionErrorBuilder()
+               << "Requested camera setting (" << requested_setting
+               << ") conflicts with current hardware setting ("
+               << *current_setting << ").";
+      }
+      verified_entries.emplace_back(entry.key, current_setting->value);
+    }
+
+    absl::MutexLock lock(streaming_mutex_);
+    if (!active_effective_settings_.has_value()) {
+      return absl::OkStatus();
+    }
+    if (stream_generation_ != generation) {
+      hardware_reads.clear();
+      continue;
+    }
+    for (auto& [key, value] : verified_entries) {
+      active_effective_settings_->CacheVerifiedSetting(std::move(key),
+                                                       std::move(value));
+    }
+    return absl::OkStatus();
+  }
 }
 
 void ImageSource::InvokeCaptureCallbacks(CaptureResult raw_capture_result,
@@ -506,8 +604,7 @@ absl::Status ImageSource::UpdateCameraSetting(
 
   {
     absl::MutexLock lock(streaming_mutex_);
-    if ((streaming_thread_.has_value() || is_stream_stopping_) &&
-        !is_stream_starting_) {
+    if (active_effective_settings_.has_value() || is_stream_stopping_) {
       return absl::FailedPreconditionError(
           "We do not allow UpdateCameraSetting calls while there is a stream "
           "running.");
@@ -649,13 +746,13 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
                         BuildUniqueSensorIdSet(params.sensor_ids));
   {
     absl::MutexLock lock(streaming_mutex_);
-    if (streaming_thread_.has_value() || is_stream_starting_ ||
+    if (active_effective_settings_.has_value() || is_stream_starting_ ||
         is_stream_stopping_) {
       return absl::FailedPreconditionError("Stream already started.");
     }
     is_stream_starting_ = true;
   }
-  absl::Cleanup reset_stream_starting = [this] {
+  const absl::Cleanup reset_stream_starting = [this] {
     absl::MutexLock lock(streaming_mutex_);
     is_stream_starting_ = false;
   };
@@ -664,10 +761,33 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
   INTR_RETURN_IF_ERROR(
       ApplyCameraSettings(params.camera_config.camera_settings));
 
+  EffectiveCameraSettings::SelectorMap selector_map =
+      GetSelectorsBySelectedFeature();
+  {
+    absl::MutexLock lock(streaming_mutex_);
+    active_effective_settings_.emplace(params.camera_config.camera_settings,
+                                       selector_map);
+    ++stream_generation_;
+    initial_stream_sensor_ids_ = std::move(sensor_ids);
+  }
+
+  bool stream_started = false;
+  const absl::Cleanup cleanup_on_error = [&] {
+    if (!stream_started) {
+      absl::MutexLock lock(streaming_mutex_);
+      active_effective_settings_.reset();
+      ++stream_generation_;
+      initial_stream_sensor_ids_.clear();
+    }
+  };
+
+  INTR_RETURN_IF_ERROR(StartStreamImpl(params));
+  stream_started = true;
+  return absl::OkStatus();
+}
+
+absl::Status ImageSource::StartStreamImpl(const CaptureArgs& params) {
   absl::MutexLock lock(streaming_mutex_);
-  std::move(reset_stream_starting).Cancel();
-  is_stream_starting_ = false;
-  initial_stream_sensor_ids_ = std::move(sensor_ids);
   streaming_thread_.emplace([this, params](intrinsic::StopToken stop_token) {
     LOG(INFO) << "ImageSource::Thread: Starting streaming thread.";
     while (!stop_token.stop_requested()) {
@@ -681,39 +801,49 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
       InvokeCaptureCallbacks(*std::move(capture_result), params);
     }
   });
-
   return absl::OkStatus();
 }
 
 absl::Status ImageSource::StopStream() {
+  bool was_active = false;
+  {
+    absl::MutexLock lock(streaming_mutex_);
+    const auto ready_to_stop =
+        [this]() ABSL_SHARED_LOCKS_REQUIRED(streaming_mutex_) {
+          return !is_stream_starting_ && !is_stream_stopping_;
+        };
+    streaming_mutex_.Await(absl::Condition(&ready_to_stop));
+    was_active =
+        active_effective_settings_.has_value() || streaming_thread_.has_value();
+    if (was_active) {
+      is_stream_stopping_ = true;
+    }
+  }
+  if (!was_active) {
+    return absl::OkStatus();
+  }
+  const absl::Cleanup cleanup = [this]() {
+    absl::MutexLock lock(streaming_mutex_);
+    active_effective_settings_.reset();
+    ++stream_generation_;
+    initial_stream_sensor_ids_.clear();
+    is_stream_stopping_ = false;
+  };
+  return StopStreamImpl();
+}
+
+absl::Status ImageSource::StopStreamImpl() {
   std::optional<intrinsic::Thread> streaming_thread;
   {
     absl::MutexLock lock(streaming_mutex_);
-    const auto not_stopping = [this]()
-                                  ABSL_SHARED_LOCKS_REQUIRED(streaming_mutex_) {
-                                    return !is_stream_stopping_;
-                                  };
-    streaming_mutex_.Await(absl::Condition(&not_stopping));
-    if (!streaming_thread_.has_value()) {
-      return absl::OkStatus();
-    }
-    is_stream_stopping_ = true;
     streaming_thread = std::move(streaming_thread_);
     streaming_thread_.reset();
   }
-  const absl::Cleanup reset_stopping = [this]() {
-    absl::MutexLock lock(streaming_mutex_);
-    is_stream_stopping_ = false;
-  };
   // Deallocating the streaming thread requests a stop on the stop token and
   // joins the thread before completing the destructor call. Perform this
   // outside `streaming_mutex_` so `InvokeCaptureCallbacks` on the streaming
   // thread cannot deadlock with `StopStream()`.
   streaming_thread.reset();
-  {
-    absl::MutexLock lock(streaming_mutex_);
-    initial_stream_sensor_ids_.clear();
-  }
   return absl::OkStatus();
 }
 

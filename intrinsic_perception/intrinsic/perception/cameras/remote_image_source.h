@@ -27,6 +27,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/sync_stream.h"
 #include "intrinsic/assets/services/proto/v1/service_state.grpc.pb.h"
@@ -85,6 +86,10 @@ class RemoteImageSource : public ImageSourceInterface {
   // Returns `absl::UnimplementedError` (unsupported on `RemoteImageSource`).
   absl::Status UpdateCaptureCallbackOptions(
       const CallbackToken& token, CaptureCallbackOptions options) final;
+
+  // Returns `absl::UnimplementedError` (unsupported on `RemoteImageSource`).
+  absl::Status CheckStreamSettingsCompatibility(
+      absl::Span<const CameraSetting> settings) const final;
 
   absl::Status RemoveCaptureCallback(CallbackToken token) final;
 

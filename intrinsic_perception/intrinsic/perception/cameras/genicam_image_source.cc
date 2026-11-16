@@ -64,6 +64,7 @@
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
 #include "intrinsic/perception/cameras/camera_setting_utils.h"
 #include "intrinsic/perception/cameras/capture_result.h"
+#include "intrinsic/perception/cameras/effective_camera_settings.h"
 #include "intrinsic/perception/cameras/genicam/feature_names.h"
 #include "intrinsic/perception/cameras/image_source.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
@@ -684,6 +685,10 @@ absl::Status GenicamImageSource::Init(bool requires_device_reset) {
   }
 
   INTR_RETURN_IF_ERROR(ConfigureCameraDefaults(*this));
+  EffectiveCameraSettings::SelectorMap selectors =
+      intrinsic::perception::GetSelectorsBySelectedFeature(camera_.get());
+  absl::MutexLock lock(mutex_);
+  selectors_by_selected_feature_ = std::move(selectors);
   return absl::OkStatus();
 }
 
@@ -734,7 +739,7 @@ GenicamImageSource::~GenicamImageSource() {
     LOG(ERROR) << status;
     return;
   }
-  if (const absl::Status status = StopStream(); !status.ok()) {
+  if (const absl::Status status = StopStreamImpl(); !status.ok()) {
     LOG(ERROR) << status;
   }
   if (const absl::Status status = StopAsyncAcquisition(); !status.ok()) {
@@ -2213,10 +2218,13 @@ absl::Status GenicamImageSource::ClearFaults() {
   return status;
 }
 
-absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
-  if (!IsUnique(params.sensor_ids)) {
-    return absl::InvalidArgumentError("Duplicate sensor_ids are not allowed.");
-  }
+EffectiveCameraSettings::SelectorMap
+GenicamImageSource::GetSelectorsBySelectedFeature() const {
+  absl::MutexLock lock(mutex_);
+  return selectors_by_selected_feature_;
+}
+
+absl::Status GenicamImageSource::StartStreamImpl(const CaptureArgs& params) {
   {
     absl::MutexLock lock(mutex_);
     if (streaming_state_.has_value()) {
@@ -2238,19 +2246,12 @@ absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
           streaming_state_->hdr = std::move(hdr_state);
         }
       }
-      if (const absl::Status status = StopStream(); !status.ok()) {
+      if (const absl::Status status = StopStreamImpl(); !status.ok()) {
         LOG(ERROR) << "Failed to clean up after stream start failure: "
                    << status;
       }
     }
   };
-
-  // Apply all camera settings once before we start the capture loop.
-  INTR_RETURN_IF_ERROR(
-      ApplyCameraSettings(params.camera_config.camera_settings,
-                          [this](const CameraSetting& camera_setting) {
-                            return UpdateCameraSettingInternal(camera_setting);
-                          }));
 
   INTR_RETURN_IF_ERROR(GetFaultsStatus());
   INTR_RETURN_IF_ERROR(StopAsyncAcquisition());
@@ -2337,7 +2338,7 @@ absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
   return absl::OkStatus();
 }
 
-absl::Status GenicamImageSource::StopStream() {
+absl::Status GenicamImageSource::StopStreamImpl() {
   std::optional<absl::Duration> base_exposure_time;
   std::vector<CameraSetting> auto_settings_to_restore;
   {

@@ -213,6 +213,11 @@ absl::Status Camera::UpdateCaptureCallbackOptions(
       token, std::move(options));
 }
 
+absl::Status Camera::CheckStreamSettingsCompatibility(
+    absl::Span<const CameraSetting> settings) const {
+  return image_source_interface_->CheckStreamSettingsCompatibility(settings);
+}
+
 absl::Status Camera::RemoveCaptureCallback(
     ImageSourceInterface::CallbackToken token) {
   return image_source_interface_->RemoveCaptureCallback(token);

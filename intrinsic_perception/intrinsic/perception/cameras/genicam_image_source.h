@@ -43,6 +43,7 @@
 #include "intrinsic/perception/cameras/camera_setting_access.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
 #include "intrinsic/perception/cameras/capture_result.h"
+#include "intrinsic/perception/cameras/effective_camera_settings.h"
 #include "intrinsic/perception/cameras/image_source.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
 #include "intrinsic/perception/cameras/software_hdr.h"
@@ -79,9 +80,6 @@ class GenicamImageSource : public ImageSource {
 
   absl::Status ClearFaults() final;
 
-  absl::Status StartStream(const CaptureArgs& params) override;
-  absl::Status StopStream() override;
-
  protected:
   struct CaptureResultWithExposureTime {
     CaptureResult capture_result;
@@ -95,6 +93,9 @@ class GenicamImageSource : public ImageSource {
   absl::StatusOr<CaptureResult> CaptureImpl(
       absl::Duration timeout,
       const absl::flat_hash_set<int64_t>& sensor_ids) override;
+
+  EffectiveCameraSettings::SelectorMap GetSelectorsBySelectedFeature()
+      const final ABSL_LOCKS_EXCLUDED(mutex_);
 
  private:
   struct StreamingHdrState {
@@ -240,6 +241,9 @@ class GenicamImageSource : public ImageSource {
   absl::StatusOr<std::vector<SensorInformation>> DescribeCameraSensorsImpl()
       const override;
 
+  absl::Status StartStreamImpl(const CaptureArgs& params) override;
+  absl::Status StopStreamImpl() override;
+
   // virtual for unit testing.
   virtual absl::StatusOr<CaptureResultWithExposureTime> GetCaptureResultAsync(
       absl::Time deadline) ABSL_LOCKS_EXCLUDED(mutex_);
@@ -351,6 +355,9 @@ class GenicamImageSource : public ImageSource {
 
   // All settings and functionality required to create HDR images.
   std::optional<SoftwareHdr> software_hdr_;
+
+  EffectiveCameraSettings::SelectorMap selectors_by_selected_feature_
+      ABSL_GUARDED_BY(mutex_);
 
   struct AcquisitionMeasurement {
     absl::Duration acquisition_time;
