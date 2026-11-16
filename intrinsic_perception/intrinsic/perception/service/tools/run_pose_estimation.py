@@ -72,12 +72,15 @@ _POSE_ESTIMATOR_ID = flags.DEFINE_string(
         "'ai.intrinsic.my_pose_estimator'."
     ),
 )
-_CAMERA_NAME = flags.DEFINE_string(
-    "camera_name",
-    None,
+_CAMERAS = flags.DEFINE_multi_string(
+    "cameras",
+    [f"{_DEFAULT_CAMERA_NAME}:{','.join(str(s) for s in _DEFAULT_SENSOR_IDS)}"],
     help=(
-        "Name of the camera resource to use (defaults to"
-        f" '{_DEFAULT_CAMERA_NAME}' or auto-detected from solution resources)."
+        "Camera resource name and comma-separated sensor IDs in the format "
+        "'<camera_name>:<sensor_id1>[,<sensor_id2>,...]' (defaults to "
+        "'orbbec_gemini_335le:1,4' for RGB and Depth on Orbbec Gemini 335LE). "
+        "Can be specified multiple times for multi-view capture (e.g. "
+        "--cameras='cam_1:1,4' --cameras='cam_2:2')."
     ),
 )
 _SERVICE_NAME = flags.DEFINE_enum(
@@ -88,14 +91,6 @@ _SERVICE_NAME = flags.DEFINE_enum(
         "Name of the pose estimator service resource to use (or auto-detected "
         "from solution resources if omitted). Note that "
         "'ioc_pose_estimator_service' is currently unimplemented."
-    ),
-)
-_SENSOR_IDS = flags.DEFINE_list(
-    "sensor_ids",
-    ["1", "4"],
-    help=(
-        "List of sensor IDs to capture from the camera (defaults to ['1', '4'] "
-        "for RGB and Depth on Orbbec Gemini 335LE)."
     ),
 )
 _MIN_NUM_INSTANCES = flags.DEFINE_integer(
@@ -153,53 +148,29 @@ def _list_resource_handles(
 
 def get_camera_resource(
     solution: deployments.Solution,
-    camera_name: str | None = None,
+    camera_name: str,
 ) -> provided.ResourceHandle:
   """Retrieves the camera resource handle from the solution.
 
   Args:
     solution: The connected Solution instance.
-    camera_name: Optional explicit camera resource name.
+    camera_name: Camera resource name.
 
   Returns:
     The matching ResourceHandle.
 
   Raises:
-    ValueError: If no suitable camera resource can be found or resolved.
+    ValueError: If camera_name is empty or cannot be found in the solution.
   """
-  if camera_name:
-    if not _has_resource(solution, camera_name):
-      available = _list_resource_names(solution)
-      raise ValueError(
-          f"Camera resource '{camera_name}' not found in solution. "
-          f"Available resources: {available}"
-      )
-    return solution.resources[camera_name]
-
-  # Check default camera name
-  if _has_resource(solution, _DEFAULT_CAMERA_NAME):
-    return solution.resources[_DEFAULT_CAMERA_NAME]
-
-  # Auto-detect resource with CameraConfig capability
-  handles = _list_resource_handles(solution)
-  camera_resources = [
-      handle
-      for handle in handles
-      if hasattr(handle, "types") and "CameraConfig" in handle.types
-  ]
-  if len(camera_resources) == 1:
-    return camera_resources[0]
-  elif len(camera_resources) > 1:
-    names = [r.name for r in camera_resources]
+  if not camera_name:
+    raise ValueError("Camera resource name must be provided.")
+  if not _has_resource(solution, camera_name):
+    available = _list_resource_names(solution)
     raise ValueError(
-        f"Multiple camera resources found: {names}. "
-        "Please specify which camera to use via --camera_name."
+        f"Camera resource '{camera_name}' not found in solution. "
+        f"Available resources: {available}"
     )
-  else:
-    raise ValueError(
-        "No camera resource with 'CameraConfig' capability found in the"
-        " solution."
-    )
+  return solution.resources[camera_name]
 
 
 def get_perception_service_resource(
@@ -250,34 +221,87 @@ def get_perception_service_resource(
     )
 
 
+def parse_cameras(
+    cameras_flag: Sequence[str] | None,
+) -> dict[str, list[int]]:
+  """Parses the --cameras flag into a mapping of camera name to sensor IDs.
+
+  Each entry must have the format '<camera_name>:<sensor_id1>[,<sensor_id2>,...]'.
+
+  Args:
+    cameras_flag: Sequence of camera specification strings from --cameras.
+
+  Returns:
+    An ordered dict mapping each camera resource name to its list of sensor IDs.
+
+  Raises:
+    ValueError: If cameras_flag is empty, an entry is malformed, a camera name
+      is empty or duplicated, or sensor IDs after ':' are empty/non-integer.
+  """
+  if not cameras_flag:
+    raise ValueError("At least one camera must be specified via --cameras.")
+
+  cameras: dict[str, list[int]] = {}
+  for entry in cameras_flag:
+    entry = entry.strip()
+    if not entry:
+      raise ValueError("Camera specification in --cameras must not be empty.")
+
+    if ":" not in entry:
+      raise ValueError(
+          f"Invalid camera specification '{entry}'. Expected format:"
+          " '<camera_name>:<sensor_id1>[,<sensor_id2>,...]'."
+      )
+
+    camera_name, sensor_ids_str = entry.split(":", 1)
+    camera_name = camera_name.strip()
+    if not camera_name:
+      raise ValueError(f"Camera resource name must be provided in '{entry}'.")
+    sensor_ids = [
+        int(s.strip()) for s in sensor_ids_str.split(",") if s.strip()
+    ]
+    if not sensor_ids:
+      raise ValueError(
+          f"At least one sensor ID must be provided after ':' in '{entry}'."
+      )
+
+    if camera_name in cameras:
+      raise ValueError(
+          f"Duplicate camera name '{camera_name}' specified in --cameras."
+      )
+    cameras[camera_name] = sensor_ids
+
+  return cameras
+
+
 def create_pose_estimation_pipeline(
     solution: deployments.Solution,
-    camera_resource: provided.ResourceHandle,
+    cameras: Sequence[tuple[provided.ResourceHandle, Sequence[int]]],
     perception_resource: provided.ResourceHandle,
     pose_estimator_id: str,
-    sensor_ids: Sequence[int] | None = _DEFAULT_SENSOR_IDS,
     min_num_instances: int = _DEFAULT_MIN_NUM_INSTANCES,
     log_debug_data: bool = True,
     timeout_sec: int | None = None,
-) -> tuple[Any, Any]:
+) -> tuple[list[provided.SkillBase], provided.SkillBase]:
   """Constructs the capture_images and estimate_pose_multi_view skills for the pipeline.
 
   Args:
     solution: Connected Solution instance.
-    camera_resource: ResourceHandle for the RGB-D camera.
+    cameras: Sequence of (camera_resource, sensor_ids) pairs (e.g.
+      [(cam1, [1, 4]), (cam2, [2])]).
     perception_resource: ResourceHandle for the IOC Pose Estimator Service.
     pose_estimator_id: Full ID of the pose estimator asset (e.g.
       'ai.intrinsic.my_pose_estimator').
-    sensor_ids: Optional list of sensor IDs to capture from the camera (e.g. [1, 4] for RGB-D).
     min_num_instances: Minimum number of detected instances required.
     log_debug_data: Whether to enable debug data logging in the skills.
     timeout_sec: Optional inference timeout in seconds.
 
   Returns:
-    A tuple of (capture_images_skill, estimate_pose_multi_view_skill).
+    A tuple of (capture_images_skills, estimate_pose_multi_view_skill).
 
   Raises:
-    ValueError: If pose_estimator_id is not a valid Intrinsic ID format.
+    ValueError: If pose_estimator_id is not a valid Intrinsic ID format,
+      cameras is empty, or sensor_ids for a camera is empty.
   """
   if not id_utils.is_id(pose_estimator_id):
     raise ValueError(
@@ -290,17 +314,23 @@ def create_pose_estimation_pipeline(
 
   skills = solution.skills
 
-  # 1. Set up capture_images skill with sensor_ids (e.g. 1 for RGB and 4 for Depth)
-  capture_images_kwargs: dict[str, Any] = {
-      "camera": camera_resource,
-      "log_debug_data": log_debug_data,
-  }
-  if sensor_ids is not None:
-    capture_images_kwargs["sensor_ids"] = [int(sid) for sid in sensor_ids]
+  if not cameras:
+    raise ValueError("At least one camera must be provided.")
 
-  capture_images_skill = skills.ai.intrinsic.capture_images(
-      **capture_images_kwargs
-  )
+  # 1. Set up capture_images skill(s) with sensor_ids
+  capture_skills = []
+  for cam, cam_sensor_ids in cameras:
+    if not cam_sensor_ids:
+      raise ValueError(
+          f"At least one sensor ID must be provided for camera '{cam.name}'."
+      )
+    capture_skills.append(
+        skills.ai.intrinsic.capture_images(
+            camera=cam,
+            log_debug_data=log_debug_data,
+            sensor_ids=[int(sid) for sid in cam_sensor_ids],
+        )
+    )
 
   pose_estimator_proto = pose_estimator_id_pb2.PoseEstimatorId(
       id=name,
@@ -311,7 +341,7 @@ def create_pose_estimation_pipeline(
   estimate_pose_kwargs: dict[str, Any] = {
       "perception": perception_resource,
       "pose_estimator": pose_estimator_proto,
-      "capture_data": [capture_images_skill.result.capture_data],
+      "capture_data": [s.result.capture_data for s in capture_skills],
       "min_num_instances": min_num_instances,
       "log_debug_data": log_debug_data,
   }
@@ -322,27 +352,27 @@ def create_pose_estimation_pipeline(
       **estimate_pose_kwargs
   )
 
-  return capture_images_skill, estimate_pose_skill
+  return capture_skills, estimate_pose_skill
 
 
 def run_pose_estimation_pipeline(
     solution: deployments.Solution,
-    capture_images_skill: Any,
-    estimate_pose_skill: Any,
+    capture_images_skills: Sequence[provided.SkillBase],
+    estimate_pose_skill: provided.SkillBase,
 ) -> estimate_pose_multi_view_pb2.EstimatePoseMultiViewResult:
   """Executes the pipeline on the solution executive and returns the results.
 
   Args:
     solution: Connected Solution instance.
-    capture_images_skill: Instantiated CaptureImages skill.
+    capture_images_skills: Sequence of instantiated CaptureImages skills.
     estimate_pose_skill: Instantiated EstimatePoseMultiView skill.
 
   Returns:
     EstimatePoseMultiViewResult proto message containing detections and poses.
   """
   print("Executing pose estimation pipeline on executive...")
-  skills_to_run = [capture_images_skill, estimate_pose_skill]
-  solution.executive.run(skills_to_run)
+  # This runs capture_image_skills sequentially.
+  solution.executive.run([*capture_images_skills, estimate_pose_skill])
   print("Pipeline execution finished successfully.")
 
   result: estimate_pose_multi_view_pb2.EstimatePoseMultiViewResult = (
@@ -425,7 +455,11 @@ def main(argv: Sequence[str]) -> None:
   print("Successfully connected to solutions SDK!")
 
   try:
-    camera_resource = get_camera_resource(solution, _CAMERA_NAME.value)
+    camera_sensor_ids = parse_cameras(_CAMERAS.value)
+    cameras = [
+        (get_camera_resource(solution, name), sids)
+        for name, sids in camera_sensor_ids.items()
+    ]
     perception_resource = get_perception_service_resource(
         solution, _SERVICE_NAME.value
     )
@@ -433,24 +467,19 @@ def main(argv: Sequence[str]) -> None:
     print(f"Resource resolution error: {e}")
     return
 
-  sensor_ids = (
-      [int(s.strip()) for s in _SENSOR_IDS.value if s.strip()]
-      if _SENSOR_IDS.value
-      else list(_DEFAULT_SENSOR_IDS)
+  print(
+      "Using cameras and sensor IDs:"
+      f" { {cam.name: sids for cam, sids in cameras} }"
   )
-
-  print(f"Using camera resource: {camera_resource.name}")
-  print(f"Using sensor IDs: {sensor_ids}")
   print(f"Using perception service resource: {perception_resource.name}")
   print(f"Using pose estimator ID: {pose_estimator_id}")
 
   try:
-    capture_skill, estimate_skill = create_pose_estimation_pipeline(
+    capture_skills, estimate_skill = create_pose_estimation_pipeline(
         solution=solution,
-        camera_resource=camera_resource,
+        cameras=cameras,
         perception_resource=perception_resource,
         pose_estimator_id=pose_estimator_id,
-        sensor_ids=sensor_ids,
         min_num_instances=_MIN_NUM_INSTANCES.value,
         log_debug_data=_LOG_DEBUG_DATA.value,
         timeout_sec=_TIMEOUT_SEC.value,
@@ -462,7 +491,7 @@ def main(argv: Sequence[str]) -> None:
   try:
     result = run_pose_estimation_pipeline(
         solution=solution,
-        capture_images_skill=capture_skill,
+        capture_images_skills=capture_skills,
         estimate_pose_skill=estimate_skill,
     )
   except execution.ExecutionFailedError as e:
