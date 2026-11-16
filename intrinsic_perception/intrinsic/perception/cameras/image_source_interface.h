@@ -82,11 +82,15 @@ class ImageSourceInterface {
   using CaptureCallback =
       absl::AnyInvocable<absl::Status(const CaptureResult&)>;
 
-  // Add a callback that will receive new capture results
+  // Add a callback that will receive new capture results. Different
+  // registered callbacks may be invoked concurrently on arbitrary threads,
+  // while a given callback is never invoked concurrently with itself.
   virtual absl::StatusOr<CallbackToken> AddCaptureCallback(
       CaptureCallback callback) = 0;
 
-  // Remove a previously registered callback.
+  // Remove a previously registered callback. Blocks until any in-flight
+  // invocation of the callback returns, except when called reentrantly from
+  // within any capture callback of the same `ImageSourceInterface`.
   virtual absl::Status RemoveCaptureCallback(CallbackToken token) = 0;
 
   // Starts a stream with the given CaptureArgs and returns the images back into

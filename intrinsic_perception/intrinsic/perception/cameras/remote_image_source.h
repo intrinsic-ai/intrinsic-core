@@ -96,8 +96,11 @@ class RemoteImageSource : public ImageSourceInterface {
   std::optional<std::string> server_instance_;
 
   absl::Mutex callback_mutex_;
-  absl::flat_hash_map<CallbackToken, CaptureCallback> callbacks_
-      ABSL_GUARDED_BY(callback_mutex_);
+  absl::Mutex callback_invocation_mutex_ ABSL_ACQUIRED_BEFORE(callback_mutex_);
+  absl::flat_hash_map<CallbackToken, std::shared_ptr<CaptureCallback>>
+      callbacks_ ABSL_GUARDED_BY(callback_mutex_);
+  absl::flat_hash_map<CallbackToken, std::weak_ptr<CaptureCallback>>
+      in_flight_removed_callbacks_ ABSL_GUARDED_BY(callback_mutex_);
 
 };
 

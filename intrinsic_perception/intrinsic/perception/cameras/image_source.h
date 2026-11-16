@@ -43,9 +43,9 @@
 #include "intrinsic/perception/core/undistortion.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/thread/thread.h"
+#include "intrinsic/util/thread/thread_pool.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
 
 // Represents an image source whose frames can be grabbed.
 // The ImageSource is a building block of InternalCamera. ImageSource by itself
@@ -101,8 +101,6 @@ class ImageSource : public ImageSourceInterface {
       const final;
 
  protected:
-  UndistortionBySensorId undistortion_;
-
   virtual absl::StatusOr<CaptureResult> CaptureImpl(absl::Duration timeout) {
     return intrinsic::UnimplementedErrorBuilder() << "CaptureImpl";
   }
@@ -154,18 +152,51 @@ class ImageSource : public ImageSourceInterface {
   absl::Status UpdateDimensions(const Dimensions& dimensions);
 
   absl::StatusOr<CaptureResult> PostCaptureImplProcessing(
-      CaptureResult capture_result, const CaptureArgs& args);
+      CaptureResult capture_result, const CaptureArgs& args)
+      ABSL_LOCKS_EXCLUDED(undistortion_mutex_, crop_and_resize_mutex_);
+
+  // Applies `args` post-processing to `raw_capture_result` and invokes all
+  // registered callbacks in parallel. Callers must serialize calls to
+  // `InvokeCaptureCallbacks` so a given callback is never invoked concurrently
+  // with itself.
+  void InvokeCaptureCallbacks(CaptureResult raw_capture_result,
+                              const CaptureArgs& args)
+      ABSL_LOCKS_EXCLUDED(callback_mutex_, undistortion_mutex_,
+                          crop_and_resize_mutex_);
+
+ private:
+  struct RegisteredCallback {
+    std::shared_ptr<CaptureCallback> callback;
+  };
+
+  // Guards `undistortion_` map lookup/initialization and serializes OpenCV
+  // `Undistort` (`cv::remap`) calls on this `ImageSource` so concurrent
+  // callers neither race on `undistortion_` entries nor collide on OpenCV's
+  // global `cv::parallel_for_` `ThreadManager`.
+  absl::Mutex undistortion_mutex_;
+  UndistortionBySensorId undistortion_ ABSL_GUARDED_BY(undistortion_mutex_);
+  // Serializes OpenCV `CropAndResize` (`cv::resize`) calls on this
+  // `ImageSource` so concurrent post-processing callers (such as per-callback
+  // post-processing or concurrent stream `Capture()` calls) do not collide on
+  // OpenCV's global `cv::parallel_for_` `ThreadManager`, which otherwise forces
+  // concurrent callers onto single-core fallback execution.
+  absl::Mutex crop_and_resize_mutex_;
 
   absl::Mutex callback_mutex_;
-  absl::flat_hash_map<CallbackToken, CaptureCallback> callbacks_
+  absl::flat_hash_map<CallbackToken, RegisteredCallback> callbacks_
+      ABSL_GUARDED_BY(callback_mutex_);
+  absl::flat_hash_map<CallbackToken, std::weak_ptr<CaptureCallback>>
+      in_flight_removed_callbacks_ ABSL_GUARDED_BY(callback_mutex_);
+  std::optional<intrinsic::ThreadPool> callback_thread_pool_
       ABSL_GUARDED_BY(callback_mutex_);
 
   absl::Mutex streaming_mutex_;
-  std::optional<intrinsic::Thread> streaming_thread_
-      ABSL_GUARDED_BY(streaming_mutex_);
   // Used internally to prevent deadlocks when starting a stream but still have
   // all of the relevant settings update.
   bool is_stream_starting_ ABSL_GUARDED_BY(streaming_mutex_) = false;
+  bool is_stream_stopping_ ABSL_GUARDED_BY(streaming_mutex_) = false;
+  std::optional<intrinsic::Thread> streaming_thread_
+      ABSL_GUARDED_BY(streaming_mutex_);
 };
 
 // Registration mechanism for factories that create the camera providers.
@@ -204,7 +235,6 @@ GetImageSourceAliasRegistry() {
     return true;                                                 \
   }();
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception
 
 #endif  // INTRINSIC_PERCEPTION_CAMERAS_IMAGE_SOURCE_H_

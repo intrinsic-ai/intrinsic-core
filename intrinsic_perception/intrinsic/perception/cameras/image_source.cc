@@ -14,6 +14,8 @@
 
 #include "intrinsic/perception/cameras/image_source.h"
 
+#include <cstddef>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -30,6 +32,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/blocking_counter.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/types/span.h"
@@ -50,9 +53,20 @@
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/thread/stop_token.h"
+#include "intrinsic/util/thread/thread.h"
+#include "intrinsic/util/thread/thread_pool.h"
 
-namespace intrinsic {
-namespace perception {
+namespace intrinsic::perception {
+namespace {
+
+constexpr int kCallbackThreadPoolSize = 4;
+
+// Tracks the `ImageSource` currently invoking a `CaptureCallback` on the
+// calling thread so reentrant `RemoveCaptureCallback` calls from within a
+// callback do not deadlock waiting for `InvokeCaptureCallbacks` to finish.
+thread_local const ImageSource* current_callback_source = nullptr;
+
+}  // namespace
 
 absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
   {
@@ -60,7 +74,7 @@ absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
     // problematic if the camera parameters are not the same. See the TDD for
     // more details: go/intrinsic-camera-streaming-design
     absl::MutexLock lock(streaming_mutex_);
-    if (streaming_thread_.has_value()) {
+    if (streaming_thread_.has_value() || is_stream_stopping_) {
       return absl::FailedPreconditionError(
           "We do not allow Capture calls while there is a stream running.");
     }
@@ -138,11 +152,109 @@ absl::StatusOr<CaptureResult> ImageSource::PostCaptureImplProcessing(
 
   // Even for an empty post processing map we apply post processing, as by
   // default undistortion needs to be applied to all images.
-  INTR_ASSIGN_OR_RETURN(capture_result,
-                        PostProcessCaptureResult(
-                            std::move(capture_result),
-                            args.post_processing_by_sensor_id, undistortion_));
-  return capture_result;
+  {
+    absl::MutexLock lock(undistortion_mutex_);
+    INTR_ASSIGN_OR_RETURN(
+        capture_result,
+        Undistort(std::move(capture_result), args.post_processing_by_sensor_id,
+                  undistortion_));
+  }
+  bool needs_crop = false;
+  bool needs_resize = false;
+  for (const SensorImage& sensor_image : capture_result.sensor_images) {
+    const auto it =
+        args.post_processing_by_sensor_id.find(sensor_image.sensor_id());
+    if (it == args.post_processing_by_sensor_id.end()) {
+      continue;
+    }
+    if (it->second.crop_region.has_value()) {
+      needs_crop = true;
+    }
+    if (it->second.cols.has_value() || it->second.rows.has_value()) {
+      needs_resize = true;
+    }
+  }
+  if (!needs_crop && !needs_resize) {
+    return capture_result;
+  }
+  if (needs_resize) {
+    absl::MutexLock lock(crop_and_resize_mutex_);
+    return CropAndResize(std::move(capture_result),
+                         args.post_processing_by_sensor_id);
+  }
+  return CropAndResize(std::move(capture_result),
+                       args.post_processing_by_sensor_id);
+}
+
+void ImageSource::InvokeCaptureCallbacks(CaptureResult raw_capture_result,
+                                         const CaptureArgs& args) {
+  std::vector<RegisteredCallback> callbacks_snapshot;
+  intrinsic::ThreadPool* callback_thread_pool = nullptr;
+  {
+    absl::MutexLock lock(callback_mutex_);
+    if (callbacks_.empty()) {
+      return;
+    }
+    callbacks_snapshot.reserve(callbacks_.size());
+    for (const auto& [unused_token, entry] : callbacks_) {
+      callbacks_snapshot.push_back(entry);
+    }
+    if (callbacks_snapshot.size() > 1) {
+      if (!callback_thread_pool_.has_value()) {
+        callback_thread_pool_.emplace(kCallbackThreadPoolSize);
+      }
+      callback_thread_pool = &*callback_thread_pool_;
+    }
+  }
+  const absl::Cleanup release_snapshot = [this, &callbacks_snapshot]() {
+    callbacks_snapshot.clear();
+    absl::MutexLock lock(callback_mutex_);
+    absl::erase_if(in_flight_removed_callbacks_,
+                   [](const auto& item) { return item.second.expired(); });
+  };
+
+  absl::StatusOr<CaptureResult> processed_result =
+      PostCaptureImplProcessing(std::move(raw_capture_result), args);
+  if (!processed_result.ok()) {
+    LOG(WARNING) << "Failed to process capture image: "
+                 << processed_result.status();
+    return;
+  }
+
+  const auto run_callback =
+      [this, &processed_result](const RegisteredCallback& entry) {
+        const ImageSource* previous_callback_source = current_callback_source;
+        current_callback_source = this;
+        const absl::Cleanup reset_source = [previous_callback_source]() {
+          current_callback_source = previous_callback_source;
+        };
+        if (absl::Status status = (*entry.callback)(*processed_result);
+            !status.ok()) {
+          LOG(ERROR) << "Callback returned error status: " << status;
+        }
+      };
+
+  if (callbacks_snapshot.size() == 1) {
+    run_callback(callbacks_snapshot[0]);
+    return;
+  }
+
+  absl::BlockingCounter counter(
+      static_cast<int>(callbacks_snapshot.size() - 1));
+  for (size_t i = 1; i < callbacks_snapshot.size(); ++i) {
+    const RegisteredCallback& entry = callbacks_snapshot[i];
+    if (absl::Status schedule_status =
+            callback_thread_pool->Schedule([&run_callback, &entry, &counter]() {
+              run_callback(entry);
+              counter.DecrementCount();
+            });
+        !schedule_status.ok()) {
+      run_callback(entry);
+      counter.DecrementCount();
+    }
+  }
+  run_callback(callbacks_snapshot[0]);
+  counter.Wait();
 }
 
 absl::StatusOr<CameraSettingProperties>
@@ -168,7 +280,8 @@ absl::Status ImageSource::UpdateCameraSetting(
 
   {
     absl::MutexLock lock(streaming_mutex_);
-    if (streaming_thread_.has_value() && !is_stream_starting_) {
+    if ((streaming_thread_.has_value() || is_stream_stopping_) &&
+        !is_stream_starting_) {
       return absl::FailedPreconditionError(
           "We do not allow UpdateCameraSetting calls while there is a stream "
           "running.");
@@ -223,20 +336,47 @@ ImageSource::AddCaptureCallback(CaptureCallback callback) {
   CallbackToken callback_token(absl::StrCat(absl::Now(), global_id++));
   INTR_RET_CHECK(!callbacks_.contains(callback_token))
       << "Callback with id " << callback_token << " already exists.";
-  callbacks_[callback_token] = std::move(callback);
+  callbacks_[callback_token] = RegisteredCallback{
+      .callback = std::make_shared<CaptureCallback>(std::move(callback)),
+  };
   return callback_token;
 }
 
 absl::Status ImageSource::RemoveCaptureCallback(CallbackToken token) {
-  absl::MutexLock lock(callback_mutex_);
-  callbacks_.erase(token);
+  std::shared_ptr<CaptureCallback> removed_callback;
+  {
+    absl::MutexLock lock(callback_mutex_);
+    if (auto it = callbacks_.find(token); it != callbacks_.end()) {
+      removed_callback = std::move(it->second.callback);
+      callbacks_.erase(it);
+      in_flight_removed_callbacks_[token] = removed_callback;
+    }
+  }
+  // Destroy `removed_callback` outside `callback_mutex_` so a callback's
+  // destructor cannot self-deadlock on `callback_mutex_`. If the callback is
+  // currently in flight inside `InvokeCaptureCallbacks`, `callbacks_snapshot`
+  // retains a strong reference until the invocation completes.
+  removed_callback.reset();
+
+  if (current_callback_source != this) {
+    absl::MutexLock lock(callback_mutex_);
+    const auto callback_not_in_flight =
+        [this, &token]() ABSL_SHARED_LOCKS_REQUIRED(callback_mutex_) {
+          auto it = in_flight_removed_callbacks_.find(token);
+          return it == in_flight_removed_callbacks_.end() ||
+                 it->second.expired();
+        };
+    callback_mutex_.Await(absl::Condition(&callback_not_in_flight));
+    in_flight_removed_callbacks_.erase(token);
+  }
   return absl::OkStatus();
 }
 
 absl::Status ImageSource::StartStream(const CaptureArgs& params) {
   {
     absl::MutexLock lock(streaming_mutex_);
-    if (streaming_thread_.has_value() || is_stream_starting_) {
+    if (streaming_thread_.has_value() || is_stream_starting_ ||
+        is_stream_stopping_) {
       return absl::FailedPreconditionError("Stream already started.");
     }
     is_stream_starting_ = true;
@@ -263,20 +403,7 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
         continue;
       }
 
-      capture_result =
-          PostCaptureImplProcessing(std::move(capture_result).value(), params);
-      if (!capture_result.ok()) {
-        LOG(WARNING) << "Failed to process capture image: "
-                     << capture_result.status();
-        continue;
-      }
-
-      absl::MutexLock lock(callback_mutex_);
-      for (auto& [_, callback] : callbacks_) {
-        if (absl::Status status = callback(*capture_result); !status.ok()) {
-          LOG(ERROR) << "Callback returned error status: " << status;
-        }
-      }
+      InvokeCaptureCallbacks(*std::move(capture_result), params);
     }
   });
 
@@ -284,15 +411,31 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
 }
 
 absl::Status ImageSource::StopStream() {
-  absl::MutexLock lock(streaming_mutex_);
-  if (streaming_thread_.has_value()) {
-    // This will deallocate the streaming thread and that will request a stop on
-    // the stop token, which will then exit, and join before completing the
-    // destructor call.
+  std::optional<intrinsic::Thread> streaming_thread;
+  {
+    absl::MutexLock lock(streaming_mutex_);
+    const auto not_stopping = [this]()
+                                  ABSL_SHARED_LOCKS_REQUIRED(streaming_mutex_) {
+                                    return !is_stream_stopping_;
+                                  };
+    streaming_mutex_.Await(absl::Condition(&not_stopping));
+    if (!streaming_thread_.has_value()) {
+      return absl::OkStatus();
+    }
+    is_stream_stopping_ = true;
+    streaming_thread = std::move(streaming_thread_);
     streaming_thread_.reset();
   }
+  const absl::Cleanup reset_stopping = [this]() {
+    absl::MutexLock lock(streaming_mutex_);
+    is_stream_stopping_ = false;
+  };
+  // Deallocating the streaming thread requests a stop on the stop token and
+  // joins the thread before completing the destructor call. Perform this
+  // outside `streaming_mutex_` so `InvokeCaptureCallbacks` on the streaming
+  // thread cannot deadlock with `StopStream()`.
+  streaming_thread.reset();
   return absl::OkStatus();
 }
 
-}  // namespace perception
-}  // namespace intrinsic
+}  // namespace intrinsic::perception

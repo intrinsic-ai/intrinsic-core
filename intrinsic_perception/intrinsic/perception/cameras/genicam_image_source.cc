@@ -1964,22 +1964,8 @@ void GenicamImageSource::OnNewBuffer(ArvStream* arv_stream, void* data) {
         return;
       }
 
-      // The post processing needs to be applied to the resulting images.
-      auto callback_capture_result = camera->PostCaptureImplProcessing(
-          std::move(maybe_hdr_result->value()), streaming_params.value());
-      if (!callback_capture_result.ok()) {
-        LOG(ERROR)
-            << "Skipping callbacks! Failed to undistort image for callbacks: "
-            << callback_capture_result.status();
-      } else {
-        absl::MutexLock lock(camera->callback_mutex_);
-        for (auto& [_, callback] : camera->callbacks_) {
-          if (absl::Status status = callback(*callback_capture_result);
-              !status.ok()) {
-            LOG(ERROR) << "Callback returned error status: " << status;
-          }
-        }
-      }
+      camera->InvokeCaptureCallbacks(**std::move(maybe_hdr_result),
+                                     *streaming_params);
     } else {
       // If we are not in the middle of a streaming session we can return the
       // capture result back to a waiting thread.

@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/cleanup/cleanup.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -329,6 +330,10 @@ RemoteImageSource::CreateContextWithDeadlineFromNow(
   return CreateContextWithDeadline(ToDeadline(timeout));
 }
 
+namespace {
+thread_local const RemoteImageSource* current_remote_callback_source = nullptr;
+}  // namespace
+
 absl::StatusOr<ImageSourceInterface::CallbackToken>
 RemoteImageSource::AddCaptureCallback(CaptureCallback callback) {
   absl::MutexLock lock(callback_mutex_);
@@ -336,13 +341,34 @@ RemoteImageSource::AddCaptureCallback(CaptureCallback callback) {
   CallbackToken callback_token(absl::StrCat(absl::Now(), global_id++));
   INTR_RET_CHECK(!callbacks_.contains(callback_token))
       << "Callback with id " << callback_token << " already exists.";
-  callbacks_[callback_token] = std::move(callback);
+  callbacks_[callback_token] =
+      std::make_shared<CaptureCallback>(std::move(callback));
   return callback_token;
 }
 
 absl::Status RemoteImageSource::RemoveCaptureCallback(CallbackToken token) {
-  absl::MutexLock lock(callback_mutex_);
-  callbacks_.erase(token);
+  std::shared_ptr<CaptureCallback> removed_callback;
+  {
+    absl::MutexLock lock(callback_mutex_);
+    if (auto it = callbacks_.find(token); it != callbacks_.end()) {
+      removed_callback = std::move(it->second);
+      callbacks_.erase(it);
+      in_flight_removed_callbacks_[token] = removed_callback;
+    }
+  }
+  removed_callback.reset();
+
+  if (current_remote_callback_source != this) {
+    absl::MutexLock lock(callback_mutex_);
+    const auto callback_not_in_flight =
+        [this, &token]() ABSL_SHARED_LOCKS_REQUIRED(callback_mutex_) {
+          auto it = in_flight_removed_callbacks_.find(token);
+          return it == in_flight_removed_callbacks_.end() ||
+                 it->second.expired();
+        };
+    callback_mutex_.Await(absl::Condition(&callback_not_in_flight));
+    in_flight_removed_callbacks_.erase(token);
+  }
   return absl::OkStatus();
 }
 
