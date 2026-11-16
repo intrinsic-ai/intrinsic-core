@@ -26,6 +26,7 @@
 
 #include "absl/algorithm/container.h"
 #include "absl/base/nullability.h"
+#include "absl/base/thread_annotations.h"
 #include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -38,6 +39,7 @@
 #include "absl/synchronization/blocking_counter.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
+#include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
 #include "intrinsic/perception/cameras/camera_setting_access.h"
@@ -106,6 +108,20 @@ bool HasSensorDistortionParams(const SensorImage& sensor_image) {
 
 bool WantsSensor(int64_t sensor_id, absl::Span<const int64_t> sensor_ids) {
   return sensor_ids.empty() || absl::c_contains(sensor_ids, sensor_id);
+}
+
+bool FrameCoversRequestedSensors(
+    const absl::flat_hash_set<int64_t>& captured_sensor_ids,
+    const absl::flat_hash_set<int64_t>& requested_sensor_ids) {
+  if (captured_sensor_ids.empty()) {
+    return true;
+  }
+  if (requested_sensor_ids.empty()) {
+    return false;
+  }
+  return absl::c_all_of(requested_sensor_ids, [&](int64_t id) {
+    return captured_sensor_ids.contains(id);
+  });
 }
 
 bool WantsUndistortion(
@@ -264,15 +280,76 @@ void InvokeSingleCaptureCallback(
 }
 }  // namespace
 
-absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
+absl::StatusOr<std::optional<CaptureResult>>
+ImageSource::TryCaptureFromActiveStream(const CaptureArgs& args) {
+  std::optional<CaptureResult> stream_capture_result;
   {
-    // We do not allow streaming and capturing at the same time. This can be
-    // problematic if the camera parameters are not the same. See the TDD for
-    // more details: go/intrinsic-camera-streaming-design
     absl::MutexLock lock(streaming_mutex_);
-    if (active_effective_settings_.has_value() || is_stream_stopping_) {
-      return absl::FailedPreconditionError(
-          "We do not allow Capture calls while there is a stream running.");
+    if (!active_effective_settings_.has_value()) {
+      return std::nullopt;
+    }
+    INTR_ASSIGN_OR_RETURN(absl::flat_hash_set<int64_t> sensor_ids,
+                          BuildUniqueSensorIdSet(args.sensor_ids));
+    INTR_RETURN_IF_ERROR(active_effective_settings_->CheckCompatibility(
+        args.camera_config.camera_settings));
+    const absl::Time start_capture = absl::Now();
+    StreamCaptureWaiter waiter{.sensor_ids = std::move(sensor_ids)};
+    stream_capture_waiters_.push_back(&waiter);
+    const absl::Cleanup cleanup_waiter =
+        [&]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(streaming_mutex_) {
+          std::erase(stream_capture_waiters_, &waiter);
+        };
+    const auto frame_ready_or_stopped =
+        [&]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(streaming_mutex_) {
+          return !active_effective_settings_.has_value() ||
+                 waiter.result.has_value();
+        };
+    if (!streaming_mutex_.AwaitWithTimeout(
+            absl::Condition(&frame_ready_or_stopped), args.timeout)) {
+      return absl::DeadlineExceededError(
+          "Timed out waiting for next frame from active stream.");
+    }
+    if (!active_effective_settings_.has_value() || !waiter.result.has_value()) {
+      return absl::CancelledError("Stream stopped before capture completed.");
+    }
+    stream_capture_result = *std::move(waiter.result);
+    stream_capture_result->capture_duration = absl::Now() - start_capture;
+  }
+
+  const stats::ScopedSpan span("ImageSource::Capture::PostProcess");
+  INTR_ASSIGN_OR_RETURN(
+      CaptureResult capture_result,
+      PostCaptureImplProcessing(std::move(*stream_capture_result), args));
+  return std::move(capture_result);
+}
+
+absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
+  absl::StatusOr<std::optional<CaptureResult>> stream_capture_result =
+      TryCaptureFromActiveStream(args);
+  if (absl::IsNotFound(stream_capture_result.status())) {
+    INTR_RETURN_IF_ERROR(
+        CheckStreamSettingsCompatibility(args.camera_config.camera_settings));
+    stream_capture_result = TryCaptureFromActiveStream(args);
+  }
+  if (!stream_capture_result.ok()) {
+    return absl::IsNotFound(stream_capture_result.status())
+               ? absl::Status(intrinsic::FailedPreconditionErrorBuilder()
+                              << stream_capture_result.status().message())
+               : stream_capture_result.status();
+  }
+  if (stream_capture_result->has_value()) {
+    return std::move(**stream_capture_result);
+  }
+  {
+    absl::MutexLock lock(streaming_mutex_);
+    const auto not_stopping = [this]()
+                                  ABSL_SHARED_LOCKS_REQUIRED(streaming_mutex_) {
+                                    return !is_stream_stopping_;
+                                  };
+    if (!streaming_mutex_.AwaitWithTimeout(absl::Condition(&not_stopping),
+                                           args.timeout)) {
+      return absl::DeadlineExceededError(
+          "Timed out waiting for stream teardown before Capture.");
     }
   }
 
@@ -307,10 +384,22 @@ absl::Status ImageSource::ApplyCameraSettings(
 absl::Status ImageSource::ApplyCameraSettings(
     absl::Span<const CameraSetting> camera_settings,
     absl::FunctionRef<absl::Status(const CameraSetting&)> update_setting) {
+  bool has_command = false;
   for (const CameraSetting& camera_setting : camera_settings) {
     if (camera_setting.name.empty()) {
       return absl::InvalidArgumentError(
           "Camera setting 'name' cannot be empty.");
+    }
+    if (std::holds_alternative<CameraSetting::Command>(camera_setting.value)) {
+      has_command = true;
+    }
+  }
+  if (!has_command) {
+    absl::MutexLock lock(streaming_mutex_);
+    if (active_effective_settings_.has_value() &&
+        active_effective_settings_->AreAllSettingsAlreadyApplied(
+            camera_settings)) {
+      return absl::OkStatus();
     }
   }
   for (const CameraSetting& camera_setting : camera_settings) {
@@ -321,6 +410,16 @@ absl::Status ImageSource::ApplyCameraSettings(
                !current_setting.ok() ||
                !current_setting->IsApprox(camera_setting)) {
       INTR_RETURN_IF_ERROR(update_setting(camera_setting));
+    } else {
+      // Always update `active_effective_settings_` even when the hardware write
+      // above is skipped, so selector settings that already match the hardware
+      // state still set the active selector context for subsequent selected
+      // features in `camera_settings`.
+      absl::MutexLock lock(streaming_mutex_);
+      if (active_effective_settings_.has_value()) {
+        active_effective_settings_->UpdateSetting(camera_setting);
+        ++stream_generation_;
+      }
     }
   }
   return absl::OkStatus();
@@ -472,8 +571,22 @@ absl::Status ImageSource::CheckStreamSettingsCompatibility(
   }
 }
 
-void ImageSource::InvokeCaptureCallbacks(CaptureResult raw_capture_result,
-                                         const CaptureArgs& default_args) {
+void ImageSource::InvokeCaptureCallbacks(
+    CaptureResult raw_capture_result, const CaptureArgs& default_args,
+    const absl::flat_hash_set<int64_t>& captured_sensor_ids) {
+  {
+    absl::MutexLock lock(streaming_mutex_);
+    if (active_effective_settings_.has_value()) {
+      for (StreamCaptureWaiter* waiter : stream_capture_waiters_) {
+        if (!waiter->result.has_value() &&
+            FrameCoversRequestedSensors(captured_sensor_ids,
+                                        waiter->sensor_ids)) {
+          waiter->result = raw_capture_result;
+        }
+      }
+    }
+  }
+
   std::vector<RegisteredCallback> callbacks_snapshot;
   intrinsic::ThreadPool* callback_thread_pool = nullptr;
   {
@@ -602,16 +715,14 @@ absl::Status ImageSource::UpdateCameraSetting(
     return absl::InvalidArgumentError("Camera setting 'name' cannot be empty.");
   }
 
-  {
-    absl::MutexLock lock(streaming_mutex_);
-    if (active_effective_settings_.has_value() || is_stream_stopping_) {
-      return absl::FailedPreconditionError(
-          "We do not allow UpdateCameraSetting calls while there is a stream "
-          "running.");
-    }
-  }
+  INTR_RETURN_IF_ERROR(UpdateCameraSettingImpl(camera_setting));
 
-  return UpdateCameraSettingImpl(camera_setting);
+  absl::MutexLock lock(streaming_mutex_);
+  if (active_effective_settings_.has_value()) {
+    active_effective_settings_->UpdateSetting(camera_setting);
+    ++stream_generation_;
+  }
+  return absl::OkStatus();
 }
 
 absl::StatusOr<std::vector<SensorInformation>>
@@ -704,11 +815,37 @@ absl::flat_hash_set<int64_t> ImageSource::GetActiveStreamSensorIds() const {
                               entry.options->sensor_ids.end());
     }
   }
-  if (has_active_consumer) {
-    return union_sensor_ids;
+  {
+    absl::MutexLock lock(streaming_mutex_);
+    if (!has_active_consumer) {
+      if (initial_stream_sensor_ids_.empty()) {
+        return {};
+      }
+      union_sensor_ids = initial_stream_sensor_ids_;
+    }
+    for (const StreamCaptureWaiter* waiter : stream_capture_waiters_) {
+      if (waiter->result.has_value()) {
+        continue;
+      }
+      if (waiter->sensor_ids.empty()) {
+        return {};
+      }
+      union_sensor_ids.insert(waiter->sensor_ids.begin(),
+                              waiter->sensor_ids.end());
+    }
   }
+  return union_sensor_ids;
+}
+
+bool ImageSource::WaitForStreamCaptureWaiters(size_t expected_count,
+                                              absl::Duration timeout) const {
   absl::MutexLock lock(streaming_mutex_);
-  return initial_stream_sensor_ids_;
+  const auto enough_waiters =
+      [this, expected_count]() ABSL_EXCLUSIVE_LOCKS_REQUIRED(streaming_mutex_) {
+        return stream_capture_waiters_.size() >= expected_count;
+      };
+  return streaming_mutex_.AwaitWithTimeout(absl::Condition(&enough_waiters),
+                                           timeout);
 }
 
 absl::Status ImageSource::RemoveCaptureCallback(CallbackToken token) {
@@ -791,14 +928,17 @@ absl::Status ImageSource::StartStreamImpl(const CaptureArgs& params) {
   streaming_thread_.emplace([this, params](intrinsic::StopToken stop_token) {
     LOG(INFO) << "ImageSource::Thread: Starting streaming thread.";
     while (!stop_token.stop_requested()) {
+      const absl::flat_hash_set<int64_t> active_sensor_ids =
+          GetActiveStreamSensorIds();
       absl::StatusOr<CaptureResult> capture_result =
-          CaptureImpl(params.timeout, GetActiveStreamSensorIds());
+          CaptureImpl(params.timeout, active_sensor_ids);
       if (!capture_result.ok()) {
         LOG(WARNING) << "Failed to capture image: " << capture_result.status();
         continue;
       }
 
-      InvokeCaptureCallbacks(*std::move(capture_result), params);
+      InvokeCaptureCallbacks(*std::move(capture_result), params,
+                             active_sensor_ids);
     }
   });
   return absl::OkStatus();
@@ -817,6 +957,8 @@ absl::Status ImageSource::StopStream() {
         active_effective_settings_.has_value() || streaming_thread_.has_value();
     if (was_active) {
       is_stream_stopping_ = true;
+      active_effective_settings_.reset();
+      ++stream_generation_;
     }
   }
   if (!was_active) {
@@ -824,8 +966,6 @@ absl::Status ImageSource::StopStream() {
   }
   const absl::Cleanup cleanup = [this]() {
     absl::MutexLock lock(streaming_mutex_);
-    active_effective_settings_.reset();
-    ++stream_generation_;
     initial_stream_sensor_ids_.clear();
     is_stream_stopping_ = false;
   };

@@ -50,6 +50,7 @@ using AutoModeFeatureMap =
 
 constexpr absl::string_view kSelectorSuffix = "Selector";
 constexpr absl::string_view kOff = "Off";
+constexpr absl::string_view kOnce = "Once";
 constexpr absl::string_view kContinuous = "Continuous";
 
 // Returns the baseline map from a selected feature name to the selector feature
@@ -260,6 +261,20 @@ bool IsIgnoredByActiveAutoOrHdrMode(
                                        settings_map);
 }
 
+// Returns true if `setting` should not be cached in `EffectiveCameraSettings`
+// (unset value, one-shot command, or stream transport-internal feature).
+bool IsNonCacheableSetting(const CameraSetting& setting) {
+  return std::holds_alternative<std::monostate>(setting.value) ||
+         std::holds_alternative<CameraSetting::Command>(setting.value) ||
+         IsStreamTransportInternalFeature(setting.name);
+}
+
+// Returns true if `value` is a `CameraSetting::Float` holding `NaN`.
+bool IsNanFloat(const CameraSetting::Value& value) {
+  const auto* float_val = std::get_if<CameraSetting::Float>(&value);
+  return float_val != nullptr && std::isnan(float_val->value);
+}
+
 // Applies a single `setting`, updating `active_selectors` if `setting` is a
 // selector feature or recording the `(feature_name, active_selectors)` entry in
 // `settings_map` while skipping unset values, one-shot commands, and
@@ -270,15 +285,11 @@ void ApplySetting(
     const absl::flat_hash_set<std::string>& selector_features,
     absl::flat_hash_map<std::string, CameraSetting::Value>& active_selectors,
     SettingsMap& settings_map) {
-  if (std::holds_alternative<std::monostate>(setting.value) ||
-      std::holds_alternative<CameraSetting::Command>(setting.value) ||
-      IsStreamTransportInternalFeature(setting.name)) {
+  if (IsNonCacheableSetting(setting)) {
     return;
   }
   if (IsSelectorFeature(setting.name, selector_features)) {
-    if (const auto* float_val =
-            std::get_if<CameraSetting::Float>(&setting.value);
-        float_val != nullptr && std::isnan(float_val->value)) {
+    if (IsNanFloat(setting.value)) {
       LOG(WARNING) << "Ignoring NaN value for selector feature '"
                    << setting.name << "'.";
       return;
@@ -424,6 +435,44 @@ EffectiveCameraSettings::FindUnconfiguredSettings(
     }
   }
   return unconfigured;
+}
+
+bool EffectiveCameraSettings::AreAllSettingsAlreadyApplied(
+    absl::Span<const CameraSetting> requested_settings) const {
+  if (requested_settings.empty()) {
+    return true;
+  }
+  absl::flat_hash_map<std::string, CameraSetting::Value> req_selectors =
+      active_selectors_;
+  for (const CameraSetting& setting : requested_settings) {
+    if (IsNonCacheableSetting(setting)) {
+      return false;
+    }
+    if (IsSelectorFeature(setting.name, selector_features_)) {
+      if (IsNanFloat(setting.value)) {
+        return false;
+      }
+      req_selectors[setting.name] = setting.value;
+      continue;
+    }
+    if (GetAutoModeControlledManualFeatures().contains(setting.name) &&
+        IsEnumValue(setting.value, kOnce)) {
+      return false;
+    }
+    SelectorContext selector_ctx = BuildSelectorContext(
+        setting.name, selectors_by_selected_feature_, req_selectors);
+    const SettingKey key{.name = setting.name,
+                         .active_selectors = std::move(selector_ctx)};
+    auto iter = settings_.find(key);
+    if (iter == settings_.end()) {
+      return false;
+    }
+    const CameraSetting active_setting{.name = key.name, .value = iter->second};
+    if (!active_setting.IsApprox(setting)) {
+      return false;
+    }
+  }
+  return req_selectors == active_selectors_;
 }
 
 absl::Status EffectiveCameraSettings::CheckCompatibility(

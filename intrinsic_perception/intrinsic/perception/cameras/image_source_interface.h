@@ -69,6 +69,18 @@ class ImageSourceInterface {
   //    mutate internal state when acquiring frames.
   virtual absl::StatusOr<CaptureResult> Capture(const CaptureArgs& args) = 0;
 
+  // If a stream is currently active, validates `args` against the stream's
+  // cached effective settings (returning `FAILED_PRECONDITION` on conflict or
+  // `NOT_FOUND` if a requested setting is not yet configured in the stream's
+  // effective settings), waits for the next stream frame covering
+  // `args.sensor_ids`, applies post-processing, and returns the resulting
+  // `CaptureResult`. Returns `std::nullopt` if no stream is currently active.
+  // Must be safe to call concurrently without external synchronization.
+  virtual absl::StatusOr<std::optional<CaptureResult>>
+  TryCaptureFromActiveStream(const CaptureArgs& args) {
+    return std::nullopt;
+  }
+
   virtual absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccess(
       absl::string_view name) const = 0;
 

@@ -24,6 +24,7 @@
 #include "absl/base/no_destructor.h"
 #include "absl/base/nullability.h"
 #include "absl/functional/any_invocable.h"
+#include "absl/log/die_if_null.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -167,6 +168,11 @@ absl::StatusOr<CaptureResult> Camera::Capture(const CaptureArgs& args) const {
   return image_source_interface_->Capture(args);
 }
 
+absl::StatusOr<std::optional<CaptureResult>> Camera::TryCaptureFromActiveStream(
+    const CaptureArgs& args) const {
+  return image_source_interface_->TryCaptureFromActiveStream(args);
+}
+
 absl::StatusOr<CameraSettingAccess> Camera::ReadCameraSettingAccess(
     absl::string_view name) const {
   return image_source_interface_->ReadCameraSettingAccess(name);
@@ -231,8 +237,8 @@ absl::Status Camera::StopStream() {
   return image_source_interface_->StopStream();
 }
 
-ConcurrentCamera::ConcurrentCamera(std::unique_ptr<Camera> camera)
-    : camera_(std::move(camera)) {}
+ConcurrentCamera::ConcurrentCamera(std::unique_ptr<Camera> absl_nonnull camera)
+    : camera_(ABSL_DIE_IF_NULL(std::move(camera))) {}
 
 absl::StatusOr<std::shared_ptr<ConcurrentCamera>> ConcurrentCamera::Create(
     const CameraIdentifier& identifier) {

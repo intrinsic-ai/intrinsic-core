@@ -118,6 +118,15 @@ class Camera {
   // Captures from active sensors and returns the resulting sensor images.
   absl::StatusOr<CaptureResult> Capture(const CaptureArgs& args) const;
 
+  // If a stream is currently active, validates `args` against the stream's
+  // cached effective settings (returning `FAILED_PRECONDITION` on conflict or
+  // `NOT_FOUND` if a requested setting is not yet configured in the stream's
+  // effective settings), captures the next stream frame, and applies
+  // post-processing without requiring external synchronization. Returns
+  // `std::nullopt` if no stream is currently active.
+  absl::StatusOr<std::optional<CaptureResult>> TryCaptureFromActiveStream(
+      const CaptureArgs& args) const;
+
   absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccess(
       absl::string_view name) const;
 
@@ -187,6 +196,8 @@ class ConcurrentCamera {
   static absl::StatusOr<std::shared_ptr<ConcurrentCamera>> Create(
       const CameraIdentifier& identifier);
 
+  explicit ConcurrentCamera(std::unique_ptr<Camera> absl_nonnull camera);
+
   // Call any Camera member function through, e.g.
   //   concurrent_camera->Call(&Camera::Bar, param1, param2);
   // This prevents us from adding new functions here whenever we extend the
@@ -196,6 +207,46 @@ class ConcurrentCamera {
   ABSL_LOCKS_EXCLUDED(mutex_)
   auto Call(M T::* absl_nonnull pm, Args&&... args) ->
       typename std::invoke_result_t<decltype(pm), T&, Args&&...> {
+    if constexpr (std::is_same_v<M T::*, decltype(&Camera::Capture)> &&
+                  sizeof...(Args) == 1) {
+      if (pm == &Camera::Capture) {
+        if constexpr (error_on_disabled) {
+          if (IsDisabled()) {
+            return absl::FailedPreconditionError("Camera is disabled.");
+          }
+        }
+        // Piggyback on an active stream without holding `mutex_` so waiting for
+        // the next stream frame and running post-processing neither blocks
+        // `StopStream()` nor serializes concurrent `Capture()` and setting
+        // RPCs. If a requested setting is not yet cached in
+        // `active_effective_settings_` (`NOT_FOUND`), verify and cache it via
+        // `CheckStreamSettingsCompatibility` under `mutex_` before retrying.
+        absl::StatusOr<std::optional<CaptureResult>> stream_capture =
+            camera_->TryCaptureFromActiveStream(args...);
+        if (absl::IsNotFound(stream_capture.status())) {
+          {
+            absl::MutexLock lock(mutex_);
+            if constexpr (error_on_disabled) {
+              if (is_disabled_) {
+                return absl::FailedPreconditionError("Camera is disabled.");
+              }
+            }
+            INTR_RETURN_IF_ERROR(camera_->CheckStreamSettingsCompatibility(
+                args.camera_config.camera_settings...));
+          }
+          stream_capture = camera_->TryCaptureFromActiveStream(args...);
+        }
+        if (!stream_capture.ok()) {
+          return absl::IsNotFound(stream_capture.status())
+                     ? absl::Status(absl::FailedPreconditionError(
+                           stream_capture.status().message()))
+                     : stream_capture.status();
+        }
+        if (stream_capture->has_value()) {
+          return std::move(**stream_capture);
+        }
+      }
+    }
     absl::MutexLock lock(mutex_);
     if constexpr (error_on_disabled) {
       if (is_disabled_) {
@@ -220,11 +271,12 @@ class ConcurrentCamera {
   bool IsDisabled() const ABSL_LOCKS_EXCLUDED(mutex_);
 
  private:
-  explicit ConcurrentCamera(std::unique_ptr<Camera> camera);
-
   mutable absl::Mutex mutex_;
   bool is_disabled_ ABSL_GUARDED_BY(mutex_) = false;
-  const std::unique_ptr<Camera> camera_ ABSL_GUARDED_BY(mutex_);
+  // `camera_` is immutable after construction. Hardware operations on
+  // `*camera_` are serialized by `mutex_`, while `TryCaptureFromActiveStream`
+  // is synchronized internally by `ImageSource`'s mutexes.
+  const std::unique_ptr<Camera> absl_nonnull camera_;
 };
 
 struct ActiveCameraConfig {

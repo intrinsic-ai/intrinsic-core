@@ -95,6 +95,17 @@ class EffectiveCameraSettings {
   absl::StatusOr<std::vector<UnconfiguredSetting>> FindUnconfiguredSettings(
       absl::Span<const CameraSetting> requested_settings) const;
 
+  // Returns true if every setting in `requested_settings` is already applied
+  // with an approximately equal value in `this` and leaves the active selector
+  // context unchanged. Unlike `CheckCompatibility`, returns false if any entry
+  // is unset (`std::monostate`), a `Command`, a stream-transport feature (such
+  // as `AcquisitionFrameRate` or `FPS`), a `"Once"` auto mode (which converges
+  // to `"Off"` on hardware), a setting shadowed by `Continuous` auto or
+  // `MultiSlopeMode=Off` whose stored value differs or is missing, or a
+  // selector change that alters the active selector state.
+  [[nodiscard]] bool AreAllSettingsAlreadyApplied(
+      absl::Span<const CameraSetting> requested_settings) const;
+
   // Checks whether `requested_settings` is compatible with `this` (the active
   // camera/stream settings), returning `absl::OkStatus()` when compatible:
   // - Empty `requested_settings` is always compatible.

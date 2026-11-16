@@ -15,6 +15,7 @@
 #ifndef INTRINSIC_PERCEPTION_CAMERAS_IMAGE_SOURCE_H_
 #define INTRINSIC_PERCEPTION_CAMERAS_IMAGE_SOURCE_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <memory>
 #include <optional>
@@ -67,6 +68,11 @@ class ImageSource : public ImageSourceInterface {
 
   absl::StatusOr<CaptureResult> Capture(const CaptureArgs& args) final;
 
+  absl::StatusOr<std::optional<CaptureResult>> TryCaptureFromActiveStream(
+      const CaptureArgs& args) final
+      ABSL_LOCKS_EXCLUDED(streaming_mutex_, undistortion_mutex_,
+                          crop_and_resize_mutex_);
+
   absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccess(
       absl::string_view name) const final;
 
@@ -91,15 +97,8 @@ class ImageSource : public ImageSourceInterface {
   absl::Status StartStream(const CaptureArgs& params) final;
   absl::Status StopStream() final;
 
-  // Sets the user specified parameters.
-  // This function performs a partial validation and checks if the specified
-  // parameters are in conflict with the currently set camera parameters (if
-  // any exist). In case of a conflict an invalid argument error is raised.
-  // In all other cases, the function defers to the driver specific
-  // implementation whose sole purpose is to actually set the parameters
-  // without any additional error checking. Note: Even for drivers which to
-  // not provide a concrete implementation of UpdateCameraSettingImpl() (see
-  // below), this function may raise invalid argument errors.
+  // Sets the user specified camera setting and updates the active stream's
+  // effective settings if a stream is currently running.
   absl::Status UpdateCameraSetting(const CameraSetting& camera_setting) final;
 
   // Applies each setting in `camera_settings` if it is a command, cannot be
@@ -186,31 +185,47 @@ class ImageSource : public ImageSourceInterface {
       CaptureResult capture_result, const CaptureArgs& args)
       ABSL_LOCKS_EXCLUDED(undistortion_mutex_, crop_and_resize_mutex_);
 
-  // Applies `default_args.camera_config` to `raw_capture_result`, applies
-  // per-callback post-processing for active consumers (falling back to
-  // `default_args.post_processing_by_sensor_id` when empty, while skipping
-  // undistortion and crop/resize for `std::nullopt` observers), and invokes
-  // all registered callbacks. Callers must serialize calls to
+  // Wakes any pending one-shot stream `Capture()` waiters with
+  // `raw_capture_result`, applies `default_args.camera_config` to
+  // `raw_capture_result`, applies per-callback post-processing for active
+  // consumers (falling back to `default_args.post_processing_by_sensor_id` when
+  // empty, while skipping undistortion and crop/resize for `std::nullopt`
+  // observers), and invokes all registered callbacks. `captured_sensor_ids`
+  // records the `sensor_ids` filter passed to `CaptureImpl` for this frame
+  // (empty means all sensors). Callers must serialize calls to
   // `InvokeCaptureCallbacks` so a given callback is never invoked concurrently
   // with itself.
-  void InvokeCaptureCallbacks(CaptureResult raw_capture_result,
-                              const CaptureArgs& default_args)
-      ABSL_LOCKS_EXCLUDED(callback_mutex_, undistortion_mutex_,
-                          crop_and_resize_mutex_);
+  void InvokeCaptureCallbacks(
+      CaptureResult raw_capture_result, const CaptureArgs& default_args,
+      const absl::flat_hash_set<int64_t>& captured_sensor_ids = {})
+      ABSL_LOCKS_EXCLUDED(streaming_mutex_, callback_mutex_,
+                          undistortion_mutex_, crop_and_resize_mutex_);
 
   // Returns the union of sensor IDs across all registered consumer callbacks
-  // (`options.has_value()`), or an empty set if any consumer requests all
-  // sensors (an empty `sensor_ids` list). Passive raw-stream observers
+  // (`options.has_value()`) and pending one-shot stream `Capture()` waiters, or
+  // an empty set if any active consumer or waiter requests all sensors (an
+  // empty `sensor_ids` list/set). Passive raw-stream observers
   // (`!options.has_value()`) do not affect the returned set. Falls back to the
   // `sensor_ids` passed to `StartStream()` when no consumer callback is
   // registered.
   absl::flat_hash_set<int64_t> GetActiveStreamSensorIds() const
       ABSL_LOCKS_EXCLUDED(callback_mutex_, streaming_mutex_);
 
+  // Blocks until at least `expected_count` concurrent `Capture()` callers are
+  // waiting on the active stream, or `timeout` elapses.
+  bool WaitForStreamCaptureWaiters(size_t expected_count,
+                                   absl::Duration timeout) const
+      ABSL_LOCKS_EXCLUDED(streaming_mutex_);
+
  private:
   struct RegisteredCallback {
     std::shared_ptr<CaptureCallback> callback;
     std::optional<CaptureCallbackOptions> options;
+  };
+
+  struct StreamCaptureWaiter {
+    absl::flat_hash_set<int64_t> sensor_ids;
+    std::optional<CaptureResult> result;
   };
 
   // Guards `undistortion_` map lookup/initialization and serializes OpenCV
@@ -241,6 +256,8 @@ class ImageSource : public ImageSourceInterface {
   bool is_stream_stopping_ ABSL_GUARDED_BY(streaming_mutex_) = false;
   uint64_t stream_generation_ ABSL_GUARDED_BY(streaming_mutex_) = 0;
   absl::flat_hash_set<int64_t> initial_stream_sensor_ids_
+      ABSL_GUARDED_BY(streaming_mutex_);
+  std::vector<StreamCaptureWaiter*> stream_capture_waiters_
       ABSL_GUARDED_BY(streaming_mutex_);
   mutable std::optional<EffectiveCameraSettings> active_effective_settings_
       ABSL_GUARDED_BY(streaming_mutex_);
