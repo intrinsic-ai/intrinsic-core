@@ -23,6 +23,7 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 #include <vector>
 
 #include "absl/cleanup/cleanup.h"
@@ -30,6 +31,7 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/functional/bind_front.h"
+#include "absl/functional/overload.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -44,7 +46,6 @@
 #include "grpcpp/server.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
-#include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
@@ -69,12 +70,11 @@
 #include "intrinsic/perception/proto_conversion/v1/post_processing.h"
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
-#include "intrinsic/simulation/gazebo/plugins/cameras/simulation_camera_settings.h"
 #include "intrinsic/util/proto/pb_hash.h"
+#include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/ret_check_grpc.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_builder_grpc.h"
-#include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_macros_grpc.h"
 #include "intrinsic/util/thread/stop_token.h"
@@ -141,6 +141,25 @@ absl::Status VerifyIntrinsicParams(
   return absl::OkStatus();
 }
 
+bool IsDimensionSetting(absl::string_view name) {
+  return name == genicam::kWidth || name == genicam::kHeight ||
+         name == genicam::kSensorWidth || name == genicam::kSensorHeight;
+}
+
+absl::StatusOr<int64_t> GetDimensionSettingValue(
+    absl::string_view name,
+    const intrinsic_proto::perception::v1::CameraConfig& camera_config) {
+  INTR_RET_CHECK(!camera_config.sensor_configs().empty());
+  // TODO(feuer): Add support for selecting a sensor.
+  const auto& dimensions = camera_config.sensor_configs(0)
+                               .camera_params()
+                               .intrinsic_params()
+                               .dimensions();
+  return (name == genicam::kWidth || name == genicam::kSensorWidth)
+             ? dimensions.cols()
+             : dimensions.rows();
+}
+
 }  // namespace
 
 GazeboCameraConnection::GazeboCameraConnection(
@@ -156,16 +175,15 @@ GazeboCameraConnection::GazeboCameraConnection(
   camera_handle_ = CanonicalString(
       intrinsic_proto::perception::v1::FromProto(camera_config_.identifier()));
 
-  if (auto status_or_camera =
-          Camera::Create({.driver = CameraIdentifier::FakeGenICam{}});
-      status_or_camera.ok()) {
-    LOG(INFO) << "Created fake camera to simulate camera parameter support.";
-    fake_camera_ = std::move(status_or_camera.value());
-  } else {
-    LOG(WARNING) << absl::StrFormat(
-        "Failed to create fake camera for simulating camera parameters. Error: "
-        "%s",
-        status_or_camera.status().message());
+  for (const auto& proto_setting : camera_config_.camera_settings()) {
+    if (!proto_setting.name().empty() &&
+        !IsDimensionSetting(proto_setting.name())) {
+      CameraSetting setting =
+          intrinsic_proto::perception::v1::FromProto(proto_setting);
+      if (!std::holds_alternative<std::monostate>(setting.value)) {
+        settings_[proto_setting.name()] = std::move(setting);
+      }
+    }
   }
 }
 
@@ -310,33 +328,90 @@ const std::string& GazeboCameraConnection::camera_handle() const {
 absl::StatusOr<CameraSettingProperties>
 GazeboCameraConnection::ReadCameraSettingProperties(
     absl::string_view name) const {
+  if (IsDimensionSetting(name)) {
+    INTR_ASSIGN_OR_RETURN(const int64_t value,
+                          GetDimensionSettingValue(name, camera_config_));
+    return CameraSettingProperties{
+        .name = std::string(name),
+        .properties =
+            CameraSettingProperties::Integer{
+                .range =
+                    CameraSettingProperties::Integer::Range{
+                        .minimum = value,
+                        .maximum = value,
+                    },
+                .increment = 1,
+            },
+    };
+  }
   absl::MutexLock lock(mutex_);
-  if (!fake_camera_.has_value()) {
+  const auto it = settings_.find(name);
+  if (it == settings_.end()) {
     return absl::NotFoundError(absl::StrFormat(
         "The parameter '%s' is not supported by a camera in simulation.",
         name));
   }
-  return fake_camera_->ReadCameraSettingProperties(name);
+  return CameraSettingProperties{
+      .name = std::string(name),
+      .properties = std::visit(
+          absl::Overload{
+              [](const CameraSetting::Integer&)
+                  -> CameraSettingProperties::Properties {
+                return CameraSettingProperties::Integer{.increment = 1};
+              },
+              [](const CameraSetting::Float&)
+                  -> CameraSettingProperties::Properties {
+                return CameraSettingProperties::Float{};
+              },
+              [](const CameraSetting::Enumeration& val)
+                  -> CameraSettingProperties::Properties {
+                return CameraSettingProperties::Enumeration{
+                    .values = {val.value}};
+              },
+              [](const auto&) -> CameraSettingProperties::Properties {
+                return std::monostate{};
+              },
+          },
+          it->second.value),
+  };
 }
 
 absl::StatusOr<CameraSetting> GazeboCameraConnection::ReadCameraSetting(
     absl::string_view name) const {
+  if (IsDimensionSetting(name)) {
+    INTR_ASSIGN_OR_RETURN(const int64_t value,
+                          GetDimensionSettingValue(name, camera_config_));
+    return CameraSetting{
+        .name = std::string(name),
+        .value = CameraSetting::Integer{.value = value},
+    };
+  }
   absl::MutexLock lock(mutex_);
-  if (!fake_camera_.has_value()) {
+  const auto it = settings_.find(name);
+  if (it == settings_.end()) {
     return absl::NotFoundError(absl::StrFormat(
         "The parameter '%s' is not supported by a camera in simulation.",
         name));
   }
-  return fake_camera_->ReadCameraSetting(name);
+  return it->second;
 }
 
 absl::Status GazeboCameraConnection::UpdateCameraSetting(
     const CameraSetting& camera_setting) {
-  absl::MutexLock lock(mutex_);
-  if (!fake_camera_.has_value()) {
-    return absl::UnimplementedError("UpdateCameraSetting");
+  if (camera_setting.name.empty()) {
+    return absl::InvalidArgumentError("Camera setting 'name' cannot be empty.");
   }
-  return fake_camera_->UpdateCameraSetting(camera_setting);
+  if (IsDimensionSetting(camera_setting.name)) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Cannot write read-only parameter '%s'.", camera_setting.name));
+  }
+  if (std::holds_alternative<std::monostate>(camera_setting.value)) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Camera setting '%s' must specify a value.", camera_setting.name));
+  }
+  absl::MutexLock lock(mutex_);
+  settings_[camera_setting.name] = camera_setting;
+  return absl::OkStatus();
 }
 
 absl::StatusOr<ImageSourceInterface::CallbackToken>
@@ -500,32 +575,11 @@ grpc::Status GazeboCameraGrpcService::ReadCameraSettingProperties(
       intrinsic_proto::perception::v1::FromProto(request->camera_identifier()));
   INTR_ASSIGN_OR_RETURN_GRPC(GazeboCameraConnection * camera,
                              GetCameraConnection(camera_handle), _.LogError());
-  INTR_RET_CHECK_GRPC(!camera->camera_config().sensor_configs().empty());
-  // TODO(feuer): Add support for selecting a sensor.
-  const intrinsic_proto::perception::v1::IntrinsicParams& intrinsic_params =
-      camera->camera_config()
-          .sensor_configs(0)
-          .camera_params()
-          .intrinsic_params();
-  if (request->name() == genicam::kWidth) {
-    *response->mutable_properties() =
-        GetWidthSettingProperties(intrinsic_params);
-  } else if (request->name() == genicam::kHeight) {
-    *response->mutable_properties() =
-        GetHeightSettingProperties(intrinsic_params);
-  } else if (request->name() == genicam::kSensorWidth) {
-    *response->mutable_properties() =
-        GetSensorWidthSettingProperties(intrinsic_params);
-  } else if (request->name() == genicam::kSensorHeight) {
-    *response->mutable_properties() =
-        GetSensorHeightSettingProperties(intrinsic_params);
-  } else {
-    INTR_ASSIGN_OR_RETURN_GRPC(
-        const CameraSettingProperties properties,
-        camera->ReadCameraSettingProperties(request->name()), _.LogError());
-    *response->mutable_properties() =
-        intrinsic_proto::perception::v1::ToProto(properties);
-  }
+  INTR_ASSIGN_OR_RETURN_GRPC(
+      const CameraSettingProperties properties,
+      camera->ReadCameraSettingProperties(request->name()), _.LogError());
+  *response->mutable_properties() =
+      intrinsic_proto::perception::v1::ToProto(properties);
   LOG(INFO) << "Read camera setting properties: " << response->properties();
   return grpc::Status::OK;
 }
@@ -542,28 +596,11 @@ grpc::Status GazeboCameraGrpcService::ReadCameraSetting(
       intrinsic_proto::perception::v1::FromProto(request->camera_identifier()));
   INTR_ASSIGN_OR_RETURN_GRPC(const GazeboCameraConnection* camera,
                              GetCameraConnection(camera_handle), _.LogError());
-  INTR_RET_CHECK_GRPC(!camera->camera_config().sensor_configs().empty());
-  // TODO(feuer): Add support for selecting a sensor.
-  const intrinsic_proto::perception::v1::IntrinsicParams& intrinsic_params =
-      camera->camera_config()
-          .sensor_configs(0)
-          .camera_params()
-          .intrinsic_params();
-  if (request->name() == genicam::kWidth) {
-    *response->mutable_setting() = GetWidthSetting(intrinsic_params);
-  } else if (request->name() == genicam::kHeight) {
-    *response->mutable_setting() = GetHeightSetting(intrinsic_params);
-  } else if (request->name() == genicam::kSensorWidth) {
-    *response->mutable_setting() = GetSensorWidthSetting(intrinsic_params);
-  } else if (request->name() == genicam::kSensorHeight) {
-    *response->mutable_setting() = GetSensorHeightSetting(intrinsic_params);
-  } else {
-    INTR_ASSIGN_OR_RETURN_GRPC(const CameraSetting setting,
-                               camera->ReadCameraSetting(request->name()),
-                               _.LogError());
-    *response->mutable_setting() =
-        intrinsic_proto::perception::v1::ToProto(setting);
-  }
+  INTR_ASSIGN_OR_RETURN_GRPC(const CameraSetting setting,
+                             camera->ReadCameraSetting(request->name()),
+                             _.LogError());
+  *response->mutable_setting() =
+      intrinsic_proto::perception::v1::ToProto(setting);
   LOG(INFO) << "Read camera settings: " << response->setting();
   return grpc::Status::OK;
 }
@@ -580,18 +617,10 @@ grpc::Status GazeboCameraGrpcService::UpdateCameraSetting(
       intrinsic_proto::perception::v1::FromProto(request->camera_identifier()));
   INTR_ASSIGN_OR_RETURN_GRPC(GazeboCameraConnection * camera,
                              GetCameraConnection(camera_handle), _.LogError());
-  const std::string& setting_name = request->setting().name();
-  if (setting_name == genicam::kWidth || setting_name == genicam::kHeight ||
-      setting_name == genicam::kSensorWidth ||
-      setting_name == genicam::kSensorHeight) {
-    return ToGrpcStatus(absl::InvalidArgumentError(absl::StrFormat(
-        "Cannot write read-only parameter '%s'.", setting_name)));
-  } else {
-    INTR_RETURN_IF_ERROR_GRPC(
-        camera->UpdateCameraSetting(
-            intrinsic_proto::perception::v1::FromProto(request->setting())))
-        .LogError();
-  }
+  INTR_RETURN_IF_ERROR_GRPC(
+      camera->UpdateCameraSetting(
+          intrinsic_proto::perception::v1::FromProto(request->setting())))
+      .LogError();
   return grpc::Status::OK;
 }
 

@@ -187,18 +187,6 @@ cc_library(
 )
 
 cc_library(
-    name = "simulation_camera_settings",
-    srcs = ["simulation_camera_settings.cc"],
-    hdrs = ["simulation_camera_settings.h"],
-    deps = [
-        "//intrinsic_perception/intrinsic/perception/cameras/genicam:feature_names",
-        "@intrinsic_apis//intrinsic/perception/proto/v1:camera_settings_cc_proto",
-        "@intrinsic_apis//intrinsic/perception/proto/v1:intrinsic_params_cc_proto",
-        "@intrinsic_apis//intrinsic/perception/proto/v1:settings_cc_proto",
-    ],
-)
-
-cc_library(
     name = "triggered_camera_client",
     srcs = ["triggered_camera_client.cc"],
     hdrs = ["triggered_camera_client.h"],
@@ -221,9 +209,7 @@ cc_library(
     srcs = ["camera_service.cc"],
     hdrs = ["camera_service.h"],
     deps = [
-        ":simulation_camera_settings",
         "//intrinsic/util/proto:pb_hash",
-        "//intrinsic_perception/intrinsic/perception/cameras:camera",
         "//intrinsic_perception/intrinsic/perception/cameras:camera_identifier",
         "//intrinsic_perception/intrinsic/perception/cameras:camera_setting",
         "//intrinsic_perception/intrinsic/perception/cameras:camera_setting_properties",
@@ -246,10 +232,10 @@ cc_library(
         "//intrinsic_perception/intrinsic/perception/proto_conversion/v1:post_processing",
         "//intrinsic_sdk/intrinsic/platform/pubsub",
         "//intrinsic_sdk/intrinsic/platform/pubsub:publisher",
+        "//intrinsic_sdk/intrinsic/util/status:ret_check",
         "//intrinsic_sdk/intrinsic/util/status:ret_check_grpc",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",
         "//intrinsic_sdk/intrinsic/util/status:status_builder_grpc",
-        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
         "//intrinsic_sdk/intrinsic/util/thread",
@@ -263,6 +249,7 @@ cc_library(
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/functional:bind_front",
+        "@abseil-cpp//absl/functional:overload",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",

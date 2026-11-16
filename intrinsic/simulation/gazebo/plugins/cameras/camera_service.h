@@ -33,7 +33,6 @@
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
-#include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
 #include "intrinsic/perception/cameras/image_source_interface.h"
@@ -161,7 +160,8 @@ class GazeboCameraConnection {
   mutable absl::Mutex mutex_;
   std::vector<intrinsic::perception::SensorImage> last_sensor_images_
       ABSL_GUARDED_BY(mutex_);
-  std::optional<Camera> fake_camera_ ABSL_GUARDED_BY(mutex_);
+  absl::flat_hash_map<std::string, CameraSetting> settings_
+      ABSL_GUARDED_BY(mutex_);
   bool stopped_ ABSL_GUARDED_BY(mutex_) = false;
 
   intrinsic_proto::perception::v1::DescribeCameraResponse camera_description_;
