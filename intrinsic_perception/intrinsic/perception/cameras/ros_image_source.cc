@@ -478,6 +478,8 @@ RosImageSource::RosImageSource(std::string_view driver_type,
                                std::string_view device_id)
     : ImageSource(), driver_type_(driver_type), device_id_(device_id) {}
 
+RosImageSource::~RosImageSource() { StopStream().IgnoreError(); }
+
 absl::Status RosImageSource::Init() {
   LOG(INFO) << "RosImageSource::Init() with driver_type: " << driver_type_
             << " and device_id: " << device_id_;
@@ -499,8 +501,7 @@ RosImageSource::DescribeCameraSensorsImpl() const {
 
   INTR_ASSIGN_OR_RETURN(Describe::Response describe_response, CallDescribe());
 
-  sensor_ids_.clear();
-  sensor_id_by_name_.clear();
+  absl::MutexLock lock(sensor_info_mutex_);
   sensor_id_by_topic_.clear();
   sensor_info_by_id_.clear();
 
@@ -510,8 +511,6 @@ RosImageSource::DescribeCameraSensorsImpl() const {
   int64_t sensor_id =
       describe_response.sensors.size() <= 1 ? kFallbackSensorId : 1;
   for (const auto& sensor_info : describe_response.sensors) {
-    sensor_ids_.insert(sensor_id);
-    sensor_id_by_name_.try_emplace(sensor_info.sensor_name, sensor_id);
     if (!sensor_info.topic_name.empty()) {
       sensor_id_by_topic_.try_emplace(sensor_info.topic_name, sensor_id);
     }
@@ -560,6 +559,21 @@ absl::StatusOr<CaptureResult> RosImageSource::CaptureImpl(
         absl::FormatTime(deadline_at)));
   }
 
+  const std::optional<absl::flat_hash_set<int64_t>> active_stream_sensor_ids =
+      GetActiveStreamSensorIdsIfStreaming();
+  const auto should_keep_sensor = [&](int64_t sensor_id) {
+    if (sensor_ids.empty() || sensor_ids.contains(sensor_id)) {
+      return true;
+    }
+    if (!active_stream_sensor_ids.has_value()) {
+      return false;
+    }
+    return active_stream_sensor_ids->empty() ||
+           active_stream_sensor_ids->contains(sensor_id);
+  };
+
+  absl::MutexLock lock(sensor_info_mutex_);
+
   // TODO(b/395343221): handle imus and temperatures
   std::vector<SensorImage> sensor_images;
   sensor_images.reserve(snapshot_response.images.size() +
@@ -578,7 +592,7 @@ absl::StatusOr<CaptureResult> RosImageSource::CaptureImpl(
                        image_snapshot.topic_name));
     }
     const int64_t sensor_id = it_sensor_id->second;
-    if (!sensor_ids.empty() && !sensor_ids.contains(sensor_id)) {
+    if (!should_keep_sensor(sensor_id)) {
       continue;
     }
     const auto it_sensor_info = sensor_info_by_id_.find(sensor_id);
@@ -602,7 +616,7 @@ absl::StatusOr<CaptureResult> RosImageSource::CaptureImpl(
         sensor_id_by_topic_.find(point_cloud_snapshot.topic_name);
     INTR_RET_CHECK(it_sensor_id != sensor_id_by_topic_.end());
     const int64_t sensor_id = it_sensor_id->second;
-    if (!sensor_ids.empty() && !sensor_ids.contains(sensor_id)) {
+    if (!should_keep_sensor(sensor_id)) {
       continue;
     }
     const auto it_sensor_info = sensor_info_by_id_.find(sensor_id);

@@ -68,19 +68,22 @@ class RosImageSource : public ImageSource {
   static absl::StatusOr<std::unique_ptr<ImageSource>> Create(
       const CameraIdentifier& camera_identifier);
 
+  ~RosImageSource() override;
+
  protected:
   explicit RosImageSource(std::string_view driver_type,
                           std::string_view device_id);
 
  private:
-  absl::Status Init();
+  absl::Status Init() ABSL_LOCKS_EXCLUDED(mutex_, sensor_info_mutex_);
 
   absl::StatusOr<std::vector<SensorInformation>> DescribeCameraSensorsImpl()
-      const override;
+      const override ABSL_LOCKS_EXCLUDED(mutex_, sensor_info_mutex_);
 
   absl::StatusOr<CaptureResult> CaptureImpl(
       absl::Duration timeout,
-      const absl::flat_hash_set<int64_t>& sensor_ids) override;
+      const absl::flat_hash_set<int64_t>& sensor_ids) override
+      ABSL_LOCKS_EXCLUDED(mutex_, sensor_info_mutex_);
 
   absl::StatusOr<CameraSettingAccess> ReadCameraSettingAccessImpl(
       absl::string_view name) const override;
@@ -151,11 +154,11 @@ class RosImageSource : public ImageSource {
   mutable absl::Mutex mutex_;
   std::unique_ptr<PubSub> pubsub_ ABSL_GUARDED_BY(mutex_);
 
-  mutable absl::flat_hash_set<int64_t> sensor_ids_;
-  mutable absl::flat_hash_map<std::string, int64_t> sensor_id_by_name_;
-  mutable absl::flat_hash_map<std::string, int64_t> sensor_id_by_topic_;
+  mutable absl::Mutex sensor_info_mutex_;
+  mutable absl::flat_hash_map<std::string, int64_t> sensor_id_by_topic_
+      ABSL_GUARDED_BY(sensor_info_mutex_);
   mutable absl::btree_map<int64_t, snapshot_interfaces::msg::SensorInfo>
-      sensor_info_by_id_;
+      sensor_info_by_id_ ABSL_GUARDED_BY(sensor_info_mutex_);
 };
 
 template <typename ResponseT, typename RequestT>

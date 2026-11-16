@@ -795,9 +795,11 @@ absl::Status ImageSource::UpdateCaptureCallbackOptions(
   return absl::OkStatus();
 }
 
-absl::flat_hash_set<int64_t> ImageSource::GetActiveStreamSensorIds() const {
+std::optional<absl::flat_hash_set<int64_t>>
+ImageSource::GetActiveStreamSensorIdsImpl(bool require_streaming) const {
   absl::flat_hash_set<int64_t> union_sensor_ids;
   bool has_active_consumer = false;
+  bool consumer_requests_all_sensors = false;
   {
     absl::MutexLock lock(callback_mutex_);
     for (const auto& [unused_token, entry] : callbacks_) {
@@ -808,7 +810,8 @@ absl::flat_hash_set<int64_t> ImageSource::GetActiveStreamSensorIds() const {
       // requests all available sensors, so the union across active consumers
       // must also request all sensors (`{}`).
       if (entry.options->sensor_ids.empty()) {
-        return {};
+        consumer_requests_all_sensors = true;
+        break;
       }
       has_active_consumer = true;
       union_sensor_ids.insert(entry.options->sensor_ids.begin(),
@@ -817,9 +820,15 @@ absl::flat_hash_set<int64_t> ImageSource::GetActiveStreamSensorIds() const {
   }
   {
     absl::MutexLock lock(streaming_mutex_);
+    if (require_streaming && !active_effective_settings_.has_value()) {
+      return std::nullopt;
+    }
+    if (consumer_requests_all_sensors) {
+      return absl::flat_hash_set<int64_t>{};
+    }
     if (!has_active_consumer) {
       if (initial_stream_sensor_ids_.empty()) {
-        return {};
+        return absl::flat_hash_set<int64_t>{};
       }
       union_sensor_ids = initial_stream_sensor_ids_;
     }
@@ -828,13 +837,22 @@ absl::flat_hash_set<int64_t> ImageSource::GetActiveStreamSensorIds() const {
         continue;
       }
       if (waiter->sensor_ids.empty()) {
-        return {};
+        return absl::flat_hash_set<int64_t>{};
       }
       union_sensor_ids.insert(waiter->sensor_ids.begin(),
                               waiter->sensor_ids.end());
     }
   }
   return union_sensor_ids;
+}
+
+absl::flat_hash_set<int64_t> ImageSource::GetActiveStreamSensorIds() const {
+  return *GetActiveStreamSensorIdsImpl(/*require_streaming=*/false);
+}
+
+std::optional<absl::flat_hash_set<int64_t>>
+ImageSource::GetActiveStreamSensorIdsIfStreaming() const {
+  return GetActiveStreamSensorIdsImpl(/*require_streaming=*/true);
 }
 
 bool ImageSource::WaitForStreamCaptureWaiters(size_t expected_count,

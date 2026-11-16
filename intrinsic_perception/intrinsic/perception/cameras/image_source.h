@@ -211,6 +211,12 @@ class ImageSource : public ImageSourceInterface {
   absl::flat_hash_set<int64_t> GetActiveStreamSensorIds() const
       ABSL_LOCKS_EXCLUDED(callback_mutex_, streaming_mutex_);
 
+  // Returns `GetActiveStreamSensorIds()` when a stream is currently active, or
+  // `std::nullopt` when idle (`!active_effective_settings_.has_value()`).
+  std::optional<absl::flat_hash_set<int64_t>>
+  GetActiveStreamSensorIdsIfStreaming() const
+      ABSL_LOCKS_EXCLUDED(callback_mutex_, streaming_mutex_);
+
   // Blocks until at least `expected_count` concurrent `Capture()` callers are
   // waiting on the active stream, or `timeout` elapses.
   bool WaitForStreamCaptureWaiters(size_t expected_count,
@@ -227,6 +233,10 @@ class ImageSource : public ImageSourceInterface {
     absl::flat_hash_set<int64_t> sensor_ids;
     std::optional<CaptureResult> result;
   };
+
+  std::optional<absl::flat_hash_set<int64_t>> GetActiveStreamSensorIdsImpl(
+      bool require_streaming) const
+      ABSL_LOCKS_EXCLUDED(callback_mutex_, streaming_mutex_);
 
   // Guards `undistortion_` map lookup/initialization and serializes OpenCV
   // `Undistort` (`cv::remap`) calls on this `ImageSource` so concurrent
