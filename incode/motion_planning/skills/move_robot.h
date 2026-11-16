@@ -32,6 +32,7 @@
 #include "intrinsic/motion_planning/service/debug/timing_debug_logger.h"
 #include "intrinsic/motion_planning/skills/move_robot.pb.h"
 #include "intrinsic/skills/cc/skill_interface.h"
+#include "intrinsic/skills/proto/footprint.pb.h"
 #include "intrinsic/skills/proto/skill_service.pb.h"
 #include "intrinsic/world/objects/kinematic_object.h"
 

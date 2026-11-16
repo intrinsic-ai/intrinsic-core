@@ -194,8 +194,6 @@ cc_library(
     ],
     deps = [
         ":move_robot_util",
-        "//intrinsic/choreographer/footprints:footprint",
-        "//intrinsic/choreographer/footprints:object_world_reservation",
         "//intrinsic/logging:log_item_builder",
         "//intrinsic/stats:scoped_span",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
@@ -259,6 +257,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_blending_parameter_cc_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planning_limits_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:equipment_cc_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:footprint_cc_proto",
         "@intrinsic_apis//intrinsic/skills/proto:skills_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",

@@ -36,8 +36,6 @@
 #include "incode/motion_planning/skills/move_robot_util.h"
 #include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
-#include "intrinsic/choreographer/footprints/footprint.h"
-#include "intrinsic/choreographer/footprints/object_world_reservation.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/cc_client/client.h"
@@ -85,6 +83,7 @@
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/cc/skill_utils.h"
 #include "intrinsic/skills/proto/equipment.pb.h"
+#include "intrinsic/skills/proto/footprint.pb.h"
 #include "intrinsic/skills/proto/skill_service.pb.h"
 #include "intrinsic/skills/proto/skills.pb.h"
 #include "intrinsic/stats/scoped_span.h"
@@ -484,9 +483,6 @@ MoveRobot::MoveRobot(std::unique_ptr<icon::ChannelFactory> icon_channel_factory)
 
 absl::StatusOr<intrinsic_proto::skills::Footprint> MoveRobot::GetFootprint(
     const GetFootprintRequest& request, GetFootprintContext& context) const {
-  // MoveRobot at least needs to modify the robot.
-  Footprint footprint;
-
   INTR_ASSIGN_OR_RETURN(
       const intrinsic_proto::skills::MoveRobotParams params,
       request.params<intrinsic_proto::skills::MoveRobotParams>());
@@ -494,10 +490,12 @@ absl::StatusOr<intrinsic_proto::skills::Footprint> MoveRobot::GetFootprint(
   // use the robot from the equipment slot. In execute, it is checked that there
   // is only one robot in the world in this case.
   std::optional<world::KinematicObject> robot_object;
+  // MoveRobot at least needs to modify the robot.
+  intrinsic_proto::skills::Footprint out;
   if (params.has_arm_part()) {
-    footprint.AddObjectReservation(
-        ObjectWorldReservation(ObjectWorldReservation::kSharingTypeWrite,
-                               params.arm_part().by_name()));
+    out = CreateObjectReservationFootprint(
+        params.arm_part().by_name(),
+        intrinsic_proto::skills::ObjectWorldReservation::WRITE);
     INTR_ASSIGN_OR_RETURN(
         robot_object,
         context.object_world().GetKinematicObject(params.arm_part()));
@@ -505,14 +503,11 @@ absl::StatusOr<intrinsic_proto::skills::Footprint> MoveRobot::GetFootprint(
     INTR_ASSIGN_OR_RETURN(
         const world::KinematicObject robot,
         context.GetKinematicObjectForEquipment(MoveRobot::kEquipmentSlot));
-    footprint.AddObjectReservation(ObjectWorldReservation(
-        ObjectWorldReservation::kSharingTypeWrite, robot.Name()));
+    out = CreateObjectReservationFootprint(
+        robot.Name().value(),
+        intrinsic_proto::skills::ObjectWorldReservation::WRITE);
     robot_object = robot;
   }
-
-  intrinsic_proto::skills::Footprint out;
-  INTR_ASSIGN_OR_RETURN(
-      out, footprint.ToProto(&(context.geometry_library().Serializer())));
 
   // Compute and store the motion plan.
   INTR_ASSIGN_OR_RETURN(
