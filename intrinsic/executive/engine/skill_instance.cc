@@ -23,12 +23,11 @@
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "grpcpp/client_context.h"
-#include "intrinsic/assets/dependencies/utils.h"
-#include "intrinsic/executive/clips_cpp/protobuf.h"
-#include "intrinsic/executive/engine/skill_action.h"
 #include "intrinsic/executive/proto/behavior_call.pb.h"
 #include "intrinsic/skills/internal/skill_service_client.h"
 #include "intrinsic/skills/proto/skills.pb.h"
@@ -37,76 +36,6 @@
 #include "intrinsic/util/unique_id.h"
 
 namespace intrinsic::executive {
-
-namespace {
-
-absl::Status ResolveSkillParameterDependencies(
-    google::protobuf::Any& parameter, const assets::Resolver& resolver,
-    const clips::ProtobufManager::DescriptorPoolInfo& pool_info,
-    SkillAction skill_action,
-    const absl::flat_hash_map<std::string, std::string>&
-        fallback_manifest_dependencies) {
-  INTR_ASSIGN_OR_RETURN(
-      std::unique_ptr<google::protobuf::Message> casted_parameter,
-      clips::ProtobufManager::CastFromAnyWithPool(parameter, pool_info, ""));
-  INTR_RETURN_IF_ERROR(resolver.ResolveParameterDependenciesWithFallback(
-      *casted_parameter, skill_action, fallback_manifest_dependencies,
-      pool_info.descriptor_pool, pool_info.message_factory));
-  if (!parameter.PackFrom(*casted_parameter)) {
-    return absl::InternalError("Failed to pack parameter");
-  }
-  return absl::OkStatus();
-}
-
-absl::StatusOr<bool> HasAnnotatedResolvedDependency(
-    const google::protobuf::Any& parameter,
-    const clips::ProtobufManager::DescriptorPoolInfo& pool_info) {
-  INTR_ASSIGN_OR_RETURN(
-      std::unique_ptr<google::protobuf::Message> casted_parameter,
-      clips::ProtobufManager::CastFromAnyWithPool(parameter, pool_info, ""));
-  return ::intrinsic::assets::dependencies::HasResolvedDependency(
-      *casted_parameter->GetDescriptor(),
-      ::intrinsic::assets::dependencies::ResolvedDepsIntrospectionOptions{
-          .check_dependency_annotation = true,
-          .check_skill_annotations = false,
-      });
-}
-
-// Perform skill parameter resolving on the given BehaviorCall. This might
-// modify the BehaviorCall's parameters when dependencies are resolved.
-//
-// A non-OK Status is returned, when the resolving could not be performed.
-absl::Status ResolveSkillParameterDependenciesFromResolvedDependencies(
-    intrinsic_proto::executive::BehaviorCall& behavior_call,
-    SkillAction skill_action, const SkillInstance::CreationContext& context) {
-  if (!context.pool_info.has_value()) {
-    return absl::InternalError(absl::StrFormat(
-        "SkillInstance::Create called without pool information that is "
-        "required to deserialize its parameters for skill %s",
-        behavior_call.skill_id()));
-  }
-  // If the skill parameters have a resolved dependency, we need to resolve
-  // them.
-  INTR_ASSIGN_OR_RETURN(bool has_resolved_dependency,
-                        HasAnnotatedResolvedDependency(
-                            behavior_call.parameters(), *context.pool_info));
-  if (has_resolved_dependency) {
-    absl::flat_hash_map<std::string, std::string>
-        fallback_manifest_dependencies;
-    for (const auto& [resource_slot, resource_spec] :
-         behavior_call.resources()) {
-      if (resource_spec.has_handle()) {
-        fallback_manifest_dependencies[resource_slot] = resource_spec.handle();
-      }
-    }
-    INTR_RETURN_IF_ERROR(ResolveSkillParameterDependencies(
-        *behavior_call.mutable_parameters(), context.resolver,
-        *context.pool_info, skill_action, fallback_manifest_dependencies));
-  }
-  return absl::OkStatus();
-}
-
-}  // namespace
 
 absl::StatusOr<std::unique_ptr<skills::SkillServiceClientInterface>>
 CreateSkillServiceClient(
@@ -134,24 +63,20 @@ CreateSkillServiceClient(
 SkillInstance::SkillInstance() : mutex_(std::make_unique<absl::Mutex>()) {}
 
 absl::StatusOr<SkillInstance> SkillInstance::Create(
-    intrinsic_proto::executive::BehaviorCall& behavior_call,
-    SkillAction skill_action, const CreationContext& context) {
+    const intrinsic_proto::executive::BehaviorCall& behavior_call,
+    const CreationContext& context) {
   const stats::ScopedSpan span("SkillInstance/Create");
-
-  // If there are no parameters, we cannot resolve anything. This usually only
-  // happens in tests.
-  if (behavior_call.has_parameters()) {
-    INTR_RETURN_IF_ERROR(
-        ResolveSkillParameterDependenciesFromResolvedDependencies(
-            behavior_call, skill_action, context));
-  }
 
   SkillInstance skill_instance;
   INTR_RETURN_IF_ERROR(skill_instance.InitializeInstanceProto(
-      behavior_call, context.grpc_targets, context.id_version));
+      behavior_call.skill_id(),
+      behavior_call.has_instance_name()
+          ? std::make_optional<absl::string_view>(behavior_call.instance_name())
+          : std::nullopt,
+      context.grpc_targets, context.id_version));
 
-  INTR_RETURN_IF_ERROR(
-      skill_instance.FillEquipmentPack(behavior_call, context));
+  INTR_RETURN_IF_ERROR(skill_instance.FillEquipmentPack(
+      behavior_call.skill_id(), behavior_call.resources(), context));
 
   INTR_ASSIGN_OR_RETURN(skill_instance.client_,
                         CreateSkillServiceClient(
@@ -162,21 +87,25 @@ absl::StatusOr<SkillInstance> SkillInstance::Create(
 }
 
 absl::Status SkillInstance::FillEquipmentPack(
-    const intrinsic_proto::executive::BehaviorCall& behavior_call,
+    absl::string_view skill_id,
+    const google::protobuf::Map<
+        std::string,
+        intrinsic_proto::executive::BehaviorCall::ResourceSpecification>&
+        resources,
     const CreationContext& context) {
   for (const std::string& resource_slot : context.required_equipment_keys) {
-    auto resource_spec_it = behavior_call.resources().find(resource_slot);
-    if (resource_spec_it == behavior_call.resources().end()) {
+    auto resource_spec_it = resources.find(resource_slot);
+    if (resource_spec_it == resources.end()) {
       return absl::InvalidArgumentError(absl::StrFormat(
           "Required resource slot '%s' missing in BehaviorCall for skill %s.",
-          resource_slot, behavior_call.skill_id()));
+          resource_slot, skill_id));
     }
     const auto& resource_spec = resource_spec_it->second;
     if (!resource_spec.has_handle()) {
-      return absl::InvalidArgumentError(absl::StrFormat(
-          "Resource slot '%s' is not a handle, but "
-          "reference '%s' in BehaviorCall for skill %s.",
-          resource_slot, resource_spec.reference(), behavior_call.skill_id()));
+      return absl::InvalidArgumentError(
+          absl::StrFormat("Resource slot '%s' is not a handle, but "
+                          "reference '%s' in BehaviorCall for skill %s.",
+                          resource_slot, resource_spec.reference(), skill_id));
     }
     const std::string& resource_name = resource_spec.handle();
     auto handle_it = context.resource_handles.find(resource_name);
@@ -194,16 +123,16 @@ absl::Status SkillInstance::FillEquipmentPack(
 }
 
 absl::Status SkillInstance::InitializeInstanceProto(
-    const intrinsic_proto::executive::BehaviorCall& behavior_call,
+    absl::string_view skill_id, std::optional<absl::string_view> instance_name,
     const intrinsic_proto::assets::v1alpha1::InternalSkillData::GrpcTargets&
         grpc_targets,
     absl::string_view id_version) {
   const stats::ScopedSpan span_client("SkillInstance/InitializeInstanceProto");
-  if (behavior_call.has_instance_name()) {
-    instance_.set_instance_name(behavior_call.instance_name());
+  if (instance_name.has_value()) {
+    instance_.set_instance_name(std::string(*instance_name));
   } else {
     instance_.set_instance_name(
-        absl::StrCat(behavior_call.skill_id(), "/", intrinsic::UniqueId()));
+        absl::StrCat(skill_id, "/", intrinsic::UniqueId()));
   }
   instance_.set_id_version(std::string(id_version));
   instance_.mutable_project_handle()->set_grpc_target(grpc_targets.project());

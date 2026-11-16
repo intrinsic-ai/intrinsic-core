@@ -178,15 +178,14 @@ class SkillClientGenerator {
       std::vector<SkillClientGenerator::SkillRegistrationInternal>&
           skill_assets);
 
-  absl::Status ResolveSkillParameterDependencies(
-      google::protobuf::Any& parameter,
-      clips::DescriptorPoolId descriptor_pool_id, SkillAction skill_action,
-      const absl::flat_hash_map<std::string, std::string>&
-          fallback_manifest_dependencies) const;
-
-  absl::StatusOr<bool> HasAnnotatedResolvedDependency(
-      const google::protobuf::Any& parameter,
-      clips::DescriptorPoolId descriptor_pool_id) const;
+  absl::Status ResolveSkillParameters(
+      google::protobuf::Any& parameters,
+      const google::protobuf::Map<
+          std::string,
+          intrinsic_proto::executive::BehaviorCall::ResourceSpecification>&
+          resources,
+      clips::DescriptorPoolId descriptor_pool_id,
+      SkillAction skill_action) const;
 
   // Update skills_ from the installed assets service and the skill registry.
   // Only call from UpdateSkillsAndResources to ensure the information is

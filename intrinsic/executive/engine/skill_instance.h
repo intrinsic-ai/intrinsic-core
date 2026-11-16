@@ -18,17 +18,20 @@
 #include <functional>
 #include <memory>
 #include <optional>
+#include <string>
+#include <vector>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "grpcpp/client_context.h"
-#include "intrinsic/assets/dependencies/resolver.h"
 #include "intrinsic/assets/proto/v1alpha1/asset_info_internal.pb.h"
-#include "intrinsic/executive/clips_cpp/protobuf.h"
-#include "intrinsic/executive/engine/skill_action.h"
 #include "intrinsic/executive/proto/behavior_call.pb.h"
+#include "intrinsic/resources/proto/resource_handle.pb.h"
 #include "intrinsic/skills/cc/equipment_pack.h"
 #include "intrinsic/skills/internal/skill_registry_client_interface.h"
 #include "intrinsic/skills/internal/skill_service_client_interface.h"
@@ -58,9 +61,6 @@ class SkillInstance {
   SkillInstance& operator=(SkillInstance&&) = default;
 
   struct CreationContext {
-    // Only set when the BehaviorCall has parameters
-    std::optional<clips::ProtobufManager::DescriptorPoolInfo> pool_info;
-    const assets::Resolver& resolver;
     intrinsic_proto::assets::v1alpha1::InternalSkillData::GrpcTargets
         grpc_targets;  // defines how to connect to this skill instance
     const absl::flat_hash_map<std::string,
@@ -72,9 +72,14 @@ class SkillInstance {
     std::string id_version;
   };
 
+  // Creates a skill instance for the behavior call's skill id.
+  // If the behavior call specifies an instance_name that is taken, otherwise an
+  // instance name is generated.
+  // The old-style resources field of the behavior call is stored in the
+  // instance proto for skill calls.
   static absl::StatusOr<SkillInstance> Create(
-      intrinsic_proto::executive::BehaviorCall& behavior_call,
-      SkillAction skill_action, const CreationContext& context);
+      const intrinsic_proto::executive::BehaviorCall& behavior_call,
+      const CreationContext& context);
 
   const skills::SkillServiceClientInterface* GetClient() const {
     return client_.get();
@@ -96,15 +101,20 @@ class SkillInstance {
 
  private:
   // This fills the legacy EquipmentPack in equipment for a skill instance from
-  // the ResourceHandles retrieved by the resource registry.
+  // the given resources retrieved by the resource registry.
   absl::Status FillEquipmentPack(
-      const intrinsic_proto::executive::BehaviorCall& behavior_call,
+      absl::string_view skill_id,
+      const google::protobuf::Map<
+          std::string,
+          intrinsic_proto::executive::BehaviorCall::ResourceSpecification>&
+          resources,
       const CreationContext& context);
 
-  // Fills the instance proto by generating an instance name and retrieving the
-  // grpc addresses for this skill instance.
+  // Fills the instance proto by generating an instance name if not given and
+  // retrieving the grpc addresses for this skill instance.
   absl::Status InitializeInstanceProto(
-      const intrinsic_proto::executive::BehaviorCall& behavior_call,
+      absl::string_view skill_id,
+      std::optional<absl::string_view> instance_name,
       const intrinsic_proto::assets::v1alpha1::InternalSkillData::GrpcTargets&
           grpc_targets,
       absl::string_view id_version);

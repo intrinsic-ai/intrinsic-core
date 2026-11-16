@@ -16,12 +16,14 @@
 
 #include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -30,6 +32,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "grpcpp/client_context.h"
+#include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/assets/id_utils.h"
 #include "intrinsic/assets/proto/asset_type.pb.h"
 #include "intrinsic/assets/proto/installed_assets.grpc.pb.h"
@@ -43,7 +46,6 @@
 #include "intrinsic/executive/clips_cpp/readonly_facade.h"
 #include "intrinsic/executive/clips_cpp/value.h"
 #include "intrinsic/executive/engine/skill_action.h"
-#include "intrinsic/executive/engine/skill_client_generator.h"
 #include "intrinsic/executive/engine/skill_instance.h"
 #include "intrinsic/executive/proto/behavior_call.pb.h"
 #include "intrinsic/executive/proto/behavior_tree.pb.h"
@@ -68,6 +70,38 @@ constexpr int kInstalledAssetsServiceMaxPageSize = 50;
 inline constexpr absl::string_view kIngressAddress =
     "istio-ingressgateway.app-ingress.svc.cluster.local:80";
 inline constexpr absl::string_view kInstanceHeader = "x-resource-instance-name";
+
+absl::Status ResolveSkillParameterDependencies(
+    google::protobuf::Any& parameter, const assets::Resolver& resolver,
+    const clips::ProtobufManager::DescriptorPoolInfo& pool_info,
+    SkillAction skill_action,
+    const absl::flat_hash_map<std::string, std::string>&
+        fallback_manifest_dependencies) {
+  INTR_ASSIGN_OR_RETURN(
+      std::unique_ptr<google::protobuf::Message> casted_parameter,
+      clips::ProtobufManager::CastFromAnyWithPool(parameter, pool_info, ""));
+  INTR_RETURN_IF_ERROR(resolver.ResolveParameterDependenciesWithFallback(
+      *casted_parameter, skill_action, fallback_manifest_dependencies,
+      pool_info.descriptor_pool, pool_info.message_factory));
+  if (!parameter.PackFrom(*casted_parameter)) {
+    return absl::InternalError("Failed to pack parameter");
+  }
+  return absl::OkStatus();
+}
+
+absl::StatusOr<bool> HasAnnotatedResolvedDependency(
+    const google::protobuf::Any& parameter,
+    const clips::ProtobufManager::DescriptorPoolInfo& pool_info) {
+  INTR_ASSIGN_OR_RETURN(
+      std::unique_ptr<google::protobuf::Message> casted_parameter,
+      clips::ProtobufManager::CastFromAnyWithPool(parameter, pool_info, ""));
+  return ::intrinsic::assets::dependencies::HasResolvedDependency(
+      *casted_parameter->GetDescriptor(),
+      ::intrinsic::assets::dependencies::ResolvedDepsIntrospectionOptions{
+          .check_dependency_annotation = true,
+          .check_skill_annotations = false,
+      });
+}
 
 }  // namespace
 
@@ -556,6 +590,40 @@ SkillClientGenerator::GetSkillRegistration(absl::string_view skill_id) const
   };
 }
 
+// Perform skill parameter resolving on the given BehaviorCall's parameters.
+// This might modify the given parameters when dependencies are resolved.
+//
+// A non-OK Status is returned, when the resolving could not be performed.
+absl::Status SkillClientGenerator::ResolveSkillParameters(
+    google::protobuf::Any& parameters,
+    const google::protobuf::Map<
+        std::string,
+        intrinsic_proto::executive::BehaviorCall::ResourceSpecification>&
+        resources,
+    const clips::DescriptorPoolId descriptor_pool_id,
+    SkillAction skill_action) const {
+  const stats::ScopedSpan span("SkillClientGenerator/ResolveSkillParameters");
+  INTR_ASSIGN_OR_RETURN(clips::ProtobufManager::DescriptorPoolInfo pool_info,
+                        proto_manager_->GetDescriptorPool(descriptor_pool_id));
+  // If the skill parameters have a resolved dependency, we need to resolve
+  // them.
+  INTR_ASSIGN_OR_RETURN(bool has_resolved_dependency,
+                        HasAnnotatedResolvedDependency(parameters, pool_info));
+  if (has_resolved_dependency) {
+    absl::flat_hash_map<std::string, std::string>
+        fallback_manifest_dependencies;
+    for (const auto& [resource_slot, resource_spec] : resources) {
+      if (resource_spec.has_handle()) {
+        fallback_manifest_dependencies[resource_slot] = resource_spec.handle();
+      }
+    }
+    INTR_RETURN_IF_ERROR(ResolveSkillParameterDependencies(
+        parameters, resolver_, pool_info, skill_action,
+        fallback_manifest_dependencies));
+  }
+  return absl::OkStatus();
+}
+
 absl::StatusOr<SkillInstance> SkillClientGenerator::CreateSkillInstance(
     intrinsic_proto::executive::BehaviorCall& behavior_call,
     const clips::DescriptorPoolId descriptor_pool_id,
@@ -576,16 +644,17 @@ absl::StatusOr<SkillInstance> SkillClientGenerator::CreateSkillInstance(
         behavior_call.skill_id()));
   }
 
-  std::optional<clips::ProtobufManager::DescriptorPoolInfo> pool_info;
+  // If there are no parameters, we cannot resolve anything. This usually only
+  // happens in tests.
   if (behavior_call.has_parameters()) {
-    INTR_ASSIGN_OR_RETURN(
-        pool_info, proto_manager_->GetDescriptorPool(descriptor_pool_id));
+    INTR_RETURN_IF_ERROR(ResolveSkillParameters(
+        *behavior_call.mutable_parameters(), behavior_call.resources(),
+        descriptor_pool_id, skill_action));
   }
+
   return SkillInstance::Create(
-      behavior_call, skill_action,
-      {.pool_info = pool_info,
-       .resolver = resolver_,
-       .grpc_targets = *skill_reg.grpc_targets,
+      behavior_call,
+      {.grpc_targets = *skill_reg.grpc_targets,
        .resource_handles = resource_handles_,
        .connect_timeout = skill_service_connect_timeout_,
        .skill_service_client_creator_mock = skill_service_client_creator_mock_,
