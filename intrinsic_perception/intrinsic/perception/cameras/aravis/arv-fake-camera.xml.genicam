@@ -382,6 +382,9 @@
 			<Value>1</Value>
 		</EnumEntry>
 		<pValue>TriggerSelectorInteger</pValue>
+		<pSelected>TriggerMode</pSelected>
+		<pSelected>TriggerSource</pSelected>
+		<pSelected>TriggerActivation</pSelected>
 	</Enumeration>
 
 	<Integer Name="TriggerSelectorInteger" NameSpace="Custom">

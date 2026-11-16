@@ -15,6 +15,7 @@
 #include "intrinsic/perception/cameras/aravis/aravis_utils.h"
 
 #include <arv.h>
+#include <glib.h>
 
 #include <algorithm>
 #include <cstddef>
@@ -641,6 +642,47 @@ absl::StatusOr<DistortionParams> GetFactoryDistortionParams(
                           .ty = ty};
 }
 
+void RecordSelectorNodeIfApplicable(
+    ArvDomNode* absl_nonnull node, SelectorMap& selectors_by_selected_feature) {
+  if (ARV_IS_GC_FEATURE_NODE(node) == 0 || ARV_IS_GC_SELECTOR(node) == 0 ||
+      arv_gc_selector_is_selector(ARV_GC_SELECTOR(node)) == 0) {
+    return;
+  }
+  const char* selector_name =
+      arv_gc_feature_node_get_name(ARV_GC_FEATURE_NODE(node));
+  if (selector_name == nullptr) {
+    return;
+  }
+  for (const GSList* iter =
+           arv_gc_selector_get_selected_features(ARV_GC_SELECTOR(node));
+       iter != nullptr; iter = iter->next) {
+    if (iter->data == nullptr || ARV_IS_GC_FEATURE_NODE(iter->data) == 0) {
+      continue;
+    }
+    if (const char* selected_name =
+            arv_gc_feature_node_get_name(ARV_GC_FEATURE_NODE(iter->data));
+        selected_name != nullptr) {
+      selectors_by_selected_feature[selected_name].emplace(selector_name);
+    }
+  }
+}
+
+SelectorMap CollectSelectorsFromDomNode(ArvDomNode* absl_nonnull root) {
+  SelectorMap selectors_by_selected_feature;
+  std::vector<ArvDomNode*> stack;
+  stack.push_back(root);
+  while (!stack.empty()) {
+    ArvDomNode* node = stack.back();
+    stack.pop_back();
+    RecordSelectorNodeIfApplicable(node, selectors_by_selected_feature);
+    for (ArvDomNode* child = arv_dom_node_get_first_child(node);
+         child != nullptr; child = arv_dom_node_get_next_sibling(child)) {
+      stack.push_back(child);
+    }
+  }
+  return selectors_by_selected_feature;
+}
+
 }  // namespace
 
 absl::StatusOr<int> BitsPerPixel(ArvPixelFormat pixel_format) {
@@ -1127,6 +1169,21 @@ std::optional<CameraSettingProperties::Float> GetGainProperties(
   }
   return CameraSettingProperties::Float{
       .range = range, .increment = increment.value_or(0.0), .unit = "dB"};
+}
+
+SelectorMap GetSelectorsBySelectedFeature(ArvCamera* absl_nonnull camera) {
+  if (ARV_IS_CAMERA(camera) == 0) {
+    return {};
+  }
+  ArvDevice* device = arv_camera_get_device(camera);
+  if (device == nullptr || ARV_IS_DEVICE(device) == 0) {
+    return {};
+  }
+  ArvGc* genicam = arv_device_get_genicam(device);
+  if (genicam == nullptr || ARV_IS_GC(genicam) == 0) {
+    return {};
+  }
+  return CollectSelectorsFromDomNode(ARV_DOM_NODE(genicam));
 }
 
 BufferHelper::BufferHelper(ArvCamera* absl_nonnull camera,

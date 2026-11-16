@@ -43,6 +43,7 @@ cc_library(
         ":aravis_glib_utils",
         ":aravis_wrapper",
         ":gio_wrapper",
+        ":glib_wrapper",
         "//intrinsic_control/intrinsic/icon/release:source_location",
         "//intrinsic_perception/intrinsic/perception/cameras:camera_setting_properties",
         "//intrinsic_perception/intrinsic/perception/cameras:capture_result",

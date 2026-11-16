@@ -243,6 +243,18 @@ std::optional<CameraSettingProperties::Float> GetExposureTimeProperties(
 std::optional<CameraSettingProperties::Float> GetGainProperties(
     ArvCamera* absl_nonnull arv_camera);
 
+// Maps a selector-governed feature name (e.g. `"TriggerSource"`) to the
+// name(s) of the selector feature(s) that control it (e.g.
+// `{"TriggerSelector"}`).
+using SelectorMap =
+    absl::flat_hash_map<std::string, absl::flat_hash_set<std::string>>;
+
+// Introspects the camera's GenICam XML DOM via Aravis `ArvGcSelector` to build
+// a map from each selected feature name (`<pSelected>`) to the selector feature
+// name(s) that control it. Returns an empty map if the camera defines no
+// selectors or if its underlying device or GenICam DOM is unavailable.
+SelectorMap GetSelectorsBySelectedFeature(ArvCamera* absl_nonnull camera);
+
 template <typename T>
 absl::StatusOr<T> BufferHelper::GetChunkValue(
     std::string_view feature_name, ArvBuffer* absl_nonnull chunk_buffer) const {
