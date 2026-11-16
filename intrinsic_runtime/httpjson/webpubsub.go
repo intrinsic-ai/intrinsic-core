@@ -30,7 +30,7 @@ import (
 	"intrinsic/config/environments"
 	pb "intrinsic/httpjson/proto/v1alpha/webpubsub_go_proto"
 
-	"github.com/intrinsic-ai/insrc/intrinsic_runtime/httpjson/webrtc"
+	"intrinsic_runtime/httpjson/webrtc"
 )
 
 type idTokenSource interface {

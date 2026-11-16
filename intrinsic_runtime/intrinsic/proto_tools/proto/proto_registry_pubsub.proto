@@ -18,7 +18,7 @@ package intrinsic_proto.proto_registry;
 
 import "google/protobuf/descriptor.proto";
 
-option go_package = "github.com/intrinsic-ai/insrc/intrinsic_runtime/intrinsic/proto_tools/proto/proto_registry_pubsub_go_proto";
+option go_package = "intrinsic/proto_tools/proto/proto_registry_pubsub_go_proto";
 
 // The following is for the _types/register queryable to register types for a
 // topic. It is invoked as part of creating a publisher/subscriber. The response

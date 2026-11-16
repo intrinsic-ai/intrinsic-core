@@ -32,7 +32,7 @@ import (
 	"intrinsic/platform/pubsub/golang/pubsub"
 	"intrinsic/stats/go/telemetry"
 
-	"github.com/intrinsic-ai/insrc/intrinsic_runtime/httpjson/webrtc"
+	"intrinsic_runtime/httpjson/webrtc"
 
 	"github.com/grpc-ecosystem/grpc-gateway/v2/runtime"
 	"go.opencensus.io/plugin/ocgrpc"

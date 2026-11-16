@@ -16,7 +16,7 @@ syntax = "proto3";
 
 package intrinsic_proto.proto_registry.internal;
 
-option go_package = "github.com/intrinsic-ai/insrc/intrinsic_runtime/intrinsic/proto_tools/proto";
+option go_package = "intrinsic/proto_tools/proto/proto_registry_internal_go_proto";
 
 // Internal message representing a file descriptor set name. Can be used, e.g.,
 // for obfuscation.

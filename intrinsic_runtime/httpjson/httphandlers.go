@@ -38,7 +38,7 @@ import (
 
 	webpubsubpb "intrinsic/httpjson/proto/v1alpha/webpubsub_go_proto"
 
-	"github.com/intrinsic-ai/insrc/intrinsic_runtime/httpjson/webrtc"
+	"intrinsic_runtime/httpjson/webrtc"
 
 	"log/slog"
 	"math"

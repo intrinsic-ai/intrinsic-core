@@ -12,8 +12,6 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-# gazelle:prefix github.com/intrinsic-ai/insrc/intrinsic_runtime/httpjson/webrtc
-
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 go_library(
@@ -34,7 +32,7 @@ go_library(
         "stats.go",
         "turn.go",
     ],
-    importpath = "github.com/intrinsic-ai/insrc/intrinsic_runtime/httpjson/webrtc",
+    importpath = "intrinsic_runtime/httpjson/webrtc",
     visibility = ["//visibility:public"],
     deps = [
         "//intrinsic_sdk/intrinsic/cloud/devicemanager/shared",

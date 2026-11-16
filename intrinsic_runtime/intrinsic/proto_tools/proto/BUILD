@@ -30,7 +30,7 @@ cc_proto_library(
 
 go_proto_library(
     name = "proto_registry_internal_go_proto",
-    importpath = "github.com/intrinsic-ai/insrc/intrinsic_runtime/intrinsic/proto_tools/proto",
+    importpath = "intrinsic/proto_tools/proto/proto_registry_internal_go_proto",
     proto = ":proto_registry_internal_proto",
 )
 
@@ -42,7 +42,7 @@ proto_library(
 
 go_proto_library(
     name = "proto_registry_pubsub_go_proto",
-    importpath = "github.com/intrinsic-ai/insrc/intrinsic_runtime/intrinsic/proto_tools/proto/proto_registry_pubsub_go_proto",
+    importpath = "intrinsic/proto_tools/proto/proto_registry_pubsub_go_proto",
     proto = ":proto_registry_pubsub_proto",
 )
 
