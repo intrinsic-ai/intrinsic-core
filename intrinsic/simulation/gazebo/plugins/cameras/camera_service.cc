@@ -15,7 +15,6 @@
 #include "intrinsic/simulation/gazebo/plugins/cameras/camera_service.h"
 
 #include <algorithm>
-#include <cstddef>
 #include <cstdint>
 #include <functional>
 #include <memory>
@@ -25,6 +24,7 @@
 #include <variant>
 #include <vector>
 
+#include "absl/algorithm/container.h"
 #include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
@@ -37,19 +37,17 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
-#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
-#include "grpcpp/server.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
+#include "intrinsic/perception/cameras/camera_config.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
 #include "intrinsic/perception/cameras/capture_result.h"
-#include "intrinsic/perception/cameras/capture_result_helper.h"
 #include "intrinsic/perception/cameras/genicam/feature_names.h"
 #include "intrinsic/perception/cameras/image_source.h"
 #include "intrinsic/perception/cameras/image_source_interface.h"
@@ -57,7 +55,6 @@
 #include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
 #include "intrinsic/perception/core/camera_params.h"
 #include "intrinsic/perception/core/intrinsic_params.h"
-#include "intrinsic/perception/core/undistortion.h"
 #include "intrinsic/perception/logging/sensor_image.h"
 #include "intrinsic/perception/proto/v1/camera_config.pb.h"
 #include "intrinsic/perception/proto/v1/camera_identifier.pb.h"
@@ -66,21 +63,14 @@
 #include "intrinsic/perception/proto_conversion/v1/camera_config.h"
 #include "intrinsic/perception/proto_conversion/v1/camera_identifier.h"
 #include "intrinsic/perception/proto_conversion/v1/camera_settings.h"
-#include "intrinsic/perception/proto_conversion/v1/capture_result.h"
-#include "intrinsic/perception/proto_conversion/v1/post_processing.h"
-#include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/util/proto/pb_hash.h"
 #include "intrinsic/util/status/ret_check.h"
-#include "intrinsic/util/status/ret_check_grpc.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_builder_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_macros_grpc.h"
 #include "intrinsic/util/thread/stop_token.h"
-#include "third_party/ros2/ros_interfaces/jazzy/builtin_interfaces/msg/time.pb.h"
-#include "third_party/ros2/ros_interfaces/jazzy/sensor_msgs/msg/image.pb.h"
-#include "third_party/ros2/ros_interfaces/jazzy/std_msgs/msg/header.pb.h"
 
 namespace intrinsic {
 namespace perception {
@@ -88,15 +78,11 @@ namespace perception {
 namespace {
 
 absl::Status VerifyIntrinsicParams(
-    const intrinsic_proto::perception::v1::CameraConfig&
-        requested_camera_config,
+    const CameraConfig& requested_config,
     const intrinsic_proto::perception::v1::CameraConfig&
         matched_camera_config) {
   INTR_ASSIGN_OR_RETURN(
-      (const auto [requested_config, _1]),
-      intrinsic_proto::perception::v1::FromProto(requested_camera_config));
-  INTR_ASSIGN_OR_RETURN(
-      (const auto [matched_config, _2]),
+      (const auto [matched_config, unused_identifier]),
       intrinsic_proto::perception::v1::FromProto(matched_camera_config));
   for (const auto& [requested_sensor_id, requested_sensor_params] :
        requested_config.camera_params_by_sensor_id) {
@@ -158,6 +144,37 @@ absl::StatusOr<int64_t> GetDimensionSettingValue(
   return (name == genicam::kWidth || name == genicam::kSensorWidth)
              ? dimensions.cols()
              : dimensions.rows();
+}
+
+absl::StatusOr<ParsedCaptureRequest> ParseGazeboCaptureRequest(
+    const intrinsic_proto::perception::v1::CaptureRequest& request) {
+  INTR_ASSIGN_OR_RETURN(
+      ParsedCaptureRequest parsed_request,
+      ParseCaptureRequest(request, kGazeboDefaultCaptureTimeout));
+
+  // In slow-running or complex simulations, rendering camera images can take
+  // much longer than real-time hardware capture timeouts, so ensure we wait at
+  // least `kGazeboDefaultCaptureTimeout`.
+  parsed_request.capture_args.timeout = std::max(
+      parsed_request.capture_args.timeout, kGazeboDefaultCaptureTimeout);
+
+  // Deduplicate sensor_ids so `ImageSource` does not fail on duplicate IDs
+  // (`ImageSource` only uses `sensor_ids` for set membership, not ordering).
+  absl::c_sort(parsed_request.capture_args.sensor_ids);
+  parsed_request.capture_args.sensor_ids.erase(
+      std::unique(parsed_request.capture_args.sensor_ids.begin(),
+                  parsed_request.capture_args.sensor_ids.end()),
+      parsed_request.capture_args.sensor_ids.end());
+
+  // Gazebo does not support camera distortion yet and simulated images are
+  // already undistorted, so strip any distortion parameters from the request to
+  // avoid undistorting simulated images again in `ImageSource`.
+  for (auto& [unused_sensor_id, camera_params] :
+       parsed_request.capture_args.camera_config.camera_params_by_sensor_id) {
+    camera_params.distortion_params = std::nullopt;
+  }
+
+  return parsed_request;
 }
 
 }  // namespace
@@ -504,52 +521,26 @@ grpc::Status GazeboCameraGrpcService::Capture(
     grpc::ServerContext* context,
     const intrinsic_proto::perception::v1::CaptureRequest* request,
     intrinsic_proto::perception::v1::CaptureResponse* response) {
-  if (!request->camera_config().has_identifier()) {
-    return InvalidArgumentErrorBuilderGrpc()
-           << "Capture() requires a config with a camera identifier.";
-  }
-
+  INTR_ASSIGN_OR_RETURN_GRPC(ParsedCaptureRequest parsed_request,
+                             ParseGazeboCaptureRequest(*request));
   const std::string camera_handle =
-      CanonicalString(intrinsic_proto::perception::v1::FromProto(
-          request->camera_config().identifier()));
+      CanonicalString(parsed_request.camera_identifier);
 
   INTR_ASSIGN_OR_RETURN_GRPC(GazeboCameraConnection * camera,
                              GetCameraConnection(camera_handle), _.LogError());
 
   // Check that the intrinsic parameters in the requested camera config
   // match the ones in the found config.
-  INTR_RETURN_IF_ERROR_GRPC(
-      VerifyIntrinsicParams(request->camera_config(), camera->camera_config()));
+  INTR_RETURN_IF_ERROR_GRPC(VerifyIntrinsicParams(
+      parsed_request.capture_args.camera_config, camera->camera_config()));
 
   const auto start_capture = absl::Now();
-  const absl::flat_hash_set<int64_t> sensor_ids(request->sensor_ids().begin(),
-                                                request->sensor_ids().end());
-
-  INTR_ASSIGN_OR_RETURN_GRPC(auto sensor_images,
-                             camera->WaitForNewSensorImages(sensor_ids),
+  INTR_ASSIGN_OR_RETURN_GRPC(CaptureResult capture_result,
+                             camera->Capture(parsed_request.capture_args),
                              _.LogError());
   LOG(INFO) << "GazeboCameraGrpcService::Capture(...) received sensor images: "
             << absl::Now() - start_capture;
 
-  absl::Time capture_at;
-  if (!sensor_images.empty()) {
-    capture_at = sensor_images[0].acquisition_time();
-  }
-
-  CaptureResult capture_result = {.capture_at = capture_at,
-                                  .sensor_images = std::move(sensor_images)};
-  // Simulated images are already undistorted, so post-processing is not
-  // modifying the undistortion map and hence it is cheap to re-create an
-  // empty map. If we ever add support for distorted images, we need to make
-  // the undistortion map a member.
-  UndistortionBySensorId undistortion_by_sensor_id;
-  INTR_ASSIGN_OR_RETURN_GRPC(
-      capture_result,
-      PostProcessCaptureResult(std::move(capture_result),
-                               intrinsic_proto::perception::v1::FromProto(
-                                   request->post_processing_by_sensor_id())
-                                   .first,
-                               undistortion_by_sensor_id));
   if (request->has_context()) {
     INTR_RETURN_IF_ERROR_GRPC(
         LogSensorImages(executor_, capture_result.sensor_images,
