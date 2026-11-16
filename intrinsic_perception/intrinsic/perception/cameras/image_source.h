@@ -23,6 +23,7 @@
 #include "absl/base/no_destructor.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/functional/function_ref.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -132,6 +133,12 @@ class ImageSource : public ImageSourceInterface {
     return absl::UnimplementedError(
         "Updating camera settings is not implemented for the current driver.");
   }
+
+  // Validates `camera_settings` and invokes `update_setting` for each setting
+  // that is a command, cannot be read, or differs from the current readback.
+  absl::Status ApplyCameraSettings(
+      absl::Span<const CameraSetting> camera_settings,
+      absl::FunctionRef<absl::Status(const CameraSetting&)> update_setting);
 
   // Derived classes should implement this function to offer sensor-specific
   // access, factory calibrations, and configuration options.

@@ -193,8 +193,8 @@ class GenicamImageSource : public ImageSource {
   absl::Status UpdateCameraSettingImpl(
       const CameraSetting& camera_setting) override;
 
-  // Internal helper to update a camera setting during stream startup/teardown
-  // while `streaming_state_` is populated.
+  // Internal helper for applying settings during stream startup/teardown
+  // without triggering the external streaming-state guard.
   absl::Status UpdateCameraSettingInternal(const CameraSetting& camera_setting);
 
   // Sets a value of the specified camera setting.

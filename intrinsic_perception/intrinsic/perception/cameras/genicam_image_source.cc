@@ -2166,17 +2166,11 @@ absl::Status GenicamImageSource::StartStream(const CaptureArgs& params) {
   };
 
   // Apply all camera settings once before we start the capture loop.
-  for (const CameraSetting& camera_setting :
-       params.camera_config.camera_settings) {
-    if (std::holds_alternative<CameraSetting::Command>(camera_setting.value)) {
-      INTR_RETURN_IF_ERROR(UpdateCameraSettingInternal(camera_setting));
-    } else if (const absl::StatusOr<CameraSetting> current_setting =
-                   ReadCameraSetting(camera_setting.name);
-               !current_setting.ok() ||
-               !current_setting->IsApprox(camera_setting)) {
-      INTR_RETURN_IF_ERROR(UpdateCameraSettingInternal(camera_setting));
-    }
-  }
+  INTR_RETURN_IF_ERROR(
+      ApplyCameraSettings(params.camera_config.camera_settings,
+                          [this](const CameraSetting& camera_setting) {
+                            return UpdateCameraSettingInternal(camera_setting);
+                          }));
 
   INTR_RETURN_IF_ERROR(GetFaultsStatus());
   INTR_RETURN_IF_ERROR(StopAsyncAcquisition());

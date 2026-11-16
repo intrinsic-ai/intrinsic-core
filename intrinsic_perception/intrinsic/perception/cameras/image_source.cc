@@ -21,6 +21,7 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/functional/any_invocable.h"
 #include "absl/log/check.h"
@@ -84,6 +85,15 @@ absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
 
 absl::Status ImageSource::ApplyCameraSettings(
     absl::Span<const CameraSetting> camera_settings) {
+  return ApplyCameraSettings(camera_settings,
+                             [this](const CameraSetting& camera_setting) {
+                               return UpdateCameraSetting(camera_setting);
+                             });
+}
+
+absl::Status ImageSource::ApplyCameraSettings(
+    absl::Span<const CameraSetting> camera_settings,
+    absl::FunctionRef<absl::Status(const CameraSetting&)> update_setting) {
   for (const CameraSetting& camera_setting : camera_settings) {
     if (camera_setting.name.empty()) {
       return absl::InvalidArgumentError(
@@ -92,12 +102,12 @@ absl::Status ImageSource::ApplyCameraSettings(
   }
   for (const CameraSetting& camera_setting : camera_settings) {
     if (std::holds_alternative<CameraSetting::Command>(camera_setting.value)) {
-      INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
+      INTR_RETURN_IF_ERROR(update_setting(camera_setting));
     } else if (const absl::StatusOr<CameraSetting> current_setting =
                    ReadCameraSetting(camera_setting.name);
                !current_setting.ok() ||
                !current_setting->IsApprox(camera_setting)) {
-      INTR_RETURN_IF_ERROR(UpdateCameraSetting(camera_setting));
+      INTR_RETURN_IF_ERROR(update_setting(camera_setting));
     }
   }
   return absl::OkStatus();
@@ -231,12 +241,17 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
     }
     is_stream_starting_ = true;
   }
+  absl::Cleanup reset_stream_starting = [this] {
+    absl::MutexLock lock(streaming_mutex_);
+    is_stream_starting_ = false;
+  };
 
   // Apply all camera settings once before we start the capture loop.
   INTR_RETURN_IF_ERROR(
       ApplyCameraSettings(params.camera_config.camera_settings));
 
   absl::MutexLock lock(streaming_mutex_);
+  std::move(reset_stream_starting).Cancel();
   is_stream_starting_ = false;
   streaming_thread_.emplace([this, params](intrinsic::StopToken stop_token) {
     LOG(INFO) << "ImageSource::Thread: Starting streaming thread.";
