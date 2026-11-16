@@ -802,6 +802,56 @@ ClipsSkillDispatcher::StartSkillSpan(
   return span;
 }
 
+absl::StatusOr<std::shared_ptr<SkillInstance>>
+ClipsSkillDispatcher::GetOrCreateSkillInstanceOrReportError(
+    absl::string_view action_id, SkillAction skill_action,
+    const intrinsic_proto::executive::BehaviorCall& behavior_call_proto) {
+  {
+    absl::MutexLock lock(action_id_to_skill_instance_mutex_);
+    auto it = action_id_to_skill_instance_.find(action_id);
+    if (it != action_id_to_skill_instance_.end()) {
+      return it->second;
+    }
+  }
+
+  INTR_ASSIGN_OR_RETURN(
+      SkillInstance skill_instance_to_move,
+      CreateSkillInstanceOrReportError(assert_facade_, proto_manager_,
+                                       skill_client_generator_, action_id,
+                                       skill_action, behavior_call_proto));
+  auto new_skill_instance =
+      std::make_shared<SkillInstance>(std::move(skill_instance_to_move));
+  new_skill_instance->GetClient()->InitConcurrentLogging();
+
+  // CreateSkillInstanceOrReportError and InitConcurrentLogging might take some
+  // (ideally short) time. Thus do *not* do this under the lock as that blocks
+  // all skill calls.
+  // However, once we have this skill instance created, a concurrent call could
+  // have already inserted a skill instance for the same action. In that case
+  // use the already existing one for this action id and tear down and remove
+  // the new one that was created here.
+  // Again: Do only try the insertion under lock and keep the tear down of the
+  // now obsolete new one outside the lock.
+
+  std::shared_ptr<SkillInstance> existing_instance;
+  {
+    absl::MutexLock lock(action_id_to_skill_instance_mutex_);
+    auto [it, inserted] =
+        action_id_to_skill_instance_.try_emplace(action_id, new_skill_instance);
+    if (!inserted) {
+      LOG(WARNING) << "Concurrent SkillInstance creation for action_id '"
+                   << action_id << "'; reusing first instance.";
+      existing_instance = it->second;
+    }
+  }
+  if (existing_instance != nullptr) {
+    const stats::ScopedSpan span("TearDownDuplicateConcurrentLogging");
+    new_skill_instance->GetClient()->TearDownConcurrentLogging();
+    return existing_instance;
+  }
+  return new_skill_instance;
+}
+
 absl::StatusOr<std::optional<::google::protobuf::Any>>
 ClipsSkillDispatcher::PerformSkillPreview(
     absl::string_view action_id, SkillInstance& skill_instance,
@@ -1028,39 +1078,14 @@ void ClipsSkillDispatcher::StartSkillExecution(
                                  SkillAction::Execution, descriptor_pool_id,
                                  behavior_call_proto))
             .With(ReturnVoid());
-        // Get Skill info, also creates client, hence do within bundle
-        INTR_ASSIGN_OR_RETURN(
-            SkillInstance skill_instance_to_move,
-            CreateSkillInstanceOrReportError(
-                assert_facade_, proto_manager_, skill_client_generator_,
-                action_id, SkillAction::Execution, behavior_call_proto),
-            _.With(ReturnVoid()));
 
-        std::shared_ptr<SkillInstance> skill_instance;
-        {
-          absl::MutexLock lock(action_id_to_skill_instance_mutex_);
-          action_id_to_skill_instance_[action_id] =
-              std::make_shared<SkillInstance>(
-                  std::move(skill_instance_to_move));
-          // This thread added the skill_instance to
-          // action_id_to_skill_instance_ and it is the only place where it is
-          // erased again. Other threads may use it (while locked) but never
-          // erase it.
-          skill_instance = action_id_to_skill_instance_.at(action_id);
-        }
-
-        INTR_ASSIGN_OR_RETURN(
-            const std::string footprint_object_name,
-            AddFootprintVolumesOrReportError(
-                assert_facade_, proto_manager_, object_world_service_stub_,
-                world_id, action_id, behavior_call_proto),
-            _.With(ReturnVoid()));
-
-        std::optional<absl::Duration> execute_timeout =
-            GetExecuteTimeoutOrDefault(behavior_call_proto);
-
-        skill_instance->GetClient()->InitConcurrentLogging();
-
+        // Retrieve and register a skill instance for this action_id.
+        INTR_ASSIGN_OR_RETURN(std::shared_ptr<SkillInstance> skill_instance,
+                              GetOrCreateSkillInstanceOrReportError(
+                                  action_id, skill_action, behavior_call_proto),
+                              _.With(ReturnVoid()));
+        // The execution thread is the last part where the skill instance is
+        // being used. Thus clean it up once done.
         absl::Cleanup cleanup_skill_instance =
             [skill_instance, action_id = std::string(action_id), this] {
               // Retain the skill_instance shared_ptr here to be able to call
@@ -1077,6 +1102,16 @@ void ClipsSkillDispatcher::StartSkillExecution(
               const stats::ScopedSpan span("TearDownConcurrentLogging");
               skill_instance->GetClient()->TearDownConcurrentLogging();
             };
+
+        INTR_ASSIGN_OR_RETURN(
+            const std::string footprint_object_name,
+            AddFootprintVolumesOrReportError(
+                assert_facade_, proto_manager_, object_world_service_stub_,
+                world_id, action_id, behavior_call_proto),
+            _.With(ReturnVoid()));
+
+        std::optional<absl::Duration> execute_timeout =
+            GetExecuteTimeoutOrDefault(behavior_call_proto);
 
         // actual execution follows, this is potentially long-running
         absl::Status result_status;

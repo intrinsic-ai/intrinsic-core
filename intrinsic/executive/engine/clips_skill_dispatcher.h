@@ -152,6 +152,23 @@ class ClipsSkillDispatcher {
       "CANCELING-EXECUTION-TIMEOUT";
 
  private:
+  // Retrieves an existing SkillInstance for `action_id` or creates and stores a
+  // new one.
+  // The returned SkillInstance has already initialized concurrent logging.
+  // If creation fails, reports FAILED status to CLIPS and returns the error.
+  //
+  // Note on concurrency: While this function is thread-safe, callers must not
+  // run concurrent project or execute calls for the same `action_id`:
+  // 1. A single `SkillServiceClient` is not safe for concurrent RPCs (other
+  //    than concurrent `CancelSkillExecution` / `AbandonSkillExecution` calls).
+  // 2. A CLIPS `plan-action` (`action_id`) shares a single `BehaviorCall` proto
+  //    that stores the projected footprint and internal data.
+  // This function is expected to be called from inside a skill thread.
+  absl::StatusOr<std::shared_ptr<SkillInstance>>
+  GetOrCreateSkillInstanceOrReportError(
+      absl::string_view action_id, SkillAction skill_action,
+      const intrinsic_proto::executive::BehaviorCall& behavior_call_proto);
+
   // Start a tracing span for project or execute.
   // Will always start a span, even if parent_context is invalid. In that case
   // a root span in a new trace is started. Normally, this should not happen.
