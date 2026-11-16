@@ -69,12 +69,6 @@ cc_library(
 )
 
 cc_library(
-    name = "full_precision",
-    hdrs = ["full_precision.h"],
-    deps = ["@abseil-cpp//absl/strings:str_format"],
-)
-
-cc_library(
     name = "subprocess",
     srcs = ["subprocess.cc"],
     hdrs = ["subprocess.h"],

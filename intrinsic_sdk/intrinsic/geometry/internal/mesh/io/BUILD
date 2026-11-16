@@ -106,7 +106,6 @@ cc_library(
     hdrs = ["load_mesh_from_file.h"],
     visibility = [
         "//intrinsic/scene/sdf:__pkg__",
-        "//intrinsic_runtime/intrinsic/geometry/internal/io:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
     ],
@@ -138,5 +137,24 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@assimp",
         "@com_gitlab_libeigen_eigen//:eigen",
+    ],
+)
+
+cc_library(
+    name = "save_mesh_to_stl_file",
+    srcs = ["save_mesh_to_stl_file.cc"],
+    hdrs = ["save_mesh_to_stl_file.h"],
+    visibility = [
+        "//intrinsic/scene/sdf:__pkg__",
+        "//intrinsic/simulation/world:__pkg__",
+    ],
+    deps = [
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@com_gitlab_libeigen_eigen//:eigen",
+        "@or_tools//ortools/base:file",
     ],
 )

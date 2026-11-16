@@ -104,7 +104,7 @@ cc_test(
     srcs = ["condition_test.cc"],
     deps = [
         ":condition",
-        "//intrinsic/util:full_precision",
+        "//intrinsic_sdk/intrinsic/util:full_precision",
         "@abseil-cpp//absl/hash:hash_testing",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:status_matchers",

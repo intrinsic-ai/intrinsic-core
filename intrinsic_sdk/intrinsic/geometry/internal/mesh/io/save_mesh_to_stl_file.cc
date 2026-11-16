@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/geometry/internal/io/save_mesh_to_stl_file.h"
+#include "intrinsic/geometry/internal/mesh/io/save_mesh_to_stl_file.h"
 
 #include <cstdint>
 #include <fstream>

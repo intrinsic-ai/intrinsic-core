@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef INTRINSIC_GEOMETRY_INTERNAL_IO_SAVE_MESH_TO_STL_FILE_H_
-#define INTRINSIC_GEOMETRY_INTERNAL_IO_SAVE_MESH_TO_STL_FILE_H_
+#ifndef INTRINSIC_GEOMETRY_INTERNAL_MESH_IO_SAVE_MESH_TO_STL_FILE_H_
+#define INTRINSIC_GEOMETRY_INTERNAL_MESH_IO_SAVE_MESH_TO_STL_FILE_H_
 
 #include "absl/status/status.h"
 #include "absl/strings/string_view.h"
@@ -25,4 +25,4 @@ absl::Status SaveMeshToBinaryStlFile(absl::string_view filename,
                                      const Mesh& mesh);
 
 }  // namespace intrinsic::geo
-#endif  // INTRINSIC_GEOMETRY_INTERNAL_IO_SAVE_MESH_TO_STL_FILE_H_
+#endif  // INTRINSIC_GEOMETRY_INTERNAL_MESH_IO_SAVE_MESH_TO_STL_FILE_H_

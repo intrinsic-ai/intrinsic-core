@@ -59,6 +59,12 @@ cc_library(
 )
 
 cc_library(
+    name = "full_precision",
+    hdrs = ["full_precision.h"],
+    deps = ["@abseil-cpp//absl/strings:str_format"],
+)
+
+cc_library(
     name = "invalid_until_set",
     hdrs = ["invalid_until_set.h"],
 )

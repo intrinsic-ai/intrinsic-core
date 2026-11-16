@@ -56,7 +56,7 @@
 #include "intrinsic/geometry/api/geometry_fingerprint.h"
 #include "intrinsic/geometry/api/is_convex.h"
 #include "intrinsic/geometry/api/renderable_generation.h"
-#include "intrinsic/geometry/internal/io/save_mesh_to_stl_file.h"
+#include "intrinsic/geometry/internal/mesh/io/save_mesh_to_stl_file.h"
 #include "intrinsic/geometry/internal/util/scale_shape.h"
 #include "intrinsic/geometry/shapes/shape_base.h"
 #include "intrinsic/geometry/shapes/shapes.h"
