@@ -20,6 +20,7 @@
 #include <string>
 #include <utility>
 
+#include "absl/base/no_destructor.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -50,11 +51,13 @@ constexpr double kNotFoundRetryDelayFactor = 2.0;
 }  // namespace
 
 KeyValueStoreFactory CreateKeyValueStoreFactory() {
-  return [pubsub = PubSub()](absl::string_view store)
+  static const absl::NoDestructor<PubSub> kPubSub;
+  const PubSub* pubsub = kPubSub.get();
+  return [pubsub](absl::string_view store)
              -> absl::StatusOr<std::shared_ptr<KeyValueStore>> {
     std::optional<std::string> prefix =
         store.empty() ? std::nullopt : std::make_optional(std::string(store));
-    INTR_ASSIGN_OR_RETURN(KeyValueStore kvstore, pubsub.KeyValueStore(prefix));
+    INTR_ASSIGN_OR_RETURN(KeyValueStore kvstore, pubsub->KeyValueStore(prefix));
     return std::make_shared<KeyValueStore>(std::move(kvstore));
   };
 }

@@ -27,6 +27,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/time:deadline_timeout",
+        "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/functional:any_invocable",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
