@@ -18,6 +18,7 @@
 #include <string>
 
 #include "absl/algorithm/container.h"
+#include "absl/base/no_destructor.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -143,7 +144,7 @@ absl::StatusOr<google::protobuf::RepeatedPtrField<
 GetCameraResourceHandles(
     const google::protobuf::RepeatedPtrField<
         intrinsic_proto::assets::v1::ResolvedDependency>& cameras) {
-  perception::GrpcCamera grpc_camera;
+  static absl::NoDestructor<perception::GrpcCamera> grpc_camera;
   google::protobuf::RepeatedPtrField<intrinsic_proto::resources::ResourceHandle>
       camera_handles;
   for (const auto& camera : cameras) {
@@ -157,7 +158,7 @@ GetCameraResourceHandles(
     }
     INTR_ASSIGN_OR_RETURN(
         *camera_handles.Add(),
-        GetCameraResourceHandle(camera, camera_name, grpc_camera));
+        GetCameraResourceHandle(camera, camera_name, *grpc_camera));
   }
   if (camera_handles.empty()) {
     return absl::InvalidArgumentError(

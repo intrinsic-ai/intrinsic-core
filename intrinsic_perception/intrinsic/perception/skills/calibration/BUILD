@@ -288,6 +288,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_client",
         "//intrinsic_sdk/intrinsic/world/util:object_reference_utils",
         "@abseil-cpp//absl/algorithm:container",
+        "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
