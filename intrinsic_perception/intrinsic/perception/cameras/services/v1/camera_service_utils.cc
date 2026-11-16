@@ -14,6 +14,7 @@
 
 #include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
 
+#include <cstddef>
 #include <string>
 #include <utility>
 
@@ -21,18 +22,27 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "google/protobuf/any.pb.h"
 #include "intrinsic/perception/cameras/capture_result.h"
+#include "intrinsic/perception/cameras/image_source_interface.h"
+#include "intrinsic/perception/cameras/sensor_image.h"
+#include "intrinsic/perception/core/dimensions.h"
+#include "intrinsic/perception/proto/v1/camera_config.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
 #include "intrinsic/perception/proto/v1/capture_result.pb.h"
+#include "intrinsic/perception/proto_conversion/v1/camera_config.h"
 #include "intrinsic/perception/proto_conversion/v1/capture_result.h"
 #include "intrinsic/perception/proto_conversion/v1/post_processing.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
+#include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
+#include "intrinsic/platform/pubsub/topic_config.h"
 #include "intrinsic/stats/scoped_span.h"
+#include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_macros.h"
 
 namespace intrinsic::perception {
@@ -63,6 +73,121 @@ absl::StatusOr<int> WaitForKeyDeletion(KeyValueStore& kvstore,
 }
 
 }  // namespace
+
+absl::StatusOr<ParsedCaptureRequest> ParseCaptureRequest(
+    const intrinsic_proto::perception::v1::CaptureRequest& request,
+    absl::Duration default_timeout) {
+  if (!request.camera_config().has_identifier()) {
+    return absl::InvalidArgumentError(
+        "CaptureRequest requires a config with a camera identifier.");
+  }
+  INTR_ASSIGN_OR_RETURN(
+      (auto [camera_config, camera_identifier]),
+      intrinsic_proto::perception::v1::FromProto(request.camera_config()));
+  absl::Duration timeout = default_timeout;
+  if (request.has_timeout()) {
+    INTR_ASSIGN_OR_RETURN(timeout, ToAbslDuration(request.timeout()));
+  }
+  auto [post_processing_by_sensor_id, encoding_by_sensor_id] =
+      FromProto(request.post_processing_by_sensor_id());
+  return ParsedCaptureRequest{
+      .camera_identifier = std::move(camera_identifier),
+      .capture_args =
+          CaptureArgs{
+              .timeout = timeout,
+              .sensor_ids = {request.sensor_ids().begin(),
+                             request.sensor_ids().end()},
+              .camera_config = std::move(camera_config),
+              .post_processing_by_sensor_id =
+                  std::move(post_processing_by_sensor_id),
+          },
+      .encoding_by_sensor_id = std::move(encoding_by_sensor_id),
+  };
+}
+
+absl::StatusOr<ImageSourceInterface::CaptureCallback>
+CreateBaseTopicPublishingCaptureCallback(const PubSub& pubsub,
+                                         absl::string_view base_topic) {
+  INTR_ASSIGN_OR_RETURN(
+      Publisher publisher,
+      pubsub.CreatePublisher(base_topic,
+                             TopicConfig{.topic_qos = TopicConfig::Sensor}),
+      _.LogError() << "Failed to create base topic publisher.");
+
+  LOG(INFO) << "Generating base topic publishing capture callback for topic: "
+            << base_topic;
+  return [publisher = std::move(publisher)](
+             const CaptureResult& capture) -> absl::Status {
+    INTR_ASSIGN_OR_RETURN(
+        intrinsic_proto::perception::v1::CaptureResult capture_result_proto,
+        intrinsic_proto::perception::v1::ToProto(capture), _.LogError());
+
+    LOG_EVERY_N_SEC(INFO, 10)
+        << "Publishing raw images on base topic: " << publisher.TopicName();
+    if (const absl::Status status =
+            publisher.Publish(capture_result_proto, capture.capture_at);
+        !status.ok()) {
+      LOG(WARNING) << "Failed to publish image on base topic: "
+                   << publisher.TopicName() << " with error: " << status;
+    }
+
+    return absl::OkStatus();
+  };
+}
+
+ImageSourceInterface::CaptureCallback CreateDebugLogsCaptureCallback(
+    absl::string_view camera_log_id) {
+  struct SessionStats {
+    size_t num_frames = 0;
+    absl::Time start_time = absl::InfinitePast();
+    absl::Time last_capture_time = absl::InfinitePast();
+  };
+
+  LOG(INFO) << "Generating debug capture callback to track stats.";
+  return [camera_log_id = std::string(camera_log_id),
+          session_stats = SessionStats{}](
+             const CaptureResult& capture) mutable -> absl::Status {
+    if (session_stats.start_time == absl::InfinitePast()) {
+      session_stats.start_time = capture.capture_at;
+      session_stats.last_capture_time = capture.capture_at;
+    } else {
+      ++session_stats.num_frames;
+      const absl::Duration last_capture_duration =
+          capture.capture_at - session_stats.last_capture_time;
+      session_stats.last_capture_time = capture.capture_at;
+      const absl::Duration total_duration =
+          session_stats.last_capture_time - session_stats.start_time;
+      const double average_rate_hz =
+          total_duration > absl::ZeroDuration()
+              ? session_stats.num_frames / absl::ToDoubleSeconds(total_duration)
+              : 0.0;
+      const double instant_rate_hz =
+          last_capture_duration > absl::ZeroDuration()
+              ? 1.0 / absl::ToDoubleSeconds(last_capture_duration)
+              : 0.0;
+
+      LOG_EVERY_N_SEC(INFO, 5)
+          << "\nCamera: " << camera_log_id << "\n\tRate: " << average_rate_hz
+          << "Hz\n\tInstant Rate: " << instant_rate_hz
+          << "Hz\n\tFrame count: " << session_stats.num_frames
+          << "\n\tLast capture time: " << session_stats.last_capture_time
+          << "\n\tDimensions[" << capture.sensor_images.size() << "]: "
+          << absl::StrJoin(
+                 capture.sensor_images, "\n\t\t",
+                 [](std::string* out, const auto& sensor_image) {
+                   absl::StrAppend(
+                       out, "[", sensor_image.sensor_id(),
+                       "]: ", sensor_image.Dimensions().cols, "x",
+                       sensor_image.Dimensions().rows, " => ",
+                       sensor_image.Dimensions().area(), " pixels (",
+                       (sensor_image.Dimensions().area() / 10000) / 100.0,
+                       "MP)");
+                 });
+    }
+
+    return absl::OkStatus();
+  };
+}
 
 absl::Status StoreCaptureResult(
     intrinsic_proto::perception::v1::CaptureResult&& capture_result,

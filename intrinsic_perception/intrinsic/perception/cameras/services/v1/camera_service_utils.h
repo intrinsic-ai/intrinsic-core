@@ -18,7 +18,13 @@
 #include <string_view>
 
 #include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/time/time.h"
+#include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/capture_result.h"
+#include "intrinsic/perception/cameras/image_source_interface.h"
+#include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
 #include "intrinsic/perception/proto/v1/capture_result.pb.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
@@ -26,6 +32,34 @@
 namespace intrinsic::perception {
 
 constexpr std::string_view kCameraServiceLoggerPrefix = "/camera_service/";
+
+// Unpacked `CaptureRequest` fields separating the driver-level `CaptureArgs`
+// (settings, timeout, sensor IDs, and crop/resize post-processing) from the
+// service-level `CameraIdentifier` and per-sensor image encodings.
+struct ParsedCaptureRequest {
+  CameraIdentifier camera_identifier;
+  CaptureArgs capture_args;
+  EncodingBySensorId encoding_by_sensor_id;
+};
+
+// Parses `request` into its `CameraIdentifier`, `CaptureArgs`, and
+// `EncodingBySensorId`, using `default_timeout` when `request.has_timeout()`
+// is false. Returns `InvalidArgumentError` if `camera_config` does not specify
+// an identifier or if `request.timeout()` is invalid.
+absl::StatusOr<ParsedCaptureRequest> ParseCaptureRequest(
+    const intrinsic_proto::perception::v1::CaptureRequest& request,
+    absl::Duration default_timeout = CaptureArgs::kDefaultTimeout);
+
+// Creates a session-level capture callback for `<base_topic>` that publishes
+// unencoded `CaptureResult` frames.
+absl::StatusOr<ImageSourceInterface::CaptureCallback>
+CreateBaseTopicPublishingCaptureCallback(const PubSub& pubsub,
+                                         absl::string_view base_topic);
+
+// Creates a capture callback that periodically logs streaming frame rate and
+// image dimensions.
+ImageSourceInterface::CaptureCallback CreateDebugLogsCaptureCallback(
+    absl::string_view camera_log_id);
 
 absl::Status StoreCaptureResult(
     intrinsic_proto::perception::v1::CaptureResult&& capture_result,

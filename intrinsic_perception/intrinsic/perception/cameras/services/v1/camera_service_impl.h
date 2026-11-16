@@ -19,11 +19,11 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <string_view>
 
 #include "absl/base/nullability.h"
 #include "absl/base/thread_annotations.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
@@ -34,7 +34,6 @@
 #include "intrinsic/perception/core/single_thread_executor.h"
 #include "intrinsic/perception/proto/v1/camera_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
-#include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 
 namespace intrinsic {
@@ -126,21 +125,8 @@ class CameraServiceImpl final
   std::weak_ptr<StreamingSession> streaming_session_
       ABSL_GUARDED_BY(streaming_mutex_);
 
-  // A publisher that can be reused.
-  absl::Mutex publisher_mutex_;
-  std::weak_ptr<Publisher> publisher_ ABSL_GUARDED_BY(publisher_mutex_);
-
-  absl::StatusOr<std::shared_ptr<Publisher>> GetOrCreatePublisher(
-      absl::string_view topic_name) ABSL_LOCKS_EXCLUDED(publisher_mutex_);
-
-  // Gets the publishing callback to the image source.
-  absl::StatusOr<ImageSourceInterface::CaptureCallback> GetPublishingCallback(
-      const CameraIdentifier& camera_identifier, std::string topic_name);
   // Adds the metrics callback to the image source.
   absl::StatusOr<ImageSourceInterface::CaptureCallback> GetMetricsCallback(
-      const CameraIdentifier& camera_identifier);
-  // Optionally adds the debug logs callback to the image source.
-  absl::StatusOr<ImageSourceInterface::CaptureCallback> GetDebugLogsCallback(
       const CameraIdentifier& camera_identifier);
 };
 
