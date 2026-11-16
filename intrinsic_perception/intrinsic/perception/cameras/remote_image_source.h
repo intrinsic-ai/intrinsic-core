@@ -73,8 +73,18 @@ class RemoteImageSource : public ImageSourceInterface {
 
   absl::Status ClearFaults() final;
 
+  // Registers `callback` to receive the server-published stream; returns
+  // `absl::UnimplementedError` if `options` specifies non-empty
+  // `post_processing_by_sensor_id` or `sensor_ids` (note that `std::nullopt`
+  // observers receive whatever frames the server publishes on the stream
+  // topic).
   absl::StatusOr<CallbackToken> AddCaptureCallback(
-      ImageSourceInterface::CaptureCallback callback) final;
+      ImageSourceInterface::CaptureCallback callback,
+      std::optional<CaptureCallbackOptions> options) final;
+
+  // Returns `absl::UnimplementedError` (unsupported on `RemoteImageSource`).
+  absl::Status UpdateCaptureCallbackOptions(
+      const CallbackToken& token, CaptureCallbackOptions options) final;
 
   absl::Status RemoveCaptureCallback(CallbackToken token) final;
 

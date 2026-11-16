@@ -16,6 +16,7 @@
 #define INTRINSIC_PERCEPTION_CAMERAS_IMAGE_SOURCE_INTERFACE_H_
 
 #include <cstdint>
+#include <optional>
 #include <vector>
 
 #include "absl/functional/any_invocable.h"
@@ -28,9 +29,21 @@
 #include "intrinsic/perception/cameras/camera_setting_properties.h"
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
+#include "intrinsic/perception/core/post_processing.h"
 #include "intrinsic/util/string_type.h"
 
 namespace intrinsic::perception {
+
+// Per-consumer post-processing and sensor filtering options for a stream
+// capture callback.
+struct CaptureCallbackOptions {
+  // Per-sensor post-processing (undistortion, crop, resize). By default,
+  // undistortion is applied to all sensors with distortion parameters unless
+  // `skip_undistortion = true` is set for that sensor.
+  PostProcessingBySensorId post_processing_by_sensor_id;
+  // Sensor IDs to capture and deliver to the callback. Empty means all sensors.
+  std::vector<int64_t> sensor_ids;
+};
 
 class ImageSourceInterface {
  public:
@@ -85,8 +98,31 @@ class ImageSourceInterface {
   // Add a callback that will receive new capture results. Different
   // registered callbacks may be invoked concurrently on arbitrary threads,
   // while a given callback is never invoked concurrently with itself.
+  // - When `options` is `std::nullopt`, the callback is registered as a
+  //   passive raw-stream observer: it receives all captured sensors without
+  //   per-callback post-processing and does not vote on active hardware sensor
+  //   selection.
+  // - When `options` is populated (including `CaptureCallbackOptions{}`), the
+  //   callback is registered as an active consumer:
+  //   - `options->post_processing_by_sensor_id`: applies default undistortion
+  //     (unless `skip_undistortion` is set) and any per-sensor crop/resize. An
+  //     empty map inherits `StartStream`'s `post_processing_by_sensor_id` map
+  //     as a whole (all or nothing).
+  //   - `options->sensor_ids`: filters sensors delivered to this callback and
+  //     votes on active hardware sensor selection. An empty list requests all
+  //     sensors regardless of `StartStream`'s `sensor_ids`.
   virtual absl::StatusOr<CallbackToken> AddCaptureCallback(
-      CaptureCallback callback) = 0;
+      CaptureCallback callback,
+      std::optional<CaptureCallbackOptions> options) = 0;
+
+  // Updates the post-processing and sensor filter options for a previously
+  // registered active consumer callback (with the same `CaptureCallbackOptions`
+  // fallback semantics as `AddCaptureCallback`), replacing its options
+  // wholesale. Returns `NOT_FOUND` if `token` is not registered, or
+  // `FAILED_PRECONDITION` if `token` was registered as a passive observer
+  // (`std::nullopt`).
+  virtual absl::Status UpdateCaptureCallbackOptions(
+      const CallbackToken& token, CaptureCallbackOptions options) = 0;
 
   // Remove a previously registered callback. Blocks until any in-flight
   // invocation of the callback returns, except when called reentrantly from

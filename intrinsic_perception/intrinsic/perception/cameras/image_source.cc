@@ -14,6 +14,7 @@
 
 #include "intrinsic/perception/cameras/image_source.h"
 
+#include <atomic>
 #include <cstddef>
 #include <cstdint>
 #include <memory>
@@ -24,11 +25,11 @@
 #include <vector>
 
 #include "absl/algorithm/container.h"
+#include "absl/base/nullability.h"
 #include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/functional/any_invocable.h"
-#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -50,6 +51,7 @@
 #include "intrinsic/perception/core/camera_params.h"
 #include "intrinsic/perception/core/coordinate.h"
 #include "intrinsic/perception/core/dimensions.h"
+#include "intrinsic/perception/core/post_processing.h"
 #include "intrinsic/perception/core/range_tools.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/status/ret_check.h"
@@ -77,6 +79,187 @@ absl::StatusOr<absl::flat_hash_set<int64_t>> BuildUniqueSensorIdSet(
   return unique_ids;
 }
 
+absl::StatusOr<CaptureResult> ApplyCommonCaptureProcessing(
+    CaptureResult capture_result, const CaptureArgs& args) {
+  if (!args.camera_config.camera_params_by_sensor_id.empty()) {
+    INTR_ASSIGN_OR_RETURN(
+        capture_result,
+        ApplyCameraParams(std::move(capture_result),
+                          args.camera_config.camera_params_by_sensor_id));
+  }
+
+  if (!args.camera_config.camera_t_sensor_by_sensor_id.empty()) {
+    INTR_ASSIGN_OR_RETURN(
+        capture_result,
+        ApplyCameraTsSensor(std::move(capture_result),
+                            args.camera_config.camera_t_sensor_by_sensor_id));
+  }
+  return capture_result;
+}
+
+bool HasSensorDistortionParams(const SensorImage& sensor_image) {
+  return sensor_image.camera_params().has_value() &&
+         sensor_image.camera_params()->distortion_params.has_value();
+}
+
+bool WantsSensor(int64_t sensor_id, absl::Span<const int64_t> sensor_ids) {
+  return sensor_ids.empty() || absl::c_contains(sensor_ids, sensor_id);
+}
+
+bool WantsUndistortion(
+    int64_t sensor_id,
+    const PostProcessingBySensorId& post_processing_by_sensor_id) {
+  const auto it = post_processing_by_sensor_id.find(sensor_id);
+  return it == post_processing_by_sensor_id.end() ||
+         !it->second.skip_undistortion;
+}
+
+const PostProcessing* absl_nullable FindCropOrResize(
+    int64_t sensor_id,
+    const PostProcessingBySensorId& post_processing_by_sensor_id) {
+  const auto it = post_processing_by_sensor_id.find(sensor_id);
+  if (it != post_processing_by_sensor_id.end() &&
+      (it->second.crop_region.has_value() || it->second.cols.has_value() ||
+       it->second.rows.has_value())) {
+    return &it->second;
+  }
+  return nullptr;
+}
+
+const SensorImage* absl_nullable FindSensorImage(
+    absl::Span<const SensorImage> sensor_images, size_t expected_index,
+    int64_t sensor_id) {
+  if (expected_index < sensor_images.size() &&
+      sensor_images[expected_index].sensor_id() == sensor_id) {
+    return &sensor_images[expected_index];
+  }
+  const auto it = absl::c_find_if(
+      sensor_images, [sensor_id](const SensorImage& sensor_image) {
+        return sensor_image.sensor_id() == sensor_id;
+      });
+  return it != sensor_images.end() ? &*it : nullptr;
+}
+
+void RunAndLogCaptureCallback(ImageSourceInterface::CaptureCallback& callback,
+                              const CaptureResult& result) {
+  if (absl::Status status = callback(result); !status.ok()) {
+    LOG(ERROR) << "Callback returned error status: " << status;
+  }
+}
+
+std::optional<CaptureResult> BuildPerCallbackCaptureResult(
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
+    absl::Span<const int64_t> sensor_ids, const CaptureResult& base_result,
+    const std::optional<absl::StatusOr<CaptureResult>>& undistorted_base_result,
+    absl::Mutex& crop_and_resize_mutex)
+    ABSL_LOCKS_EXCLUDED(crop_and_resize_mutex) {
+  CaptureResult callback_result{
+      .capture_at = base_result.capture_at,
+      .sensor_images = {},
+      .capture_duration = base_result.capture_duration,
+  };
+  callback_result.sensor_images.reserve(base_result.sensor_images.size());
+  for (size_t i = 0; i < base_result.sensor_images.size(); ++i) {
+    const int64_t sensor_id = base_result.sensor_images[i].sensor_id();
+    if (!WantsSensor(sensor_id, sensor_ids)) {
+      continue;
+    }
+    const bool use_undistorted =
+        HasSensorDistortionParams(base_result.sensor_images[i]) &&
+        WantsUndistortion(sensor_id, post_processing_by_sensor_id);
+    const SensorImage* source_image = &base_result.sensor_images[i];
+    if (use_undistorted) {
+      source_image = FindSensorImage((*undistorted_base_result)->sensor_images,
+                                     i, sensor_id);
+      if (source_image == nullptr) {
+        LOG(WARNING) << "Undistorted image for sensor " << sensor_id
+                     << " not found.";
+        return std::nullopt;
+      }
+    }
+    if (const PostProcessing* post_processing =
+            FindCropOrResize(sensor_id, post_processing_by_sensor_id);
+        post_processing != nullptr) {
+      absl::StatusOr<SensorImage> cropped_image;
+      if (post_processing->cols.has_value() ||
+          post_processing->rows.has_value()) {
+        absl::MutexLock lock(crop_and_resize_mutex);
+        cropped_image = CropAndResize(*source_image, *post_processing);
+      } else {
+        cropped_image = CropAndResize(*source_image, *post_processing);
+      }
+      if (!cropped_image.ok()) {
+        LOG(WARNING) << "Failed to process capture image for callback: "
+                     << cropped_image.status();
+        return std::nullopt;
+      }
+      callback_result.sensor_images.push_back(*std::move(cropped_image));
+    } else {
+      callback_result.sensor_images.push_back(*source_image);
+    }
+  }
+  return callback_result;
+}
+
+void InvokeSingleCaptureCallback(
+    ImageSourceInterface::CaptureCallback& callback,
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
+    absl::Span<const int64_t> sensor_ids, const CaptureResult& base_result,
+    const std::optional<absl::StatusOr<CaptureResult>>& undistorted_base_result,
+    absl::Mutex& crop_and_resize_mutex)
+    ABSL_LOCKS_EXCLUDED(crop_and_resize_mutex) {
+  bool uses_undistorted = false;
+  bool uses_raw_distorted = false;
+  bool needs_crop_or_resize = false;
+  bool filters_sensors = false;
+  for (const SensorImage& sensor_image : base_result.sensor_images) {
+    const int64_t sensor_id = sensor_image.sensor_id();
+    if (!WantsSensor(sensor_id, sensor_ids)) {
+      filters_sensors = true;
+      continue;
+    }
+    if (FindCropOrResize(sensor_id, post_processing_by_sensor_id) != nullptr) {
+      needs_crop_or_resize = true;
+    }
+    if (HasSensorDistortionParams(sensor_image)) {
+      if (WantsUndistortion(sensor_id, post_processing_by_sensor_id)) {
+        uses_undistorted = true;
+      } else {
+        uses_raw_distorted = true;
+      }
+    }
+  }
+
+  if (uses_undistorted) {
+    if (!undistorted_base_result.has_value()) {
+      LOG(WARNING) << "Missing undistorted base result for callback.";
+      return;
+    }
+    if (!undistorted_base_result->ok()) {
+      LOG(WARNING) << "Failed to undistort capture image for callback: "
+                   << undistorted_base_result->status();
+      return;
+    }
+  }
+
+  // Fast path: no per-sensor filtering, crop/resize, or mixed distortion
+  // states, so we can pass the shared result directly by const reference
+  // without copying images.
+  if (!filters_sensors && !needs_crop_or_resize &&
+      !(uses_undistorted && uses_raw_distorted)) {
+    RunAndLogCaptureCallback(
+        callback, uses_undistorted ? **undistorted_base_result : base_result);
+    return;
+  }
+
+  if (std::optional<CaptureResult> callback_result =
+          BuildPerCallbackCaptureResult(
+              post_processing_by_sensor_id, sensor_ids, base_result,
+              undistorted_base_result, crop_and_resize_mutex);
+      callback_result.has_value()) {
+    RunAndLogCaptureCallback(callback, *callback_result);
+  }
+}
 }  // namespace
 
 absl::StatusOr<CaptureResult> ImageSource::Capture(const CaptureArgs& args) {
@@ -152,20 +335,8 @@ absl::StatusOr<CaptureResult> ImageSource::PostCaptureImplProcessing(
       return !absl::c_contains(args.sensor_ids, i.sensor_id());
     });
   }
-
-  if (!args.camera_config.camera_params_by_sensor_id.empty()) {
-    INTR_ASSIGN_OR_RETURN(
-        capture_result,
-        ApplyCameraParams(std::move(capture_result),
-                          args.camera_config.camera_params_by_sensor_id));
-  }
-
-  if (!args.camera_config.camera_t_sensor_by_sensor_id.empty()) {
-    INTR_ASSIGN_OR_RETURN(
-        capture_result,
-        ApplyCameraTsSensor(std::move(capture_result),
-                            args.camera_config.camera_t_sensor_by_sensor_id));
-  }
+  INTR_ASSIGN_OR_RETURN(capture_result, ApplyCommonCaptureProcessing(
+                                            std::move(capture_result), args));
 
   // Even for an empty post processing map we apply post processing, as by
   // default undistortion needs to be applied to all images.
@@ -204,7 +375,7 @@ absl::StatusOr<CaptureResult> ImageSource::PostCaptureImplProcessing(
 }
 
 void ImageSource::InvokeCaptureCallbacks(CaptureResult raw_capture_result,
-                                         const CaptureArgs& args) {
+                                         const CaptureArgs& default_args) {
   std::vector<RegisteredCallback> callbacks_snapshot;
   intrinsic::ThreadPool* callback_thread_pool = nullptr;
   {
@@ -214,7 +385,17 @@ void ImageSource::InvokeCaptureCallbacks(CaptureResult raw_capture_result,
     }
     callbacks_snapshot.reserve(callbacks_.size());
     for (const auto& [unused_token, entry] : callbacks_) {
-      callbacks_snapshot.push_back(entry);
+      std::optional<CaptureCallbackOptions> effective_options = entry.options;
+      if (effective_options.has_value() &&
+          effective_options->post_processing_by_sensor_id.empty() &&
+          !default_args.post_processing_by_sensor_id.empty()) {
+        effective_options->post_processing_by_sensor_id =
+            default_args.post_processing_by_sensor_id;
+      }
+      callbacks_snapshot.push_back(RegisteredCallback{
+          .callback = entry.callback,
+          .options = std::move(effective_options),
+      });
     }
     if (callbacks_snapshot.size() > 1) {
       if (!callback_thread_pool_.has_value()) {
@@ -230,26 +411,54 @@ void ImageSource::InvokeCaptureCallbacks(CaptureResult raw_capture_result,
                    [](const auto& item) { return item.second.expired(); });
   };
 
-  absl::StatusOr<CaptureResult> processed_result =
-      PostCaptureImplProcessing(std::move(raw_capture_result), args);
-  if (!processed_result.ok()) {
-    LOG(WARNING) << "Failed to process capture image: "
-                 << processed_result.status();
+  absl::StatusOr<CaptureResult> base_result =
+      ApplyCommonCaptureProcessing(std::move(raw_capture_result), default_args);
+  if (!base_result.ok()) {
+    LOG(WARNING) << "Failed to apply common capture processing for callbacks: "
+                 << base_result.status();
     return;
   }
 
-  const auto run_callback =
-      [this, &processed_result](const RegisteredCallback& entry) {
-        const ImageSource* previous_callback_source = current_callback_source;
-        current_callback_source = this;
-        const absl::Cleanup reset_source = [previous_callback_source]() {
-          current_callback_source = previous_callback_source;
-        };
-        if (absl::Status status = (*entry.callback)(*processed_result);
-            !status.ok()) {
-          LOG(ERROR) << "Callback returned error status: " << status;
-        }
-      };
+  PostProcessingBySensorId shared_undistort_config;
+  bool any_sensor_needs_undistortion = false;
+  for (const SensorImage& sensor_image : base_result->sensor_images) {
+    if (!HasSensorDistortionParams(sensor_image)) continue;
+    const int64_t sensor_id = sensor_image.sensor_id();
+    if (absl::c_any_of(callbacks_snapshot, [&](const RegisteredCallback& cb) {
+          return cb.options.has_value() &&
+                 WantsSensor(sensor_id, cb.options->sensor_ids) &&
+                 WantsUndistortion(sensor_id,
+                                   cb.options->post_processing_by_sensor_id);
+        })) {
+      any_sensor_needs_undistortion = true;
+    } else {
+      shared_undistort_config.emplace(
+          sensor_id, PostProcessing{.skip_undistortion = true});
+    }
+  }
+
+  std::optional<absl::StatusOr<CaptureResult>> undistorted_base_result;
+  if (any_sensor_needs_undistortion) {
+    absl::MutexLock lock(undistortion_mutex_);
+    undistorted_base_result =
+        Undistort(*base_result, shared_undistort_config, undistortion_);
+  }
+
+  const auto run_callback = [&](const RegisteredCallback& entry) {
+    const ImageSource* previous_callback_source = current_callback_source;
+    current_callback_source = this;
+    const absl::Cleanup reset_source = [previous_callback_source]() {
+      current_callback_source = previous_callback_source;
+    };
+    if (!entry.options.has_value()) {
+      RunAndLogCaptureCallback(*entry.callback, *base_result);
+      return;
+    }
+    InvokeSingleCaptureCallback(
+        *entry.callback, entry.options->post_processing_by_sensor_id,
+        entry.options->sensor_ids, *base_result, undistorted_base_result,
+        crop_and_resize_mutex_);
+  };
 
   if (callbacks_snapshot.size() == 1) {
     run_callback(callbacks_snapshot[0]);
@@ -347,16 +556,62 @@ absl::Status ImageSource::UpdateDimensions(const Dimensions& dimensions) {
 }
 
 absl::StatusOr<ImageSourceInterface::CallbackToken>
-ImageSource::AddCaptureCallback(CaptureCallback callback) {
+ImageSource::AddCaptureCallback(CaptureCallback callback,
+                                std::optional<CaptureCallbackOptions> options) {
   absl::MutexLock lock(callback_mutex_);
-  static int global_id = 0;
+  static std::atomic<int> global_id = 0;
   CallbackToken callback_token(absl::StrCat(absl::Now(), global_id++));
   INTR_RET_CHECK(!callbacks_.contains(callback_token))
       << "Callback with id " << callback_token << " already exists.";
   callbacks_[callback_token] = RegisteredCallback{
       .callback = std::make_shared<CaptureCallback>(std::move(callback)),
+      .options = std::move(options),
   };
   return callback_token;
+}
+
+absl::Status ImageSource::UpdateCaptureCallbackOptions(
+    const CallbackToken& token, CaptureCallbackOptions options) {
+  absl::MutexLock lock(callback_mutex_);
+  auto it = callbacks_.find(token);
+  if (it == callbacks_.end()) {
+    return intrinsic::NotFoundErrorBuilder()
+           << "Callback with id " << token << " not found.";
+  }
+  if (!it->second.options.has_value()) {
+    return absl::FailedPreconditionError(
+        "Cannot update options on a passive observer callback registered with "
+        "std::nullopt.");
+  }
+  it->second.options = std::move(options);
+  return absl::OkStatus();
+}
+
+absl::flat_hash_set<int64_t> ImageSource::GetActiveStreamSensorIds() const {
+  absl::flat_hash_set<int64_t> union_sensor_ids;
+  bool has_active_consumer = false;
+  {
+    absl::MutexLock lock(callback_mutex_);
+    for (const auto& [unused_token, entry] : callbacks_) {
+      if (!entry.options.has_value()) {
+        continue;
+      }
+      // An empty `sensor_ids` list in a consumer's options means that consumer
+      // requests all available sensors, so the union across active consumers
+      // must also request all sensors (`{}`).
+      if (entry.options->sensor_ids.empty()) {
+        return {};
+      }
+      has_active_consumer = true;
+      union_sensor_ids.insert(entry.options->sensor_ids.begin(),
+                              entry.options->sensor_ids.end());
+    }
+  }
+  if (has_active_consumer) {
+    return union_sensor_ids;
+  }
+  absl::MutexLock lock(streaming_mutex_);
+  return initial_stream_sensor_ids_;
 }
 
 absl::Status ImageSource::RemoveCaptureCallback(CallbackToken token) {
@@ -412,12 +667,12 @@ absl::Status ImageSource::StartStream(const CaptureArgs& params) {
   absl::MutexLock lock(streaming_mutex_);
   std::move(reset_stream_starting).Cancel();
   is_stream_starting_ = false;
-  streaming_thread_.emplace([this, params, sensor_ids = std::move(sensor_ids)](
-                                intrinsic::StopToken stop_token) {
+  initial_stream_sensor_ids_ = std::move(sensor_ids);
+  streaming_thread_.emplace([this, params](intrinsic::StopToken stop_token) {
     LOG(INFO) << "ImageSource::Thread: Starting streaming thread.";
     while (!stop_token.stop_requested()) {
       absl::StatusOr<CaptureResult> capture_result =
-          CaptureImpl(params.timeout, sensor_ids);
+          CaptureImpl(params.timeout, GetActiveStreamSensorIds());
       if (!capture_result.ok()) {
         LOG(WARNING) << "Failed to capture image: " << capture_result.status();
         continue;
@@ -455,6 +710,10 @@ absl::Status ImageSource::StopStream() {
   // outside `streaming_mutex_` so `InvokeCaptureCallbacks` on the streaming
   // thread cannot deadlock with `StopStream()`.
   streaming_thread.reset();
+  {
+    absl::MutexLock lock(streaming_mutex_);
+    initial_stream_sensor_ids_.clear();
+  }
   return absl::OkStatus();
 }
 

@@ -138,9 +138,20 @@ class Camera {
   absl::Status ApplyCameraSettings(
       absl::Span<const CameraSetting> camera_settings);
 
-  // Add a callback that will receive new capture results
+  // Add a callback that will receive new capture results.
+  // See `ImageSourceInterface::AddCaptureCallback` for `std::nullopt` vs.
+  // `CaptureCallbackOptions` semantics.
   absl::StatusOr<ImageSourceInterface::CallbackToken> AddCaptureCallback(
-      absl::AnyInvocable<absl::Status(const CaptureResult&)> callback);
+      absl::AnyInvocable<absl::Status(const CaptureResult&)> callback,
+      std::optional<CaptureCallbackOptions> options);
+
+  // Updates the post-processing and sensor filter options for a previously
+  // registered active consumer callback. See
+  // `ImageSourceInterface::UpdateCaptureCallbackOptions` for fallback and error
+  // semantics.
+  absl::Status UpdateCaptureCallbackOptions(
+      const ImageSourceInterface::CallbackToken& token,
+      CaptureCallbackOptions options);
 
   // Remove a previously registered callback.
   absl::Status RemoveCaptureCallback(ImageSourceInterface::CallbackToken token);

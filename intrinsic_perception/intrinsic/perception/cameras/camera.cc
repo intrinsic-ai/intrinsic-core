@@ -200,8 +200,17 @@ absl::Status Camera::ClearFaults() {
 }
 
 absl::StatusOr<ImageSourceInterface::CallbackToken> Camera::AddCaptureCallback(
-    absl::AnyInvocable<absl::Status(const CaptureResult&)> callback) {
-  return image_source_interface_->AddCaptureCallback(std::move(callback));
+    absl::AnyInvocable<absl::Status(const CaptureResult&)> callback,
+    std::optional<CaptureCallbackOptions> options) {
+  return image_source_interface_->AddCaptureCallback(std::move(callback),
+                                                     std::move(options));
+}
+
+absl::Status Camera::UpdateCaptureCallbackOptions(
+    const ImageSourceInterface::CallbackToken& token,
+    CaptureCallbackOptions options) {
+  return image_source_interface_->UpdateCaptureCallbackOptions(
+      token, std::move(options));
 }
 
 absl::Status Camera::RemoveCaptureCallback(

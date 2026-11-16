@@ -72,6 +72,11 @@ absl::StatusOr<CaptureResult> Undistort(
     UndistortionBySensorId& undistortion_by_sensor_id);
 
 absl::StatusOr<CaptureResult> Undistort(
+    const CaptureResult& capture_result,
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
+    UndistortionBySensorId& undistortion_by_sensor_id);
+
+absl::StatusOr<CaptureResult> Undistort(
     CaptureResult&& capture_result,
     UndistortionBySensorId& undistortion_by_sensor_id);
 
@@ -79,8 +84,14 @@ absl::StatusOr<SensorImage> Undistort(
     SensorImage&& sensor_image,
     UndistortionBySensorId& undistortion_by_sensor_id);
 
+absl::StatusOr<SensorImage> Undistort(
+    const SensorImage& sensor_image,
+    UndistortionBySensorId& undistortion_by_sensor_id);
+
 // Un-distorts the sensor image, if distortion parameters exist.
 absl::StatusOr<SensorImage> Undistort(SensorImage&& sensor_image,
+                                      const Undistortion& undistortion);
+absl::StatusOr<SensorImage> Undistort(const SensorImage& sensor_image,
                                       const Undistortion& undistortion);
 
 // Returns true if any of the sensor images in the capture result can be

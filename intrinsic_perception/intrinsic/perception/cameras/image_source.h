@@ -76,7 +76,11 @@ class ImageSource : public ImageSourceInterface {
       absl::string_view name) const final;
 
   absl::StatusOr<ImageSourceInterface::CallbackToken> AddCaptureCallback(
-      CaptureCallback callback) final;
+      CaptureCallback callback,
+      std::optional<CaptureCallbackOptions> options) final;
+
+  absl::Status UpdateCaptureCallbackOptions(
+      const CallbackToken& token, CaptureCallbackOptions options) final;
 
   absl::Status RemoveCaptureCallback(CallbackToken token) final;
 
@@ -162,18 +166,31 @@ class ImageSource : public ImageSourceInterface {
       CaptureResult capture_result, const CaptureArgs& args)
       ABSL_LOCKS_EXCLUDED(undistortion_mutex_, crop_and_resize_mutex_);
 
-  // Applies `args` post-processing to `raw_capture_result` and invokes all
-  // registered callbacks in parallel. Callers must serialize calls to
+  // Applies `default_args.camera_config` to `raw_capture_result`, applies
+  // per-callback post-processing for active consumers (falling back to
+  // `default_args.post_processing_by_sensor_id` when empty, while skipping
+  // undistortion and crop/resize for `std::nullopt` observers), and invokes
+  // all registered callbacks. Callers must serialize calls to
   // `InvokeCaptureCallbacks` so a given callback is never invoked concurrently
   // with itself.
   void InvokeCaptureCallbacks(CaptureResult raw_capture_result,
-                              const CaptureArgs& args)
+                              const CaptureArgs& default_args)
       ABSL_LOCKS_EXCLUDED(callback_mutex_, undistortion_mutex_,
                           crop_and_resize_mutex_);
+
+  // Returns the union of sensor IDs across all registered consumer callbacks
+  // (`options.has_value()`), or an empty set if any consumer requests all
+  // sensors (an empty `sensor_ids` list). Passive raw-stream observers
+  // (`!options.has_value()`) do not affect the returned set. Falls back to the
+  // `sensor_ids` passed to `StartStream()` when no consumer callback is
+  // registered.
+  absl::flat_hash_set<int64_t> GetActiveStreamSensorIds() const
+      ABSL_LOCKS_EXCLUDED(callback_mutex_, streaming_mutex_);
 
  private:
   struct RegisteredCallback {
     std::shared_ptr<CaptureCallback> callback;
+    std::optional<CaptureCallbackOptions> options;
   };
 
   // Guards `undistortion_` map lookup/initialization and serializes OpenCV
@@ -189,7 +206,7 @@ class ImageSource : public ImageSourceInterface {
   // concurrent callers onto single-core fallback execution.
   absl::Mutex crop_and_resize_mutex_;
 
-  absl::Mutex callback_mutex_;
+  mutable absl::Mutex callback_mutex_;
   absl::flat_hash_map<CallbackToken, RegisteredCallback> callbacks_
       ABSL_GUARDED_BY(callback_mutex_);
   absl::flat_hash_map<CallbackToken, std::weak_ptr<CaptureCallback>>
@@ -197,11 +214,13 @@ class ImageSource : public ImageSourceInterface {
   std::optional<intrinsic::ThreadPool> callback_thread_pool_
       ABSL_GUARDED_BY(callback_mutex_);
 
-  absl::Mutex streaming_mutex_;
+  mutable absl::Mutex streaming_mutex_;
   // Used internally to prevent deadlocks when starting a stream but still have
   // all of the relevant settings update.
   bool is_stream_starting_ ABSL_GUARDED_BY(streaming_mutex_) = false;
   bool is_stream_stopping_ ABSL_GUARDED_BY(streaming_mutex_) = false;
+  absl::flat_hash_set<int64_t> initial_stream_sensor_ids_
+      ABSL_GUARDED_BY(streaming_mutex_);
   std::optional<intrinsic::Thread> streaming_thread_
       ABSL_GUARDED_BY(streaming_mutex_);
 };

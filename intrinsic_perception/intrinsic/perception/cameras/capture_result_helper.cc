@@ -180,20 +180,132 @@ absl::StatusOr<CaptureResult> CropAndResize(
   return capture_result;
 }
 
+namespace {
+
+bool ShouldUndistort(
+    int64_t sensor_id,
+    const PostProcessingBySensorId& post_processing_by_sensor_id) {
+  const auto it = post_processing_by_sensor_id.find(sensor_id);
+  return it == post_processing_by_sensor_id.end() ||
+         !it->second.skip_undistortion;
+}
+
+template <typename SensorImageT>
+absl::StatusOr<SensorImage> UndistortImpl(SensorImageT&& sensor_image,
+                                          const Undistortion& undistortion) {
+  if (sensor_image.camera_params().has_value() !=
+          undistortion.camera_params().has_value() ||
+      (sensor_image.camera_params().has_value() &&
+       undistortion.camera_params().has_value() &&
+       !CameraParamsNear(sensor_image.camera_params().value(),
+                         undistortion.camera_params().value(), 0.0)
+            .ok())) {
+    return absl::InvalidArgumentError(
+        "Camera params of sensor image and undistortion don't match");
+  }
+
+  // TODO b/380194970 - Add support for point cloud undistortion.
+  if (sensor_image.point32f().has_value()) {
+    LOG(WARNING) << "Point sensor image undistortion unimplemented";
+    return std::forward<SensorImageT>(sensor_image);
+  } else if (sensor_image.normal32f().has_value()) {
+    LOG(WARNING) << "Normal sensor image undistortion unimplemented";
+    return std::forward<SensorImageT>(sensor_image);
+  }
+
+  const int64_t sensor_id = sensor_image.sensor_id();
+  const absl::Time acquisition_time = sensor_image.acquisition_time();
+  const std::optional<Pose> camera_t_sensor = sensor_image.camera_t_sensor();
+  std::optional<CameraParams> camera_params;
+  if (sensor_image.camera_params().has_value()) {
+    camera_params =
+        CameraParams(sensor_image.camera_params()->intrinsic_params);
+  }
+
+  // We only undistort images for RGB/gray cameras.
+  if (sensor_image.rgb8u().has_value()) {
+    Image<Rgb8u> image =
+        undistortion(std::forward<SensorImageT>(sensor_image).rgb8u().value());
+    return SensorImage(sensor_id, acquisition_time, camera_params,
+                       camera_t_sensor, std::move(image));
+  } else if (sensor_image.gray8u().has_value()) {
+    Image<Gray8u> image =
+        undistortion(std::forward<SensorImageT>(sensor_image).gray8u().value());
+    return SensorImage(sensor_id, acquisition_time, camera_params,
+                       camera_t_sensor, std::move(image));
+  } else if (sensor_image.gray32f().has_value()) {
+    Image<Gray32f> image = undistortion(
+        std::forward<SensorImageT>(sensor_image).gray32f().value());
+    return SensorImage(sensor_id, acquisition_time, camera_params,
+                       camera_t_sensor, std::move(image));
+  } else if (sensor_image.depth32f().has_value()) {
+    Image<Depth32f> image = undistortion(
+        std::forward<SensorImageT>(sensor_image).depth32f().value());
+    return SensorImage(sensor_id, acquisition_time, camera_params,
+                       camera_t_sensor, std::move(image));
+  } else {
+    return absl::InvalidArgumentError("No image to export!");
+  }
+}
+
+template <typename SensorImageT>
+absl::StatusOr<SensorImage> UndistortWithMapImpl(
+    SensorImageT&& sensor_image,
+    UndistortionBySensorId& undistortion_by_sensor_id) {
+  if (!sensor_image.camera_params().has_value() ||
+      !sensor_image.camera_params()->distortion_params.has_value()) {
+    return std::forward<SensorImageT>(sensor_image);
+  }
+  const CameraParams& camera_params = *sensor_image.camera_params();
+  auto it = undistortion_by_sensor_id.find(sensor_image.sensor_id());
+  if (it == undistortion_by_sensor_id.end() ||
+      !it->second.camera_params().has_value() ||
+      !CameraParamsNear(*it->second.camera_params(), camera_params, 0.0).ok()) {
+    it = undistortion_by_sensor_id
+             .insert_or_assign(sensor_image.sensor_id(),
+                               Undistortion(camera_params))
+             .first;
+  }
+  return UndistortImpl(std::forward<SensorImageT>(sensor_image), it->second);
+}
+
+}  // namespace
+
 absl::StatusOr<CaptureResult> Undistort(
     CaptureResult&& capture_result,
     const PostProcessingBySensorId& post_processing_by_sensor_id,
     UndistortionBySensorId& undistortion_by_sensor_id) {
   for (SensorImage& sensor_image : capture_result.sensor_images) {
-    const auto it = post_processing_by_sensor_id.find(sensor_image.sensor_id());
-    // Undistortion is only skipped if explicitly requested.
-    if (it == post_processing_by_sensor_id.end() ||
-        !it->second.skip_undistortion) {
+    if (ShouldUndistort(sensor_image.sensor_id(),
+                        post_processing_by_sensor_id)) {
       INTR_ASSIGN_OR_RETURN(sensor_image, Undistort(std::move(sensor_image),
                                                     undistortion_by_sensor_id));
     }
   }
   return capture_result;
+}
+
+absl::StatusOr<CaptureResult> Undistort(
+    const CaptureResult& capture_result,
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
+    UndistortionBySensorId& undistortion_by_sensor_id) {
+  CaptureResult undistorted_result{
+      .capture_at = capture_result.capture_at,
+      .sensor_images = {},
+      .capture_duration = capture_result.capture_duration,
+  };
+  undistorted_result.sensor_images.reserve(capture_result.sensor_images.size());
+  for (const SensorImage& sensor_image : capture_result.sensor_images) {
+    if (ShouldUndistort(sensor_image.sensor_id(),
+                        post_processing_by_sensor_id)) {
+      INTR_ASSIGN_OR_RETURN(SensorImage undistorted_image,
+                            Undistort(sensor_image, undistortion_by_sensor_id));
+      undistorted_result.sensor_images.push_back(std::move(undistorted_image));
+    } else {
+      undistorted_result.sensor_images.push_back(sensor_image);
+    }
+  }
+  return undistorted_result;
 }
 
 absl::StatusOr<CaptureResult> Undistort(
@@ -209,74 +321,24 @@ absl::StatusOr<CaptureResult> Undistort(
 absl::StatusOr<SensorImage> Undistort(
     SensorImage&& sensor_image,
     UndistortionBySensorId& undistortion_by_sensor_id) {
-  if (!sensor_image.camera_params().has_value() ||
-      !sensor_image.camera_params()->distortion_params.has_value()) {
-    return sensor_image;
-  }
-  const CameraParams& camera_params = *sensor_image.camera_params();
-  auto it = undistortion_by_sensor_id.find(sensor_image.sensor_id());
-  if (it == undistortion_by_sensor_id.end() ||
-      !it->second.camera_params().has_value() ||
-      !CameraParamsNear(*it->second.camera_params(), camera_params, 0.0).ok()) {
-    bool _;
-    std::tie(it, _) = undistortion_by_sensor_id.insert_or_assign(
-        sensor_image.sensor_id(), Undistortion(camera_params));
-  }
-  return Undistort(std::move(sensor_image), it->second);
+  return UndistortWithMapImpl(std::move(sensor_image),
+                              undistortion_by_sensor_id);
+}
+
+absl::StatusOr<SensorImage> Undistort(
+    const SensorImage& sensor_image,
+    UndistortionBySensorId& undistortion_by_sensor_id) {
+  return UndistortWithMapImpl(sensor_image, undistortion_by_sensor_id);
 }
 
 absl::StatusOr<SensorImage> Undistort(SensorImage&& sensor_image,
                                       const Undistortion& undistortion) {
-  if (sensor_image.camera_params().has_value() !=
-          undistortion.camera_params().has_value() ||
-      (sensor_image.camera_params().has_value() &&
-       undistortion.camera_params().has_value() &&
-       !CameraParamsNear(sensor_image.camera_params().value(),
-                         undistortion.camera_params().value(), 0.0)
-            .ok())) {
-    return absl::InvalidArgumentError(
-        "Camera params of sensor image and undistortion don't match");
-  }
+  return UndistortImpl(std::move(sensor_image), undistortion);
+}
 
-  // TODO b/380194970 - Add support for point cloud undistortion.
-  if (sensor_image.point32f().has_value()) {
-    LOG(WARNING) << "Point sensor image undistortion unimplemented";
-    return sensor_image;
-  } else if (sensor_image.normal32f().has_value()) {
-    LOG(WARNING) << "Normal sensor image undistortion unimplemented";
-    return sensor_image;
-  }
-
-  std::optional<CameraParams> camera_params;
-  if (sensor_image.camera_params().has_value()) {
-    camera_params =
-        CameraParams(sensor_image.camera_params()->intrinsic_params);
-  }
-
-  // We only undistort images for RGB/gray cameras.
-  if (sensor_image.rgb8u().has_value()) {
-    Image<Rgb8u> image = undistortion(sensor_image.rgb8u().value());
-    return SensorImage(sensor_image.sensor_id(),
-                       sensor_image.acquisition_time(), camera_params,
-                       sensor_image.camera_t_sensor(), std::move(image));
-  } else if (sensor_image.gray8u().has_value()) {
-    Image<Gray8u> image = undistortion(sensor_image.gray8u().value());
-    return SensorImage(sensor_image.sensor_id(),
-                       sensor_image.acquisition_time(), camera_params,
-                       sensor_image.camera_t_sensor(), std::move(image));
-  } else if (sensor_image.gray32f().has_value()) {
-    Image<Gray32f> image = undistortion(sensor_image.gray32f().value());
-    return SensorImage(sensor_image.sensor_id(),
-                       sensor_image.acquisition_time(), camera_params,
-                       sensor_image.camera_t_sensor(), std::move(image));
-  } else if (sensor_image.depth32f().has_value()) {
-    Image<Depth32f> image = undistortion(sensor_image.depth32f().value());
-    return SensorImage(sensor_image.sensor_id(),
-                       sensor_image.acquisition_time(), camera_params,
-                       sensor_image.camera_t_sensor(), std::move(image));
-  } else {
-    return absl::InvalidArgumentError("No image to export!");
-  }
+absl::StatusOr<SensorImage> Undistort(const SensorImage& sensor_image,
+                                      const Undistortion& undistortion) {
+  return UndistortImpl(sensor_image, undistortion);
 }
 
 bool CanBeUndistorted(const CaptureResult& capture_result) {

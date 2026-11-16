@@ -335,7 +335,14 @@ thread_local const RemoteImageSource* current_remote_callback_source = nullptr;
 }  // namespace
 
 absl::StatusOr<ImageSourceInterface::CallbackToken>
-RemoteImageSource::AddCaptureCallback(CaptureCallback callback) {
+RemoteImageSource::AddCaptureCallback(
+    CaptureCallback callback, std::optional<CaptureCallbackOptions> options) {
+  if (options.has_value() && (!options->post_processing_by_sensor_id.empty() ||
+                              !options->sensor_ids.empty())) {
+    return absl::UnimplementedError(
+        "Per-callback post-processing and sensor filtering options are not "
+        "supported on RemoteImageSource.");
+  }
   absl::MutexLock lock(callback_mutex_);
   static int global_id = 0;
   CallbackToken callback_token(absl::StrCat(absl::Now(), global_id++));
@@ -344,6 +351,12 @@ RemoteImageSource::AddCaptureCallback(CaptureCallback callback) {
   callbacks_[callback_token] =
       std::make_shared<CaptureCallback>(std::move(callback));
   return callback_token;
+}
+
+absl::Status RemoteImageSource::UpdateCaptureCallbackOptions(
+    const CallbackToken& /*token*/, CaptureCallbackOptions /*options*/) {
+  return absl::UnimplementedError(
+      "UpdateCaptureCallbackOptions is not supported on RemoteImageSource.");
 }
 
 absl::Status RemoteImageSource::RemoveCaptureCallback(CallbackToken token) {
