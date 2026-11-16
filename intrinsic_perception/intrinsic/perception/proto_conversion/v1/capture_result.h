@@ -15,9 +15,6 @@
 #ifndef INTRINSIC_PERCEPTION_PROTO_CONVERSION_V1_CAPTURE_RESULT_H_
 #define INTRINSIC_PERCEPTION_PROTO_CONVERSION_V1_CAPTURE_RESULT_H_
 
-#include <cstdint>
-
-#include "absl/container/flat_hash_map.h"
 #include "absl/status/statusor.h"
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/core/encoding.h"
@@ -33,8 +30,8 @@ absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
 
 absl::StatusOr<CaptureResult> ToProto(
     const intrinsic::perception::CaptureResult& capture_result,
-    const absl::flat_hash_map<int64_t, intrinsic::perception::Encoding>&
-        encoding_by_sensor_id = {});
+    const intrinsic::perception::EncodingBySensorId& encoding_by_sensor_id =
+        {});
 
 }  // namespace intrinsic_proto::perception::v1
 

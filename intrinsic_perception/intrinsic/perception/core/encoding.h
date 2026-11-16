@@ -26,6 +26,7 @@
 #include <cstdint>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "intrinsic/perception/core/image.h"
 #include "intrinsic/perception/core/image_traits.h"
 
@@ -39,6 +40,9 @@ enum class Encoding {
   kWebp,
   kYuv420p,
 };
+
+// A map from sensor id to image encoding.
+using EncodingBySensorId = absl::flat_hash_map<int64_t, Encoding>;
 
 template <class ImageTrait>
 bool EncodeImagePng(const Image<ImageTrait>& image,

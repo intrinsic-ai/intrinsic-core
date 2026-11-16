@@ -176,7 +176,6 @@ cc_library(
         ":camera_config",
         ":sensor_image",
         "//intrinsic_perception/intrinsic/perception/core:post_processing",
-        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/time",
     ],
 )

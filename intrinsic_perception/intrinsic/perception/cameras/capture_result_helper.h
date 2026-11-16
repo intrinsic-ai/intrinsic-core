@@ -43,8 +43,7 @@ namespace intrinsic::perception {
 
 absl::StatusOr<CaptureResult> PostProcessCaptureResult(
     CaptureResult&& capture_result,
-    const absl::flat_hash_map<int64_t, PostProcessing>&
-        post_processing_by_sensor_id,
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
     UndistortionBySensorId& undistortion_by_sensor_id);
 
 // For each sensor image in the capture result: crops the image, then resizes
@@ -61,8 +60,7 @@ absl::StatusOr<SensorImage> CropAndResize(
 
 absl::StatusOr<CaptureResult> CropAndResize(
     CaptureResult&& capture_result,
-    const absl::flat_hash_map<int64_t, PostProcessing>&
-        post_processing_by_sensor_id);
+    const PostProcessingBySensorId& post_processing_by_sensor_id);
 
 // Un-distorts all of the sensor images contained in the capture result while
 // automatically synchronizing the passed undistortion map to the camera
@@ -70,8 +68,7 @@ absl::StatusOr<CaptureResult> CropAndResize(
 // deleted or created if necessary.
 absl::StatusOr<CaptureResult> Undistort(
     CaptureResult&& capture_result,
-    const absl::flat_hash_map<int64_t, PostProcessing>&
-        post_processing_by_sensor_id,
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
     UndistortionBySensorId& undistortion_by_sensor_id);
 
 absl::StatusOr<CaptureResult> Undistort(

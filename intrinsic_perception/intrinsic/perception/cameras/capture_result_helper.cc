@@ -79,8 +79,7 @@ std::optional<typename TypeTrait::PixelType> ConvertPadding(
 
 absl::StatusOr<CaptureResult> PostProcessCaptureResult(
     CaptureResult&& capture_result,
-    const absl::flat_hash_map<int64_t, PostProcessing>&
-        post_processing_by_sensor_id,
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
     UndistortionBySensorId& undistortion_by_sensor_id) {
   INTR_ASSIGN_OR_RETURN(capture_result, Undistort(std::move(capture_result),
                                                   post_processing_by_sensor_id,
@@ -170,8 +169,7 @@ absl::StatusOr<SensorImage> CropAndResize(const SensorImage& sensor_image,
 
 absl::StatusOr<CaptureResult> CropAndResize(
     CaptureResult&& capture_result,
-    const absl::flat_hash_map<int64_t, PostProcessing>&
-        post_processing_by_sensor_id) {
+    const PostProcessingBySensorId& post_processing_by_sensor_id) {
   for (SensorImage& sensor_image : capture_result.sensor_images) {
     const auto it = post_processing_by_sensor_id.find(sensor_image.sensor_id());
     if (it != post_processing_by_sensor_id.end()) {
@@ -184,8 +182,7 @@ absl::StatusOr<CaptureResult> CropAndResize(
 
 absl::StatusOr<CaptureResult> Undistort(
     CaptureResult&& capture_result,
-    const absl::flat_hash_map<int64_t, PostProcessing>&
-        post_processing_by_sensor_id,
+    const PostProcessingBySensorId& post_processing_by_sensor_id,
     UndistortionBySensorId& undistortion_by_sensor_id) {
   for (SensorImage& sensor_image : capture_result.sensor_images) {
     const auto it = post_processing_by_sensor_id.find(sensor_image.sensor_id());

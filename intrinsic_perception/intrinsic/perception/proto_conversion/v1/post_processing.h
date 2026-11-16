@@ -18,7 +18,6 @@
 #include <cstdint>
 #include <utility>
 
-#include "absl/container/flat_hash_map.h"
 #include "google/protobuf/map.h"
 #include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/core/post_processing.h"
@@ -30,8 +29,8 @@ std::pair<intrinsic::perception::PostProcessing,
           intrinsic::perception::Encoding>
 FromProto(const SensorImagePostProcessing& post_processing);
 
-std::pair<absl::flat_hash_map<int64_t, intrinsic::perception::PostProcessing>,
-          absl::flat_hash_map<int64_t, intrinsic::perception::Encoding>>
+std::pair<intrinsic::perception::PostProcessingBySensorId,
+          intrinsic::perception::EncodingBySensorId>
 FromProto(const google::protobuf::Map<int64_t, SensorImagePostProcessing>&
               post_processing_by_sensor_id);
 
@@ -40,10 +39,9 @@ SensorImagePostProcessing ToProto(
     intrinsic::perception::Encoding encoding);
 
 google::protobuf::Map<int64_t, SensorImagePostProcessing> ToProto(
-    const absl::flat_hash_map<int64_t, intrinsic::perception::PostProcessing>&
+    const intrinsic::perception::PostProcessingBySensorId&
         post_processing_by_sensor_id,
-    const absl::flat_hash_map<int64_t, intrinsic::perception::Encoding>&
-        encoding_by_sensor_id);
+    const intrinsic::perception::EncodingBySensorId& encoding_by_sensor_id);
 
 }  // namespace intrinsic_proto::perception::v1
 

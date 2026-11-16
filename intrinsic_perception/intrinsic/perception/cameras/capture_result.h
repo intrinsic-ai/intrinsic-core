@@ -19,7 +19,6 @@
 #include <optional>
 #include <vector>
 
-#include "absl/container/flat_hash_map.h"
 #include "absl/time/time.h"
 #include "intrinsic/perception/cameras/camera_config.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
@@ -53,7 +52,7 @@ struct CaptureArgs {
   CameraConfig camera_config;
   // Optional post processing to apply to the returned sensor images. If not
   // specified, images will always be undistorted, if possible.
-  absl::flat_hash_map<int64_t, PostProcessing> post_processing_by_sensor_id;
+  PostProcessingBySensorId post_processing_by_sensor_id;
 };
 
 }  // namespace intrinsic::perception

@@ -220,6 +220,7 @@ cc_library(
         ":image_traits",
         ":io_conversions",
         ":opencv_wrapper",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log:check",
         "@opencv//:core",
         "@opencv//:imgcodecs",
@@ -453,7 +454,10 @@ cc_library(
     name = "post_processing",
     srcs = ["post_processing.cc"],
     hdrs = ["post_processing.h"],
-    deps = [":rectangle"],
+    deps = [
+        ":rectangle",
+        "@abseil-cpp//absl/container:flat_hash_map",
+    ],
 )
 
 cc_library(
