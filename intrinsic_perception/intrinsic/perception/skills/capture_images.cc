@@ -20,6 +20,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/no_destructor.h"
 #include "absl/status/statusor.h"
 #include "absl/synchronization/notification.h"
 #include "absl/time/time.h"
@@ -280,10 +281,18 @@ absl::StatusOr<intrinsic_proto::Pose> GetReferenceTCamera(
   return ToProto(ref_t_camera);
 }
 
-}  // namespace
+perception::GrpcCamera& GetGrpcCamera() {
+  static absl::NoDestructor<perception::GrpcCamera> grpc_camera;
+  return *grpc_camera;
+}
 
-CaptureImages::CaptureImages()
-    : thread_pool_(/*num_threads=*/kDefaultNumThreads) {}
+ThreadPool& GetThreadPool() {
+  static absl::NoDestructor<ThreadPool> thread_pool(
+      /*num_threads=*/kDefaultNumThreads);
+  return *thread_pool;
+}
+
+}  // namespace
 
 std::unique_ptr<SkillInterface> CaptureImages::CreateSkill() {
   return std::make_unique<CaptureImages>();
@@ -299,11 +308,11 @@ CaptureImages::Execute(const ExecuteRequest& request, ExecuteContext& context) {
   absl::Notification capture_done;
   const stats::ScopedSpan capture_images_span("CaptureImages::Execute");
 
-  INTR_RETURN_IF_ERROR(thread_pool_.Schedule([&]() {
+  INTR_RETURN_IF_ERROR(GetThreadPool().Schedule([&]() {
     const stats::ScopedSpan capture_span("CaptureImages::Capture",
                                          capture_images_span.span());
     capture_result = Capture(
-        params, context.logging_context().data_logger_context, grpc_camera_);
+        params, context.logging_context().data_logger_context, GetGrpcCamera());
     capture_done.Notify();
   }));
 

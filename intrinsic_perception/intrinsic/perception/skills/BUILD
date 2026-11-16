@@ -84,6 +84,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/objects:transform_node",
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
+        "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/synchronization",
         "@abseil-cpp//absl/time",

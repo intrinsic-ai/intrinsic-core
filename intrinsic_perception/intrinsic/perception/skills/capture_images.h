@@ -19,10 +19,8 @@
 
 #include "absl/status/statusor.h"
 #include "google/protobuf/message.h"
-#include "intrinsic/perception/cameras/camera.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
-#include "intrinsic/util/thread/thread_pool.h"
 
 namespace intrinsic::skills {
 
@@ -42,12 +40,11 @@ class CaptureImages : public SkillInterface {
   // Constructors and factories.
   static std::unique_ptr<SkillInterface> CreateSkill();
 
-  CaptureImages();
+  CaptureImages() = default;
+  // Not copyable or movable.
+  CaptureImages(const CaptureImages&) = delete;
+  CaptureImages& operator=(const CaptureImages&) = delete;
   ~CaptureImages() override = default;
-
- private:
-  perception::GrpcCamera grpc_camera_;
-  ThreadPool thread_pool_;
 };
 
 }  // namespace intrinsic::skills
