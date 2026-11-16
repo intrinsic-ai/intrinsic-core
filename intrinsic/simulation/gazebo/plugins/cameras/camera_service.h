@@ -18,8 +18,8 @@
 #include <cstdint>
 #include <functional>
 #include <memory>
-#include <optional>
 #include <string>
+#include <string_view>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
@@ -38,6 +38,8 @@
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/cameras/image_source.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
+#include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
+#include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/core/pixel_type.h"
 #include "intrinsic/perception/core/single_thread_executor.h"
 #include "intrinsic/perception/proto/v1/camera_config.pb.h"

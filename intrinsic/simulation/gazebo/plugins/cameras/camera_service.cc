@@ -31,7 +31,6 @@
 #include "absl/flags/flag.h"
 #include "absl/functional/bind_front.h"
 #include "absl/functional/overload.h"
-#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -41,6 +40,7 @@
 #include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
 #include "intrinsic/perception/cameras/camera_config.h"
@@ -54,7 +54,9 @@
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/cameras/services/v1/camera_service_utils.h"
 #include "intrinsic/perception/core/camera_params.h"
+#include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/core/intrinsic_params.h"
+#include "intrinsic/perception/core/post_processing.h"
 #include "intrinsic/perception/logging/sensor_image.h"
 #include "intrinsic/perception/proto/v1/camera_config.pb.h"
 #include "intrinsic/perception/proto/v1/camera_identifier.pb.h"
@@ -64,7 +66,6 @@
 #include "intrinsic/perception/proto_conversion/v1/camera_identifier.h"
 #include "intrinsic/perception/proto_conversion/v1/camera_settings.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
-#include "intrinsic/util/proto/pb_hash.h"
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_builder_grpc.h"
@@ -608,6 +609,7 @@ grpc::Status GazeboCameraGrpcService::UpdateCameraSetting(
   }
   const std::string camera_handle = CanonicalString(
       intrinsic_proto::perception::v1::FromProto(request->camera_identifier()));
+
   INTR_ASSIGN_OR_RETURN_GRPC(GazeboCameraConnection * camera,
                              GetCameraConnection(camera_handle), _.LogError());
   INTR_RETURN_IF_ERROR_GRPC(
