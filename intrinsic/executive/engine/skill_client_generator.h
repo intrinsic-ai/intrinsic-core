@@ -83,14 +83,27 @@ class SkillClientGenerator {
                                     readonly_facade->GetClipsMutex());
 
   absl::StatusOr<SkillInstance> CreateSkillInstance(
-      intrinsic_proto::executive::BehaviorCall& behavior_call,
-      clips::DescriptorPoolId descriptor_pool_id, SkillAction skill_action)
+      const intrinsic_proto::executive::BehaviorCall& behavior_call)
       ABSL_LOCKS_EXCLUDED(skills_mutex_);
 
   absl::Status ResetSkillInstances() ABSL_LOCKS_EXCLUDED(skills_mutex_);
 
   absl::Status UpdateSkillsAndResources(absl::string_view operation_name)
       ABSL_LOCKS_EXCLUDED(skills_mutex_);
+
+  // Perform skill parameter resolving on the given BehaviorCall's parameters.
+  // This might modify the given parameters when dependencies are resolved.
+  // The result can be different depending on the skill_action.
+  //
+  // A non-OK Status is returned, when the resolving could not be performed.
+  absl::Status ResolveSkillParameters(
+      google::protobuf::Any& parameters,
+      const google::protobuf::Map<
+          std::string,
+          intrinsic_proto::executive::BehaviorCall::ResourceSpecification>&
+          resources,
+      clips::DescriptorPoolId descriptor_pool_id,
+      SkillAction skill_action) const;
 
   // Retrieves a cached skill registration. This only retrieves protos that
   // have already been cached, e.g., by UpdateSkillsAndResources, but does not
@@ -177,15 +190,6 @@ class SkillClientGenerator {
   absl::Status UpdateGrpcTargets(
       std::vector<SkillClientGenerator::SkillRegistrationInternal>&
           skill_assets);
-
-  absl::Status ResolveSkillParameters(
-      google::protobuf::Any& parameters,
-      const google::protobuf::Map<
-          std::string,
-          intrinsic_proto::executive::BehaviorCall::ResourceSpecification>&
-          resources,
-      clips::DescriptorPoolId descriptor_pool_id,
-      SkillAction skill_action) const;
 
   // Update skills_ from the installed assets service and the skill registry.
   // Only call from UpdateSkillsAndResources to ensure the information is

@@ -320,24 +320,64 @@ GetContextProtoOrReportError(clips::EnvironmentAssertFacade* assert_facade,
   return **context_proto;
 }
 
+absl::Status ResolveSkillParametersOrReportError(
+    clips::EnvironmentAssertFacade* assert_facade,
+    clips::ProtobufManager* proto_mgr,
+    SkillClientGenerator* skill_client_generator, absl::string_view action_id,
+    SkillAction skill_action, const clips::DescriptorPoolId descriptor_pool_id,
+    intrinsic_proto::executive::BehaviorCall& behavior_call_proto)
+    ABSL_LOCKS_EXCLUDED(assert_facade->GetClipsMutex()) {
+  const stats::ScopedSpan span(
+      "ClipsSkillDispatcher/ResolveSkillParametersOrReportError");
+  // If there are no parameters, we cannot resolve anything. This usually only
+  // happens in tests.
+  if (!behavior_call_proto.has_parameters()) {
+    return absl::OkStatus();
+  }
+  absl::Status status = skill_client_generator->ResolveSkillParameters(
+      *behavior_call_proto.mutable_parameters(),
+      behavior_call_proto.resources(), descriptor_pool_id, skill_action);
+  if (!status.ok()) {
+    absl::MutexLock clips_lock(*assert_facade->GetClipsMutex());
+    LOG(ERROR) << "Failed to ResolveSkillParameters for "
+               << behavior_call_proto.skill_id() << " using descriptor pool "
+               << descriptor_pool_id << ": " << status;
+
+    intrinsic_proto::status::ExtendedStatus es_proto = CreateExtendedStatus(
+        18100,
+        absl::StrFormat("Could not resolve skill parameters to call skill "
+                        "'%s' during %s. Error: %s",
+                        behavior_call_proto.skill_id(),
+                        SkillActionNameNoun(skill_action), status.message()),
+        {.debug_message =
+             absl::StrFormat("Internal action id: %s", action_id)});
+    clips::ProtoMessageId es_proto_id = proto_mgr->AddGeneratedProto(es_proto);
+    ReportClipsStatus(
+        assert_facade, action_id, ClipsSkillDispatcher::kSkillStatusFailed,
+        {.message = absl::StrFormat(
+             "Cannot resolve skill parameters: %s",
+             status.ToString(absl::StatusToStringMode::kWithNoExtraData)),
+         .extended_status_proto_id = es_proto_id});
+  }
+  return status;
+}
+
 absl::StatusOr<SkillInstance> CreateSkillInstanceOrReportError(
     clips::EnvironmentAssertFacade* assert_facade,
     clips::ProtobufManager* proto_mgr,
     SkillClientGenerator* skill_client_generator, absl::string_view action_id,
     SkillAction skill_action,
-    intrinsic_proto::executive::BehaviorCall& behavior_call_proto,
-    const clips::DescriptorPoolId descriptor_pool_id)
+    const intrinsic_proto::executive::BehaviorCall& behavior_call_proto)
     ABSL_LOCKS_EXCLUDED(assert_facade->GetClipsMutex()) {
   const stats::ScopedSpan span(
       "ClipsSkillDispatcher/CreateSkillInstanceOrReportError");
   absl::StatusOr<SkillInstance> skill_instance =
-      skill_client_generator->CreateSkillInstance(
-          behavior_call_proto, descriptor_pool_id, skill_action);
+      skill_client_generator->CreateSkillInstance(behavior_call_proto);
   if (!skill_instance.ok()) {
     absl::MutexLock clips_lock(*assert_facade->GetClipsMutex());
     LOG(ERROR) << "Failed to CreateSkillInstance for "
-               << behavior_call_proto.skill_id() << " using descriptor pool "
-               << descriptor_pool_id << ": " << skill_instance.status();
+               << behavior_call_proto.skill_id() << ": "
+               << skill_instance.status();
 
     intrinsic_proto::status::ExtendedStatus es_proto = CreateExtendedStatus(
         18100,
@@ -982,13 +1022,18 @@ void ClipsSkillDispatcher::StartSkillExecution(
         const stats::ScopedSpan span(StartSkillSpan(
             behavior_call_proto.skill_id(), parent_context, skill_action));
 
+        INTR_RETURN_IF_ERROR(ResolveSkillParametersOrReportError(
+                                 assert_facade_, proto_manager_,
+                                 skill_client_generator_, action_id,
+                                 SkillAction::Execution, descriptor_pool_id,
+                                 behavior_call_proto))
+            .With(ReturnVoid());
         // Get Skill info, also creates client, hence do within bundle
         INTR_ASSIGN_OR_RETURN(
             SkillInstance skill_instance_to_move,
             CreateSkillInstanceOrReportError(
                 assert_facade_, proto_manager_, skill_client_generator_,
-                action_id, SkillAction::Execution, behavior_call_proto,
-                descriptor_pool_id),
+                action_id, SkillAction::Execution, behavior_call_proto),
             _.With(ReturnVoid()));
 
         std::shared_ptr<SkillInstance> skill_instance;
@@ -1335,13 +1380,18 @@ void ClipsSkillDispatcher::StartSkillProjection(
                 StartSkillSpan(behavior_call_proto.skill_id(), parent_context,
                                SkillAction::Projection));
 
+            INTR_RETURN_IF_ERROR(ResolveSkillParametersOrReportError(
+                                     assert_facade_, proto_manager_,
+                                     skill_client_generator_, action_id,
+                                     SkillAction::Projection,
+                                     descriptor_pool_id, behavior_call_proto))
+                .With(ReturnVoid());
             // Get Skill info, also creates client, hence do within bundle
             INTR_ASSIGN_OR_RETURN(
                 SkillInstance skill_instance,
                 CreateSkillInstanceOrReportError(
                     assert_facade_, proto_manager_, skill_client_generator_,
-                    action_id, SkillAction::Projection, behavior_call_proto,
-                    descriptor_pool_id),
+                    action_id, SkillAction::Projection, behavior_call_proto),
                 _.With(ReturnVoid()));
 
             std::optional<absl::Duration> project_timeout =

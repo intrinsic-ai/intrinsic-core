@@ -590,10 +590,6 @@ SkillClientGenerator::GetSkillRegistration(absl::string_view skill_id) const
   };
 }
 
-// Perform skill parameter resolving on the given BehaviorCall's parameters.
-// This might modify the given parameters when dependencies are resolved.
-//
-// A non-OK Status is returned, when the resolving could not be performed.
 absl::Status SkillClientGenerator::ResolveSkillParameters(
     google::protobuf::Any& parameters,
     const google::protobuf::Map<
@@ -625,9 +621,7 @@ absl::Status SkillClientGenerator::ResolveSkillParameters(
 }
 
 absl::StatusOr<SkillInstance> SkillClientGenerator::CreateSkillInstance(
-    intrinsic_proto::executive::BehaviorCall& behavior_call,
-    const clips::DescriptorPoolId descriptor_pool_id,
-    SkillAction skill_action) {
+    const intrinsic_proto::executive::BehaviorCall& behavior_call) {
   const stats::ScopedSpan span("SkillClientGenerator/CreateSkillInstance");
   absl::MutexLock lock(skills_mutex_);
   // Check whether skill is known
@@ -642,14 +636,6 @@ absl::StatusOr<SkillInstance> SkillClientGenerator::CreateSkillInstance(
     return absl::FailedPreconditionError(absl::StrFormat(
         "Skill '%s' did not have connection information available.",
         behavior_call.skill_id()));
-  }
-
-  // If there are no parameters, we cannot resolve anything. This usually only
-  // happens in tests.
-  if (behavior_call.has_parameters()) {
-    INTR_RETURN_IF_ERROR(ResolveSkillParameters(
-        *behavior_call.mutable_parameters(), behavior_call.resources(),
-        descriptor_pool_id, skill_action));
   }
 
   return SkillInstance::Create(
