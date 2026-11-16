@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/attributes.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/declare.h"
 #include "absl/log/log.h"
@@ -379,6 +380,11 @@ class KeyValueStore {
   // connected workcells within an organization.
   std::string GetGlobalReplicationNamespace() {
     return std::string(kGlobalReplicationNamespace);
+  }
+
+  // Returns the storage key prefix configured for this KVStore instance.
+  absl::string_view key_prefix() const ABSL_ATTRIBUTE_LIFETIME_BOUND {
+    return key_prefix_;
   }
 
  private:
