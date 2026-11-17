@@ -21,13 +21,12 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = ["//visibility:public"])
 
+# Deprecated (b/584140057): do not add new dependencies on environments_cc.
 cc_library(
     name = "environments_cc",
     srcs = ["environments.cc"],
     hdrs = ["environments.h"],
-    visibility = [
-        "//visibility:public",
-    ],
+    visibility = ["//intrinsic_sdk/intrinsic/util/grpc:__pkg__"],
     deps = [
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
@@ -37,20 +36,33 @@ cc_library(
     ],
 )
 
+# Deprecated (b/584140057): do not add new dependencies on environments_py.
 py_library(
     name = "environments_py",
     srcs = ["environments.py"],
-    visibility = [
-        "//visibility:public",
-    ],
+    visibility = ["//intrinsic_sdk/intrinsic/util/grpc:__pkg__"],
 )
 
+# Deprecated (b/584140057): do not add new dependencies on environments.
 go_library(
     name = "environments",
     srcs = ["environments.go"],
     importpath = "intrinsic/config/environments",
     visibility = [
-        "//visibility:public",
+        "//intrinsic/frontend/onprem:__pkg__",
+        "//intrinsic/kubernetes:__pkg__",
+        "//intrinsic/tools/inctl/cmd:__pkg__",
+        "//intrinsic/tools/inctl/cmd/cluster:__pkg__",
+        "//intrinsic/tools/inctl/util:__pkg__",
+        "//intrinsic_runtime/httpjson:__pkg__",
+        "//intrinsic_sdk/intrinsic/assets:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/auth:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/auth:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/cluster:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution_version:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/vm:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util:__pkg__",
+        "//intrinsic_sdk/intrinsic/tools/inctl/util/accounts:__pkg__",
     ],
 )
 
