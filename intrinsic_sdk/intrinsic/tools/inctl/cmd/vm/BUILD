@@ -17,7 +17,6 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 package(default_visibility = [
     "//intrinsic/production:__subpackages__",
     "//intrinsic/tools:__subpackages__",
-    "//intrinsic/tools/inctl/cmd/vm:__pkg__",
     "//intrinsic_sdk/intrinsic/tools:__subpackages__",
 ])
 
@@ -28,7 +27,7 @@ go_library(
         "lease.go",
         "return.go",
         "vm.go",
-    ],
+    ] + [],
     importpath = "intrinsic/tools/inctl/cmd/vm/vm",
     visibility = [
         "//intrinsic/assets:__pkg__",

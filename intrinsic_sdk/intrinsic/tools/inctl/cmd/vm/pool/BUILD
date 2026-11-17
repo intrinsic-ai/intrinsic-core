@@ -16,8 +16,6 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = [
     "//intrinsic/tools:__subpackages__",
-    "//intrinsic/tools/inctl/cmd/vm:__subpackages__",
-    "//intrinsic/tools/inctl/cmd/vm/pool:__pkg__",
     "//intrinsic_sdk/intrinsic/tools:__subpackages__",
 ])
 
@@ -31,7 +29,7 @@ go_library(
         "pool.go",
         "state.go",
         "wait.go",
-    ],
+    ] + [],
     importpath = "intrinsic/tools/inctl/cmd/vm/pool/pool",
     deps = [
         "//intrinsic_sdk/intrinsic/kubernetes/acl:identity",
@@ -41,7 +39,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools/inctl/util:cobrautil",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
-        "@com_github_golang_glog//:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_github_spf13_viper//:go_default_library",
         "@intrinsic_apis//intrinsic/kubernetes/vmpool/manager/api/v1:lease_api_go_proto",
