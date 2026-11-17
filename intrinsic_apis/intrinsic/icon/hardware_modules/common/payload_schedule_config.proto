@@ -25,23 +25,65 @@ option go_package = "intrinsic/icon/hardware_modules/common/payload_schedule_con
 //
 // A hardware module that supports payload schedules does not apply a requested
 // payload verbatim. Instead it selects the schedule that best matches the
-// request and reports the selected schedule as the active payload. If no
-// schedule matches, the payload command is rejected and the previously active
-// schedule stays active.
+// request (see the matching tolerances below) and reports the selected schedule
+// as the active payload. If no schedule matches, the payload command is
+// rejected and the previously active schedule stays active.
+//
+// Matching tolerances:
+//
+// Controllers and safety monitors (such as collaborative contact detection
+// and DCS payload monitoring) compensate for the static gravitational load at
+// the robot flange:
+//   F_g = m * g
+//   M_g = (m * c) x g
+// where `m` is mass, `c` is the center of gravity in the flange frame, and
+// `m * c` is the first moment of mass.
+//
+// When selecting schedule (m_s, c_s) for request (m_req, c_req), the
+// resulting static residual force and moment disturbances are bounded by:
+//   ||delta F_g|| <= |m_s - m_req| * g
+//   ||delta M_g|| <= ||m_s * c_s - m_req * c_req|| * g
+//
+// Specifying tolerances on `m` and `m * c` uniformly bounds the static
+// gravitational disturbance across all robot orientations without requiring
+// prior knowledge of the gravity vector. Payload inertia does not affect
+// static gravity balance (it only enters the dynamic terms, through joint
+// accelerations and velocities) and is therefore evaluated as a tie-breaker
+// rather than a candidate gate.
+//
+// With `m_s`,`c_s` and `m_req`,`c_req` in the flange frame, a schedule is a
+// candidate if:
+//   m_s >= m_req (round up: the mass is never under-estimated; the first
+//                 moment can still be under-estimated by up to
+//                 moment_tolerance_kg_m)
+//   |m_s - m_req| <= mass_tolerance_kg
+//   ||m_s*c_s - m_req*c_req|| <= moment_tolerance_kg_m
+//
+// Among candidate schedules, the lightest covering schedule is selected.
+// Mass ranks first because schedule tables typically step the part mass for
+// a fixed tool; schedules that differ only in CoG are rare. Ties are broken
+// first by smallest first-moment error, then by smallest flange-frame inertia
+// difference, and finally by schedule declaration order. Two schedules with
+// the same mass, first moment of mass and flange-frame inertia are rejected,
+// since no request could tell them apart.
 //
 // Next ID: 6
 message PayloadScheduleConfig {
   // A single pre-configured payload schedule.
   message Schedule {
-    // Controller-specific payload schedule index, for example the FANUC payload
-    // schedule number `n` in `PAYLOAD[n]`. When set, must be non-negative and
-    // unique within the table. Whether an index is required and its valid range
-    // are checked by the hardware module that applies the table.
+    // Required. Integer identifier of this payload schedule on the robot
+    // controller (not an index into `schedules`), for example the FANUC
+    // payload schedule number `n` in `PAYLOAD[n]`. Matching the controller's
+    // own numbering avoids requiring users to maintain a separate mapping
+    // between this config and the controller. Must be non-negative and unique
+    // within the table; the hardware module checks the controller's valid
+    // range.
     optional int32 payload_index = 1;
 
     // Payload of this schedule. `tip_t_cog` is the pose of the center of
-    // gravity in the robot flange frame; its orientation may be omitted and
-    // then defaults to identity (inertia axes parallel to the flange frame).
+    // gravity in the robot flange frame. When set, its orientation must be
+    // a valid unit quaternion (such as identity `{ w: 1.0 }`). If `tip_t_cog`
+    // is omitted, it defaults to the flange origin with identity orientation.
     // `inertia` is the inertia tensor about the center of gravity in the
     // `tip_t_cog` frame.
     optional intrinsic_proto.world.RobotPayload payload = 2;
@@ -58,6 +100,17 @@ message PayloadScheduleConfig {
   oneof table {
     ExplicitTable explicit_table = 1;
   }
+
+  // Maximum mass error |m_s - m_req| (kg) of a candidate schedule; see
+  // `PayloadScheduleConfig` for how matching tolerances are defined. Must be
+  // finite and > 0. Defaults to 1.0 kg.
+  optional double mass_tolerance_kg = 3;
+
+  // Maximum first-moment-of-mass error ||m_s*c_s - m_req*c_req|| (kg*m) of a
+  // candidate schedule; see `PayloadScheduleConfig` for how matching tolerances
+  // are defined. Must be finite and > 0. Defaults to 0.1 kg*m (1 kg at a 0.1 m
+  // CoG offset).
+  optional double moment_tolerance_kg_m = 4;
 
   // `payload_index` of the schedule that the hardware module activates on the
   // controller when it initializes and reports as the active payload until the
