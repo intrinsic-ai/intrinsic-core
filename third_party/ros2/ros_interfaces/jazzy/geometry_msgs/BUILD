@@ -8,6 +8,10 @@ package(
 license(
     name = "license",
     package_name = "jazzy_geometry_msgs",
+    license_kinds = [
+        "@rules_license//licenses/spdx:Apache-2.0",
+    ],
+    license_text = "LICENSE",
 )
 
 licenses(["notice"])
