@@ -245,8 +245,8 @@ use_repo(
 PYTHON_VERSION = "3.11"
 # LINT.ThenChange(//intrinsic_sdk/bazel/python_oci_image.bzl:python_version)
 
-bazel_dep(name = "rules_python", version = "2.4.5")
-bazel_dep(name = "rules_python_gazelle_plugin", version = "2.4.5")  
+bazel_dep(name = "rules_python", version = "2.5.1")
+bazel_dep(name = "rules_python_gazelle_plugin", version = "2.5.1")  
 bazel_dep(name = "rules_uv", version = "0.89.2")
 
 python = use_extension("@rules_python//python/extensions:python.bzl", "python")
