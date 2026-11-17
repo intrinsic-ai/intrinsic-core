@@ -16,6 +16,7 @@
 
 #include <map>
 #include <memory>
+#include <optional>
 #include <string>
 #include <string_view>
 #include <utility>
@@ -119,13 +120,23 @@ absl::StatusOr<Channel::OrgInfo> Channel::OrgInfo::FromString(
 
 absl::StatusOr<std::shared_ptr<Channel>> Channel::MakeFromAddress(
     const ConnectionParams& params, absl::Duration timeout) {
+  const std::optional<absl::string_view> server_instance =
+      (params.header == "x-resource-instance-name" &&
+       !params.instance_name.empty())
+          ? std::make_optional<absl::string_view>(params.instance_name)
+          : std::nullopt;
   // Set the max message size to unlimited to allow longer trajectories.
   // Please check with the motion team before changing the value (see
   // b/275280379).
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<grpc::Channel> channel,
-                        connect::CreateClientChannel(
-                            params.address, absl::Now() + timeout,
-                            connect::UnlimitedMessageSizeGrpcChannelArgs()));
+  INTR_ASSIGN_OR_RETURN(
+      std::shared_ptr<grpc::Channel> channel,
+      connect::GrpcChannel(params.address)
+          .WithTimeout(timeout)
+          .WithUnlimitedMessageSizeChannelArgs()
+          .WithChannelCredentials(
+              grpc::InsecureChannelCredentials())  // NOLINT(insecure)
+          .WithCheckChannelHealth(server_instance)
+          .Connect());
   return std::shared_ptr<Channel>(
       new Channel(channel, params.instance_name, params.header));
 }
