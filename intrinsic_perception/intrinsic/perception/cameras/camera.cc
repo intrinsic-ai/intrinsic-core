@@ -32,6 +32,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
+#include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
 #include "grpcpp/support/client_callback.h"
@@ -392,7 +393,8 @@ absl::StatusOr<std::shared_ptr<Channel>> GrpcCamera::GetChannel(
 }
 
 absl::StatusOr<intrinsic_proto::perception::v1::CameraConfig>
-GrpcCamera::GetCameraConfig(const ConnectionParams& connection_params) const {
+GrpcCamera::GetCameraConfig(const ConnectionParams& connection_params,
+                            std::optional<absl::Duration> rpc_timeout) const {
   INTR_ASSIGN_OR_RETURN(std::shared_ptr<Channel> channel,
                         channel_cache_.Get(connection_params));
   std::unique_ptr<intrinsic_proto::perception::v1::CameraConfigService::Stub>
@@ -400,6 +402,9 @@ GrpcCamera::GetCameraConfig(const ConnectionParams& connection_params) const {
           channel->GetChannel());
   std::unique_ptr<grpc::ClientContext> client_context =
       channel->GetClientContextFactory()();
+  if (rpc_timeout.has_value()) {
+    client_context->set_deadline(::grpc::DeadlineFromDuration(*rpc_timeout));
+  }
   intrinsic_proto::perception::v1::GetCameraConfigRequest request;
   intrinsic_proto::perception::v1::CameraConfig response;
   INTR_RETURN_IF_ERROR(ToAbslStatus(

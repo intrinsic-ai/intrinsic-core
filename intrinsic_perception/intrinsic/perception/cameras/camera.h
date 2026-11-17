@@ -36,6 +36,7 @@
 #include "absl/types/span.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/support/client_callback.h"
+#include "grpcpp/support/time.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/perception/cameras/camera_config.h"
@@ -330,17 +331,27 @@ class GrpcCamera {
   //     intrinsic_proto::perception::v1::CaptureResponse response,
   //     grpc_camera.Call(&GrpcCamera::Stub::Capture, request,
   //                      connection_params));
+  //
+  // When `rpc_timeout` is `std::nullopt`, the channel's `ClientContextFactory`
+  // default deadline (60s via `ConfigureClientContext`) is preserved; passing
+  // `absl::InfiniteDuration()` removes the RPC deadline. Note that
+  // `rpc_timeout` only bounds the RPC itself and not initial channel creation
+  // in `GetChannel`.
   template <typename Request, typename Response>
   absl::StatusOr<Response> Call(
       grpc::Status (Stub::* absl_nonnull method)(
           grpc::ClientContext* absl_nonnull, const Request&,
           Response* absl_nonnull),
-      const Request& request, const ConnectionParams& connection_params) const {
+      const Request& request, const ConnectionParams& connection_params,
+      std::optional<absl::Duration> rpc_timeout = std::nullopt) const {
     INTR_ASSIGN_OR_RETURN(std::shared_ptr<Channel> channel,
                           GetChannel(connection_params));
     std::unique_ptr<Stub> stub = CameraService::NewStub(channel->GetChannel());
     std::unique_ptr<grpc::ClientContext> client_context =
         channel->GetClientContextFactory()();
+    if (rpc_timeout.has_value()) {
+      client_context->set_deadline(::grpc::DeadlineFromDuration(*rpc_timeout));
+    }
     Response response;
     INTR_RETURN_IF_ERROR(ToAbslStatus(
         (stub.get()->*method)(client_context.get(), request, &response)));
@@ -355,8 +366,14 @@ class GrpcCamera {
   // Note: The connection must implement
   // intrinsic_proto.perception.v1.CameraConfigService. Old versions of camera
   // Assets do not implement it.
+  //
+  // When `rpc_timeout` is `std::nullopt`, the channel's `ClientContextFactory`
+  // default deadline (60s via `ConfigureClientContext`) is preserved; passing
+  // `absl::InfiniteDuration()` removes the RPC deadline. Note that
+  // `rpc_timeout` only bounds the RPC itself and not initial channel creation.
   absl::StatusOr<intrinsic_proto::perception::v1::CameraConfig> GetCameraConfig(
-      const ConnectionParams& connection_params) const;
+      const ConnectionParams& connection_params,
+      std::optional<absl::Duration> rpc_timeout = std::nullopt) const;
 
  private:
   mutable ChannelCache channel_cache_;
