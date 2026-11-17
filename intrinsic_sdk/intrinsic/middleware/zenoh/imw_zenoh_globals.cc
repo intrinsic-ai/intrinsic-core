@@ -165,11 +165,24 @@ void IMWZenoh::static_data_callback(z_loaned_sample_t* sample,
 
 void IMWZenoh::static_liveliness_callback(z_loaned_sample_t* sample,
                                           void* untyped_context) {
-  IMWZenohDataCallbackContext* zenoh_context =
-      static_cast<IMWZenohDataCallbackContext*>(untyped_context);
+  auto* context = static_cast<LivelinessCallbackContext*>(untyped_context);
+  std::shared_ptr<IMWZenohLivelinessSubscription> sub =
+      context->subscription.lock();
+  if (sub == nullptr) {
+    return;
+  }
+  z_view_string_t sample_keyexpr;
+  z_keyexpr_as_view_string(z_sample_keyexpr(sample), &sample_keyexpr);
+  const std::string sample_keyexpr_str(
+      std::string_view(z_string_data(z_loan(sample_keyexpr)),
+                       z_string_len(z_loan(sample_keyexpr))));
+  const bool alive = (z_sample_kind(sample) == Z_SAMPLE_KIND_PUT);
+  sub->invoke(sample_keyexpr_str.c_str(), alive);
+}
 
-  zenoh_context->get_imw_zenoh_instance()->liveliness_callback(
-      zenoh_context->get_subscription_keyexpr(), sample);
+void IMWZenoh::static_liveliness_closure_drop(void* untyped_context) {
+  auto* context = static_cast<LivelinessCallbackContext*>(untyped_context);
+  delete context;
 }
 
 void IMWZenoh::static_closure_drop(void* untyped_context) {

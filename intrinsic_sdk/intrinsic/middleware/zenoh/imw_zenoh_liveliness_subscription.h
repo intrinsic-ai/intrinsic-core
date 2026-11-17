@@ -15,11 +15,10 @@
 #ifndef MIDDLEWARE_ZENOH_IMW_ZENOH_LIVELINESS_SUBSCRIPTION_H_
 #define MIDDLEWARE_ZENOH_IMW_ZENOH_LIVELINESS_SUBSCRIPTION_H_
 
+#include <cstddef>
 #include <string>
-#include <utility>
-#include <vector>
 
-#include "absl/log/log.h"
+#include "absl/base/thread_annotations.h"
 #include "absl/synchronization/mutex.h"
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "zenoh.h"  // NOLINT(build/include_subdir)
@@ -30,7 +29,6 @@ class IMWZenohLivelinessSubscription {
  public:
   IMWZenohLivelinessSubscription(const std::string& keyexpr,
                                  imw_liveliness_callback_fn* callback,
-                                 z_owned_subscriber_t zenoh_sub,
                                  void* user_context);
 
   IMWZenohLivelinessSubscription(IMWZenohLivelinessSubscription&& other) =
@@ -42,27 +40,28 @@ class IMWZenohLivelinessSubscription {
 
   ~IMWZenohLivelinessSubscription();
 
+  void set_zenoh_sub(z_owned_subscriber_t zenoh_sub) { zenoh_sub_ = zenoh_sub; }
   z_owned_subscriber_t& get_zenoh_sub() { return zenoh_sub_; }
   const std::string& get_keyexpr() const { return keyexpr_; }
-  void add_callback(imw_liveliness_callback_fn* fptr, void* user_context);
-  bool remove_callback(imw_liveliness_callback_fn* fptr,
-                       const void* user_context);
-  bool clear_callbacks();
-  bool is_empty() const { return callbacks_.empty(); }
-  void invoke_callbacks(const char* keyexpr, bool alive);
+  imw_liveliness_callback_fn* get_callback() const { return callback_; }
+  const void* get_user_context() const { return user_context_; }
+  void disable() ABSL_LOCKS_EXCLUDED(mutex_);
+  void invoke(const char* keyexpr, bool alive) ABSL_LOCKS_EXCLUDED(mutex_);
   struct Statistics {
     size_t n_messages;
     size_t n_bytes;
   };
-  Statistics get_statistics();
+  Statistics get_statistics() ABSL_LOCKS_EXCLUDED(mutex_);
 
  private:
-  std::string keyexpr_;
-  std::vector<std::pair<imw_liveliness_callback_fn*, void*>> callbacks_;
+  const std::string keyexpr_;
+  imw_liveliness_callback_fn* const callback_;
+  void* const user_context_;
   z_owned_subscriber_t zenoh_sub_;
   absl::Mutex mutex_;  // protects internal data structures
-  size_t n_bytes;
-  size_t n_messages;
+  bool active_ ABSL_GUARDED_BY(mutex_) = true;
+  size_t n_bytes ABSL_GUARDED_BY(mutex_) = 0;
+  size_t n_messages ABSL_GUARDED_BY(mutex_) = 0;
 };
 
 }  // namespace intrinsic

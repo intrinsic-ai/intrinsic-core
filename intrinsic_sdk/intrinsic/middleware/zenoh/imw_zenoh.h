@@ -119,6 +119,7 @@ class IMWZenoh {
   static int keyexpr_is_canon(const char* keyexpr);
 
   static void static_liveliness_callback(z_loaned_sample_t* sample, void* arg);
+  static void static_liveliness_closure_drop(void* context);
   static void static_liveliness_get_callback(z_loaned_reply_t* reply,
                                              void* untyped_context);
   static void static_liveliness_get_drop(void* untyped_context);
@@ -126,6 +127,10 @@ class IMWZenoh {
   static const char* const version();
 
  private:
+  struct LivelinessCallbackContext {
+    std::weak_ptr<IMWZenohLivelinessSubscription> subscription;
+  };
+
   void data_callback(const std::string& subscription_keyexpr,
                      const z_loaned_sample_t* sample);
   void queryable_callback(const std::string& queryable_keyexpr,
@@ -133,8 +138,6 @@ class IMWZenoh {
   void query_callback(const char* keyexpr, imw_query_callback_fn* user_callback,
                       z_loaned_reply_t* reply, void* user_context,
                       const imw_query_options_t* options);
-  void liveliness_callback(const std::string& subscription_keyexpr,
-                           const z_loaned_sample_t* sample);
   void liveliness_get_callback(z_loaned_reply_t* reply,
                                imw_liveliness_get_callback_fn* callback,
                                void* untyped_context);
@@ -151,25 +154,13 @@ class IMWZenoh {
       ABSL_SHARED_LOCKS_REQUIRED(publishers_mutex_);
 
   void destroy_empty_subscriptions() ABSL_LOCKS_EXCLUDED(subscriptions_mutex_) {
-    destroy_empty_subscriptions(subscriptions_, subscriptions_mutex_);
-  }
-
-  void destroy_empty_liveliness_subscriptions()
-      ABSL_LOCKS_EXCLUDED(liveliness_subscriptions_mutex_) {
-    destroy_empty_subscriptions(liveliness_subscriptions_,
-                                liveliness_subscriptions_mutex_);
-  }
-
-  template <typename T>
-  void destroy_empty_subscriptions(std::list<std::shared_ptr<T>>& subscriptions,
-                                   absl::Mutex& mutex) {
-    std::vector<std::shared_ptr<T>> subs_to_undeclare;
+    std::vector<std::shared_ptr<IMWZenohSubscription>> subs_to_undeclare;
     {
-      absl::MutexLock lock(&mutex);
-      for (auto it = subscriptions.begin(); it != subscriptions.end();) {
+      absl::MutexLock lock(&subscriptions_mutex_);
+      for (auto it = subscriptions_.begin(); it != subscriptions_.end();) {
         if ((*it)->is_empty()) {
           subs_to_undeclare.push_back(*it);
-          it = subscriptions.erase(it);
+          it = subscriptions_.erase(it);
         } else {
           ++it;
         }

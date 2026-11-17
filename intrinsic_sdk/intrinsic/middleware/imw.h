@@ -111,6 +111,9 @@ imw_ret_t imw_delete_keyexpr(const char* keyexpr);
 imw_ret_t imw_create_liveliness_subscription(
     const char* keyexpr, imw_liveliness_callback_fn* callback,
     bool notify_about_existing_tokens, void* user_context);
+// Must only be called after the corresponding
+// imw_create_liveliness_subscription() call has returned, and must not be
+// called from within that subscription's liveliness callback.
 imw_ret_t imw_destroy_liveliness_subscription(
     const char* keyexpr, imw_liveliness_callback_fn* callback,
     const void* user_context);
