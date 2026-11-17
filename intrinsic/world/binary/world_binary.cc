@@ -103,7 +103,6 @@ namespace {
 
 using ::intrinsic::conductor::ConductorImpl;
 using ::intrinsic::conductor::SrvParams;
-using ShouldLoadWorlds = ::intrinsic::WorldStorage::LoadWorlds;
 
 template <typename T>
 std::future<T*> PointerFromSharedFuture(
@@ -165,17 +164,16 @@ int main(int argc, char** argv) {
   // saved to disk. After a restart, the conductor recreates the solution
   // worlds from a recovered execution context.
   std::shared_future<std::unique_ptr<intrinsic::WorldStorage>> world_storage =
-      std::async(std::launch::async, [geo_lib] {
+      std::async(std::launch::async, [] {
         std::vector<intrinsic::WorldStorage::InitWorld> init_worlds;
         init_worlds.push_back({.world_id = "world",
                                .world = intrinsic::World::CreateEmptyWorld()});
         init_worlds.push_back({.world_id = "init_world",
                                .world = intrinsic::World::CreateEmptyWorld()});
         return intrinsic::WorldStorage::Create(
-                   /*worlds_path=*/"", PointerFromSharedFuture(geo_lib),
                    intrinsic::object_world::ObjectWorld::
                        VerifyWorldCouldBeCompatible,
-                   ShouldLoadWorlds::kNo, std::move(init_worlds))
+                   std::move(init_worlds))
             .value();
       }).share();
 
@@ -196,9 +194,6 @@ int main(int argc, char** argv) {
                                                               geo_cache);
                     }));
 
-  // We connect to the logger after creation of world_service so that we do
-  // not have to wait for the logger service to be available before starting
-  // the world loads from disk.
   if (std::string data_logger_address =
           absl::GetFlag(FLAGS_data_logger_grpc_service_address);
       !data_logger_address.empty()) {
@@ -336,7 +331,6 @@ int main(int argc, char** argv) {
   world_server->Shutdown(absl::Now() + shutdown_params.shutdown_timeout);
   world_server->Wait();
 
-  // World storage should flush the worlds to disk in the destructor.
   LOG(INFO) << "Goodbye world!";
 
   return 0;

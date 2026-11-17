@@ -41,7 +41,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/gzfile",
         "//intrinsic_sdk/intrinsic/world/hashing",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
-        "@abseil-cpp//absl/flags:flag",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",

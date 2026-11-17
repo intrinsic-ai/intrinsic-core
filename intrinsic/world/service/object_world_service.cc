@@ -1879,8 +1879,6 @@ grpc::Status ObjectWorldService::CloneWorld(
     // world store that the world has changed.
     WorldStore().MarkWorldAsChanged(updated_world_id, world_ptr,
                                     /*has_state_change=*/true);
-  } else {
-    WorldStore().MarkWorldForSaving(updated_world_id, world_ptr);
   }
 
   return grpc::Status::OK;

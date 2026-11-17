@@ -44,7 +44,6 @@ class FakeWorldService {
  public:
   struct CreateOptions {
     bool enable_local_tcp = false;
-    WorldStorage::LoadWorlds should_load_worlds = WorldStorage::LoadWorlds::kNo;
     static CreateOptions Default() { return {}; }
   };
 

@@ -20,8 +20,6 @@
 #include <utility>
 #include <vector>
 
-#include "absl/flags/declare.h"
-#include "absl/flags/flag.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -51,9 +49,6 @@
 #include "intrinsic/world/service/worldservice_impl.h"
 #include "intrinsic/world/world.h"
 
-// Defined in intrinsic/world/service/world_storage.cc.
-ABSL_DECLARE_FLAG(bool, save_worlds_to_disk);
-
 namespace intrinsic {
 
 absl::StatusOr<std::unique_ptr<FakeWorldService>> FakeWorldService::Create(
@@ -72,16 +67,10 @@ absl::StatusOr<std::unique_ptr<FakeWorldService>> FakeWorldService::Create(
     WorldHashMap<std::string, World> worlds,
     std::unique_ptr<GeometryLibrary> geo_lib,
     const FakeWorldService::CreateOptions& options) {
-  // Keep WorldStorage from saving worlds to disk.
-  absl::SetFlag(&FLAGS_save_worlds_to_disk, false);
-
   auto geo_lib_factory =
       std::make_shared<FakeGeoLibFactory>(std::move(geo_lib));
-  INTR_ASSIGN_OR_RETURN(
-      std::unique_ptr<WorldStorage> world_storage,
-      WorldStorage::Create(
-          /*worlds_path=*/"", geo_lib_factory->GetGeoLib(),
-          /*compat_func=*/std::nullopt, options.should_load_worlds, {}));
+  INTR_ASSIGN_OR_RETURN(std::unique_ptr<WorldStorage> world_storage,
+                        WorldStorage::Create());
 
   INTR_ASSIGN_OR_RETURN(
       std::unique_ptr<WorldServiceImpl> world_service,

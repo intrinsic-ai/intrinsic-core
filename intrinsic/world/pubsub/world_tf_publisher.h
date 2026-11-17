@@ -15,9 +15,17 @@
 #ifndef INTRINSIC_WORLD_PUBSUB_WORLD_TF_PUBLISHER_H_
 #define INTRINSIC_WORLD_PUBSUB_WORLD_TF_PUBLISHER_H_
 
+#include <future>
 #include <memory>
 #include <optional>
+#include <string>
 
+#include "absl/base/thread_annotations.h"
+#include "absl/status/status.h"
+#include "absl/status/statusor.h"
+#include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/util/thread/periodic.h"

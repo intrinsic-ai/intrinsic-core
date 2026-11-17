@@ -16,7 +16,6 @@
 #define INTRINSIC_WORLD_SERVICE_WORLD_STORAGE_H_
 
 #include <functional>
-#include <future>  // NOLINT(build/c++11)
 #include <memory>
 #include <optional>
 #include <string>
@@ -28,8 +27,6 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
-#include "intrinsic/geometry/storage/geometry_library.h"
-#include "intrinsic/util/thread/periodic.h"
 #include "intrinsic/world/hashing/hashing.h"
 #include "intrinsic/world/service/world_mutex.h"
 #include "intrinsic/world/world.h"
@@ -38,8 +35,7 @@ namespace intrinsic {
 
 using ObjectWorldCompatibilityFunc = std::function<absl::Status(const World&)>;
 
-// Manages the in-memory worlds of the world service, and takes care of syncing
-// the worlds to disk to guard against crashes/restarts.
+// Manages the in-memory worlds of the world service.
 class WorldStorage {
  public:
   struct InitWorld {
@@ -47,38 +43,10 @@ class WorldStorage {
     World world;
   };
 
-  // Whether to load worlds from provided path.
-  enum class LoadWorlds {
-    kYes,
-    kNo,
-  };
-
-  ~WorldStorage();
-
-  // Creates an instance with an initial set of worlds.
-  //
-  // Copies all GZF files under 'seed_worlds_path' to 'worlds_path', not
-  // overwriting existing files, and then loads all GZF files under
-  // 'worlds_path' using the file basename as world id. Any changes to worlds
-  // later on will be synced out to the GZFs in 'worlds_path'.
-  // Use 'init_worlds' to add additional in-memory worlds. If a world id in
-  // 'init_worlds' matches a file basename in 'seed_worlds_path', the world from
-  // file takes precedence.
-  // `load_worlds` controls whether to load worlds from the provided path. If
-  // set to kNo, the provided path is only be used to save the worlds.
-  // If 'worlds_path' is empty, worlds are neither loaded from nor saved to
-  // disk and only live in memory.
-  // Resource instances from 'resource_set_path' will be composed into the
-  // initial worlds during creation.
+  // Creates an instance with an initial set of in-memory worlds.
   static absl::StatusOr<std::unique_ptr<WorldStorage>> Create(
-      absl::string_view worlds_path, GeometryLibrary& geo_lib,
-      std::optional<ObjectWorldCompatibilityFunc> compat_func,
-      LoadWorlds load_worlds, std::vector<InitWorld> init_worlds = {});
-
-  static absl::StatusOr<std::unique_ptr<WorldStorage>> Create(
-      absl::string_view worlds_path, std::future<GeometryLibrary*> geo_lib,
-      std::optional<ObjectWorldCompatibilityFunc> compat_func,
-      LoadWorlds load_worlds, std::vector<InitWorld> init_worlds = {});
+      std::optional<ObjectWorldCompatibilityFunc> compat_func = std::nullopt,
+      std::vector<InitWorld> init_worlds = {});
 
   // Returns true if the passed world_id can be overwritten with a new world
   // that is copied into it.
@@ -127,23 +95,15 @@ class WorldStorage {
   WorldHashMap<std::string, std::shared_ptr<WorldAndMutex>> GetAllWorlds()
       ABSL_LOCKS_EXCLUDED(worlds_mtx_);
 
-  // Deletes the world with the given id in-memory and on disk.
+  // Deletes the world with the given id.
   absl::Status DeleteWorld(absl::string_view world_id)
-      ABSL_LOCKS_EXCLUDED(worlds_mtx_, flush_mtx_);
-
-  // Marks the world id to be written to disk later.
-  void MarkWorldForSaving(absl::string_view world_id,
-                          const std::shared_ptr<WorldAndMutex>& world)
-      ABSL_SHARED_LOCKS_REQUIRED(world->mtx) ABSL_LOCKS_EXCLUDED(flush_mtx_);
+      ABSL_LOCKS_EXCLUDED(worlds_mtx_);
 
   void MarkWorldAsChanged(absl::string_view world_id,
                           const std::shared_ptr<WorldAndMutex>& world,
                           bool has_state_change)
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(world->mtx)
           ABSL_LOCKS_EXCLUDED(callbacks_mtx_);
-
-  // Spins up a thread to periodically publish TF frames from the belief world.
-  absl::Status StartTfPublisher();
 
   // The OnAddWorldCallback callback is called when a world is added to this
   // store. If this returns a non-OK status, the world will not be added to the
@@ -181,13 +141,13 @@ class WorldStorage {
   void ClearOnDeleteWorldCallback() ABSL_LOCKS_EXCLUDED(worlds_mtx_);
 
   // The OnWorldChangeCallback callback is called when a modification is made to
-  // a world held by this store. This occurs through the MarkWorldForSaving
+  // a world held by this store. This occurs through the MarkWorldAsChanged
   // method call. The bool has_state_change will be set if this world
   // modification incorporates a state change like modifying the dof or pose
   // values of entities.
   //
-  // Must not lock any mutex on WorldStorage, it will be called while holding a
-  // shared lock on the given WorldAndMutex.
+  // Must not lock any mutex on WorldStorage, it will be called while holding an
+  // exclusive lock on the given WorldAndMutex.
   using OnWorldChangeCallback = absl::AnyInvocable<void(
       absl::string_view world_id, const std::shared_ptr<WorldAndMutex>& world,
       bool has_state_change)>;
@@ -199,31 +159,10 @@ class WorldStorage {
   // Clears the callback set by SetOnWorldChangeCallback, if any.
   void ClearOnWorldChangeCallback() ABSL_LOCKS_EXCLUDED(worlds_mtx_);
 
-  // TODO(stoyang): This should really be private.
-  // Returns the file path based on 'worlds_path_' for the given world_id.
-  std::string GetFilepathForWorldId(absl::string_view world_id) const;
-
  private:
-  // Returns the file path based on 'worlds_path_' for the given world_id.
-  std::string GetProtoFilepathForWorldId(absl::string_view world_id) const;
-
-  // Returns true if worlds are persisted to disk, i.e., a worlds path is set
-  // and saving is enabled via flag.
-  bool ShouldSaveToDisk() const;
-
-  // Performs a batch flush of all the pending saves
-  void FlushImpl() ABSL_LOCKS_EXCLUDED(flush_mtx_, worlds_mtx_);
-
   WorldStorage(
-      absl::string_view worlds_path, GeometryLibrary& geo_lib,
       std::optional<ObjectWorldCompatibilityFunc> compat_func,
       WorldHashMap<std::string, std::shared_ptr<WorldAndMutex>> worlds);
-
-  // The path to use when loading worlds.
-  std::string worlds_path_;
-
-  // Geometry storage to use when flushing protos to disk.
-  GeometryLibrary& geo_lib_;
 
   // Callback for checking if a World instance is compatible with the object
   // world view.
@@ -242,11 +181,6 @@ class WorldStorage {
  private:
   WorldHashMap<std::string, std::shared_ptr<WorldAndMutex>> worlds_
       ABSL_GUARDED_BY(worlds_mtx_);
-
-  absl::Mutex flush_mtx_;
-  WorldHashSet<std::string> ids_to_flush_ ABSL_GUARDED_BY(flush_mtx_);
-  WorldHashSet<std::string> ids_to_delete_ ABSL_GUARDED_BY(flush_mtx_);
-  intrinsic::PeriodicOperation world_flusher_;
 
   absl::Mutex callbacks_mtx_;
 
