@@ -168,6 +168,9 @@ absl::StatusOr<SceneObject> ProcessSceneObjectUpdates(
     case SceneObjectInstanceUpdate::kUpdateSimulationProperties:
       return ProcessSceneObjectUpdate(std::move(object),
                                       update.update_simulation_properties());
+    case SceneObjectInstanceUpdate::kUpdatePhysicsProperties:
+      return ProcessSceneObjectUpdate(std::move(object),
+                                      update.update_physics_properties());
     case SceneObjectInstanceUpdate::UPDATE_NOT_SET:
       return absl::InvalidArgumentError(
           "Update not set within SceneObjectInstanceUpdate proto.");

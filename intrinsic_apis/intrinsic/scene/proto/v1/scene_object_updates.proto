@@ -63,6 +63,7 @@ message SceneObjectInstanceUpdate {
     SetIKSolversUpdate set_ik_solvers = 9;
     GeometryUpdate update_geometry = 10;
     UpdateSimulationProperties update_simulation_properties = 11;
+    UpdatePhysicsProperties update_physics_properties = 12;
 
     // TODO(stoyang): Add more updates as we work through the UI flows.
 

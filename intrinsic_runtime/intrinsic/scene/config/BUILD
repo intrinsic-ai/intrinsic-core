@@ -37,9 +37,13 @@ cc_library(
     srcs = ["scene_object_config_updater.cc"],
     hdrs = ["scene_object_config_updater.h"],
     deps = [
+        "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_config_cc_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_cc_proto",

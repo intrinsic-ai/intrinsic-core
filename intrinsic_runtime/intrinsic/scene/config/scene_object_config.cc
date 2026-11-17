@@ -34,6 +34,7 @@ using ::intrinsic_proto::scene_object::v1::SceneObject;
 using ::intrinsic_proto::scene_object::v1::SceneObjectConfig;
 using ::intrinsic_proto::scene_object::v1::SceneObjectInstanceUpdates;
 using ::intrinsic_proto::scene_object::v1::UpdateCollisionRules;
+using ::intrinsic_proto::scene_object::v1::UpdatePhysicsProperties;
 
 absl::StatusOr<SceneObjectUpdateResult> ProcessSceneObjectConfig(
     SceneObject object, const SceneObjectConfig& config,
@@ -77,6 +78,13 @@ absl::StatusOr<SceneObjectUpdateResult> ProcessSceneObjectConfig(
     GeometryUpdate update_with_name = update;
     update_with_name.set_entity_name(entity_name);
     *all_updates.add_updates()->mutable_update_geometry() = update_with_name;
+  }
+
+  for (const auto& [entity_name, update] : config.physics_overrides()) {
+    UpdatePhysicsProperties update_with_name = update;
+    update_with_name.set_entity_name(entity_name);
+    *all_updates.add_updates()->mutable_update_physics_properties() =
+        std::move(update_with_name);
   }
 
   if (config.has_updates()) {

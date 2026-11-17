@@ -62,6 +62,11 @@ message SceneObjectConfig {
   // ignored.
   map<string, GeometryUpdate> geometry_overrides = 13;
 
+  // Physics property changes for link entities of this scene object, e.g.,
+  // whether a link is kinematic. Maps from link entity names to physics
+  // updates. Entity name in each UpdatePhysicsProperties is ignored.
+  map<string, UpdatePhysicsProperties> physics_overrides = 14;
+
   // Additional updates to the scene object type that are specific to this
   // particular instantiation of the scene object, defined in order. This is
   // mostly used for backwards compatibility.

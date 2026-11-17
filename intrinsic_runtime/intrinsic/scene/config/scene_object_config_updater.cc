@@ -14,8 +14,15 @@
 
 #include "intrinsic/scene/config/scene_object_config_updater.h"
 
+#include <string>
+
+#include "absl/algorithm/container.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
+#include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
+#include "intrinsic/scene/proto/v1/entity.pb.h"
+#include "intrinsic/scene/proto/v1/scene_object.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object_config.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object_updates.pb.h"
 
@@ -26,6 +33,7 @@ using ::google::protobuf::Map;
 using ::google::protobuf::RepeatedPtrField;
 using ::intrinsic_proto::scene_object::v1::CartesianLimitsUpdate;
 using ::intrinsic_proto::scene_object::v1::CreateFrameUpdate;
+using ::intrinsic_proto::scene_object::v1::Entity;
 using ::intrinsic_proto::scene_object::v1::EntityPoseUpdate;
 using ::intrinsic_proto::scene_object::v1::GeometryUpdate;
 using ::intrinsic_proto::scene_object::v1::NamedConfiguration;
@@ -34,6 +42,7 @@ using ::intrinsic_proto::scene_object::v1::SceneObjectConfig;
 using ::intrinsic_proto::scene_object::v1::SceneObjectInstanceUpdate;
 using ::intrinsic_proto::scene_object::v1::SceneObjectInstanceUpdates;
 using ::intrinsic_proto::scene_object::v1::SetNamedConfigurationsUpdate;
+using ::intrinsic_proto::scene_object::v1::UpdatePhysicsProperties;
 
 namespace {
 
@@ -242,6 +251,62 @@ void MergeGeometryUpdate(const GeometryUpdate& update,
   }
 }
 
+// Returns an error if `entity_name` is not a link entity of `object`.
+absl::Status ValidatePhysicsUpdateEntity(const SceneObject& object,
+                                         absl::string_view entity_name) {
+  if (entity_name.empty()) {
+    return absl::InvalidArgumentError(
+        "UpdatePhysicsProperties has empty entity_name.");
+  }
+  const auto entity = absl::c_find_if(
+      object.entities(),
+      [entity_name](const Entity& e) { return e.name() == entity_name; });
+  if (entity == object.entities().end()) {
+    return absl::NotFoundError(
+        absl::StrCat("UpdatePhysicsProperties references unknown entity '",
+                     entity_name, "'."));
+  }
+  if (!entity->has_link()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("UpdatePhysicsProperties references entity '", entity_name,
+                     "', which is not a link."));
+  }
+  return absl::OkStatus();
+}
+
+// Merges `update` into the physics override for its entity in `target`. Fields
+// set in `update` replace the corresponding fields of the existing override,
+// matching the semantics of applying the updates in sequence.
+void MergePhysicsUpdate(const UpdatePhysicsProperties& update,
+                        Map<std::string, UpdatePhysicsProperties>* target) {
+  UpdatePhysicsProperties& target_update = (*target)[update.entity_name()];
+  if (update.has_mass_kg()) {
+    target_update.set_mass_kg(update.mass_kg());
+  }
+  if (update.has_this_t_center_of_mass()) {
+    *target_update.mutable_this_t_center_of_mass() =
+        update.this_t_center_of_mass();
+  }
+  if (update.has_inertia()) {
+    *target_update.mutable_inertia() = update.inertia();
+  }
+  if (update.has_friction()) {
+    *target_update.mutable_friction() = update.friction();
+  }
+  if (update.has_torsional()) {
+    *target_update.mutable_torsional() = update.torsional();
+  }
+  if (update.has_contact_kp()) {
+    target_update.set_contact_kp(update.contact_kp());
+  }
+  if (update.has_contact_kd()) {
+    target_update.set_contact_kd(update.contact_kd());
+  }
+  if (update.has_kinematic()) {
+    target_update.set_kinematic(update.kinematic());
+  }
+}
+
 }  // namespace
 
 absl::Status ApplyUpdatesToConfig(const SceneObject& object,
@@ -332,6 +397,18 @@ absl::Status ApplyUpdatesToConfig(const SceneObject& object,
         }
         MergeGeometryUpdate(update.update_geometry(),
                             config->mutable_geometry_overrides());
+        break;
+      case ::intrinsic_proto::scene_object::v1::SceneObjectInstanceUpdate::
+          kUpdatePhysicsProperties:
+        // Validates before indexing into the overrides map by name, which
+        // would otherwise insert an override for a nonexistent link.
+        if (absl::Status status = ValidatePhysicsUpdateEntity(
+                object, update.update_physics_properties().entity_name());
+            !status.ok()) {
+          return status;
+        }
+        MergePhysicsUpdate(update.update_physics_properties(),
+                           config->mutable_physics_overrides());
         break;
       default:
         LOG(WARNING)
