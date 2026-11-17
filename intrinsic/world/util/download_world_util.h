@@ -15,6 +15,8 @@
 #ifndef INTRINSIC_WORLD_UTIL_DOWNLOAD_WORLD_UTIL_H_
 #define INTRINSIC_WORLD_UTIL_DOWNLOAD_WORLD_UTIL_H_
 
+#include <optional>
+
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
@@ -26,10 +28,13 @@
 
 namespace intrinsic {
 
-// Deserializes all geometry components in the world in-place using the given
-// deserializer.
+// Deserializes geometry components in the world in-place using the given
+// deserializer. If `geometry_key` is provided, only geometries with that key
+// (e.g. `kKindCollisionGeometry`) are deserialized; otherwise all geometry
+// sets are deserialized.
 absl::Status DeserializeWorldGeometries(
-    World& world, const GeometryDeserializer& deserializer);
+    World& world, const GeometryDeserializer& deserializer,
+    std::optional<absl::string_view> geometry_key = std::nullopt);
 
 // Downloads the world with the given ID from ObjectWorldService (querying
 // ListObjects and GetCollisionSettings concurrently) as an ObjectWorldService

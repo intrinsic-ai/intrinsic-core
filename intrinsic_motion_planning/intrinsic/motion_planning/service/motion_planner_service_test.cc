@@ -1089,6 +1089,35 @@ TEST_P(MotionPlannerServiceWithoutLoggerTest, BatchCheckIkOnlyWithWorldId) {
   }
 }
 
+// Verifies that BatchCheck (via MakeWorldAndProto) only deserializes
+// collision geometries and does not download visual geometries.
+TEST_P(MotionPlannerServiceWithoutLoggerTest,
+       BatchCheckDoesNotDeserializeVisualGeometries) {
+  ASSERT_OK_AND_ASSIGN(intrinsic_proto::world::World snapshot,
+                       GetWorldSnapshot(*object_world_service_stub_, "world"));
+  ASSERT_OK_AND_ASSIGN(intrinsic_proto::world::Object * iris622,
+                       FindObjectInSnapshot("iris622", snapshot));
+  ASSERT_OK_AND_ASSIGN(intrinsic_proto::world::Entity * root_entity,
+                       FindRootEntity(*iris622));
+  (*(*root_entity->mutable_geometry_component()
+          ->mutable_named_geometries())[kKindVisualGeometry]
+        .mutable_named_geometries())["non_existent_visual"]
+      .mutable_geometry()
+      ->mutable_geo_ref()
+      ->set_exact_geometry_ref("in-memory://non_existent_visual_geometry");
+
+  BatchCheckRequest request = ParseTextProtoOrDie(R"pb(
+    robot_reference { object_id { by_name { object_name: "iris622" } } }
+    collision_queries { waypoints { joints: [ 0, -0.6, 1.7, 0, 0, 0 ] } }
+  )pb");
+  *request.mutable_world_snapshot() = std::move(snapshot);
+
+  ASSERT_OK_AND_ASSIGN(const BatchCheckResponse response, BatchCheck(request));
+  ASSERT_EQ(response.collision_results_size(), 1);
+  EXPECT_TRUE(response.collision_results(0).success());
+  EXPECT_FALSE(response.collision_results(0).has_collision());
+}
+
 // Verifies evaluating multiple collision queries (single configuration and
 // multi-waypoint paths) in a single BatchCheck RPC.
 TEST_P(MotionPlannerServiceWithoutLoggerTest,

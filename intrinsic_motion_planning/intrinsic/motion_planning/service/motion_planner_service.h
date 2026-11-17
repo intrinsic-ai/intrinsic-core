@@ -209,8 +209,8 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
       absl::string_view world_id);
 
   // Serializes `world` into its proto and, if a geometry library is
-  // configured, deserializes the world geometries in-place. Shared tail of all
-  // paths that construct the initial world of a request.
+  // configured, deserializes the world collision geometries in-place. Shared
+  // tail of all paths that construct the initial world of a request.
   absl::StatusOr<WorldAndProto> MakeWorldAndProto(World world);
 
   // Returns both the initial World and its proto for a BatchCheck request,

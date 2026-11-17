@@ -14,6 +14,7 @@
 
 #include "intrinsic/world/util/download_world_util.h"
 
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -49,12 +50,20 @@ using ::intrinsic_proto::world::ObjectWorldService;
 using ObjectWorldProto = ::intrinsic_proto::world::World;
 
 absl::Status DeserializeWorldGeometries(
-    World& world, const GeometryDeserializer& deserializer) {
+    World& world, const GeometryDeserializer& deserializer,
+    std::optional<absl::string_view> geometry_key) {
   for (const auto& entity_id :
        world.GetTypedEntityIds<GeometryComponentType>()) {
     INTR_ASSIGN_OR_RETURN(
         auto* geo_component,
         world.GetComponentByEntityId<GeometryComponent>(entity_id));
+    if (geometry_key.has_value()) {
+      if (geo_component->HasGeometry(*geometry_key)) {
+        INTR_RETURN_IF_ERROR(
+            geo_component->GetGeometry(*geometry_key, deserializer).status());
+      }
+      continue;
+    }
     for (const std::string& name : geo_component->GetGeometryNames()) {
       INTR_RETURN_IF_ERROR(
           geo_component->GetGeometry(name, deserializer).status());

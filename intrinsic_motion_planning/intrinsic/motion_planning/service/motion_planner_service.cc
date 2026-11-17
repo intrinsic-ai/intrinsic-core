@@ -112,6 +112,7 @@
 #include "intrinsic/world/collision/util/make_collision_settings.h"
 #include "intrinsic/world/collision/util/make_rule_set.h"
 #include "intrinsic/world/entity_id.h"
+#include "intrinsic/world/geometry_types.h"
 #include "intrinsic/world/objects/kinematic_object_internal.h"
 #include "intrinsic/world/objects/object_world.h"
 #include "intrinsic/world/objects/object_world_proto_utils.h"
@@ -119,6 +120,7 @@
 #include "intrinsic/world/proto/collision_checker_config.pb.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
 #include "intrinsic/world/service/objects/object_world_converter.h"
+#include "intrinsic/world/util/download_world_util.h"
 #include "intrinsic/world/world.h"
 #include "opentelemetry/common/attribute_value.h"
 #include "opentelemetry/context/runtime_context.h"
@@ -556,8 +558,8 @@ absl::StatusOr<WorldAndProto> MotionPlannerService::MakeWorldAndProto(
   INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::internal::World world_proto,
                         world.Serialize());
   if (geometry_library_ != nullptr) {
-    INTR_RETURN_IF_ERROR(skills::DeserializeWorldGeometries(
-        world, geometry_library_->Deserializer()));
+    INTR_RETURN_IF_ERROR(intrinsic::DeserializeWorldGeometries(
+        world, geometry_library_->Deserializer(), kKindCollisionGeometry));
   }
   return WorldAndProto{.world = std::move(world),
                        .world_proto = std::move(world_proto)};
