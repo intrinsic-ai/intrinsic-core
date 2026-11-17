@@ -15,15 +15,17 @@
 #ifndef INTRINSIC_PERCEPTION_CORE_PARALLEL_H_
 #define INTRINSIC_PERCEPTION_CORE_PARALLEL_H_
 
+#include <cstddef>
 #include <cstdint>
 #include <type_traits>
 
 #include "absl/status/status.h"
 #include "absl/synchronization/mutex.h"
-#include "tbb/info.h"          // IWYU pragma: export
-#include "tbb/parallel_for.h"  // IWYU pragma: export
-#include "tbb/task_arena.h"    // IWYU pragma: export
-#include "tbb/task_group.h"    // IWYU pragma: export
+#include "tbb/global_control.h"  // IWYU pragma: export
+#include "tbb/info.h"            // IWYU pragma: export
+#include "tbb/parallel_for.h"    // IWYU pragma: export
+#include "tbb/task_arena.h"      // IWYU pragma: export
+#include "tbb/task_group.h"      // IWYU pragma: export
 
 namespace intrinsic::perception {
 
@@ -222,7 +224,15 @@ auto IsolatedLockedParallelFor(Index first, Index last, Index step,
 
 // Gives back the number of hyperthreads that TBB is using.
 inline int32_t ParallelDefaultNumberOfThreads() {
-  return tbb::info::default_concurrency();
+  const std::size_t max_allowed_parallelism = tbb::global_control::active_value(
+      tbb::global_control::max_allowed_parallelism);
+  const int32_t default_concurrency = tbb::info::default_concurrency();
+  if (default_concurrency <= 0 ||
+      max_allowed_parallelism >=
+          static_cast<std::size_t>(default_concurrency)) {
+    return default_concurrency;
+  }
+  return static_cast<int32_t>(max_allowed_parallelism);
 }
 
 }  // namespace intrinsic::perception
