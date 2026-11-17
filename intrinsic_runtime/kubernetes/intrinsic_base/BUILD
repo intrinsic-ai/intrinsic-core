@@ -60,7 +60,7 @@ helm_chart(
         "proto_builder": "//intrinsic_runtime/intrinsic/proto_tools/builder:proto-builder-image.tar",
         "resource_registry": "//intrinsic/resources/service:resource-registry-image.tar",
         "runtime_db": "//intrinsic/resources/service:runtime-db-image.tar",
-        "scene_object_import": "//intrinsic/scene/service:scene-object-import-image.tar",
+        "scene_object_import": "//intrinsic_runtime/intrinsic/scene/service:scene-object-import-image.tar",
         "simulation_service": "//intrinsic/simulation/service:simulation-service-image.tar",
         "skill_registry": "//intrinsic/skills/tools:skill-registry-image.tar",
         "solution_service": "//intrinsic_runtime/solution_service:solution-service-image.tar",
@@ -85,7 +85,6 @@ helm_chart(
         "//intrinsic/platform/pubsub:fds-template",
         "//intrinsic/resources/service:runtime_db_template",
         "//intrinsic/resources:resource-registry-template",
-        "//intrinsic/scene/service:scene_object_import_template",  # needed for scene_object_import
         "//intrinsic/skills/templates:skill-registry-template",
         "//intrinsic/storage/artifacts:artifacts-service-template",
         "//intrinsic/world/binary:world-template",
@@ -93,6 +92,7 @@ helm_chart(
         "//intrinsic_runtime/httpjson:http-gateway-template",
         "//intrinsic_runtime/intrinsic/longrunning/service:operations-template",
         "//intrinsic_runtime/intrinsic/proto_tools/templates:proto-builder-template",
+        "//intrinsic_runtime/intrinsic/scene/service:scene_object_import_template",  # needed for scene_object_import
         # keep-sorted end
     ] + [
         "//intrinsic/storage/data_store:core-template",

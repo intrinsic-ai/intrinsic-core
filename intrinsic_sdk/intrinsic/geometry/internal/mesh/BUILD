@@ -83,8 +83,8 @@ cc_library(
     hdrs = ["mesh.h"],
     visibility = [
         "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/scene/service:__pkg__",
         "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene/service:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene/usd:__subpackages__",
     ],
@@ -121,10 +121,11 @@ cc_library(
     hdrs = ["mesh_primitives.h"],
     visibility = [
         "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/scene:__subpackages__",
         "//intrinsic/world/conversion:__subpackages__",
         "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/scene:__subpackages__",
     ],
     deps = [
         ":mesh",

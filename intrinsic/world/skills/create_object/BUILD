@@ -58,7 +58,7 @@ cc_library(
     hdrs = ["create_object.h"],
     deps = [
         ":create_object_cc_proto",
-        "//intrinsic/scene/util:scene_object_from_asset",
+        "//intrinsic_runtime/intrinsic/scene/util:scene_object_from_asset",
         "//intrinsic_sdk/intrinsic/assets:interface_utils",
         "//intrinsic_sdk/intrinsic/assets/dependencies:utils_cc",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",

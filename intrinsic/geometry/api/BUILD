@@ -114,7 +114,7 @@ cc_library(
         "//conditions:default": [],
     }),
     visibility = [
-        "//intrinsic/scene/service:__pkg__",
+        "//intrinsic_runtime/intrinsic/scene/service:__pkg__",
     ],
     deps = [
         ":mesh_stats",

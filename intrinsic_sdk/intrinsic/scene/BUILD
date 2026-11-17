@@ -30,9 +30,9 @@ cc_library(
     hdrs = ["user_data_keys.h"],
     visibility = [
         ":__subpackages__",
-        "//intrinsic/scene:__subpackages__",
         "//intrinsic/simulation/world:__subpackages__",
         "//intrinsic/world/conversion/sdf:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/world/conversion/sdf:__subpackages__",
     ],
 )

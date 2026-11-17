@@ -74,7 +74,7 @@ cc_library(
     }),
     visibility = [
         "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/scene/service:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene/service:__subpackages__",
     ],
     deps = [
         "//intrinsic_runtime/intrinsic/geometry/internal/indexed_triangle_set_3",

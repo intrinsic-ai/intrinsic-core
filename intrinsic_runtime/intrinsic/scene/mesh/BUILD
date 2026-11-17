@@ -14,7 +14,7 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/scene/service:__subpackages__"])
+package(default_visibility = ["//intrinsic_runtime/intrinsic/scene/service:__subpackages__"])
 
 cc_library(
     name = "scene_object_from_mesh_file",

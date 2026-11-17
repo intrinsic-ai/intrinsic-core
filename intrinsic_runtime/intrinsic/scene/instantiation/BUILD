@@ -17,11 +17,11 @@ load("//bazel:cc_macros.bzl", "cc_library")
 cc_library(
     name = "imported_scene_instantiator_h",
     hdrs = ["imported_scene_instantiator.h"],
-    visibility = ["//intrinsic/scene/service:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/scene/service:__subpackages__"],
     deps = [
         "//intrinsic/kubernetes/acl/cc:client_context",
-        "//intrinsic/scene/proto/v1:imported_scene_cc_proto",
-        "//intrinsic/scene/proto/v1:scene_object_internal_cc_proto",
+        "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_cc_proto",
+        "//intrinsic_runtime/intrinsic/scene/proto/v1:scene_object_internal_cc_proto",
         "@abseil-cpp//absl/status:statusor",
     ],
 )
@@ -30,14 +30,14 @@ cc_library(
     name = "asset_and_resource_instantiator",
     srcs = ["asset_and_resource_instantiator.cc"],
     hdrs = ["asset_and_resource_instantiator.h"],
-    visibility = ["//intrinsic/scene/service:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/scene/service:__subpackages__"],
     deps = [
         ":imported_scene_instantiator_h",
         "//intrinsic/kubernetes/acl/cc:client_context",
-        "//intrinsic/scene/proto/v1:imported_scene_cc_proto",
-        "//intrinsic/scene/proto/v1:imported_scene_updates_cc_proto",
-        "//intrinsic/scene/proto/v1:scene_object_internal_cc_proto",
         "//intrinsic/stats:scoped_span",
+        "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_cc_proto",
+        "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_updates_cc_proto",
+        "//intrinsic_runtime/intrinsic/scene/proto/v1:scene_object_internal_cc_proto",
         "//intrinsic_sdk/intrinsic/assets:id_utils",
         "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_cc_proto",
         "//intrinsic_sdk/intrinsic/util/proto:descriptors",

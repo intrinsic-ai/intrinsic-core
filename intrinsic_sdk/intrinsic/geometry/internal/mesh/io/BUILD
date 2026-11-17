@@ -105,9 +105,10 @@ cc_library(
     srcs = ["load_mesh_from_file.cc"],
     hdrs = ["load_mesh_from_file.h"],
     visibility = [
-        "//intrinsic/scene/sdf:__pkg__",
+        "//intrinsic_runtime/intrinsic/scene/sdf:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
+        "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
     ],
     deps = [
         ":ai_scene_to_mesh",
@@ -145,8 +146,8 @@ cc_library(
     srcs = ["save_mesh_to_stl_file.cc"],
     hdrs = ["save_mesh_to_stl_file.h"],
     visibility = [
-        "//intrinsic/scene/sdf:__pkg__",
         "//intrinsic/simulation/world:__pkg__",
+        "//intrinsic_runtime/intrinsic/scene/sdf:__pkg__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",

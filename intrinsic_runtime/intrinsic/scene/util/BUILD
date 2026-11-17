@@ -45,7 +45,7 @@ cc_library(
     srcs = ["scene_object_from_asset.cc"],
     hdrs = ["scene_object_from_asset.h"],
     deps = [
-        "//intrinsic/scene/config:scene_object_config",
+        "//intrinsic_runtime/intrinsic/scene/config:scene_object_config",
         "//intrinsic_sdk/intrinsic/assets:id_utils",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/scene:constants",

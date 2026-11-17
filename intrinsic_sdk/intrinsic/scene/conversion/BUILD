@@ -23,9 +23,10 @@ cc_library(
     srcs = ["object_properties_conversion.cc"],
     hdrs = ["object_properties_conversion.h"],
     visibility = [
-        "//intrinsic/scene/sdf:__subpackages__",
         "//intrinsic/world:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene/sdf:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
+        "//intrinsic_sdk/intrinsic/scene/sdf:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene/util:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene/validate:__pkg__",
         "//intrinsic_sdk/intrinsic/world:__subpackages__",

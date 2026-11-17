@@ -12,6 +12,14 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+filegroup(
+    name = "export_targets",
+    testonly = True,
+    srcs = [
+        "//intrinsic_sdk/intrinsic/scene/build_defs/tests:export_targets",
+    ],
+)
+
 test_suite(
     name = "export_test_targets",
     tests = [
@@ -24,6 +32,7 @@ test_suite(
         "//intrinsic_sdk/intrinsic/math/python:quaternion_test",
         "//intrinsic_sdk/intrinsic/math/python:ros_proto_conversion_test",
         "//intrinsic_sdk/intrinsic/math/python:rotation3_test",
+        "//intrinsic_sdk/intrinsic/scene/build_defs/tests:export_test_targets",
         "//intrinsic_sdk/intrinsic/scene/sdf/testing:xml_matchers_test",
     ],
 )

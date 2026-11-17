@@ -17,9 +17,9 @@ load("//bazel:cc_macros.bzl", "cc_library")
 package(
     default_visibility =
         [
-            "//intrinsic/scene:__subpackages__",
             "//intrinsic/simulation:__subpackages__",
             "//intrinsic/world/conversion/sdf:__subpackages__",
+            "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         ],
 )
 
@@ -109,7 +109,7 @@ cc_library(
     name = "scene_object_from_zipped_sdf",
     srcs = ["scene_object_from_zipped_sdf.cc"],
     hdrs = ["scene_object_from_zipped_sdf.h"],
-    visibility = ["//intrinsic/scene/service:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/scene/service:__subpackages__"],
     deps = [
         "//intrinsic/util/archive:unzip",
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_serializer",
@@ -130,7 +130,7 @@ cc_library(
     name = "scene_object_to_zipped_sdf",
     srcs = ["scene_object_to_zipped_sdf.cc"],
     hdrs = ["scene_object_to_zipped_sdf.h"],
-    visibility = ["//intrinsic/scene/service:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/scene/service:__subpackages__"],
     deps = [
         ":scene_object_to_sdf",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",

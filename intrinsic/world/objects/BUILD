@@ -18,7 +18,6 @@ load("//bazel:cc_macros.bzl", "cc_library")
 
 package(default_visibility = [
     "//intrinsic/executive:__subpackages__",
-    "//intrinsic/scene:__subpackages__",
     "//intrinsic/simulation:__subpackages__",
     "//intrinsic/skills:__subpackages__",
     "//intrinsic/world:__subpackages__",
@@ -26,6 +25,7 @@ package(default_visibility = [
     "//intrinsic_hardware/intrinsic/hardware:__subpackages__",
     "//intrinsic_kinematics/intrinsic/kinematics:__subpackages__",
     "//intrinsic_motion_planning:__subpackages__",
+    "//intrinsic_runtime/intrinsic/scene:__subpackages__",
     "//intrinsic_sdk/intrinsic/skills:__subpackages__",
     "//intrinsic_sdk/intrinsic/world:__subpackages__",
 ])
@@ -72,7 +72,6 @@ cc_library(
         ":user_data_conversion",
         "//intrinsic/resources/proto:geometric_resource_data_cc_proto",
         "//intrinsic/resources/proto:resource_instance_cc_proto",
-        "//intrinsic/scene/config:scene_object_config",
         "//intrinsic/simulation/world:sim_plugins",
         "//intrinsic/stats:scoped_span",
         "//intrinsic/world",
@@ -93,6 +92,7 @@ cc_library(
         "//intrinsic/world/util:walk_attachment_tree",
         "//intrinsic_kinematics/intrinsic/kinematics/types:cartesian_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits_xd",
+        "//intrinsic_runtime/intrinsic/scene/config:scene_object_config",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_options",

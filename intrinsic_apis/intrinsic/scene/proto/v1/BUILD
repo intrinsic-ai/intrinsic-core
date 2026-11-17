@@ -330,3 +330,58 @@ py_grpc_library(
     srcs = [":scene_object_export_proto"],
     deps = [":scene_object_export_py_pb2"],
 )
+
+# TODO(b/317911125): Enable scene_object_edit_service in the SDK after the service satisfies user facing requirements.
+
+proto_library(
+    name = "scene_object_edit_service_proto",
+    srcs = ["scene_object_edit_service.proto"],
+    deps = [
+        ":scene_object_proto",
+        ":scene_object_updates_proto",
+        "@com_google_protobuf//:empty_proto",
+        "@com_google_protobuf//:timestamp_proto",
+        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "scene_object_edit_service_cc_proto",
+    deps = [":scene_object_edit_service_proto"],
+)
+
+py_proto_library(
+    name = "scene_object_edit_service_py_pb2",
+    deps = [":scene_object_edit_service_proto"],
+)
+
+go_proto_library(
+    name = "scene_object_edit_service_go_proto",
+    compilers = [
+        "@io_bazel_rules_go//proto:go_grpc_v2",
+        "@io_bazel_rules_go//proto:go_proto",
+    ],
+    importpath = "intrinsic/scene/proto/v1/scene_object_edit_service_go_proto",
+    protos = [":scene_object_edit_service_proto"],
+    deps = [
+        ":scene_object_go_proto",
+        ":scene_object_updates_go_proto",
+        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
+        "@org_golang_google_protobuf//types/known/emptypb",
+        "@org_golang_google_protobuf//types/known/timestamppb",
+    ],
+)
+
+cc_grpc_library(
+    name = "scene_object_edit_service_cc_grpc_proto",
+    srcs = [":scene_object_edit_service_proto"],
+    generate_mocks = True,
+    grpc_only = True,
+    deps = [":scene_object_edit_service_cc_proto"],
+)
+
+py_grpc_library(
+    name = "scene_object_edit_service_py_pb2_grpc",
+    srcs = [":scene_object_edit_service_proto"],
+    deps = [":scene_object_edit_service_py_pb2"],
+)

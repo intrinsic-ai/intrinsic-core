@@ -46,10 +46,11 @@ cc_library(
     srcs = ["scale_shape.cc"],
     hdrs = ["scale_shape.h"],
     visibility = [
-        "//intrinsic/scene/sdf:__pkg__",
         "//intrinsic/simulation/world:__pkg__",
         "//intrinsic/world:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene/sdf:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+        "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/eigenmath",
@@ -69,7 +70,7 @@ cc_library(
     hdrs = ["export_as_gltf.h"],
     visibility = [
         "//intrinsic/geometry:__subpackages__",
-        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [
@@ -107,7 +108,7 @@ cc_library(
     srcs = ["gltf_helpers.cc"],
     hdrs = ["gltf_helpers.h"],
     visibility = [
-        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [

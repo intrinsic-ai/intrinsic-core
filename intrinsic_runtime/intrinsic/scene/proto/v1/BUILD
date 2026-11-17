@@ -29,7 +29,7 @@ proto_library(
     name = "imported_scene_proto",
     srcs = ["imported_scene.proto"],
     deps = [
-        ":imported_scene_updates_proto",
+        "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_updates_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_proto",
     ],
 )
@@ -42,18 +42,15 @@ cc_proto_library(
 go_proto_library(
     name = "imported_scene_go_proto",
     importpath = "intrinsic/scene/proto/v1/imported_scene_go_proto",
-    protos = [":imported_scene_proto"],
+    proto = ":imported_scene_proto",
     deps = [
-        "//intrinsic/scene/proto/v1:imported_scene_updates_go_proto",
+        ":imported_scene_updates_go_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_go_proto",
     ],
 )
 
 py_proto_library(
     name = "imported_scene_py_pb2",
-    visibility = [
-        "//visibility:public",
-    ],
     deps = [":imported_scene_proto"],
 )
 
@@ -71,7 +68,7 @@ cc_proto_library(
 go_proto_library(
     name = "imported_scene_updates_go_proto",
     importpath = "intrinsic/scene/proto/v1/imported_scene_updates_go_proto",
-    protos = [":imported_scene_updates_proto"],
+    proto = ":imported_scene_updates_proto",
     deps = [
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
     ],
@@ -79,9 +76,6 @@ go_proto_library(
 
 py_proto_library(
     name = "imported_scene_updates_py_pb2",
-    visibility = [
-        "//visibility:public",
-    ],
     deps = [":imported_scene_updates_proto"],
 )
 
@@ -89,7 +83,7 @@ proto_library(
     name = "scene_object_internal_proto",
     srcs = ["scene_object_internal.proto"],
     deps = [
-        ":imported_scene_proto",
+        "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_proto",
         "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_proto",
         "@com_google_googleapis//google/longrunning:operations_proto",
         "@com_google_protobuf//:any_proto",
@@ -113,7 +107,7 @@ go_proto_library(
         "@io_bazel_rules_go//proto:go_proto",
     ],
     importpath = "intrinsic/scene/proto/v1/scene_object_internal_go_proto",
-    protos = [":scene_object_internal_proto"],
+    proto = ":scene_object_internal_proto",
     deps = [
         ":imported_scene_go_proto",
         "//intrinsic_sdk/intrinsic/scene/proto/v1:scene_object_import_go_proto",
@@ -127,8 +121,6 @@ go_proto_library(
         "@intrinsic_apis//intrinsic/scene/proto/v1:export_go_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:geometry_stats_go_proto",
         "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_config_go_proto",
-        "@org_golang_google_protobuf//types/known/anypb",
-        "@org_golang_google_protobuf//types/known/timestamppb",
     ],
 )
 
@@ -154,59 +146,4 @@ cc_grpc_library(
     generate_mocks = True,
     grpc_only = True,
     deps = [":scene_object_internal_cc_proto"],
-)
-
-# TODO(b/317911125): Enable scene_object_edit_service in the SDK after the service satisfies user facing requirements.
-
-proto_library(
-    name = "scene_object_edit_service_proto",
-    srcs = ["scene_object_edit_service.proto"],
-    deps = [
-        "@com_google_protobuf//:empty_proto",
-        "@com_google_protobuf//:timestamp_proto",
-        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_proto",
-    ],
-)
-
-cc_proto_library(
-    name = "scene_object_edit_service_cc_proto",
-    deps = [":scene_object_edit_service_proto"],
-)
-
-py_proto_library(
-    name = "scene_object_edit_service_py_pb2",
-    deps = [":scene_object_edit_service_proto"],
-)
-
-go_proto_library(
-    name = "scene_object_edit_service_go_proto",
-    compilers = [
-        "@io_bazel_rules_go//proto:go_grpc_v2",
-        "@io_bazel_rules_go//proto:go_proto",
-    ],
-    importpath = "intrinsic/scene/proto/v1/scene_object_edit_service_go_proto",
-    protos = [":scene_object_edit_service_proto"],
-    deps = [
-        "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_go_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_go_proto",
-        "@org_golang_google_protobuf//types/known/emptypb",
-        "@org_golang_google_protobuf//types/known/timestamppb",
-    ],
-)
-
-cc_grpc_library(
-    name = "scene_object_edit_service_cc_grpc_proto",
-    srcs = [":scene_object_edit_service_proto"],
-    generate_mocks = True,
-    grpc_only = True,
-    deps = [":scene_object_edit_service_cc_proto"],
-)
-
-py_grpc_library(
-    name = "scene_object_edit_service_py_pb2_grpc",
-    srcs = [":scene_object_edit_service_proto"],
-    deps = [":scene_object_edit_service_py_pb2"],
 )

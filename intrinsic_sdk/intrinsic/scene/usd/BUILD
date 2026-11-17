@@ -12,11 +12,11 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//bazel:cc_macros.bzl", "cc_library")
+load("//bazel:cc_macros.bzl", "cc_binary", "cc_library")
 
 package(
     default_visibility = [
-        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene:__subpackages__",
     ],
 )
@@ -26,7 +26,7 @@ cc_library(
     srcs = ["utils.cc"],
     hdrs = ["utils.h"],
     visibility = [
-        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene:__subpackages__",
     ],
     deps = [
@@ -44,7 +44,7 @@ cc_library(
     srcs = ["scene_object_from_usd.cc"],
     hdrs = ["scene_object_from_usd.h"],
     visibility = [
-        "//intrinsic/scene:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/scene:__subpackages__",
     ],
     deps = [
@@ -109,5 +109,43 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@openusd",
+    ],
+)
+
+cc_binary(
+    name = "usd_file_converter",
+    srcs = ["usd_file_converter.cc"],
+    data = [
+        # Required for initializing the USD library.
+        "@openusd//:plugin_files",
+    ],
+    output_licenses = ["unencumbered"],
+    visibility = [
+        "//intrinsic_sdk/intrinsic/scene:__subpackages__",
+    ],
+    deps = [
+        ":scene_object_from_usd",
+        "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
+        "//intrinsic_sdk/intrinsic/geometry/storage:geometry_serializer",
+        "//intrinsic_sdk/intrinsic/geometry/storage:gzf_storage",
+        "//intrinsic_sdk/intrinsic/scene/util:object_user_data",
+        "//intrinsic_sdk/intrinsic/scene/util:scene_object_gzf",
+        "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validate_geo",
+        "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validation",
+        "//intrinsic_sdk/intrinsic/util:macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/world/gzfile",
+        "@abseil-cpp//absl/base:log_severity",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/flags:flag",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:check",
+        "@abseil-cpp//absl/log:flags",
+        "@abseil-cpp//absl/log:globals",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@com_google_protobuf//:protobuf",
+        "@or_tools//ortools/base:file",
     ],
 )

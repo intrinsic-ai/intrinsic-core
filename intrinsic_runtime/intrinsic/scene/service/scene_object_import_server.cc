@@ -43,7 +43,6 @@
 #include "intrinsic/longrunning/cc/operations_proxy.h"
 #include "intrinsic/longrunning/cc/operations_service_impl.h"
 #include "intrinsic/longrunning/cc/wrappers.h"
-#include "intrinsic/scene/cad/grpc_cad_importer.h"
 #include "intrinsic/scene/instantiation/asset_and_resource_instantiator.h"
 #include "intrinsic/scene/service/scene_object_edit_service_impl.h"
 #include "intrinsic/scene/service/scene_object_import.h"

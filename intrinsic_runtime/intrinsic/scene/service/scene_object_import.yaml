@@ -45,7 +45,7 @@ spec:
         - name: cad-import-service
           image: "{{ .Values.registry }}{{ .Values.images.cad_import_image}}"
           args:
-            - /app/google3/intrinsic/scene/cad/cadex_cad_import_service_main
+            - /app/intrinsic_runtime/intrinsic/scene/cad/cadex_cad_import_service_main
             - --port=8081
             - --geometry_service_address=geomservice.app-intrinsic-base.svc.cluster.local:8080
         {{ end }}
