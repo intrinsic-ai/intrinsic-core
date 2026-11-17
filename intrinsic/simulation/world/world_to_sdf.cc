@@ -2153,7 +2153,7 @@ class WorldToSdfConverter {
           WorldEntityToLink(convert_span, world, entity_id,
                             /*pose_reference_id=*/kRootEntityId, model_name,
                             options_, /*collision_mask=*/{},
-                            GetLinkKinematicOverride(entity_id)));
+                            GetLinkKinematicOverride(world, entity_id)));
       if (!link_info.topic_infos.empty()) {
         object_topics_[model_name] = std::move(link_info.topic_infos);
       }
@@ -2346,7 +2346,7 @@ class WorldToSdfConverter {
           // Add ObjectInteractionModerator plugin for floating non-robot
           // object when it is dynamic.
           if (options_.enable_object_interaction_moderator &&
-              IsLinkDynamic(base_id)) {
+              IsLinkDynamic(world, base_id)) {
             absl::StrAppend(
                 &model_node->prelude,
                 "<plugin "
@@ -2579,7 +2579,7 @@ class WorldToSdfConverter {
           WorldEntityToLink(collection_to_model_span.span(), world, link_id,
                             /*pose_reference_id=*/base_id, model_name, options_,
                             collision_masks_[link_id],
-                            GetLinkKinematicOverride(link_id)));
+                            GetLinkKinematicOverride(world, link_id)));
       model_topics_list.reserve(model_topics_list.size() +
                                 link_info.topic_infos.size());
       std::ranges::move(link_info.topic_infos,
@@ -2591,7 +2591,7 @@ class WorldToSdfConverter {
           model_name, link_info.name, options_.name_scope_separator);
       entity_id_to_scoped_name_.left.insert(
           std::make_pair(link_id, scoped_link_name));
-      if (GetLinkKinematicOverride(link_id) == false) {
+      if (GetLinkKinematicOverride(world, link_id) == false) {
         dynamic_link_names_.push_back(scoped_link_name);
       }
 
@@ -2942,11 +2942,22 @@ class WorldToSdfConverter {
     return names;
   }
 
-  // Returns the per-link kinematic override derived from the physics mode:
-  // false for links that should be dynamic in hybrid mode, unset otherwise (the
-  // Physics plugin default applies).
+  // Returns the per-link kinematic override. An explicit
+  // `PhysicsComponent::GetKinematic()` value on the link takes precedence.
+  // Otherwise, it is derived from the physics mode: false for links that should
+  // be dynamic in hybrid mode, unset otherwise (the Physics plugin default
+  // applies).
   std::optional<bool> GetLinkKinematicOverride(
-      AttachmentEntityId link_id) const {
+      const World& world, AttachmentEntityId link_id) const {
+    if (absl::StatusOr<const WorldEntity*> entity =
+            world.GetEntityById(link_id);
+        entity.ok() && *entity != nullptr) {
+      if (const PhysicsComponent* physics =
+              (*entity)->GetComponent<PhysicsComponent>().value_or(nullptr);
+          physics != nullptr && physics->GetKinematic().has_value()) {
+        return physics->GetKinematic();
+      }
+    }
     if (hybrid_physics_mode_ && dynamic_entity_ids_.contains(link_id)) {
       return false;
     }
@@ -2954,7 +2965,12 @@ class WorldToSdfConverter {
   }
 
   // Returns true if `link_id` is simulated as a dynamic rigid body.
-  bool IsLinkDynamic(AttachmentEntityId link_id) const {
+  bool IsLinkDynamic(const World& world, AttachmentEntityId link_id) const {
+    if (const std::optional<bool> kinematic_override =
+            GetLinkKinematicOverride(world, link_id);
+        kinematic_override.has_value()) {
+      return !*kinematic_override;
+    }
     using PhysicsMode = WorldSdfAdapter::WorldTemplateOverrides::PhysicsMode;
     switch (options_.world_template_overrides.physics_mode.value_or(
         PhysicsMode::kDynamic)) {
@@ -2964,7 +2980,8 @@ class WorldToSdfConverter {
       case PhysicsMode::kKinematic:
         return false;
       case PhysicsMode::kHybrid:
-        return GetLinkKinematicOverride(link_id) == false;
+        // Links without an override are kinematic in hybrid mode.
+        return false;
     }
     return true;
   }

@@ -1363,6 +1363,9 @@ absl::StatusOr<SceneObject> ProcessSceneObjectUpdate(
   if (update.has_contact_kd()) {
     physics->set_contact_kd(update.contact_kd());
   }
+  if (update.has_kinematic()) {
+    physics->set_kinematic(update.kinematic());
+  }
 
   return std::move(object);
 }

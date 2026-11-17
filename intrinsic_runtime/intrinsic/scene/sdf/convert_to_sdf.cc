@@ -1002,10 +1002,19 @@ absl::StatusOr<std::string> LinkSpecToString(
                                              collision_it->second, options));
   }
 
+  // Only emits `<kinematic>` when explicitly set, since an explicit value
+  // overrides the simulator default.
+  std::string kinematic_sdf;
+  if (physics.has_kinematic()) {
+    kinematic_sdf = absl::Substitute("<kinematic>$0</kinematic>",
+                                     physics.kinematic() ? "true" : "false");
+  }
+
   return absl::Substitute(
-      "<link name=\"$0\">$1 $2 $3 $4 $5</link>", EscapeXml(properties.name),
+      "<link name=\"$0\">$1 $2 $3 $4 $5 $6</link>", EscapeXml(properties.name),
       Pose3ToPoseString(properties.parent_t_link, properties.parent_name),
-      physics_sdf, visual_sdf, collision_sdf, properties.sensors_sdf);
+      kinematic_sdf, physics_sdf, visual_sdf, collision_sdf,
+      properties.sensors_sdf);
 }
 
 }  // namespace sdf

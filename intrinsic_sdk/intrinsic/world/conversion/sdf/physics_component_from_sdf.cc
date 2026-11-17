@@ -89,6 +89,12 @@ absl::StatusOr<std::unique_ptr<PhysicsComponent>> PhysicsComponentFromSdfLink(
     physics_component->SetContactKp(parse_surface_result.contact.kp);
     physics_component->SetContactKd(parse_surface_result.contact.kd);
   }
+
+  // Sets kinematic only if provided, to default to simulator's behavior.
+  if (sdf_link.Element() != nullptr &&
+      sdf_link.Element()->HasElement("kinematic")) {
+    physics_component->SetKinematic(sdf_link.Kinematic());
+  }
   return physics_component;
 }
 

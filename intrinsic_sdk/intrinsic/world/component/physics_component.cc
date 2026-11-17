@@ -39,14 +39,16 @@ class PhysicsComponentImpl : public PhysicsComponent {
       const eigenmath::Matrix3d& inertia,
       const std::optional<intrinsic_proto::world::Friction> friction,
       const std::optional<intrinsic_proto::world::Torsional> torsional,
-      std::optional<double> contact_kp, std::optional<double> contact_kd)
+      std::optional<double> contact_kp, std::optional<double> contact_kd,
+      std::optional<bool> kinematic)
       : mass_kg_(mass_kg),
         this_t_center_of_mass_(std::move(this_t_center_of_mass)),
         inertia_(inertia),
         friction_(friction.value_or(DefaultSurfaceFriction())),
         torsional_(torsional.value_or(DefaultTorsional())),
         contact_kp_(contact_kp),
-        contact_kd_(contact_kd) {}
+        contact_kd_(contact_kd),
+        kinematic_(kinematic) {}
   absl::StatusOr<intrinsic_proto::world::PhysicsComponent> ToProto()
       const override;
   std::unique_ptr<PhysicsComponent> Clone() const override;
@@ -66,6 +68,7 @@ class PhysicsComponentImpl : public PhysicsComponent {
 
   std::optional<double> GetContactKp() const override { return contact_kp_; }
   std::optional<double> GetContactKd() const override { return contact_kd_; }
+  std::optional<bool> GetKinematic() const override { return kinematic_; }
   void SetMassKg(double mass_kg) override { mass_kg_ = mass_kg; }
   void SetThisTCenterOfMass(const Pose3d& this_t_center_of_mass) override {
     this_t_center_of_mass_ = this_t_center_of_mass;
@@ -87,6 +90,9 @@ class PhysicsComponentImpl : public PhysicsComponent {
   void SetContactKd(std::optional<double> contact_kd) override {
     contact_kd_ = contact_kd;
   }
+  void SetKinematic(std::optional<bool> kinematic) override {
+    kinematic_ = kinematic;
+  }
 
   absl::Status UpdateFromProto(
       const intrinsic_proto::world::PhysicsComponent& proto) override;
@@ -99,6 +105,7 @@ class PhysicsComponentImpl : public PhysicsComponent {
   intrinsic_proto::world::Torsional torsional_ = DefaultTorsional();
   std::optional<double> contact_kp_;
   std::optional<double> contact_kd_;
+  std::optional<bool> kinematic_;
 };
 
 absl::StatusOr<intrinsic_proto::world::PhysicsComponent>
@@ -116,13 +123,16 @@ PhysicsComponentImpl::ToProto() const {
   if (contact_kd_.has_value()) {
     ret.set_contact_kd(*contact_kd_);
   }
+  if (kinematic_.has_value()) {
+    ret.set_kinematic(*kinematic_);
+  }
   return ret;
 }
 
 std::unique_ptr<PhysicsComponent> PhysicsComponentImpl::Clone() const {
   return std::make_unique<PhysicsComponentImpl>(
       mass_kg_, this_t_center_of_mass_, inertia_, friction_, torsional_,
-      contact_kp_, contact_kd_);
+      contact_kp_, contact_kd_, kinematic_);
 }
 
 absl::Status PhysicsComponentImpl::UpdateFromProto(
@@ -136,6 +146,7 @@ absl::Status PhysicsComponentImpl::UpdateFromProto(
   torsional_ = other->GetTorsional();
   contact_kp_ = other->GetContactKp();
   contact_kd_ = other->GetContactKd();
+  kinematic_ = other->GetKinematic();
   return absl::OkStatus();
 }
 
@@ -188,9 +199,14 @@ absl::StatusOr<std::unique_ptr<PhysicsComponent>> PhysicsComponent::FromProto(
     contact_kd = proto.contact_kd();
   }
 
+  std::optional<bool> kinematic;
+  if (proto.has_kinematic()) {
+    kinematic = proto.kinematic();
+  }
+
   return std::make_unique<PhysicsComponentImpl>(
       proto.mass_kg(), this_t_center_of_mass, eigenmath::Matrix3d(inertia),
-      friction, torsional, contact_kp, contact_kd);
+      friction, torsional, contact_kp, contact_kd, kinematic);
 }
 
 double PhysicsComponent::DefaultMassKg() {

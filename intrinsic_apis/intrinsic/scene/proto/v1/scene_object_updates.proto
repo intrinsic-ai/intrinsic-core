@@ -350,6 +350,8 @@ message UpdatePhysicsProperties {
   optional intrinsic_proto.world.Torsional torsional = 6;
   optional double contact_kp = 7;
   optional double contact_kd = 8;
+  // If set, updates whether the link is kinematic only.
+  optional bool kinematic = 9;
 }
 
 // Create a new joint entity between existing attached links.

@@ -47,6 +47,16 @@ message PhysicsComponent {
   // Dynamically "damping"-equivalent coefficient for contact joints.
   optional double contact_kd = 8;
 
+  // If true, the owning link is kinematic only. It is not affected by dynamics
+  // such as gravity or contact forces, but can still be moved, e.g., through
+  // its joints or by setting its pose or velocity directly.
+  // If false, the link is dynamic.
+  // If unset, the simulator default is used.
+  // Has no effect if the link entity's parent object is marked as `static`.
+  //
+  // Modeled after `<kinematic>` element of `<link>` in SDFormat.
+  optional bool kinematic = 11;
+
   reserved 2, 3, 4;
   reserved "this_t_center_of_mass_old", "inertia_old", "is_static";
 }

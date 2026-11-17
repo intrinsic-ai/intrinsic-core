@@ -76,6 +76,9 @@ class PhysicsComponent {
   // Returns dynamically "damping"-equivalent coefficient for contact joints.
   virtual std::optional<double> GetContactKd() const = 0;
 
+  // Returns whether the entity is kinematic only, if explicitly specified.
+  virtual std::optional<bool> GetKinematic() const = 0;
+
   // Sets the entity's mass in kilograms.
   virtual void SetMassKg(double mass_kg) = 0;
 
@@ -98,6 +101,10 @@ class PhysicsComponent {
 
   // Sets dynamically "damping"-equivalent coefficient for contact joints.
   virtual void SetContactKd(std::optional<double> contact_kd) = 0;
+
+  // Sets whether the entity is kinematic only. `std::nullopt` uses the
+  // simulator default.
+  virtual void SetKinematic(std::optional<bool> kinematic) = 0;
 
   // Updates the component based on the given proto. This will do a full
   // override, if something is missing from this proto it will override any
