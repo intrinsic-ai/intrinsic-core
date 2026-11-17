@@ -23,7 +23,7 @@ cc_library(
     srcs = ["meshopt_simplification_helpers.cc"],
     hdrs = ["meshopt_simplification_helpers.h"],
     deps = [
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "@abseil-cpp//absl/types:span",
         "@meshoptimizer",
@@ -36,7 +36,7 @@ cc_library(
     hdrs = ["meshopt_locality_simplifier.h"],
     deps = [
         ":meshopt_simplification_helpers",
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/util:timeout_predicate",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/util/thread:stop_token",

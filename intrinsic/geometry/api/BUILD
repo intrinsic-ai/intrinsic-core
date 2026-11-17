@@ -28,8 +28,8 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        "//intrinsic/geometry/internal/conversion_utils:extract_all_point_3d",
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:extract_all_point_3d",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel",
         "//intrinsic_runtime/intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
         "//intrinsic_runtime/intrinsic/geometry/internal/surface_mesh_3:unary_predicates",
@@ -57,8 +57,8 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        "//intrinsic/geometry/internal/conversion_utils:extract_all_point_3d",
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:extract_all_point_3d",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel",
         "//intrinsic_runtime/intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
@@ -86,7 +86,7 @@ cc_library(
     }),
     visibility = ["//intrinsic/geometry/processing/processors:__pkg__"],
     deps = [
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/indexed_triangle_set_3",
         "//intrinsic_runtime/intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
@@ -118,7 +118,7 @@ cc_library(
     ],
     deps = [
         ":mesh_stats",
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/kernel_3:exact_predicates_inexact_constructions_kernel",
         "//intrinsic_runtime/intrinsic/geometry/internal/surface_mesh_3:surface_mesh_3d",
         "//intrinsic_runtime/intrinsic/geometry/internal/surface_mesh_3:unary_predicates",
@@ -170,8 +170,8 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/alpha_hull_3",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_options",
@@ -190,8 +190,8 @@ cc_library(
     srcs = ["simplify_mesh_strict_memoize.cc"],
     hdrs = ["simplify_mesh_strict_memoize.h"],
     deps = [
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic/geometry/internal/mesh_simplification:meshopt_locality_simplifier",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/util:timeout_predicate",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
@@ -217,7 +217,7 @@ cc_library(
         "//conditions:default": [],
     }),
     deps = [
-        "//intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:axis_aligned_bounding_box_3d",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",

@@ -332,7 +332,7 @@ cc_library(
     deps = [
         "//intrinsic/geometry/api:compute_mesh_stats",
         "//intrinsic/geometry/api:mesh_stats",
-        "//intrinsic/geometry/internal/conversion_utils:to_epic",
+        "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:to_epic",
         "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_cc_proto",
         "//intrinsic_runtime/intrinsic/scene/proto/v1:scene_object_internal_cc_proto",
         "//intrinsic_sdk/intrinsic/geometry/api:apply_transform",
