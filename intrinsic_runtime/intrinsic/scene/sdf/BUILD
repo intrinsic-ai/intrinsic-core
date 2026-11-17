@@ -29,7 +29,7 @@ cc_library(
     hdrs = ["convert_to_sdf.h"],
     deps = [
         "//intrinsic/geometry/api:geometric_transform",
-        "//intrinsic/geometry/compatibility:io",
+        "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_sdk/intrinsic/eigenmath:rotation_utils",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_fingerprint",

@@ -290,9 +290,9 @@ cc_library(
     srcs = ["post_process_imported_scene.cc"],
     hdrs = ["post_process_imported_scene.h"],
     deps = [
-        "//intrinsic/geometry/compatibility:io",
         "//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "//intrinsic/util/proto:pb_hash",
+        "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_runtime/intrinsic/scene/processing:merge_scene_object_links",
         "//intrinsic_runtime/intrinsic/scene/processing:scale_imported_scene",

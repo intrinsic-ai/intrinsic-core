@@ -21,7 +21,7 @@ pybind_extension(
     name = "io",
     srcs = ["io.cc"],
     deps = [
-        "//intrinsic/geometry/compatibility:io",
+        "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:apply_material_properties",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",

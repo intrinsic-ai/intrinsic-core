@@ -74,7 +74,7 @@ cc_library(
         ":geometry_deserializer",
         ":geometry_library",
         ":geometry_serializer",
-        "//intrinsic/geometry/compatibility:io",
+        "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_fingerprint",

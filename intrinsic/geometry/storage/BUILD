@@ -29,8 +29,8 @@ cc_library(
     }),
     deps = [
         ":geo_cache",
-        "//intrinsic/geometry/compatibility:io",
         "//intrinsic/kubernetes/acl/cc:client_context",
+        "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
@@ -70,9 +70,9 @@ cc_library(
     }),
     deps = [
         ":geo_cache",
-        "//intrinsic/geometry/compatibility:io",
         "//intrinsic/kubernetes/acl/cc:client_context",
         "//intrinsic/storage/content_addressable_storage/cpp:client_helpers_cc",
+        "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_fingerprint",

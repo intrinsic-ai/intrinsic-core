@@ -22,7 +22,7 @@ cc_library(
     hdrs = ["geometry_data.h"],
     deps = [
         "//intrinsic/geometry/api:file_io",
-        "//intrinsic/geometry/compatibility:io",
+        "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:io",
