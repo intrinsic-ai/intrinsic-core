@@ -14,6 +14,8 @@
 
 #include "intrinsic/kinematics/validate_link_parameters.h"
 
+#include <cmath>
+
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/utils/realtime_status.h"
 #include "intrinsic/math/inertia_utils.h"
@@ -21,8 +23,12 @@
 namespace intrinsic::kinematics {
 
 icon::RealtimeStatus ValidateMass(double mass_kg) {
+  if (!std::isfinite(mass_kg)) {
+    return icon::InvalidArgumentError(icon::RealtimeStatus::StrCat(
+        "The mass should be finite, but got ", mass_kg, " kg instead."));
+  }
   if (mass_kg <= 0) {
-    return icon::FailedPreconditionError(icon::RealtimeStatus::StrCat(
+    return icon::InvalidArgumentError(icon::RealtimeStatus::StrCat(
         "The mass should be > 0.0, but got ", mass_kg, " kg instead."));
   }
   return icon::OkStatus();

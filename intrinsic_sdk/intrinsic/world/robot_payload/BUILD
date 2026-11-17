@@ -33,6 +33,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
         "@intrinsic_apis//intrinsic/world/proto:robot_payload_cc_proto",
     ],
 )

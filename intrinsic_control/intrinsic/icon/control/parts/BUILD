@@ -456,6 +456,7 @@ cc_library(
     deps = [
         "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
         "//intrinsic_control/intrinsic/icon/utils:fixed_string",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_or",
         "//intrinsic_kinematics/intrinsic/kinematics:validate_link_parameters",

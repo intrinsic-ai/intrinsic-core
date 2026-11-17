@@ -17,6 +17,7 @@
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/utils/fixed_str_cat.h"
 #include "intrinsic/icon/utils/fixed_string.h"
+#include "intrinsic/icon/utils/realtime_status.h"
 #include "intrinsic/icon/utils/realtime_status_macro.h"
 #include "intrinsic/icon/utils/realtime_status_or.h"
 #include "intrinsic/kinematics/types/to_fixed_string.h"
@@ -35,6 +36,12 @@ RealtimeStatusOr<RealtimeRobotPayload> RealtimeRobotPayload::Create(
   }
   if (!inertia.isZero()) {
     INTRINSIC_RT_RETURN_IF_ERROR(kinematics::ValidateInertia(inertia));
+  }
+  if (!tip_t_cog.translation().allFinite()) {
+    return InvalidArgumentError(RealtimeStatus::StrCat(
+        "The center of gravity position should be finite, but got [",
+        tip_t_cog.translation().x(), ", ", tip_t_cog.translation().y(), ", ",
+        tip_t_cog.translation().z(), "]."));
   }
   payload.mass_kg_ = mass;
   payload.tip_t_cog_ = tip_t_cog;

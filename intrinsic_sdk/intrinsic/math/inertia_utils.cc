@@ -82,7 +82,7 @@ icon::RealtimeStatus ValidateInertia(const eigenmath::Matrix3d& inertia) {
   // definite (symmetric and with positive eigenvalues) and its eigenvalues
   // fulfill the triangle inequalities.
   if (!IsSymmetric(inertia)) {
-    return icon::FailedPreconditionError(icon::RealtimeStatus::StrCat(
+    return icon::InvalidArgumentError(icon::RealtimeStatus::StrCat(
         "Inertia tensor is not symmetric. Got ", "[[ ",
         eigenmath::ToFixedString(inertia.row(0)), "],[ ",
         eigenmath::ToFixedString(inertia.row(1)), "],[ ",
@@ -96,7 +96,7 @@ icon::RealtimeStatus ValidateInertia(const eigenmath::Matrix3d& inertia) {
   }
   const eigenmath::Vector3d& eigenvalues = eigen_solver.eigenvalues().real();
   if ((eigenvalues.array() <= 0.0).any()) {
-    return icon::FailedPreconditionError(icon::RealtimeStatus::StrCat(
+    return icon::InvalidArgumentError(icon::RealtimeStatus::StrCat(
         "Inertia tensor is not positive definite. Not all eigenvalues "
         "> 0.0: ",
         eigenmath::ToFixedString(eigenvalues)));
@@ -104,7 +104,7 @@ icon::RealtimeStatus ValidateInertia(const eigenmath::Matrix3d& inertia) {
   const auto sum = eigenvalues.sum();
   for (int i = 0; i < 3; ++i) {
     if (sum < 2.0 * eigenvalues[i]) {
-      return icon::FailedPreconditionError(
+      return icon::InvalidArgumentError(
           icon::RealtimeStatus::StrCat("The inertia eigenvalues do not satisfy "
                                        "the triangle inequality: ",
                                        sum, " < ", 2.0 * eigenvalues[i], "."));

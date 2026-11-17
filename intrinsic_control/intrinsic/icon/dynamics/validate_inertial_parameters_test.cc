@@ -72,7 +72,7 @@ TEST(ValidateInertialParameters, FailsDueToNonPositiveMass) {
 
     // Validation.
     EXPECT_THAT(ValidateInertialParameters(&skeleton),
-                StatusIs(absl::StatusCode::kFailedPrecondition,
+                StatusIs(absl::StatusCode::kInvalidArgument,
                          AllOf(HasSubstr("The mass of link"),
                                HasSubstr("should be > 0.0"))));
   }
@@ -100,7 +100,7 @@ TEST(ValidateInertialParameters, FailsDueToNonPositiveMass) {
 
     // Validation.
     EXPECT_THAT(ValidateInertialParameters(&skeleton),
-                StatusIs(absl::StatusCode::kFailedPrecondition,
+                StatusIs(absl::StatusCode::kInvalidArgument,
                          AllOf(HasSubstr("The mass of link"),
                                HasSubstr("should be > 0.0"))));
   }
@@ -131,7 +131,7 @@ TEST(ValidateInertialParameters, FailsDueToNonSymmetricInertiaTensor) {
 
   // Validation.
   EXPECT_THAT(ValidateInertialParameters(&skeleton),
-              StatusIs(absl::StatusCode::kFailedPrecondition,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        AllOf(HasSubstr("Inertia tensor of link"),
                              HasSubstr("is not symmetric."))));
 }
@@ -161,7 +161,7 @@ TEST(ValidateInertialParameters, FailsDueToNonPositiveDefiniteInertiaTensor) {
 
   // Validation.
   EXPECT_THAT(ValidateInertialParameters(&skeleton),
-              StatusIs(absl::StatusCode::kFailedPrecondition,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        AllOf(HasSubstr("Inertia tensor of link"),
                              HasSubstr("is not positive definite."))));
 }
@@ -194,7 +194,7 @@ TEST(ValidateInertialParameters,
 
   // Validation.
   EXPECT_THAT(ValidateInertialParameters(&skeleton),
-              StatusIs(absl::StatusCode::kFailedPrecondition,
+              StatusIs(absl::StatusCode::kInvalidArgument,
                        AllOf(HasSubstr("The inertia eigenvalues do not satisfy "
                                        "the triangle inequality"))));
 }

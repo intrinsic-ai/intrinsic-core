@@ -16,6 +16,7 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/kinematics/validate_link_parameters.h"
 #include "intrinsic/math/almost_equals.h"
@@ -37,6 +38,12 @@ absl::Status RobotPayload::SetMass(double mass_kg) {
 }
 
 absl::Status RobotPayload::SetTipTCog(const Pose3d& tip_t_cog) {
+  if (!tip_t_cog.translation().allFinite()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "The center of gravity position should be finite, but got [",
+        tip_t_cog.translation().x(), ", ", tip_t_cog.translation().y(), ", ",
+        tip_t_cog.translation().z(), "]."));
+  }
   tip_t_cog_ = tip_t_cog;
   return absl::OkStatus();
 }
