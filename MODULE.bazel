@@ -694,7 +694,7 @@ use_repo(
 ##############
 
 bazel_dep(name = "aspect_bazel_lib", version = "2.22.5")
-bazel_dep(name = "rules_oci", version = "2.3.0")
+bazel_dep(name = "rules_oci", version = "2.3.5")
 bazel_dep(name = "rules_helm", version = "0.32.0")  
 bazel_dep(name = "rules_multirun", version = "0.14.0")  
 
