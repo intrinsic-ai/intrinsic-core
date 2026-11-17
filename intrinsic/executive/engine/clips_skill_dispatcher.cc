@@ -1501,11 +1501,10 @@ void ClipsSkillDispatcher::StartSkillProjection(
                                      SkillAction::Projection,
                                      descriptor_pool_id, behavior_call_proto))
                 .With(ReturnVoid());
-            // Get Skill info, also creates client, hence do within bundle
+            // Retrieve and register a skill instance for this action_id.
             INTR_ASSIGN_OR_RETURN(
-                SkillInstance skill_instance,
-                CreateSkillInstanceOrReportError(
-                    assert_facade_, proto_manager_, skill_client_generator_,
+                std::shared_ptr<SkillInstance> skill_instance,
+                GetOrCreateSkillInstanceOrReportError(
                     action_id, SkillAction::Projection, behavior_call_proto),
                 _.With(ReturnVoid()));
 
@@ -1516,7 +1515,7 @@ void ClipsSkillDispatcher::StartSkillProjection(
                       << " (Projecting)";
 
             INTR_RETURN_IF_ERROR(
-                PerformGetFootprint(action_id, skill_instance, world_id,
+                PerformGetFootprint(action_id, *skill_instance, world_id,
                                     behavior_call_proto_id, behavior_call_proto,
                                     project_timeout, context_proto))
                 .With(ReturnVoid());
