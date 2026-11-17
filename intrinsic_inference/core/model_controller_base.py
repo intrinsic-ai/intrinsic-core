@@ -21,12 +21,24 @@ import dataclasses
 import enum
 import re
 import threading
+import time
 
 from absl import logging
 
 from intrinsic_inference.core import model_assets_manager_base
 from intrinsic_inference.core import telemetry_base
 from intrinsic_inference.core.v1 import ml_model_pb2
+
+# Failed operations are retried after 5s, 10s, 20s, ... and at most 5min.
+_INITIAL_BACKOFF_SECONDS = 5.0
+_MAX_BACKOFF_SECONDS = 300.0
+
+
+def _next_backoff(backoff: float) -> float:
+  """Returns the backoff after another consecutive failure."""
+  if backoff:
+    return min(2 * backoff, _MAX_BACKOFF_SECONDS)
+  return _INITIAL_BACKOFF_SECONDS
 
 
 def _version_key(model: ml_model_pb2.MlModel) -> list[str | int]:
@@ -47,34 +59,266 @@ def _version_key(model: ml_model_pb2.MlModel) -> list[str | int]:
 
 
 @enum.unique
+class _Op(enum.Enum):
+  """An operation on a backend model."""
+
+  LOAD = "load"
+  UNLOAD = "unload"
+
+
+@enum.unique
 class ModelState(enum.Enum):
+  """Lifecycle state of a model.
+
+  LOADING and UNLOADING mean that an operation is pending or running. FAILED
+  means that the last operation failed and is retried after a backoff.
+  """
+
   LOADING = "LOADING"
   READY = "READY"
-  RELOADING = "RELOADING"
   UNLOADING = "UNLOADING"
   FAILED = "FAILED"
 
 
 @dataclasses.dataclass(frozen=True)
 class ModelAndState:
+  """The state of a model.
+
+  Attributes:
+    state: The lifecycle state of the model.
+    proto: The installed model, or the loaded or loading one if it was
+      uninstalled.
+    message: Why the last operation failed. Kept until a load succeeds, or
+      until the installed model changes and no resources are left to clean up.
+  """
+
   state: ModelState
   proto: ml_model_pb2.MlModel | None = None
   message: str | None = None
 
 
 @dataclasses.dataclass(frozen=True)
-class ReconciliationDiff:
-  """Container for the difference between current and desired model states."""
+class _Failure:
+  """The latest failed operation of a model.
 
-  to_load: set[str]
-  to_unload: set[str]
-  to_reload: set[str]
+  Cleared by a successful load. If the installed model changes, it is cleared
+  right away when nothing is loaded, and otherwise once the cleanup succeeded.
+
+  Attributes:
+    op: The operation that failed. Only this kind of operation waits for the
+      backoff, so that e.g. the cleanup after a failed load runs right away.
+    message: Why the operation failed.
+    backoff: The delay before `op` is retried, doubled by each consecutive
+      failure.
+    retry_at: The time.monotonic() before which `op` isn't retried.
+  """
+
+  op: _Op
+  message: str
+  backoff: float = 0.0
+  retry_at: float = 0.0
+
+  @classmethod
+  def after(
+      cls,
+      op: _Op,
+      message: str,
+      *,
+      previous_backoff: float = 0.0,
+      back_off: bool,
+  ) -> "_Failure":
+    """Returns the failure after `op` failed."""
+    if not back_off:
+      return cls(op, message)
+    backoff = _next_backoff(previous_backoff)
+    return cls(op, message, backoff, time.monotonic() + backoff)
+
+  def delays(self, op: _Op, now: float) -> bool:
+    """Whether `op` has to wait for the backoff at time `now`."""
+    return op == self.op and now < self.retry_at
+
+  def without_backoff(self) -> "_Failure":
+    """Returns this failure with an immediate retry and a fresh backoff."""
+    return dataclasses.replace(self, backoff=0.0, retry_at=0.0)
+
+
+@dataclasses.dataclass(frozen=True)
+class _Task:
+  """A pending or running background operation on a model.
+
+  Attributes:
+    op: The operation being run.
+    proto: The model being loaded or unloaded.
+    future: The future of `op`.
+  """
+
+  op: _Op
+  proto: ml_model_pb2.MlModel
+  future: futures.Future[None]
+
+
+@dataclasses.dataclass
+class _ModelSlot:
+  """The place of one backend model, which installed versions are loaded into.
+
+  The backend and the model files identify a model by its model_config.name,
+  so all versions of an asset share one slot. A slot holds the installed
+  version (`desired`) and the one in the backend (`loaded`), and
+  reconcile_models() moves the latter towards the former: a new version
+  replaces the loaded one in place, and an uninstalled model empties the slot.
+  Empty slots are removed.
+
+  Only accessed while holding ModelControllerBase._lock.
+
+  Attributes:
+    desired: The installed model, or None if it was uninstalled.
+    loaded: The model whose resources may exist in the backend and on disk.
+    failure: The latest failed operation, if any. `loaded` is unloaded before
+      anything else while it is set. Kept until a load succeeds, or until the
+      installed model changed and nothing is loaded anymore.
+    task: The pending or running operation, if any.
+  """
+
+  desired: ml_model_pb2.MlModel | None = None
+  loaded: ml_model_pb2.MlModel | None = None
+  failure: _Failure | None = None
+  task: _Task | None = None
+
+  @property
+  def busy(self) -> bool:
+    """Whether an operation is pending or running."""
+    # A cancelled future never runs, so it can't reset `task`.
+    return self.task is not None and not self.task.future.done()
+
+  @property
+  def serving(self) -> bool:
+    """Whether `loaded` is ready to serve, including while an update loads."""
+    return (
+        self.loaded is not None
+        and self.failure is None
+        and self.desired is not None
+        # E.g. a model that is reinstalled while it is being unloaded.
+        and not (self.busy and self.task.op == _Op.UNLOAD)
+    )
+
+  @property
+  def empty(self) -> bool:
+    """Whether the slot is idle and has no installed and no loaded model."""
+    return not self.busy and self.desired is None and self.loaded is None
+
+  def next_op(self) -> _Op | None:
+    """Returns the operation that moves the model towards `desired`, if any."""
+    if self.loaded is not None and (self.failure or self.desired is None):
+      # Clean up after a failure, or remove an uninstalled model.
+      return _Op.UNLOAD
+    if self.desired is not None and self.desired != self.loaded:
+      # Load a new model, or update a loaded one in place.
+      return _Op.LOAD
+    return None
+
+  def set_desired(self, desired: ml_model_pb2.MlModel | None) -> None:
+    """Updates `desired`, resets backoff on change, and cancels moot ops."""
+    if desired != self.desired:
+      # A changed model gets a fresh attempt. A running operation keeps its own
+      # copy of the old model and finishes first. The failure itself is kept
+      # while loaded resources still need to be cleaned up.
+      self.desired = desired
+      if self.failure:
+        self.failure = (
+            self.failure.without_backoff() if self.loaded is not None else None
+        )
+    # Skip a pending operation that is no longer the next step, e.g. a load of a
+    # version that was replaced or uninstalled. The next step starts on a later
+    # reconciliation. Running operations can't be cancelled, and cancelled ones
+    # never call finish_op().
+    if self.task is not None and (
+        self.task.op != self.next_op()
+        or (self.task.op == _Op.LOAD and self.task.proto != self.desired)
+    ):
+      self.task.future.cancel()
+
+  def ready_op(self, now: float) -> _Op | None:
+    """Returns the next operation if idle and not backing off, else None."""
+    if self.busy:
+      return None
+    op = self.next_op()
+    # Only a retry of the failed operation waits for the backoff, e.g. the
+    # cleanup after a failed load runs right away.
+    if op is None or (self.failure and self.failure.delays(op, now)):
+      return None
+    return op
+
+  def finish_op(
+      self,
+      op: _Op,
+      desired: ml_model_pb2.MlModel | None,
+      error: str | None,
+  ) -> None:
+    """Records the outcome of `op`."""
+    self.task = None
+    if error is not None:
+      if op == _Op.LOAD:
+        # A failed load may leave resources behind, which are unloaded next.
+        self.loaded = desired
+      # Consecutive failures, also of the cleanup, back off further unless the
+      # model changed meanwhile.
+      self.failure = _Failure.after(
+          op,
+          error,
+          previous_backoff=self.failure.backoff if self.failure else 0.0,
+          back_off=(self.desired == desired),
+      )
+    elif op == _Op.LOAD:
+      self.loaded, self.failure = desired, None
+    else:
+      # Keeps the failure of a failed load, which is retried after its backoff,
+      # unless the model changed meanwhile and the failure is moot.
+      self.loaded = None
+      if self.failure and self.failure.retry_at == 0.0:
+        self.failure = None
+
+  def to_model_and_state(self) -> ModelAndState:
+    """Returns the public ModelAndState snapshot of this slot."""
+    if self.failure and self.task is None:
+      state = ModelState.FAILED
+    else:
+      # When idle (e.g. between steps, or after stop() cancelled a pending op),
+      # the next operation determines the state.
+      op = self.task.op if self.busy else self.next_op()
+      state = {
+          _Op.LOAD: ModelState.LOADING,
+          _Op.UNLOAD: ModelState.UNLOADING,
+          None: ModelState.READY,
+      }[op]
+    if self.desired is not None:
+      proto = self.desired
+    elif self.loaded is not None:
+      proto = self.loaded
+    else:
+      proto = self.task.proto if self.task is not None else None
+    return ModelAndState(
+        state=state,
+        proto=proto,
+        message=self.failure.message if self.failure else None,
+    )
 
 
 class ModelControllerBase(abc.ABC):
   """Base class for controlling models.
 
-  Handles state, thread safety, and backend-agnostic asset loading.
+  reconcile_models() converges the backend towards the installed models. It
+  keeps one slot per backend model, i.e. per model_config.name, so versions of
+  an asset are the same model and a new version updates the model in place.
+  For each slot that is idle and not backing off, it starts at most one
+  operation in a background thread pool:
+
+  1. unload: if resources may exist and the last operation failed or the model
+     was uninstalled.
+  2. load: if the installed model differs from the loaded one.
+
+  Failed operations are retried with exponential backoff. A failed load is
+  cleaned up by an unload before it is retried, so a stale model never serves.
+
   There are two core methods that have to be implemented by subclasses:
     - **_load_model_impl**: Loads a model into the inference backend, or updates
       it in place if it is loaded already.
@@ -82,8 +326,10 @@ class ModelControllerBase(abc.ABC):
       inference backend. Must succeed if the model isn't loaded.
 
   Attributes:
-    models: A mapping of model names to their loaded MlModel proto instances.
-    model_states: A mapping of model names to their current ModelStatus.
+    models: A mapping of model names to their serving MlModel proto instances,
+      which are shared and must not be modified.
+    model_states: A mapping of model names to their current ModelAndState,
+      whose protos are shared and must not be modified.
   """
 
   def __init__(
@@ -93,16 +339,16 @@ class ModelControllerBase(abc.ABC):
   ) -> None:
     self._model_assets_manager = model_assets_manager
     self._max_concurrent_tasks = max_concurrent_tasks
-    self._models: dict[str, ml_model_pb2.MlModel] = {}
-    self._model_states: dict[str, ModelAndState] = {}
-    self._lock = threading.Lock()
     # Serializes reconciliations, so that an older listing of the installed
     # models never overwrites a newer one. Also guards _ignored_versions.
     self._reconcile_lock = threading.Lock()
     # The versions that _latest_versions() ignored last time, by model name.
     self._ignored_versions: dict[str, list[str]] = {}
+    # Guards the attributes below. Never held during I/O, so that reading
+    # models and model_states never waits for the backend.
+    self._lock = threading.Lock()
+    self._slots: dict[str, _ModelSlot] = {}
     self._executor: futures.ThreadPoolExecutor | None = None
-    self._in_flight_futures: set[futures.Future[None]] = set()
     self.start()
 
   def start(self) -> None:
@@ -113,59 +359,49 @@ class ModelControllerBase(abc.ABC):
             max_workers=self._max_concurrent_tasks
         )
 
-  def _submit_task(self, fn, *args) -> None:
-    with self._lock:
-      if self._executor is None:
-        self._executor = futures.ThreadPoolExecutor(
-            max_workers=self._max_concurrent_tasks
-        )
-      future = self._executor.submit(fn, *args)
-      self._in_flight_futures.add(future)
-    future.add_done_callback(self._on_future_done)
-
-  def _on_future_done(self, future: futures.Future[None]) -> None:
-    with self._lock:
-      self._in_flight_futures.discard(future)
-
   def stop(self, wait: bool = False) -> None:
-    """Shuts down the background thread pool executor."""
-    with self._lock:
-      executor_to_stop = self._executor
-      self._executor = None
+    """Shuts down the background thread pool executor.
 
-    if executor_to_stop is not None:
-      executor_to_stop.shutdown(wait=wait)
+    Running operations finish. Pending operations are cancelled, and their
+    models stay as they were until the next reconciliation.
+
+    Args:
+      wait: Whether to block until all running operations have finished.
+    """
+    with self._lock:
+      executor, self._executor = self._executor, None
+    if executor is not None:
+      # Not under the lock: operations need it to record their outcome.
+      executor.shutdown(wait=wait, cancel_futures=True)
+    if wait:
+      self.wait_for_idle()
 
   def wait_for_idle(self) -> None:
-    """Blocks until all background reconciliation tasks have finished."""
+    """Blocks until no operation is pending or running."""
     while True:
       with self._lock:
-        pending = list(self._in_flight_futures)
+        pending = [s.task.future for s in self._slots.values() if s.busy]
       if not pending:
-        break
+        return
       futures.wait(pending)
 
   @property
   def models(self) -> dict[str, ml_model_pb2.MlModel]:
-    """Returns a thread-safe copy of the currently loaded models."""
+    """Returns a thread-safe copy of the serving models."""
     with self._lock:
-      return dict(self._models)
+      return {n: s.loaded for n, s in self._slots.items() if s.serving}
 
   def get_model(self, model_name: str) -> ml_model_pb2.MlModel | None:
-    """Retrieves a loaded model by its model_config.name."""
+    """Retrieves a serving model by its model_config.name."""
     with self._lock:
-      return self._models.get(model_name)
+      slot = self._slots.get(model_name)
+      return slot.loaded if slot is not None and slot.serving else None
 
   @property
   def model_states(self) -> dict[str, ModelAndState]:
-    """Returns a thread-safe copy of all model statuses."""
+    """Returns a thread-safe copy of all model states."""
     with self._lock:
-      states = {
-          k: ModelAndState(state=ModelState.READY, proto=v)
-          for k, v in self._models.items()
-      }
-      states.update(self._model_states)
-      return states
+      return {n: s.to_model_and_state() for n, s in self._slots.items()}
 
   @telemetry_base.trace_span("ModelController.load_model")
   def _load_model(
@@ -173,7 +409,14 @@ class ModelControllerBase(abc.ABC):
       loaded: ml_model_pb2.MlModel | None,
       desired: ml_model_pb2.MlModel,
   ) -> None:
-    """Loads `desired` into the inference backend, replacing `loaded` if set."""
+    """Loads `desired` into the inference backend, replacing `loaded` if set.
+
+    Called without holding a lock, since it does I/O.
+
+    Args:
+      loaded: The model whose resources may exist already, if any.
+      desired: The model to load.
+    """
     if loaded is None:
       self._model_assets_manager.create_model_asset(desired)
     elif (
@@ -190,86 +433,68 @@ class ModelControllerBase(abc.ABC):
 
   @telemetry_base.trace_span("ModelController.unload_model")
   def _unload_model(self, model_proto: ml_model_pb2.MlModel) -> None:
-    """Unloads a model from the inference backend.."""
+    """Unloads a model from the inference backend and deletes its files.
+
+    Called without holding a lock, since it does I/O.
+
+    Args:
+      model_proto: The model to unload.
+    """
     try:
       self._unload_model_impl(model_proto=model_proto)
-    except Exception as e:  # pylint: disable=broad-except
-      logging.warning(
-          "Failed to unload model %s from backend: %s. Proceeding with file"
-          " cleanup.",
-          model_proto.model_config.name,
-          e,
-      )
-    # Always try to delete model files even if backend unload failed.
-    try:
+    finally:
+      # Files are deleted even if the backend failed, which is retried.
       self._model_assets_manager.delete_model_asset(model_proto)
-    except Exception as e:  # pylint: disable=broad-except
-      logging.warning(
-          "Failed to delete model asset %s: %s",
-          model_proto.model_config.name,
-          e,
-      )
 
   @abc.abstractmethod
   def _unload_model_impl(self, model_proto: ml_model_pb2.MlModel) -> None:
     """Unloads a model from the inference backend. Must be overridden."""
 
-  @telemetry_base.trace_span("ModelController.reload_model")
-  def _reload_model(self, model_proto: ml_model_pb2.MlModel) -> None:
-    """Updates a loaded model in place."""
-    model_name = model_proto.model_config.name
+  @telemetry_base.trace_span("ModelController.reconcile_models")
+  def reconcile_models(self) -> None:
+    """Starts the operations that converge the models to the installed ones.
 
-    with self._lock:
-      old_model = self._models.get(model_name)
-
-    if not old_model:
-      logging.warning("No model found to reload. Loading as new model.")
-    self._load_model(old_model, model_proto)
-
-  def _get_reconciliation_diff(
-      self,
-      current_models: dict[str, ml_model_pb2.MlModel],
-      new_models: dict[str, ml_model_pb2.MlModel],
-      current_states: dict[str, ModelAndState] | None = None,
-  ) -> ReconciliationDiff:
-    """Calculates the difference between current and desired model states."""
-    current_keys = set(current_models.keys())
-    new_keys = set(new_models.keys())
-
-    models_to_unload = current_keys - new_keys
-    raw_models_to_load = new_keys - current_keys
-
-    # Do not re-attempt loading models that previously failed loading until
-    # state is reset or asset configuration changes.
-    models_to_load = set()
-    for candidate_model_key in raw_models_to_load:
-      status = (
-          current_states.get(candidate_model_key) if current_states else None
-      )
-      if status is None or status.state != ModelState.FAILED:
-        models_to_load.add(candidate_model_key)
-      elif (
-          status.state == ModelState.FAILED
-          and status.proto != new_models[candidate_model_key]
-      ):
-        logging.info(
-            "Retrying previously failed model '%s' due to updated"
-            " configuration.",
-            candidate_model_key,
-        )
-        models_to_load.add(candidate_model_key)
-
-    models_to_reload = set()
-    common_keys = current_keys & new_keys
-    for key in common_keys:
-      if current_models[key] != new_models[key]:
-        models_to_reload.add(key)
-
-    return ReconciliationDiff(
-        to_load=models_to_load,
-        to_unload=models_to_unload,
-        to_reload=models_to_reload,
-    )
+    The operations run in the background, see model_states for their progress.
+    Does nothing while stopped.
+    """
+    # One reconciliation at a time, so that an older listing never overwrites a
+    # newer one. The listing does I/O, so it happens outside of self._lock.
+    with self._reconcile_lock:
+      with self._lock:
+        # Prevents gRPC calls and disk ops while being stopped.
+        if self._executor is None:
+          return
+        # Snapshot the busy models before listing to prevent race conditions.
+        was_busy = {n for n, s in self._slots.items() if s.busy}
+      # The installed models, one version per model name.
+      installed = self._model_assets_manager.list_model_assets()
+      desired = self._latest_versions(installed)
+      # A single timestamp, so that all slots are evaluated at the same time.
+      now = time.monotonic()
+      with self._lock:
+        # Submitting under the lock ensures that stop() can't race with it.
+        if self._executor is None:
+          return
+        # Known models, which might still be loaded, and installed ones.
+        for name in sorted(self._slots.keys() | desired.keys()):
+          slot = self._slots.setdefault(name, _ModelSlot())
+          slot.set_desired(desired.get(name))
+          if slot.empty:
+            del self._slots[name]
+            continue
+          # Wait for a fresh listing after an operation finishes, so that e.g.
+          # an asset manager cache isn't cleared after listing.
+          op = None if name in was_busy else slot.ready_op(now)
+          if op is None:
+            continue
+          # Runs in the background, _run_op() records the outcome. The next
+          # step of this model happens on a later call.
+          logging.info("Starting to %s model %s", op.value, name)
+          future = self._executor.submit(
+              self._run_op, name, op, slot.loaded, slot.desired
+          )
+          proto = slot.desired if op == _Op.LOAD else slot.loaded
+          slot.task = _Task(op, proto, future)
 
   def _latest_versions(
       self, installed: dict[str, ml_model_pb2.MlModel]
@@ -302,169 +527,36 @@ class ModelControllerBase(abc.ABC):
       self._ignored_versions = ignored
     return {name: models[-1] for name, models in versions_by_name.items()}
 
-  def _async_unload_task(
-      self, model_name: str, model_proto: ml_model_pb2.MlModel
-  ) -> None:
-    try:
-      self._unload_model(model_proto)
-      with self._lock:
-        self._models.pop(model_name, None)
-        self._model_states.pop(model_name, None)
-      logging.info("Successfully unloaded model %s", model_name)
-    except Exception as e:  # pylint: disable=broad-except
-      message = f"Failed to unload model {model_name}: {e}"
-      logging.exception("Failed to unload model %s", model_name)
-      with self._lock:
-        self._model_states[model_name] = ModelAndState(
-            state=ModelState.FAILED,
-            proto=model_proto,
-            message=message,
-        )
-
-  def _async_load_task(
-      self, model_name: str, model_proto: ml_model_pb2.MlModel
-  ) -> None:
-    try:
-      self._load_model(None, model_proto)
-      with self._lock:
-        self._models[model_name] = model_proto
-        self._model_states[model_name] = ModelAndState(
-            state=ModelState.READY, proto=model_proto
-        )
-      logging.info("Successfully loaded model %s", model_name)
-    except Exception as e:  # pylint: disable=broad-except
-      message = f"Failed to load model {model_name}: {e}"
-      logging.exception("Failed to load model %s", model_name)
-      with self._lock:
-        self._model_states[model_name] = ModelAndState(
-            state=ModelState.FAILED,
-            proto=model_proto,
-            message=message,
-        )
-
-  def _async_reload_task(
-      self, model_name: str, model_proto: ml_model_pb2.MlModel
-  ) -> None:
-    try:
-      self._reload_model(model_proto)
-      with self._lock:
-        self._models[model_name] = model_proto
-        self._model_states[model_name] = ModelAndState(
-            state=ModelState.READY, proto=model_proto
-        )
-      logging.info("Successfully reloaded model %s", model_name)
-    except Exception as e:  # pylint: disable=broad-except
-      message = f"Failed to reload model {model_name}: {e}"
-      logging.exception("Failed to reload model %s", model_name)
-      with self._lock:
-        self._model_states[model_name] = ModelAndState(
-            state=ModelState.FAILED,
-            proto=model_proto,
-            message=message,
-        )
-
-  def _execute_reconciliation(
+  def _run_op(
       self,
-      diff: ReconciliationDiff,
-      current_models: dict[str, ml_model_pb2.MlModel],
-      new_models: dict[str, ml_model_pb2.MlModel],
+      name: str,
+      op: _Op,
+      loaded: ml_model_pb2.MlModel | None,
+      desired: ml_model_pb2.MlModel | None,
   ) -> None:
-    """Executes the loading, unloading, and reloading of models asynchronously."""
-    with self._lock:
-      unloads_to_submit = []
-      for m in diff.to_unload:
-        status = self._model_states.get(m)
-        current_state = (
-            status.state
-            if status
-            else (ModelState.READY if m in current_models else None)
-        )
-        if current_state == ModelState.READY:
-          unloads_to_submit.append(m)
-          self._model_states[m] = ModelAndState(
-              state=ModelState.UNLOADING, proto=current_models.get(m)
-          )
+    """Runs `op` for model `name` and records its outcome.
 
-      loads_to_submit = []
-      for m in diff.to_load:
-        status = self._model_states.get(m)
-        current_state = (
-            status.state
-            if status
-            else (ModelState.READY if m in current_models else None)
-        )
-        if current_state is None or current_state == ModelState.FAILED:
-          loads_to_submit.append(m)
-          self._model_states[m] = ModelAndState(
-              state=ModelState.LOADING, proto=new_models[m]
-          )
+    Runs in the thread pool without holding a lock, and only takes self._lock
+    to record the outcome.
 
-      reloads_to_submit = []
-      for m in diff.to_reload:
-        status = self._model_states.get(m)
-        current_state = (
-            status.state
-            if status
-            else (ModelState.READY if m in current_models else None)
-        )
-        if current_state == ModelState.READY:
-          reloads_to_submit.append(m)
-          self._model_states[m] = ModelAndState(
-              state=ModelState.RELOADING, proto=new_models[m]
-          )
-
-    for model_name in unloads_to_submit:
-      self._submit_task(
-          self._async_unload_task, model_name, current_models[model_name]
-      )
-
-    for model_name in loads_to_submit:
-      self._submit_task(
-          self._async_load_task, model_name, new_models[model_name]
-      )
-
-    for model_name in reloads_to_submit:
-      self._submit_task(
-          self._async_reload_task, model_name, new_models[model_name]
-      )
-
-  @telemetry_base.trace_span("ModelController.reconcile_models")
-  def reconcile_models(self) -> None:
-    """Reconciles the difference in current and desired loaded model state.
-
-    Tries to efficiently load, unload and reload models to achieve the desired
-    state of models loaded in the inference server backend.
+    Args:
+      name: The model_config.name of the model.
+      op: The operation to run.
+      loaded: The model whose resources may exist, if any.
+      desired: The installed model when `op` was submitted, if any.
     """
-    with self._reconcile_lock:
-      installed = self._model_assets_manager.list_model_assets()
-      new_models = self._latest_versions(installed)
-      with self._lock:
-        current_models = dict(self._models)
-        current_states = dict(self._model_states)
-
-      diff = self._get_reconciliation_diff(
-          current_models, new_models, current_states
-      )
-
-      if not diff.to_load and not diff.to_unload and not diff.to_reload:
-        return
-
-      logging.info("Change in installed model assets detected.")
-
-      logging.info(
-          "Reconciliation results:\n\tLoading: %s\n\tUnloading:"
-          " %s\n\tReloading: %s",
-          diff.to_load,
-          diff.to_unload,
-          diff.to_reload,
-      )
-      try:
-        self._execute_reconciliation(
-            diff=diff,
-            current_models=current_models,
-            new_models=new_models,
-        )
-      except Exception as e:
-        # TODO(lhecht): Add rollback logic.
-        logging.exception("Error while updating model configuration: %s", e)
-        raise
+    try:
+      if op == _Op.LOAD:
+        self._load_model(loaded, desired)
+      else:
+        self._unload_model(loaded)
+      error = None
+      logging.info("Successfully %sed model %s", op.value, name)
+    except Exception as e:  # pylint: disable=broad-except
+      error = f"Failed to {op.value} model {name}: {e}"
+      logging.exception("Failed to %s model %s", op.value, name)
+    with self._lock:
+      slot = self._slots[name]
+      slot.finish_op(op, desired, error)
+      if slot.empty:
+        del self._slots[name]

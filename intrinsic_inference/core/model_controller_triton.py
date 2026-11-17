@@ -14,7 +14,6 @@
 
 """Handles model loading and unloading for the Triton inference backend."""
 
-import enum
 import os
 
 from absl import logging
@@ -28,11 +27,12 @@ from intrinsic_inference.core import model_assets_manager_base
 from intrinsic_inference.core import model_controller_base
 from intrinsic_inference.core.v1 import ml_model_pb2
 
-
-@enum.unique
-class TritonAction(enum.Enum):
-  LOAD = "load"
-  UNLOAD = "unload"
+# Deadlines of the Triton RPCs, so that a hung call fails and is retried with
+# backoff instead of keeping its model busy and blocking a worker forever. Loads
+# can take long, e.g. to build TensorRT engines of large models.
+_LOAD_TIMEOUT_SECONDS = 180.0
+_UNLOAD_TIMEOUT_SECONDS = 120.0
+_MODEL_READY_TIMEOUT_SECONDS = 60.0
 
 
 class ModelControllerTriton(model_controller_base.ModelControllerBase):
@@ -52,50 +52,37 @@ class ModelControllerTriton(model_controller_base.ModelControllerBase):
     self._repo_path = repo_path
     self._triton_stub = triton_stub
 
-  def _run_triton_action(
-      self, model_proto: ml_model_pb2.MlModel, action: TritonAction
-  ) -> None:
-    """Helper to load or unload a model in Triton."""
-    model_name = model_proto.model_config.name
-    if action == TritonAction.LOAD:
-      self._write_triton_config(model_proto)
-      request = triton_pb2.RepositoryModelLoadRequest(model_name=model_name)
-      action_fn = self._triton_stub.RepositoryModelLoad
-    elif action == TritonAction.UNLOAD:
-      request = triton_pb2.RepositoryModelUnloadRequest(model_name=model_name)
-      action_fn = self._triton_stub.RepositoryModelUnload
-    else:
-      raise ValueError("Unknown triton action requested.")
-
-    try:
-      action_fn(request)
-    except grpc.RpcError as e:
-      logging.error(
-          "Error %sing model '%s': %s", action.value, model_name, e.details()
-      )
-      raise
-    logging.info("Successfully %sed model '%s'", action.value, model_name)
-
   def _load_model_impl(self, model_proto: ml_model_pb2.MlModel) -> None:
     """Loads a model into Triton, or reloads it if it is loaded already.
 
-    Triton keeps serving a loaded model until its reload finished.
+    Triton keeps serving a loaded model until its reload finished. If the
+    deadline is exceeded, Triton may still finish the load, which the cleanup
+    after the failure unloads again.
 
     Args:
       model_proto: The model to load.
     """
-    self._run_triton_action(model_proto, action=TritonAction.LOAD)
+    self._write_triton_config(model_proto)
+    model_name = model_proto.model_config.name
+    self._triton_stub.RepositoryModelLoad(
+        triton_pb2.RepositoryModelLoadRequest(model_name=model_name),
+        timeout=_LOAD_TIMEOUT_SECONDS,
+    )
 
   def _unload_model_impl(self, model_proto: ml_model_pb2.MlModel) -> None:
     """Unloads all versions of a model from Triton, if it is loaded."""
     model_name = model_proto.model_config.name
     try:
-      self._run_triton_action(model_proto, action=TritonAction.UNLOAD)
+      self._triton_stub.RepositoryModelUnload(
+          triton_pb2.RepositoryModelUnloadRequest(model_name=model_name),
+          timeout=_UNLOAD_TIMEOUT_SECONDS,
+      )
     except grpc.RpcError:
       # Ask Triton whether the model is still loaded. It isn't e.g. after a
       # failed load or a Triton restart.
       ready = self._triton_stub.ModelReady(
-          triton_pb2.ModelReadyRequest(name=model_name)
+          triton_pb2.ModelReadyRequest(name=model_name),
+          timeout=_MODEL_READY_TIMEOUT_SECONDS,
       ).ready
       if ready:
         raise
