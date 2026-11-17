@@ -98,6 +98,7 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@com_google_protobuf//:protobuf_lite",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_cc_proto",
+        "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_storage_refs_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:transformed_geometry_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:matrix_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",

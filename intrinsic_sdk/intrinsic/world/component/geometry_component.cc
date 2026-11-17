@@ -38,6 +38,7 @@
 #include "intrinsic/geometry/api/geometry_options.h"
 #include "intrinsic/geometry/api/io.h"
 #include "intrinsic/geometry/proto/v1/geometry.pb.h"
+#include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
 #include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
@@ -54,6 +55,18 @@
 
 namespace intrinsic {
 namespace {
+
+using GeometryStorageRefs = intrinsic_proto::geometry::v1::GeometryStorageRefs;
+using TransformedGeometryProto =
+    intrinsic_proto::geometry::v1::TransformedGeometry;
+
+// Returns true if `proto` holds storage references marked `MUTABILITY_MUTABLE`
+// whose underlying payload can change in place without changing the URI string.
+bool ReferencesMutableGeometry(
+    const std::optional<TransformedGeometryProto>& proto) {
+  return proto.has_value() && proto->geometry().geo_ref().mutability() ==
+                                  GeometryStorageRefs::MUTABILITY_MUTABLE;
+}
 
 // This is an implementation detail while we transition the geometry component
 // to a new API that provides deserialization at the point of requesting the
@@ -176,7 +189,9 @@ GeometryComponentImpl::ToProto(GeometrySerializer* geolib) const {
         *(*result.mutable_named_geometries())[name].mutable_named_geometries();
 
     for (const auto& [geo_name, transformed_geometry] : geo_set) {
-      if (transformed_geometry.geo.has_value()) {
+      if (ReferencesMutableGeometry(transformed_geometry.proto)) {
+        proto_named_geometries[geo_name] = *transformed_geometry.proto;
+      } else if (transformed_geometry.geo.has_value()) {
         INTR_ASSIGN_OR_RETURN(
             proto_named_geometries[geo_name],
             intrinsic::ToProto(transformed_geometry.geo.value(), geolib));
@@ -271,7 +286,7 @@ absl::StatusOr<NamedGeometrySet> GeometryComponentImpl::GetGeometry(
   NamedGeometrySet geo_set;
   for (auto& [geo_name, proto_and_geo] : geometries_.at(name)) {
     auto& [proto, geo] = proto_and_geo;
-    if (!geo.has_value()) {
+    if (!geo.has_value() || ReferencesMutableGeometry(proto)) {
       if (!proto.has_value()) {
         LOG(WARNING)
             << "Geometry '" << geo_name << "' in set named '" << name
