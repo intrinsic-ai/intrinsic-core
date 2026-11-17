@@ -104,16 +104,21 @@ cc_library(
 )
 
 cc_library(
-    name = "connection_cache",
-    hdrs = ["connection_cache.h"],
+    name = "channel_cache",
+    srcs = ["channel_cache.cc"],
+    hdrs = ["channel_cache.h"],
     deps = [
         ":channel",
         ":connection_params",
+        "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/third_party/simple_lru_cache",
         "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/hash",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/synchronization",
+        "@abseil-cpp//absl/time",
+        "@com_github_grpc_grpc//:grpc++",
     ],
 )
 

@@ -386,21 +386,24 @@ void CameraManager::SetActiveCamera(const ActiveCameraConfig& active_camera) {
   lock.Release();
 }
 
-absl::StatusOr<std::shared_ptr<GrpcCamera::CameraConnection>>
-GrpcCamera::GetConnection(const ConnectionParams& connection_params) const {
-  return connection_cache_.Get(connection_params);
+absl::StatusOr<std::shared_ptr<Channel>> GrpcCamera::GetChannel(
+    const ConnectionParams& connection_params) const {
+  return channel_cache_.Get(connection_params);
 }
 
 absl::StatusOr<intrinsic_proto::perception::v1::CameraConfig>
 GrpcCamera::GetCameraConfig(const ConnectionParams& connection_params) const {
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<CameraConfigConnection> connection,
-                        config_connection_cache_.Get(connection_params));
+  INTR_ASSIGN_OR_RETURN(std::shared_ptr<Channel> channel,
+                        channel_cache_.Get(connection_params));
+  std::unique_ptr<intrinsic_proto::perception::v1::CameraConfigService::Stub>
+      stub = intrinsic_proto::perception::v1::CameraConfigService::NewStub(
+          channel->GetChannel());
   std::unique_ptr<grpc::ClientContext> client_context =
-      connection->channel->GetClientContextFactory()();
+      channel->GetClientContextFactory()();
   intrinsic_proto::perception::v1::GetCameraConfigRequest request;
   intrinsic_proto::perception::v1::CameraConfig response;
-  INTR_RETURN_IF_ERROR(ToAbslStatus(connection->stub->GetCameraConfig(
-      client_context.get(), request, &response)));
+  INTR_RETURN_IF_ERROR(ToAbslStatus(
+      stub->GetCameraConfig(client_context.get(), request, &response)));
   return response;
 }
 

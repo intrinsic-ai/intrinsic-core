@@ -47,11 +47,11 @@
 #include "intrinsic/perception/cameras/image_source_interface.h"
 #include "intrinsic/perception/cameras/sensor_information.h"
 #include "intrinsic/perception/proto/v1/camera_config.pb.h"
-#include "intrinsic/perception/proto/v1/camera_config_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.grpc.pb.h"
 #include "intrinsic/perception/proto/v1/camera_service.pb.h"
 #include "intrinsic/resources/proto/resource_handle.pb.h"
-#include "intrinsic/util/grpc/connection_cache.h"
+#include "intrinsic/util/grpc/channel.h"
+#include "intrinsic/util/grpc/channel_cache.h"
 #include "intrinsic/util/grpc/connection_params.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -323,11 +323,6 @@ class CameraManager {
 class GrpcCamera {
  public:
   using CameraService = intrinsic_proto::perception::v1::CameraService;
-  using CameraConfigService =
-      intrinsic_proto::perception::v1::CameraConfigService;
-  using CameraConnection = ConnectionCache<CameraService>::Connection;
-  using CameraConfigConnection =
-      ConnectionCache<CameraConfigService>::Connection;
   using Stub = CameraService::Stub;
 
   // Can be used to call any method of the CameraService, e.g.:
@@ -341,18 +336,19 @@ class GrpcCamera {
           grpc::ClientContext* absl_nonnull, const Request&,
           Response* absl_nonnull),
       const Request& request, const ConnectionParams& connection_params) const {
-    INTR_ASSIGN_OR_RETURN(std::shared_ptr<CameraConnection> connection,
-                          GetConnection(connection_params));
+    INTR_ASSIGN_OR_RETURN(std::shared_ptr<Channel> channel,
+                          GetChannel(connection_params));
+    std::unique_ptr<Stub> stub = CameraService::NewStub(channel->GetChannel());
     std::unique_ptr<grpc::ClientContext> client_context =
-        connection->channel->GetClientContextFactory()();
+        channel->GetClientContextFactory()();
     Response response;
-    INTR_RETURN_IF_ERROR(ToAbslStatus((connection->stub.get()->*method)(
-        client_context.get(), request, &response)));
+    INTR_RETURN_IF_ERROR(ToAbslStatus(
+        (stub.get()->*method)(client_context.get(), request, &response)));
     return response;
   }
 
-  // Returns a connection to the camera service.
-  absl::StatusOr<std::shared_ptr<CameraConnection>> GetConnection(
+  // Returns a cached channel to the camera service.
+  absl::StatusOr<std::shared_ptr<Channel>> GetChannel(
       const ConnectionParams& connection_params) const;
 
   // Returns the camera config for the given connection params.
@@ -363,8 +359,7 @@ class GrpcCamera {
       const ConnectionParams& connection_params) const;
 
  private:
-  mutable ConnectionCache<CameraService> connection_cache_;
-  mutable ConnectionCache<CameraConfigService> config_connection_cache_;
+  mutable ChannelCache channel_cache_;
 };
 
 }  // namespace intrinsic::perception
