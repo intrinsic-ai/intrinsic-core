@@ -19,6 +19,7 @@ import (
 	"context"
 	"fmt"
 	"log"
+	"time"
 
 	"intrinsic/assets/clientutils"
 	"intrinsic/assets/cmdutils"
@@ -32,6 +33,7 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
+	"google.golang.org/protobuf/types/known/durationpb"
 
 	solutiondeploymentpb "intrinsic/assets/proto/v1/solution_deployment_go_proto"
 	opmodepb "intrinsic/config/proto/operation_mode_go_proto"
@@ -59,8 +61,10 @@ func startSolution(ctx context.Context, conn *grpc.ClientConn, solutionID string
 	name := op.GetName()
 	lroClient := lropb.NewOperationsClient(conn)
 	for !op.GetDone() {
+		// Stay below the 60s request limit of the relay; the server returns the unfinished operation.
 		op, err = lroClient.WaitOperation(ctx, &lropb.WaitOperationRequest{
-			Name: name,
+			Name:    name,
+			Timeout: durationpb.New(30 * time.Second),
 		})
 		if err != nil {
 			return fmt.Errorf("unable to check status of solution start operation %q: %w", name, err)
