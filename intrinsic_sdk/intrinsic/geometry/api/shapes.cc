@@ -14,6 +14,7 @@
 
 #include "intrinsic/geometry/api/shapes.h"
 
+#include <algorithm>
 #include <memory>
 #include <optional>
 #include <string>
@@ -25,7 +26,9 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
+#include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
+#include "absl/strings/string_view.h"
 #include "assimp/material.h"
 #include "assimp/scene.h"
 #include "assimp/types.h"
@@ -42,7 +45,9 @@
 #include "intrinsic/geometry/internal/mesh/memoized_mesh_from_triangle_mesh.h"
 #include "intrinsic/geometry/internal/point_cloud/pts_to_point_cloud.h"
 #include "intrinsic/geometry/internal/util/export_as_gltf.h"
+#include "intrinsic/geometry/internal/util/gltf_helpers.h"
 #include "intrinsic/geometry/proto/v1/material.pb.h"
+#include "intrinsic/geometry/shapes/mesh_file.h"
 #include "intrinsic/geometry/shapes/shape_base.h"
 #include "intrinsic/geometry/shapes/shapes.h"
 #include "intrinsic/math/pose3.h"
@@ -50,6 +55,7 @@
 #include "ortools/base/helpers.h"
 #include "ortools/base/options.h"
 #include "ortools/base/path.h"
+#include "tiny_gltf.h"
 
 namespace intrinsic::geo {
 namespace {
@@ -149,6 +155,53 @@ bool IsAiSceneFullyTransparent(const aiScene* scene) {
   // opaque.
   return found_opacity;
 }
+
+// Returns true if `uri` is empty or an embedded data URI, i.e. it does not
+// reference a resource outside of the GLB.
+bool IsEmbeddedUri(absl::string_view uri) {
+  return uri.empty() || absl::StartsWithIgnoreCase(uri, "data:");
+}
+
+// Returns the contents of `mesh_file` if they can be used verbatim as the
+// renderable, or std::nullopt otherwise.
+//
+// The contents are used verbatim if the file is an unscaled, self-contained
+// GLB, i.e., all buffers and images are stored in the GLB itself. Using the
+// bytes verbatim, instead of re-exporting them through Assimp, keeps the
+// renderable byte-identical across export/re-import round trips. An Assimp
+// round trip is not bit-stable (e.g., float32 normals may shift by 1 ULP),
+// which changes the content-based fingerprint of the renderable.
+absl::StatusOr<std::optional<std::string>> ReadVerbatimGlb(
+    const MeshFile& mesh_file) {
+  if (absl::AsciiStrToLower(file::Extension(mesh_file.getFilename())) !=
+          "glb" ||
+      mesh_file.getScale() != eigenmath::Vector3d::Ones()) {
+    return std::nullopt;
+  }
+  INTR_ASSIGN_OR_RETURN(
+      std::string glb_bytes,
+      file::GetContents(mesh_file.getFilename(), file::Defaults()));
+  // Files that tinygltf cannot parse fall back to the Assimp path, which
+  // reports its own errors.
+  GltfParseDiagnostics diagnostics;
+  absl::StatusOr<tinygltf::Model> model = ParseGlb(glb_bytes, &diagnostics);
+  if (!model.ok()) {
+    return std::nullopt;
+  }
+  const bool is_self_contained =
+      std::ranges::all_of(model->buffers,
+                          [](const tinygltf::Buffer& buffer) {
+                            return IsEmbeddedUri(buffer.uri);
+                          }) &&
+      std::ranges::all_of(model->images, [](const tinygltf::Image& image) {
+        return IsEmbeddedUri(image.uri);
+      });
+  if (!is_self_contained) {
+    return std::nullopt;
+  }
+  return glb_bytes;
+}
+
 }  // namespace
 
 absl::StatusOr<TransformedGeometry> ToGeometry(
@@ -168,25 +221,37 @@ absl::StatusOr<TransformedGeometry> ToGeometry(
     // Since we have a mesh file we want to read the contents of the file and
     // store that as part of the renderable info.
     const auto& mesh_file = shape.get<MeshFile>();
-    INTR_ASSIGN_OR_RETURN(
-        auto ai_scene,
-        LoadAiSceneFromFile(mesh_file.getFilename(), mesh_file.getScale()));
+    std::optional<std::string> verbatim_glb;
+    if (!material_opt.has_value()) {
+      INTR_ASSIGN_OR_RETURN(verbatim_glb, ReadVerbatimGlb(mesh_file));
+    }
+
+    std::unique_ptr<aiScene> ai_scene;
+    if (check_for_transparency || !verbatim_glb.has_value()) {
+      INTR_ASSIGN_OR_RETURN(
+          ai_scene,
+          LoadAiSceneFromFile(mesh_file.getFilename(), mesh_file.getScale()));
+    }
     if (check_for_transparency && IsAiSceneFullyTransparent(ai_scene.get())) {
       return absl::InvalidArgumentError(absl::StrCat(
           "Following mesh is fully transparent and cannot be rendered: ",
           mesh_file.getFilename()));
     }
 
-    // TODO(b/412419828): Remove this and rely on the material overrides.
-    if (material_opt.has_value()) {
-      INTR_RETURN_IF_ERROR(ApplyMaterialToAiScene(*ai_scene, *material_opt));
+    if (verbatim_glb.has_value()) {
+      renderable = std::make_shared<Renderable>(*std::move(verbatim_glb));
+    } else {
+      // TODO(b/412419828): Remove this and rely on the material overrides.
+      if (material_opt.has_value()) {
+        INTR_RETURN_IF_ERROR(ApplyMaterialToAiScene(*ai_scene, *material_opt));
+      }
+
+      INTR_ASSIGN_OR_RETURN(
+          std::string gltf_string,
+          ExportAiSceneAsGltf(*ai_scene, Eigen::Matrix4d::Identity()));
+
+      renderable = std::make_shared<Renderable>(gltf_string);
     }
-
-    INTR_ASSIGN_OR_RETURN(
-        std::string gltf_string,
-        ExportAiSceneAsGltf(*ai_scene, Eigen::Matrix4d::Identity()));
-
-    renderable = std::make_shared<Renderable>(gltf_string);
   } else if (material_opt.has_value()) {  // TODO(b/412419828): Drop this case.
     INTR_ASSIGN_OR_RETURN(std::string gltf_string,
                           ExportAsGltf(updated_shape, *material_opt));

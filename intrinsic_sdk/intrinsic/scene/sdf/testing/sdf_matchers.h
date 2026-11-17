@@ -18,11 +18,16 @@
 #include <optional>
 #include <string>
 
+#include "absl/status/status.h"
+#include "absl/strings/string_view.h"
+#include "absl/strings/strip.h"
 #include "gmock/gmock.h"
 #include "gz/math/eigen3/Conversions.hh"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/simulation/gazebo/type_conversion.h"
+#include "ortools/base/helpers.h"
+#include "ortools/base/options.h"
 #include "sdf/Box.hh"
 #include "sdf/Capsule.hh"
 #include "sdf/Collision.hh"
@@ -58,6 +63,39 @@ MATCHER_P(HasMeshUri, uri_matcher, "") {
   *result_listener << "whose mesh uri is "
                    << ::testing::PrintToString(actual_uri);
   return ExplainMatchResult(uri_matcher, actual_uri, result_listener);
+}
+
+MATCHER_P(HasMeshFileContents, contents_matcher, "") {
+  if (arg == nullptr) {
+    *result_listener << "is nullptr";
+    return false;
+  }
+  if (arg->Geom() == nullptr) {
+    *result_listener << "has no geometry";
+    return false;
+  }
+  if (arg->Geom()->MeshShape() == nullptr) {
+    *result_listener << "has no mesh shape";
+    return false;
+  }
+  const std::string uri = arg->Geom()->MeshShape()->Uri();
+  absl::string_view path = uri;
+  if (!absl::ConsumePrefix(&path, "model://")) {
+    *result_listener << "whose mesh uri " << ::testing::PrintToString(uri)
+                     << " does not start with \"model://\"";
+    return false;
+  }
+  std::string actual_contents;
+  const absl::Status status =
+      file::GetContents(path, &actual_contents, file::Defaults());
+  if (!status.ok()) {
+    *result_listener << "whose mesh file " << ::testing::PrintToString(path)
+                     << " could not be read: " << status;
+    return false;
+  }
+  *result_listener << "whose mesh file " << ::testing::PrintToString(path)
+                   << " has size " << actual_contents.size();
+  return ExplainMatchResult(contents_matcher, actual_contents, result_listener);
 }
 
 MATCHER_P(HasName, name_matcher, "") {

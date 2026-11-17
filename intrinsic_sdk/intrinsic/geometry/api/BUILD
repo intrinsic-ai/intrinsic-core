@@ -297,6 +297,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:load_ai_scene_from_file",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_point_cloud",
         "//intrinsic_sdk/intrinsic/geometry/internal/util:export_as_gltf",
+        "//intrinsic_sdk/intrinsic/geometry/internal/util:gltf_helpers",
         "//intrinsic_sdk/intrinsic/geometry/shapes",
         "//intrinsic_sdk/intrinsic/geometry/shapes:geometry_shape",
         "//intrinsic_sdk/intrinsic/math:pose3",
@@ -310,6 +311,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/geometry/proto/v1:material_cc_proto",
         "@or_tools//ortools/base:file",
         "@or_tools//ortools/base:path",
+        "@tinygltf",
     ],
 )
 
