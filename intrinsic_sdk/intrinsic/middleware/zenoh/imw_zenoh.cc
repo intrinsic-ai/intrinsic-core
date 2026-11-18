@@ -23,6 +23,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/no_destructor.h"
 #include "absl/log/log.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
@@ -43,6 +44,179 @@ namespace intrinsic {
 static constexpr char kImwZenohVersion[] = "2.1.3";
 static constexpr absl::Duration kDefaultLivelinessGetTimeout =
     absl::Minutes(10);
+
+namespace {
+
+constexpr char kRawOctetStreamEncoding[] =
+    "application/octet-stream;intrinsic.raw";
+
+// Schema-qualifies raw unframed payloads
+// (`application/octet-stream;intrinsic.raw`) because Zenoh's HTTP REST plugin
+// stamps untyped `PUT` payloads from `CloudPubsubConfigManager` (LEB128
+// VarInt-prefixed `Any` protos) with bare `application/octet-stream`.
+const z_loaned_encoding_t* RawOctetStreamEncoding() {
+  static const absl::NoDestructor<z_owned_encoding_t> kOwned([]() {
+    z_owned_encoding_t enc;
+    const z_result_t res = z_encoding_from_str(&enc, kRawOctetStreamEncoding);
+    if (res != Z_OK) {
+      LOG(FATAL) << "Failed to initialize Zenoh raw encoding: "
+                 << static_cast<int>(res);
+    }
+    return enc;
+  }());
+  return z_loan(*kOwned);
+}
+
+bool IsValidEncoding(imw_encoding_t encoding) {
+  switch (encoding) {
+    case IMW_ENCODING_VARINT_PREFIXED_BYTES:
+    case IMW_ENCODING_APPLICATION_OCTET_STREAM:
+    case IMW_ENCODING_APPLICATION_PROTOBUF:
+      return true;
+    case IMW_ENCODING_UNKNOWN:
+      return false;
+  }
+  return false;
+}
+
+imw_ret_t AttachZenohEncoding(imw_encoding_t encoding,
+                              z_owned_encoding_t* out_encoding,
+                              bool* out_has_encoding) {
+  switch (encoding) {
+    case IMW_ENCODING_VARINT_PREFIXED_BYTES:
+      *out_has_encoding = false;
+      return IMW_OK;
+    case IMW_ENCODING_APPLICATION_OCTET_STREAM:
+      z_encoding_clone(out_encoding, RawOctetStreamEncoding());
+      *out_has_encoding = true;
+      return IMW_OK;
+    case IMW_ENCODING_APPLICATION_PROTOBUF:
+      z_encoding_clone(out_encoding, z_encoding_application_protobuf());
+      *out_has_encoding = true;
+      return IMW_OK;
+    case IMW_ENCODING_UNKNOWN:
+      LOG(ERROR) << "Cannot attach read-only IMW_ENCODING_UNKNOWN";
+      return IMW_ERROR;
+  }
+  LOG(ERROR) << "Unknown imw_encoding_t constant: "
+             << static_cast<int>(encoding);
+  return IMW_ERROR;
+}
+
+imw_encoding_t FromZenohEncoding(const z_loaned_encoding_t* encoding) {
+  if (encoding == nullptr) {
+    return IMW_ENCODING_VARINT_PREFIXED_BYTES;
+  }
+  if (z_encoding_equals(encoding, RawOctetStreamEncoding())) {
+    return IMW_ENCODING_APPLICATION_OCTET_STREAM;
+  }
+  if (z_encoding_equals(encoding, z_encoding_application_protobuf())) {
+    return IMW_ENCODING_APPLICATION_PROTOBUF;
+  }
+  if (z_encoding_equals(encoding, z_encoding_zenoh_bytes()) ||
+      z_encoding_equals(encoding, z_encoding_application_octet_stream())) {
+    return IMW_ENCODING_VARINT_PREFIXED_BYTES;
+  }
+  return IMW_ENCODING_UNKNOWN;
+}
+
+imw_message_metadata_t ExtractMessageMetadata(const z_loaned_sample_t* sample) {
+  imw_message_metadata_t metadata;
+  metadata.kind = (z_sample_kind(sample) == Z_SAMPLE_KIND_DELETE)
+                      ? IMW_MESSAGE_KIND_DELETE
+                      : IMW_MESSAGE_KIND_PUT;
+  metadata.encoding = FromZenohEncoding(z_sample_encoding(sample));
+  return metadata;
+}
+
+bool SerializePayloadForEncoding(const void* bytes, const size_t bytes_len,
+                                 const imw_encoding_t encoding,
+                                 const bool raw_override,
+                                 z_owned_bytes_t* out_payload) {
+  if (bytes_len > 0 && bytes == nullptr) {
+    LOG(ERROR) << "Payload pointer is null with non-zero length: " << bytes_len;
+    return false;
+  }
+  if (raw_override || encoding != IMW_ENCODING_VARINT_PREFIXED_BYTES) {
+    if (bytes_len == 0) {
+      z_bytes_empty(out_payload);
+      return true;
+    }
+    const z_result_t result = z_bytes_copy_from_buf(
+        out_payload, static_cast<const uint8_t*>(bytes), bytes_len);
+    if (result != Z_OK) {
+      LOG(ERROR) << "z_bytes_copy_from_buf failed: "
+                 << static_cast<int>(result);
+      return false;
+    }
+    return true;
+  }
+  static constexpr uint8_t kEmptyByte = 0;
+  const uint8_t* ptr =
+      (bytes != nullptr) ? static_cast<const uint8_t*>(bytes) : &kEmptyByte;
+  const z_result_t result = ze_serialize_buf(out_payload, ptr, bytes_len);
+  if (result != Z_OK) {
+    LOG(ERROR) << "ze_serialize_buf failed: " << static_cast<int>(result);
+    return false;
+  }
+  return true;
+}
+
+bool DecodeMessagePayload(const z_loaned_sample_t* sample,
+                          const imw_encoding_t encoding,
+                          const bool raw_override, z_owned_slice_t* out_slice) {
+  const z_loaned_bytes_t* payload = z_sample_payload(sample);
+  const z_result_t result =
+      (raw_override || encoding != IMW_ENCODING_VARINT_PREFIXED_BYTES)
+          ? z_bytes_to_slice(payload, out_slice)
+          : ze_deserialize_slice(payload, out_slice);
+  if (result != Z_OK) {
+    LOG(ERROR) << "Unable to deserialize message payload ("
+               << static_cast<int>(result) << ")";
+    return false;
+  }
+  return true;
+}
+
+bool ValidateSetArgs(const z_owned_session_t& session, const char* keyexpr,
+                     imw_encoding_t encoding, z_view_keyexpr_t* out_keyexpr) {
+  if (!z_internal_check(session)) {
+    LOG(ERROR) << "Invalid session in IMWZenoh::set";
+    return false;
+  }
+  if (keyexpr == nullptr || !IsValidEncoding(encoding)) {
+    LOG(ERROR) << "Invalid arguments for set";
+    return false;
+  }
+  if (Z_OK != z_view_keyexpr_from_str(out_keyexpr, keyexpr)) {
+    LOG(ERROR) << "Invalid keyexpr for set: " << keyexpr;
+    return false;
+  }
+  return true;
+}
+
+imw_ret_t PutPayloadWithEncoding(const z_loaned_session_t* session,
+                                 const z_loaned_keyexpr_t* view_keyexpr,
+                                 z_owned_bytes_t* payload,
+                                 imw_encoding_t encoding) {
+  z_put_options_t opts;
+  z_put_options_default(&opts);
+  opts.reliability = Z_RELIABILITY_RELIABLE;
+  opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
+  z_owned_encoding_t owned_encoding;
+  bool has_encoding = false;
+  if (AttachZenohEncoding(encoding, &owned_encoding, &has_encoding) != IMW_OK) {
+    z_drop(z_move(*payload));
+    return IMW_ERROR;
+  }
+  if (has_encoding) {
+    opts.encoding = z_move(owned_encoding);
+  }
+  const int8_t result = z_put(session, view_keyexpr, z_move(*payload), &opts);
+  return result == 0 ? IMW_OK : IMW_ERROR;
+}
+
+}  // namespace
 
 IMWZenoh::IMWZenoh() {
   z_internal_session_null(&session_);
@@ -484,12 +658,13 @@ imw_ret_t IMWZenoh::create_subscription(const char* keyexpr,
     return IMW_ERROR;
   }
 
-  // If we get here, we didn't find an existing subscription for this keyexpr,
-  // so we need to create one.
+  auto sub =
+      std::make_shared<IMWZenohSubscription>(keyexpr_s, callback, user_context);
+
   z_owned_closure_sample_t closure;
   z_closure_sample(&closure, IMWZenoh::static_data_callback,
                    IMWZenoh::static_closure_drop,
-                   new IMWZenohDataCallbackContext(this, keyexpr_s));
+                   new IMWZenohDataCallbackContext(sub));
   z_subscriber_options_t sub_opts;
   z_subscriber_options_default(&sub_opts);
 
@@ -503,14 +678,8 @@ imw_ret_t IMWZenoh::create_subscription(const char* keyexpr,
     return IMW_ERROR;
   }
 
-  // We'll copy the zenoh_sub struct into the IMWZenohSubscription object.
-  // From here on out, we know it won't be further copied once it's in C++
-  // because the copy constructor for IMWZenohSubscription has been deleted.
-  // Elements within the subscriptions member are only erased in
-  // destroy_subscription, and when we do that, we call z_undeclare_subscriber
-  // to ensure the (Rust-owned) memory of the zenoh_sub object is free'd.
-  subscriptions_.emplace_back(std::make_unique<IMWZenohSubscription>(
-      keyexpr_s, callback, zenoh_sub, user_context));
+  sub->set_zenoh_sub(zenoh_sub);
+  subscriptions_.push_back(std::move(sub));
 
   return IMW_OK;
 }
@@ -647,60 +816,33 @@ imw_ret_t IMWZenoh::destroy_liveliness_subscription(
   return IMW_ERROR;
 }
 
-void IMWZenoh::data_callback(const std::string& subscription_keyexpr,
+void IMWZenoh::data_callback(IMWZenohSubscription& sub,
                              const z_loaned_sample_t* sample) {
-  // This is a bit confusing, but since Zenoh allows wildcards in subscription
-  // key expressions (keyexpr), it is possible that the keyexpr used to
-  // subscribe to this callback is different from the keyexpr of the sample.
-  // As an extreme example, a subscription to in/** may result in messages
-  // arriving from topic in/FOO_42/BAR/BAZ
-  // To route the messages appropriately, we create a user context at the
-  // time of subscription that contains the "subscription keyexpr" and use that
-  // when routing the message. The user callback is likely going to depend on
-  // the "sample keyexpr" to handle the message appropriately, so we extract
-  // that from the sample in the next few lines and will pass it to the user
-  // callback selected from our active callbacks via "subscription_keyexpr".
+  // Zenoh allows wildcards in subscription key expressions (`in/**`), so the
+  // incoming sample's key expression (`in/FOO_42/BAR/BAZ`) can differ from the
+  // registered subscription key expression. Pass the incoming sample's key
+  // expression to the user callbacks on `sub`.
   z_view_string_t sample_keyexpr;
   z_keyexpr_as_view_string(z_sample_keyexpr(sample), &sample_keyexpr);
   const string sample_keyexpr_str(
       std::string_view(z_string_data(z_loan(sample_keyexpr)),
                        z_string_len(z_loan(sample_keyexpr))));
 
-  std::list<std::shared_ptr<IMWZenohSubscription>> matches;
-  {
-    // This mutex is used to ensure that calls to create/destroy
-    // publisher/subscription coming from different threads will block until
-    // we're done iterating through those containers in this callback
-    absl::MutexLock lock(&subscriptions_mutex_);
-
-    for (auto it = subscriptions_.begin(); it != subscriptions_.end(); ++it) {
-      if ((*it)->get_keyexpr() == subscription_keyexpr) {
-        // create a shared_ptr to the subscription to make sure nobody else
-        // deletes this one after we release the subscriptions_mutex_ and
-        // start invoking its callbacks
-        matches.push_back(*it);
-      }
-    }
+  const imw_message_metadata_t metadata = ExtractMessageMetadata(sample);
+  if (metadata.kind == IMW_MESSAGE_KIND_DELETE) {
+    sub.invoke_callbacks(sample_keyexpr_str.c_str(), nullptr, 0, metadata);
+    return;
   }
-
-  if (!matches.empty()) {
-    z_owned_slice_t slice;
-    const z_result_t result =
-        ze_deserialize_slice(z_sample_payload(sample), &slice);
-    if (result < 0) {
-      LOG(ERROR) << "Unable to deserialize slice for sample_keyexpr "
-                 << sample_keyexpr_str;
-    }
-    for (auto match : matches) {
-      match->invoke_callbacks(sample_keyexpr_str.c_str(),
-                              z_slice_data(z_loan(slice)),
-                              z_slice_len(z_loan(slice)));
-    }
-    z_drop(z_move(slice));
-  } else {
-    LOG(ERROR) << "No subscriber for sample_keyexpr " << sample_keyexpr_str
-               << " with subscription_keyexpr " << subscription_keyexpr;
+  z_owned_slice_t slice;
+  if (!DecodeMessagePayload(sample, metadata.encoding, /*raw_override=*/false,
+                            &slice)) {
+    LOG(ERROR) << "Unable to deserialize slice for sample_keyexpr "
+               << sample_keyexpr_str;
+    return;
   }
+  sub.invoke_callbacks(sample_keyexpr_str.c_str(), z_slice_data(z_loan(slice)),
+                       z_slice_len(z_loan(slice)), metadata);
+  z_drop(z_move(slice));
 }
 
 void IMWZenoh::liveliness_get_callback(z_loaned_reply_t* reply,
@@ -1017,24 +1159,20 @@ imw_ret_t IMWZenoh::query(const char* keyexpr, imw_query_callback_fn* callback,
 }
 
 imw_ret_t IMWZenoh::set(const char* keyexpr, const void* bytes,
-                        const size_t bytes_len) {
+                        const size_t bytes_len, imw_encoding_t encoding) {
   z_view_keyexpr_t view_keyexpr;
-  if (Z_OK != z_view_keyexpr_from_str(&view_keyexpr, keyexpr)) {
-    LOG(ERROR) << "Invalid keyexpr for set: " << keyexpr;
+  if (!ValidateSetArgs(session_, keyexpr, encoding, &view_keyexpr)) {
     return IMW_ERROR;
   }
 
   z_owned_bytes_t payload;
-  ze_serialize_buf(&payload, static_cast<const uint8_t*>(bytes), bytes_len);
+  if (!SerializePayloadForEncoding(bytes, bytes_len, encoding,
+                                   /*raw_override=*/false, &payload)) {
+    return IMW_ERROR;
+  }
 
-  z_put_options_t opts;
-  z_put_options_default(&opts);
-  opts.reliability = Z_RELIABILITY_RELIABLE;
-  opts.congestion_control = Z_CONGESTION_CONTROL_BLOCK;
-  const int8_t result =
-      z_put(z_loan(session_), z_loan(view_keyexpr), z_move(payload), &opts);
-
-  return result == 0 ? IMW_OK : IMW_ERROR;
+  return PutPayloadWithEncoding(z_loan(session_), z_loan(view_keyexpr),
+                                &payload, encoding);
 }
 
 imw_ret_t IMWZenoh::delete_keyexpr(const char* keyexpr) {

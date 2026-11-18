@@ -87,7 +87,8 @@ class IMWZenoh {
                             const void* reply_bytes,
                             const size_t reply_bytes_len);
 
-  imw_ret_t set(const char* keyexpr, const void* bytes, const size_t bytes_len);
+  imw_ret_t set(const char* keyexpr, const void* bytes, const size_t bytes_len,
+                imw_encoding_t encoding = IMW_ENCODING_VARINT_PREFIXED_BYTES);
 
   imw_ret_t delete_keyexpr(const char* keyexpr);
 
@@ -131,8 +132,8 @@ class IMWZenoh {
     std::weak_ptr<IMWZenohLivelinessSubscription> subscription;
   };
 
-  void data_callback(const std::string& subscription_keyexpr,
-                     const z_loaned_sample_t* sample);
+  static void data_callback(IMWZenohSubscription& sub,
+                            const z_loaned_sample_t* sample);
   void queryable_callback(const std::string& queryable_keyexpr,
                           const z_loaned_query_t* sample);
   void query_callback(const char* keyexpr, imw_query_callback_fn* user_callback,

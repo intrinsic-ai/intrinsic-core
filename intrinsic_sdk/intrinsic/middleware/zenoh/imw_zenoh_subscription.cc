@@ -25,8 +25,9 @@ namespace intrinsic {
 
 IMWZenohSubscription::IMWZenohSubscription(
     const std::string& keyexpr, imw_subscription_callback_fn* callback,
-    z_owned_subscriber_t zenoh_sub, void* user_context)
-    : keyexpr_(keyexpr), zenoh_sub_(zenoh_sub), n_bytes(0), n_messages(0) {
+    void* user_context)
+    : keyexpr_(keyexpr), n_bytes(0), n_messages(0) {
+  z_internal_subscriber_null(&zenoh_sub_);
   callbacks_.push_back(std::make_pair(callback, user_context));
 }
 
@@ -69,9 +70,9 @@ bool IMWZenohSubscription::remove_callback(imw_subscription_callback_fn* fptr,
   return false;
 }
 
-void IMWZenohSubscription::invoke_callbacks(const char* keyexpr,
-                                            const void* blob,
-                                            const size_t blob_len) {
+void IMWZenohSubscription::invoke_callbacks(
+    const char* keyexpr, const void* blob, size_t blob_len,
+    const imw_message_metadata_t& /*metadata*/) {
   // People writing callbacks probably are assuming they are non-reentrant,
   // so we'll use a mutex to make sure that's true!
   absl::MutexLock lock(&mutex_);

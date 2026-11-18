@@ -14,15 +14,15 @@
 
 #include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_data_callback_context.h"
 
-using std::string;
+#include <memory>
+#include <utility>
 
 namespace intrinsic {
 
 IMWZenohDataCallbackContext::IMWZenohDataCallbackContext(
-    IMWZenoh* imw_zenoh_instance, const std::string& subscription_keyexpr)
-    : imw_zenoh_instance_(imw_zenoh_instance),
-      subscription_keyexpr_(subscription_keyexpr) {}
+    std::weak_ptr<IMWZenohSubscription> subscription)
+    : subscription_(std::move(subscription)) {}
 
-IMWZenohDataCallbackContext::~IMWZenohDataCallbackContext() {}
+IMWZenohDataCallbackContext::~IMWZenohDataCallbackContext() = default;
 
 }  // namespace intrinsic

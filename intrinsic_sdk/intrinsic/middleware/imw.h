@@ -28,6 +28,35 @@ typedef enum imw_ret {
   IMW_ALREADY_EXISTS = 4,
 } imw_ret_t;
 
+typedef enum imw_encoding : int {
+  // Legacy VarInt length-prefixed framing (`ze_serialize_buf`) with Zenoh's
+  // default `zenoh/bytes` encoding. Used by `imw_publish`, `imw_set`,
+  // `imw_query`, and `imw_queryable_reply`.
+  IMW_ENCODING_VARINT_PREFIXED_BYTES = 0,
+  // Unframed raw byte payload (`z_bytes_copy_from_buf` / `z_bytes_from_buf` /
+  // `z_bytes_to_slice`) tagged with Zenoh's schema-qualified
+  // `application/octet-stream;intrinsic.raw` encoding so untyped HTTP REST
+  // `PUT` payloads (bare `application/octet-stream`) continue decoding as
+  // `IMW_ENCODING_VARINT_PREFIXED_BYTES`.
+  IMW_ENCODING_APPLICATION_OCTET_STREAM = 1,
+  // Unframed serialized Protobuf payload tagged with Zenoh's
+  // `application/protobuf` encoding.
+  IMW_ENCODING_APPLICATION_PROTOBUF = 2,
+  // Unrecognized incoming Zenoh MIME encoding (read-only metadata value;
+  // rejected by write and reply APIs).
+  IMW_ENCODING_UNKNOWN = 3,
+} imw_encoding_t;
+
+typedef enum imw_message_kind : int {
+  IMW_MESSAGE_KIND_PUT = 0,
+  IMW_MESSAGE_KIND_DELETE = 1,
+} imw_message_kind_t;
+
+struct imw_message_metadata_t {
+  imw_message_kind_t kind = IMW_MESSAGE_KIND_PUT;
+  imw_encoding_t encoding = IMW_ENCODING_VARINT_PREFIXED_BYTES;
+};
+
 typedef void imw_subscription_callback_fn(const char* keyexpr,
                                           const void* bytes,
                                           const size_t bytes_len,
@@ -107,6 +136,9 @@ imw_ret_t imw_query(const char* keyexpr, imw_query_callback_fn* callback,
                     void* user_context, imw_query_options_t* options);
 imw_ret_t imw_set(const char* keyexpr, const void* bytes,
                   const size_t bytes_len);
+imw_ret_t imw_set_with_encoding(const char* keyexpr, const void* bytes,
+                                const size_t bytes_len,
+                                imw_encoding_t encoding);
 imw_ret_t imw_delete_keyexpr(const char* keyexpr);
 imw_ret_t imw_create_liveliness_subscription(
     const char* keyexpr, imw_liveliness_callback_fn* callback,

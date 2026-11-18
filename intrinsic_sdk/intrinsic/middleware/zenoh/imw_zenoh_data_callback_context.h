@@ -15,36 +15,29 @@
 #ifndef MIDDLEWARE_ZENOH_IMW_ZENOH_DATA_CALLBACK_CONTEXT_H_
 #define MIDDLEWARE_ZENOH_IMW_ZENOH_DATA_CALLBACK_CONTEXT_H_
 
-#include <string>
+#include <memory>
 
 namespace intrinsic {
 
-class IMWZenoh;
+class IMWZenohSubscription;
 
 class IMWZenohDataCallbackContext {
  public:
-  IMWZenohDataCallbackContext(IMWZenoh* imw_zenoh_instance,
-                              const std::string& subscription_keyexpr);
+  explicit IMWZenohDataCallbackContext(
+      std::weak_ptr<IMWZenohSubscription> subscription);
   ~IMWZenohDataCallbackContext();
 
-  // Move constructor is fine
   IMWZenohDataCallbackContext(IMWZenohDataCallbackContext&& other) = default;
-
-  // Because of the pointer to the singleton, let's just disable copy
-  // constructors so we don't have to think any harder about if they're valid
-  // or not.
   IMWZenohDataCallbackContext(const IMWZenohDataCallbackContext&) = delete;
   IMWZenohDataCallbackContext& operator=(const IMWZenohDataCallbackContext&) =
       delete;
 
-  IMWZenoh* get_imw_zenoh_instance() { return imw_zenoh_instance_; }
-  const std::string& get_subscription_keyexpr() {
-    return subscription_keyexpr_;
+  const std::weak_ptr<IMWZenohSubscription>& get_subscription() const {
+    return subscription_;
   }
 
  private:
-  IMWZenoh* imw_zenoh_instance_;
-  std::string subscription_keyexpr_;
+  std::weak_ptr<IMWZenohSubscription> subscription_;
 };
 
 }  // namespace intrinsic

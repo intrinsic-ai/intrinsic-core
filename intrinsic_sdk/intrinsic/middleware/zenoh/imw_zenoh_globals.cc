@@ -156,11 +156,14 @@ imw_ret_t DestroyEntity(Fn&& fn)
 
 void IMWZenoh::static_data_callback(z_loaned_sample_t* sample,
                                     void* untyped_context) {
-  IMWZenohDataCallbackContext* zenoh_context =
+  auto* zenoh_context =
       static_cast<IMWZenohDataCallbackContext*>(untyped_context);
-
-  zenoh_context->get_imw_zenoh_instance()->data_callback(
-      zenoh_context->get_subscription_keyexpr(), sample);
+  std::shared_ptr<IMWZenohSubscription> sub =
+      zenoh_context->get_subscription().lock();
+  if (sub == nullptr) {
+    return;
+  }
+  IMWZenoh::data_callback(*sub, sample);
 }
 
 void IMWZenoh::static_liveliness_callback(z_loaned_sample_t* sample,
@@ -398,6 +401,14 @@ imw_ret_t imw_set(const char* keyexpr, const void* bytes,
   const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
   if (singleton == nullptr) return IMW_NOT_INITIALIZED;
   return singleton->set(keyexpr, bytes, bytes_len);
+}
+
+imw_ret_t imw_set_with_encoding(const char* keyexpr, const void* bytes,
+                                const size_t bytes_len,
+                                imw_encoding_t encoding) {
+  const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
+  if (singleton == nullptr) return IMW_NOT_INITIALIZED;
+  return singleton->set(keyexpr, bytes, bytes_len, encoding);
 }
 
 imw_ret_t imw_delete_keyexpr(const char* keyexpr) {

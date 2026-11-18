@@ -30,7 +30,7 @@ class IMWZenohSubscription {
  public:
   IMWZenohSubscription(const std::string& keyexpr,
                        imw_subscription_callback_fn* callback,
-                       z_owned_subscriber_t zenoh_sub, void* user_context);
+                       void* user_context);
 
   IMWZenohSubscription(IMWZenohSubscription&& other) = delete;
   IMWZenohSubscription(const IMWZenohSubscription&) = delete;
@@ -38,6 +38,7 @@ class IMWZenohSubscription {
 
   ~IMWZenohSubscription();
 
+  void set_zenoh_sub(z_owned_subscriber_t zenoh_sub) { zenoh_sub_ = zenoh_sub; }
   z_owned_subscriber_t& get_zenoh_sub() { return zenoh_sub_; }
   const std::string& get_keyexpr() const { return keyexpr_; }
   void add_callback(imw_subscription_callback_fn* fptr, void* user_context);
@@ -45,8 +46,8 @@ class IMWZenohSubscription {
                        const void* user_context);
   bool clear_callbacks();
   bool is_empty() const { return callbacks_.empty(); }
-  void invoke_callbacks(const char* keyexpr, const void* blob,
-                        const size_t blob_len);
+  void invoke_callbacks(const char* keyexpr, const void* blob, size_t blob_len,
+                        const imw_message_metadata_t& metadata);
   struct Statistics {
     size_t n_messages;
     size_t n_bytes;
