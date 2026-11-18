@@ -92,6 +92,13 @@ platform(
         "@llvm//constraints/libc:gnu.2.31",
     ],
     exec_properties = DEFAULT,
+    # Build for the Haswell architecture when this platform is the target
+    # platform. The flags are set on the platform rather than in .bazelrc so
+    # that they are not applied to other target platforms, e.g. linux_arm64.
+    flags = [
+        "--cpu=haswell",
+        "--copt=-mcrc32",
+    ],
     parents = ["@platforms//host"],
 )
 

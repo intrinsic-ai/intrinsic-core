@@ -208,6 +208,10 @@ common --host_per_file_copt=google3/third_party/.*,intrinsic_sdk/third_party/.*,
 # switch between --config=remote (RBE) and local builds without discarding the
 # analysis cache.
 common --host_platform=//intrinsic_sdk/bazel:linux_x86_64
+# Name the default target platform explicitly, so that the flags of the
+# platform are applied without a configuration hash in the output directory
+# (bazel-out/haswell-opt).
+common --platforms=//intrinsic_sdk/bazel:linux_x86_64
 
 # Opt out of 3P telemetry tracking.
 common --repo_env=DO_NOT_TRACK=1
@@ -228,7 +232,6 @@ common:benchmark --features=-prefer_pic_for_opt_binaries
 # --config haswell for building for the Haswell architecture.
 common:haswell --cpu=haswell
 common:haswell --copt=-mcrc32
-common --config=haswell
 
 # Address sanitizer
 common:asan --strip=never
