@@ -78,7 +78,7 @@ def check_rotation_matrix(
         '%s: %s\n %s\n%s'
         % (MATRIX_WRONG_SHAPE_MESSAGE, matrix.shape, matrix, err_msg)
     )
-  matrix3x3 = np.array(matrix, dtype=np.float64, copy=False)[:3, :3]
+  matrix3x3 = np.asarray(matrix, dtype=np.float64)[:3, :3]
   # If matrix3x3 is a rotation matrix, matrix3x3 * matrix3x3' should be the
   # identity matrix.
   eye = np.matmul(matrix3x3, np.transpose(matrix3x3))
@@ -545,7 +545,7 @@ class Rotation3(object):
       ValueError: If input is not a rotation matrix.
     """
     check_rotation_matrix(matrix, rtol=rtol, atol=atol, err_msg=err_msg)
-    matrix3x3 = np.array(matrix, dtype=np.float64, copy=False)[:3, :3]
+    matrix3x3 = np.asarray(matrix, dtype=np.float64)[:3, :3]
     q_xyzw = np.zeros(4, dtype=np.float64)
     trace = np.trace(matrix3x3) + 1
     # Solve for the largest quaternion component first.
