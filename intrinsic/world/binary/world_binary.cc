@@ -38,13 +38,15 @@
 #include "grpcpp/support/time.h"
 #include "intrinsic/conductor/conductor.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
+#include "intrinsic/geometry/storage/cas_and_kvstore_storage.h"
 #include "intrinsic/geometry/storage/cas_client.h"
-#include "intrinsic/geometry/storage/cas_storage.h"
 #include "intrinsic/geometry/storage/geo_cache.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/icon/equipment/channel_factory.h"
 #include "intrinsic/icon/release/portable/init_intrinsic.h"
 #include "intrinsic/logging/data_logger_client.h"
+#include "intrinsic/platform/pubsub/kvstore.h"
+#include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/resources/client/resource_registry_client.h"
 #include "intrinsic/stats/opencensus.h"
 #include "intrinsic/storage/content_addressable_storage/proto/cas_service.grpc.pb.h"
@@ -153,11 +155,18 @@ int main(int argc, char** argv) {
       intrinsic::geo::MakeCASServiceStub(
           absl::GetFlag(FLAGS_cas_service_address)));
 
+  const intrinsic::PubSub pubsub;
+  ASSIGN_OR_DIE(intrinsic::KeyValueStore kv_store_value,
+                pubsub.KeyValueStore());
+  const auto kv_store =
+      std::make_shared<intrinsic::KeyValueStore>(std::move(kv_store_value));
+
   intrinsic::geo::GeometryFingerprintCache geo_cache;
   std::shared_future<std::unique_ptr<intrinsic::GeometryLibrary>> geo_lib =
-      std::async(std::launch::async, [&geo_cache,
-                                      cas_stub = cas_service_stub]() {
-        return intrinsic::GetCasGeometryLibrary(cas_stub, nullptr, geo_cache);
+      std::async(std::launch::async, [&geo_cache, cas_stub = cas_service_stub,
+                                      kv_store]() {
+        RETURN_OR_DIE(intrinsic::geo::CreateCasAndKvStoreGeometryLibrary(
+            cas_stub, /*context=*/nullptr, geo_cache, kv_store));
       }).share();
 
   // Worlds are kept in memory only, i.e., they are neither loaded from nor
@@ -184,15 +193,16 @@ int main(int argc, char** argv) {
           intrinsic::object_world::ObjectWorld::VerifyWorldCouldBeCompatible,
           PointerFromSharedFuture(geo_lib)));
 
-  ASSIGN_OR_DIE(std::unique_ptr<intrinsic::object_world::ObjectWorldService>
-                    object_world_service,
-                intrinsic::object_world::ObjectWorldService::CreateService(
-                    PointerFromSharedFuture(world_storage),
-                    [&geo_cache, cas_stub = cas_service_stub](
-                        grpc::ServerContext* context) {
-                      return intrinsic::GetCasGeometryLibrary(cas_stub, nullptr,
-                                                              geo_cache);
-                    }));
+  ASSIGN_OR_DIE(
+      std::unique_ptr<intrinsic::object_world::ObjectWorldService>
+          object_world_service,
+      intrinsic::object_world::ObjectWorldService::CreateService(
+          PointerFromSharedFuture(world_storage),
+          [&geo_cache, cas_stub = cas_service_stub,
+           kv_store](grpc::ServerContext* context) {
+            RETURN_OR_DIE(intrinsic::geo::CreateCasAndKvStoreGeometryLibrary(
+                cas_stub, /*context=*/nullptr, geo_cache, kv_store));
+          }));
 
   if (std::string data_logger_address =
           absl::GetFlag(FLAGS_data_logger_grpc_service_address);
