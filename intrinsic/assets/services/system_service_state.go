@@ -180,13 +180,10 @@ func (s *server) GetInstanceState(ctx context.Context, req *systemservicestatepb
 		}, nil
 	}
 
-	containerName := render.ResourceContainerName(req.GetName())
-	cs, err := s.k8sContainerState(containerName)
+	state, err := s.containerState(req.GetName())
 	if err != nil {
 		return nil, err
 	}
-
-	state := stateFromContainerState(cs, req.GetName())
 	if state.StateCode == systemservicestatepb.State_STATE_CODE_ENABLED && serviceHandler.supportsServiceState {
 		timeoutCtx, cancel := context.WithTimeout(ctx, s.reportedStateTimeout)
 		defer cancel()
@@ -248,12 +245,10 @@ func (s *server) EnableService(ctx context.Context, req *systemservicestatepb.En
 		return nil, status.Errorf(codes.FailedPrecondition, "service state gRPC client could not be created")
 	}
 
-	containerName := render.ResourceContainerName(req.GetName())
-	cs, err := s.k8sContainerState(containerName)
+	state, err := s.containerState(req.GetName())
 	if err != nil {
 		return nil, status.Errorf(status.Code(err), "failed to get k8s container state: %v", err)
 	}
-	state := stateFromContainerState(cs, req.GetName())
 	if state.StateCode == systemservicestatepb.State_STATE_CODE_STOPPED {
 		return nil, status.Errorf(codes.FailedPrecondition, "service cannot be enabled from stopped state")
 	}
@@ -285,12 +280,10 @@ func (s *server) DisableService(ctx context.Context, req *systemservicestatepb.D
 		return nil, status.Errorf(codes.FailedPrecondition, "service state gRPC client could not be created")
 	}
 
-	containerName := render.ResourceContainerName(req.GetName())
-	cs, err := s.k8sContainerState(containerName)
+	state, err := s.containerState(req.GetName())
 	if err != nil {
 		return nil, status.Errorf(status.Code(err), "failed to get k8s container state: %v", err)
 	}
-	state := stateFromContainerState(cs, req.GetName())
 	if state.StateCode == systemservicestatepb.State_STATE_CODE_STOPPED {
 		return nil, status.Errorf(codes.FailedPrecondition, "service cannot be disabled from stopped state")
 	}
@@ -427,6 +420,23 @@ func (s *server) removeServiceHandler(cm *corev1.ConfigMap) {
 			sh.clientConn.Close()
 		}
 	}
+}
+
+// containerState returns the state of the k8s container that runs the registered Service instance
+// with the provided name. An instance without a pod or container counts as stopped, e.g. while its
+// pod is being scheduled.
+//
+// Callers must check that the instance is registered (has a service handler) before calling this,
+// since a NotFound error from k8s is only a stopped instance if the instance itself exists.
+func (s *server) containerState(instanceName string) (*systemservicestatepb.State, error) {
+	cs, err := s.k8sContainerState(render.ResourceContainerName(instanceName))
+	if status.Code(err) == codes.NotFound {
+		return &systemservicestatepb.State{StateCode: systemservicestatepb.State_STATE_CODE_STOPPED}, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	return stateFromContainerState(cs, instanceName), nil
 }
 
 // k8sContainerState is a helper for getting the state of the k8s container that is running the
