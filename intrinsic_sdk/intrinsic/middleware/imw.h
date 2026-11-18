@@ -92,6 +92,11 @@ typedef void imw_query_callback_fn(const char* keyexpr,
                                    const size_t response_bytes_len,
                                    void* user_context);
 
+typedef void imw_query_message_callback_fn(
+    const char* keyexpr, const void* response_bytes,
+    const size_t response_bytes_len, const imw_message_metadata_t* metadata,
+    void* user_context);
+
 typedef void imw_query_on_done_callback_fn(const char* keyexpr,
                                            void* user_context);
 
@@ -137,13 +142,31 @@ imw_ret_t imw_create_queryable(const char* keyexpr,
 imw_ret_t imw_destroy_queryable(const char* keyexpr,
                                 imw_queryable_callback_fn* callback,
                                 void* user_context);
+// TODO(b/585305522): Once `ZenohHandle` function-pointer indirection
+// (b/548680642) and the `IMW_ENCODING_APPLICATION_PROTOBUF` write cutover
+// (b/585031754) complete, collapse `imw_set` and `imw_set_with_encoding` into
+// one defaulted `imw_set` signature (and `imw_queryable_reply` and
+// `imw_queryable_reply_with_encoding` into one defaulted
+// `imw_queryable_reply`), while keeping PUT-only `imw_query` distinct
+// from tombstone-delivering `imw_query_messages`.
 imw_ret_t imw_queryable_reply(const void* query_context, const char* keyexpr,
                               const void* reply_bytes,
                               const size_t reply_bytes_len);
+imw_ret_t imw_queryable_reply_with_encoding(const void* query_context,
+                                            const char* keyexpr,
+                                            const void* reply_bytes,
+                                            const size_t reply_bytes_len,
+                                            imw_encoding_t encoding);
 imw_ret_t imw_query(const char* keyexpr, imw_query_callback_fn* callback,
                     imw_query_on_done_callback_fn* on_done,
                     const void* query_payload, const size_t query_payload_len,
                     void* user_context, imw_query_options_t* options);
+imw_ret_t imw_query_messages(const char* keyexpr,
+                             imw_query_message_callback_fn* callback,
+                             imw_query_on_done_callback_fn* on_done,
+                             const void* query_payload,
+                             const size_t query_payload_len, void* user_context,
+                             imw_query_options_t* options);
 imw_ret_t imw_set(const char* keyexpr, const void* bytes,
                   const size_t bytes_len);
 imw_ret_t imw_set_with_encoding(const char* keyexpr, const void* bytes,

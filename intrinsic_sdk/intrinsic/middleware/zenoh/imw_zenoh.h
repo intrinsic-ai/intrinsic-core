@@ -79,6 +79,12 @@ class IMWZenoh {
                   imw_query_on_done_callback_fn* on_done,
                   const void* query_payload, const size_t query_payload_len,
                   void* user_context, imw_query_options_t* options);
+  imw_ret_t query_messages(const char* keyexpr,
+                           imw_query_message_callback_fn* callback,
+                           imw_query_on_done_callback_fn* on_done,
+                           const void* query_payload,
+                           const size_t query_payload_len, void* user_context,
+                           imw_query_options_t* options);
 
   imw_ret_t create_queryable(const char* keyexpr,
                              imw_queryable_callback_fn* callback,
@@ -89,9 +95,10 @@ class IMWZenoh {
                               imw_queryable_callback_fn* callback,
                               void* user_context);
 
-  imw_ret_t queryable_reply(const void* query_context, const char* keyexpr,
-                            const void* reply_bytes,
-                            const size_t reply_bytes_len);
+  imw_ret_t queryable_reply(
+      const void* query_context, const char* keyexpr, const void* reply_bytes,
+      const size_t reply_bytes_len,
+      imw_encoding_t encoding = IMW_ENCODING_VARINT_PREFIXED_BYTES);
 
   imw_ret_t set(const char* keyexpr, const void* bytes, const size_t bytes_len,
                 imw_encoding_t encoding = IMW_ENCODING_VARINT_PREFIXED_BYTES);
@@ -137,7 +144,6 @@ class IMWZenoh {
   struct LivelinessCallbackContext {
     std::weak_ptr<IMWZenohLivelinessSubscription> subscription;
   };
-
   imw_ret_t create_subscription_internal(
       const char* keyexpr, imw_subscription_callback_fn* legacy_callback,
       imw_subscription_message_callback_fn* message_callback, const char* qos,
@@ -146,12 +152,19 @@ class IMWZenoh {
       const char* keyexpr, imw_subscription_callback_fn* legacy_callback,
       imw_subscription_message_callback_fn* message_callback,
       const void* user_context);
+  imw_ret_t query_internal(const char* keyexpr, imw_query_callback_fn* callback,
+                           imw_query_message_callback_fn* message_callback,
+                           imw_query_on_done_callback_fn* on_done,
+                           const void* query_payload,
+                           const size_t query_payload_len, void* user_context,
+                           imw_query_options_t* options);
 
   static void data_callback(IMWZenohSubscription& sub,
                             const z_loaned_sample_t* sample);
   void queryable_callback(const std::string& queryable_keyexpr,
                           const z_loaned_query_t* sample);
   void query_callback(const char* keyexpr, imw_query_callback_fn* user_callback,
+                      imw_query_message_callback_fn* message_callback,
                       z_loaned_reply_t* reply, void* user_context,
                       const imw_query_options_t* options);
   void liveliness_get_callback(z_loaned_reply_t* reply,

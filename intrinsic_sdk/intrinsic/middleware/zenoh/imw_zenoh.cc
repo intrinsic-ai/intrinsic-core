@@ -1079,6 +1079,7 @@ int IMWZenoh::keyexpr_is_canon(const char* keyexpr) {
 
 void IMWZenoh::query_callback(const char* keyexpr,
                               imw_query_callback_fn* user_callback,
+                              imw_query_message_callback_fn* message_callback,
                               z_loaned_reply_t* reply, void* user_context,
                               const imw_query_options_t* options) {
   if (!z_reply_is_ok(reply)) {
@@ -1092,28 +1093,46 @@ void IMWZenoh::query_callback(const char* keyexpr,
   const std::string reply_keyexpr_str(
       std::string_view(z_string_data(z_loan(reply_keyexpr)),
                        z_string_len(z_loan(reply_keyexpr))));
-  z_owned_slice_t slice;
-  z_result_t result = Z_OK;
-  if (options->call_ros_service) {
-    result = z_bytes_to_slice(z_sample_payload(sample), &slice);
-  } else {
-    result = ze_deserialize_slice(z_sample_payload(sample), &slice);
+  const imw_message_metadata_t metadata = ExtractMessageMetadata(sample);
+  const bool raw_override = (options != nullptr) && options->call_ros_service;
+  if (metadata.kind == IMW_MESSAGE_KIND_DELETE) {
+    if (message_callback != nullptr) {
+      message_callback(reply_keyexpr_str.c_str(), nullptr, 0, &metadata,
+                       user_context);
+    }
+    return;
   }
-  if (Z_OK != result) {
+  z_owned_slice_t slice;
+  if (!DecodeMessagePayload(sample, metadata.encoding, raw_override, &slice)) {
     LOG(ERROR) << "Unable to deserialize reply slice for reply keyexpr "
                << reply_keyexpr_str;
-  } else {
+    return;
+  }
+  if (message_callback != nullptr) {
+    message_callback(reply_keyexpr_str.c_str(), z_slice_data(z_loan(slice)),
+                     z_slice_len(z_loan(slice)), &metadata, user_context);
+  } else if (user_callback != nullptr) {
     user_callback(reply_keyexpr_str.c_str(), z_slice_data(z_loan(slice)),
                   z_slice_len(z_loan(slice)), user_context);
   }
   z_drop(z_move(slice));
 }
 
-imw_ret_t IMWZenoh::query(const char* keyexpr, imw_query_callback_fn* callback,
-                          imw_query_on_done_callback_fn* on_done,
-                          const void* query_payload,
-                          const size_t query_payload_len, void* user_context,
-                          imw_query_options_t* options) {
+imw_ret_t IMWZenoh::query_internal(
+    const char* keyexpr, imw_query_callback_fn* callback,
+    imw_query_message_callback_fn* message_callback,
+    imw_query_on_done_callback_fn* on_done, const void* query_payload,
+    const size_t query_payload_len, void* user_context,
+    imw_query_options_t* options) {
+  if (!z_internal_check(session_)) {
+    LOG(ERROR) << "Invalid session in IMWZenoh::query";
+    return IMW_ERROR;
+  }
+  if (keyexpr == nullptr ||
+      (callback == nullptr && message_callback == nullptr)) {
+    LOG(ERROR) << "Invalid arguments for query";
+    return IMW_ERROR;
+  }
   z_view_keyexpr_t view_keyexpr;
   if (Z_OK != z_view_keyexpr_from_str(&view_keyexpr, keyexpr)) {
     LOG(ERROR) << "Invalid keyexpr for query: " << keyexpr;
@@ -1121,9 +1140,10 @@ imw_ret_t IMWZenoh::query(const char* keyexpr, imw_query_callback_fn* callback,
   }
 
   z_owned_closure_reply_t reply_closure;
-  z_closure_reply(&reply_closure, static_query_callback, static_query_drop,
-                  new IMWZenohQueryContext(this, keyexpr, callback, on_done,
-                                           user_context, options));
+  z_closure_reply(
+      &reply_closure, static_query_callback, static_query_drop,
+      new IMWZenohQueryContext(this, keyexpr, callback, message_callback,
+                               on_done, user_context, options));
   z_get_options_t opts;
   z_get_options_default(&opts);
 
@@ -1210,6 +1230,28 @@ imw_ret_t IMWZenoh::query(const char* keyexpr, imw_query_callback_fn* callback,
     return IMW_ERROR;
   }
   return IMW_OK;
+}
+
+imw_ret_t IMWZenoh::query(const char* keyexpr, imw_query_callback_fn* callback,
+                          imw_query_on_done_callback_fn* on_done,
+                          const void* query_payload,
+                          const size_t query_payload_len, void* user_context,
+                          imw_query_options_t* options) {
+  return query_internal(keyexpr, callback, /*message_callback=*/nullptr,
+                        on_done, query_payload, query_payload_len, user_context,
+                        options);
+}
+
+imw_ret_t IMWZenoh::query_messages(const char* keyexpr,
+                                   imw_query_message_callback_fn* callback,
+                                   imw_query_on_done_callback_fn* on_done,
+                                   const void* query_payload,
+                                   const size_t query_payload_len,
+                                   void* user_context,
+                                   imw_query_options_t* options) {
+  return query_internal(keyexpr, /*callback=*/nullptr, callback, on_done,
+                        query_payload, query_payload_len, user_context,
+                        options);
 }
 
 imw_ret_t IMWZenoh::set(const char* keyexpr, const void* bytes,
@@ -1366,11 +1408,23 @@ imw_ret_t IMWZenoh::destroy_queryable(const char* keyexpr,
 imw_ret_t IMWZenoh::queryable_reply(const void* untyped_reply_context,
                                     const char* reply_keyexpr,
                                     const void* reply_bytes,
-                                    const size_t reply_bytes_len) {
+                                    const size_t reply_bytes_len,
+                                    imw_encoding_t encoding) {
+  if (!z_internal_check(session_)) {
+    LOG(ERROR) << "Invalid session in IMWZenoh::queryable_reply";
+    return IMW_ERROR;
+  }
+  if (untyped_reply_context == nullptr || reply_keyexpr == nullptr ||
+      !IsValidEncoding(encoding)) {
+    LOG(ERROR) << "Invalid arguments in IMWZenoh::queryable_reply";
+    return IMW_ERROR;
+  }
   const IMWZenohReplyContext* reply_context =
       static_cast<const IMWZenohReplyContext*>(untyped_reply_context);
-  z_query_reply_options_t options;
-  z_query_reply_options_default(&options);
+  if (reply_context->query_ == nullptr) {
+    LOG(ERROR) << "Null query in IMWZenoh::queryable_reply";
+    return IMW_ERROR;
+  }
 
   z_view_keyexpr_t reply_view_keyexpr;
   if (Z_OK != z_view_keyexpr_from_str(&reply_view_keyexpr, reply_keyexpr)) {
@@ -1378,38 +1432,31 @@ imw_ret_t IMWZenoh::queryable_reply(const void* untyped_reply_context,
     return IMW_ERROR;
   }
 
-  // Due to unfortunate historical reasons, payloads were originally copied
-  // into and out of Zenoh using ze_serialize_buf() and ze_deserialize_slice().
-  // This works fine, but adds a VarInt field (1-8 bytes, depending on the
-  // value) before the byte block begins.  The only penalty is the extra few
-  // bytes of that VarInt, so it was left as-is to avoid potential
-  // incompatibility and regressions with already-deployed services. However,
-  // when interoperating with rmw_zenoh ROS services and clients, the rmw_zenoh
-  // side does not insert (or remove) the VarInt at the beginning of the
-  // payload. As a result, for deserialization to start on the correct byte, we
-  // must not write the VarInt. This is, of course, what we meant to do
-  // originally for intra-Flowstate transport, and will ideally switch to at
-  // some point.  But for the time being, we stick with the VarInt-prefixed
-  // serialization for intra-Flowstate, and use no prefix for ROS rmw_zenoh
-  // interop, via the functions z_bytes_copy_from_buf() and z_bytes_to_slice().
+  const bool raw_override = (reply_context->options_ != nullptr) &&
+                            reply_context->options_->is_ros_service;
   z_owned_bytes_t reply_payload;
-  if ((reply_context->options_ != nullptr) &&
-      reply_context->options_->is_ros_service) {
-    z_bytes_copy_from_buf(&reply_payload,
-                          static_cast<const uint8_t*>(reply_bytes),
-                          reply_bytes_len);
-  } else {
-    ze_serialize_buf(&reply_payload, static_cast<const uint8_t*>(reply_bytes),
-                     reply_bytes_len);
+  if (!SerializePayloadForEncoding(reply_bytes, reply_bytes_len, encoding,
+                                   raw_override, &reply_payload)) {
+    return IMW_ERROR;
   }
+
+  z_query_reply_options_t options;
+  z_query_reply_options_default(&options);
+  z_owned_encoding_t owned_encoding;
+  bool has_encoding = false;
+  if (AttachZenohEncoding(encoding, &owned_encoding, &has_encoding) != IMW_OK) {
+    z_drop(z_move(reply_payload));
+    return IMW_ERROR;
+  }
+  if (has_encoding) {
+    options.encoding = z_move(owned_encoding);
+  }
+
   const int8_t result =
       z_query_reply(reply_context->query_, z_loan(reply_view_keyexpr),
                     z_move(reply_payload), &options);
 
-  if (result)
-    return IMW_ERROR;
-  else
-    return IMW_OK;
+  return result == 0 ? IMW_OK : IMW_ERROR;
 }
 
 imw_ret_t IMWZenoh::declare_liveliness_token(const char* keyexpr) {

@@ -221,15 +221,15 @@ void IMWZenoh::static_query_callback(z_loaned_reply_t* reply,
   IMWZenohQueryContext* context =
       static_cast<IMWZenohQueryContext*>(untyped_context);
   context->imw_zenoh_instance_->query_callback(
-      context->keyexpr_, context->callback_, reply, context->user_context_,
-      &context->options_);
+      context->keyexpr_.c_str(), context->callback_, context->message_callback_,
+      reply, context->user_context_, &context->options_);
 }
 
 void IMWZenoh::static_query_drop(void* untyped_context) {
   IMWZenohQueryContext* typed_context =
       static_cast<IMWZenohQueryContext*>(untyped_context);
   if (typed_context != nullptr && typed_context->on_done_ != nullptr) {
-    typed_context->on_done_(typed_context->keyexpr_,
+    typed_context->on_done_(typed_context->keyexpr_.c_str(),
                             typed_context->user_context_);
   }
   delete typed_context;
@@ -385,6 +385,17 @@ imw_ret_t imw_queryable_reply(const void* query_context, const char* keyexpr,
                                     reply_bytes_len);
 }
 
+imw_ret_t imw_queryable_reply_with_encoding(const void* query_context,
+                                            const char* keyexpr,
+                                            const void* reply_bytes,
+                                            const size_t reply_bytes_len,
+                                            imw_encoding_t encoding) {
+  const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
+  if (singleton == nullptr) return IMW_NOT_INITIALIZED;
+  return singleton->queryable_reply(query_context, keyexpr, reply_bytes,
+                                    reply_bytes_len, encoding);
+}
+
 imw_ret_t imw_create_queryable(const char* keyexpr,
                                imw_queryable_callback_fn* callback,
                                void* user_context,
@@ -410,6 +421,18 @@ imw_ret_t imw_query(const char* keyexpr, imw_query_callback_fn* callback,
   if (singleton == nullptr) return IMW_NOT_INITIALIZED;
   return singleton->query(keyexpr, callback, on_done, query_payload,
                           query_payload_len, user_context, options);
+}
+
+imw_ret_t imw_query_messages(const char* keyexpr,
+                             imw_query_message_callback_fn* callback,
+                             imw_query_on_done_callback_fn* on_done,
+                             const void* query_payload,
+                             const size_t query_payload_len, void* user_context,
+                             imw_query_options_t* options) {
+  const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
+  if (singleton == nullptr) return IMW_NOT_INITIALIZED;
+  return singleton->query_messages(keyexpr, callback, on_done, query_payload,
+                                   query_payload_len, user_context, options);
 }
 
 imw_ret_t imw_set(const char* keyexpr, const void* bytes,

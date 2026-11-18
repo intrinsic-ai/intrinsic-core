@@ -15,6 +15,8 @@
 #ifndef MIDDLEWARE_ZENOH_IMW_ZENOH_QUERY_CONTEXT_H_
 #define MIDDLEWARE_ZENOH_IMW_ZENOH_QUERY_CONTEXT_H_
 
+#include <string>
+
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
 
 namespace intrinsic {
@@ -25,11 +27,13 @@ class IMWZenohQueryContext {
  public:
   IMWZenohQueryContext(IMWZenoh* imw_zenoh_instance, const char* keyexpr,
                        imw_query_callback_fn* callback,
+                       imw_query_message_callback_fn* message_callback,
                        imw_query_on_done_callback_fn* on_done,
                        void* user_context, imw_query_options_t* options)
       : imw_zenoh_instance_(imw_zenoh_instance),
-        keyexpr_(keyexpr),
+        keyexpr_(keyexpr != nullptr ? keyexpr : ""),
         callback_(callback),
+        message_callback_(message_callback),
         on_done_(on_done),
         user_context_(user_context) {
     if (options != nullptr) {
@@ -38,8 +42,9 @@ class IMWZenohQueryContext {
   }
 
   IMWZenoh* imw_zenoh_instance_;
-  const char* keyexpr_;
+  std::string keyexpr_;
   imw_query_callback_fn* callback_;
+  imw_query_message_callback_fn* message_callback_;
   imw_query_on_done_callback_fn* on_done_;
   void* user_context_;
   imw_query_options_t options_;
