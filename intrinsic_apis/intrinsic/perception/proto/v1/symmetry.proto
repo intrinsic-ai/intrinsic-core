@@ -58,3 +58,8 @@ message Symmetry {
     SphericalSymmetry spherical_symmetry = 3;
   }
 }
+
+// Defines a list of symmetries.
+message Symmetries {
+  repeated Symmetry symmetries = 1;
+}
