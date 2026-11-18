@@ -61,6 +61,10 @@ service_def {
             key: "nvidia.com/gpu"
             value: "1"
           }
+          requests {
+            key: "nvidia.com/gpu"
+            value: "0"
+          }
         }
         args: [
           "tritonserver",
@@ -122,6 +126,10 @@ service_def {
           limits {
             key: "nvidia.com/gpu"
             value: "1"
+          }
+          requests {
+            key: "nvidia.com/gpu"
+            value: "0"
           }
         }
         args: [
