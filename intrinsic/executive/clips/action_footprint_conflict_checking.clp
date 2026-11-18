@@ -153,17 +153,10 @@
 
 (defrule footprint-waiting-auto-resume
   "Auto-resume waiting action when all blocker dependencies have cleared."
-  ?af <- (plan-action (uid ?waiting-uid) (state FOOTPRINT-CONFLICT-WAITING)
-                      (behavior-call-proto-id ?bc-proto))
+  ?af <- (plan-action (uid ?waiting-uid) (state FOOTPRINT-CONFLICT-WAITING))
   (not (action-footprint-dependency (waiting-action-uid ?waiting-uid)))
  =>
-  ; Reset the state of the plan-action, but keep the action itself (e.g., with
-  ; assigned parameters) to restart it. Normal action execution will take over
-  ; from here.
-  (if (<> ?bc-proto 0) then
-    (pb-clear-field ?bc-proto "skill_execution_data.footprint")
-  )
-  (modify ?af (state SELECTED))
+  (plan-action-reset-for-reprojection ?af)
 )
 
 (defrule footprint-dependency-cleanup-orphan-waiting-action

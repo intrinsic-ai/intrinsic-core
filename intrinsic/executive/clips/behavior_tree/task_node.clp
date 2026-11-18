@@ -454,9 +454,6 @@
   (modify ?node (state RUNNING))
 )
 
-; This rule is triggered on resume for actions that were reset to ACCEPTED
-; during suspension (specifically, actions that were in FOOTPRINT-CONFLICT-WAITING).
-; It transitions them back to SELECTED, starting the projection/conflict check from scratch.
 (defrule behavior-tree-task-node-restart-action
   "For a selected task node, select the corresponding plan-action if ACCEPTED"
   (behavior-tree (id ?tree-id) (plan-id ?plan-id) (state RUNNING))
@@ -722,17 +719,10 @@
   ?action <- (plan-action (uid ?action-uid) (plan-id ?plan-id)
                           (state ?action-state&ACCEPTED|SELECTED|PROJECTED|READY|FOOTPRINT-CONFLICT-WAITING))
  =>
-  ; Suspend/resume of a node in FOOTPRINT-CONFLICT-WAITING resets the action,
-  ; i.e., we remove all waiting dependencies here and put the action back to
-  ; ACCEPTED. On resume everything will be re-run and re-checked.
-  (delayed-do-for-all-facts ((?dep action-footprint-dependency))
-      (eq ?dep:waiting-action-uid ?action-uid)
-    (retract ?dep)
-  )
-  ; Reset back to ACCEPTED to start the action from scratch (get footprint)
-  ; when resumed.
+  ; Suspend/resume of a node in FOOTPRINT-CONFLICT-WAITING resets the action. On
+  ; resume everything will be re-run and re-checked.
   (if (eq ?action-state FOOTPRINT-CONFLICT-WAITING) then
-    (modify ?action (state ACCEPTED))
+    (plan-action-reset-for-reprojection ?action)
   )
   (modify ?node (state SUSPENDED) (suspended-from-state ?state)
           (suspend-span-reference-id (tracing-start-suspend-span ?node)))

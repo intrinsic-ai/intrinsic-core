@@ -234,6 +234,34 @@
   (return (nth$ 1 ?new-ids))
 )
 
+; Resets a plan-action to SELECTED so that it starts again from projection
+; (predict/get footprint, conflict checking), e.g., after footprint conflict
+; waiting. Keeps the action itself (e.g., with assigned parameters), but
+; discards all results of the previous projection and conflict check.
+; Projection only starts once the behavior tree is RUNNING, so this is also safe
+; to call while the tree is suspending.
+;
+; Args:
+;   ?af: Fact-address of the plan-action to reset.
+;
+; Returns:
+;   The fact-address of the modified plan-action.
+(deffunction plan-action-reset-for-reprojection (?af)
+  (bind ?uid (fact-slot-value ?af uid))
+  (delayed-do-for-all-facts ((?dep action-footprint-dependency))
+      (eq ?dep:waiting-action-uid ?uid)
+    (retract ?dep)
+  )
+  (bind ?bc-proto (fact-slot-value ?af behavior-call-proto-id))
+  (if (<> ?bc-proto 0) then
+    (pb-clear-field ?bc-proto "skill_execution_data.footprint")
+  )
+  ; Re-projection will create a new footprint proto.
+  (bind ?footprint-proto (fact-slot-value ?af footprint-proto))
+  (if (<> ?footprint-proto 0) then (pb-remove ?footprint-proto))
+  (return (modify ?af (state SELECTED) (footprint-proto 0)))
+)
+
 (deffunction plan-action-remove (?uid)
   (delayed-do-for-all-facts ((?dep action-footprint-dependency))
       (or (eq ?dep:waiting-action-uid ?uid)
