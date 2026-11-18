@@ -108,6 +108,24 @@ platform(
     exec_properties = DEFAULT,
 )
 
+# Target platform conditions used to select the bundled Python interpreter in
+# python_oci_image.bzl.
+config_setting(
+    name = "is_linux_aarch64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:aarch64",
+    ],
+)
+
+config_setting(
+    name = "is_linux_x86_64",
+    constraint_values = [
+        "@platforms//os:linux",
+        "@platforms//cpu:x86_64",
+    ],
+)
+
 go_proto_compiler(
     name = "go_gen_grpc_gateway",
     options = [

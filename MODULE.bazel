@@ -268,6 +268,7 @@ pip.parse(
     requirements_lock = "//:requirements.txt",  
     target_platforms = [
         "linux_x86_64",
+        "linux_aarch64",
     ],
 )
 use_repo(pip, "ai_intrinsic_sdks_pip_deps")
@@ -862,7 +863,10 @@ oci.pull(
     name = "distroless_python3",
     digest = "sha256:60faad2efce94a847f32e2adbcaefeb2e4fd3e3a78075a3abb600904a5e010e9",
     image = "gcr.io/distroless/python3",
-    platforms = ["linux/amd64"],
+    platforms = [
+        "linux/amd64",
+        "linux/arm64/v8",
+    ],
 )
 oci.pull(
     name = "zenohd",
@@ -885,6 +889,7 @@ use_repo(
     "distroless_cc_linux_amd64",
     "distroless_python3",
     "distroless_python3_linux_amd64",
+    "distroless_python3_linux_arm64_v8",
     "distroless_static",  
     "distroless_static_linux_amd64",  
     "nginx_base",  

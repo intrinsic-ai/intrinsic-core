@@ -53,6 +53,35 @@ def _build_interpreter_manifest_cmd(interpreter_regex):
     ]
     return "grep '{}' $< | sed {} >$@".format(interpreter_regex, " ".join(sed_exprs))
 
+# Version-agnostic patterns matching the bundled rules_python interpreter directory in runfiles
+# per target platform (e.g., `rules_python++python+python_3_11_x86_64-unknown-linux-gnu/`).
+# Intentionally omits a default condition so unsupported platforms fail fast.
+_PLATFORM_INTERPRETER_DIR_REGEX = {
+    Label("//intrinsic_sdk/bazel:is_linux_aarch64"): "rules_python\\S*_aarch64-unknown-linux-gnu/",
+    Label("//intrinsic_sdk/bazel:is_linux_x86_64"): "rules_python\\S*_x86_64-unknown-linux-gnu/",
+}
+
+def _interpreter_regex(interp_dir):
+    return "^\\S*\\.runfiles/\\S*\\({interp_dir}\\|.*rules_Upython++python+python.*libpython.*\\)".format(
+        interp_dir = interp_dir,
+    )
+
+def _select_cmd_by_platform(make_cmd):
+    """Returns a select() of shell commands keyed on the supported target platforms.
+
+    Args:
+        make_cmd: function mapping an interpreter directory regex to a shell command.
+    Returns:
+        a select() with one command per supported target platform.
+    """
+    return select(
+        {
+            platform: make_cmd(interp_dir)
+            for platform, interp_dir in _PLATFORM_INTERPRETER_DIR_REGEX.items()
+        },
+        no_match_error = "python_oci_image only supports linux x86_64 and linux aarch64 target platforms",
+    )
+
 def python_layers(name, binary, **kwargs):
     """Create list of layers for a py_binary target.
 
@@ -105,16 +134,12 @@ def python_layers(name, binary, **kwargs):
         tags = kwargs.get("tags"),
     )
 
-    # Version-agnostic pattern matching the bundled rules_python interpreter directory in runfiles
-    # (e.g., `rules_python++python+python_3_11_x86_64-unknown-linux-gnu/`).
-    PY_INTERPRETER_DIR_REGEX = "rules_python\\S*_x86_64-unknown-linux-gnu/"
-
     # In rules_python 2.0+, `bootstrap_impl=system_python` creates a venv interpreter entry in runfiles:
     #   <runfiles_dir>/_main/<pkg>/_<bin>.venv/bin/python3 uid=0 ... type=file content=bazel-out/.../_<bin>.venv/bin/python3
     # Because that file in `bazel-out` is a relative symlink that only resolves inside `.runfiles/`,
     # archiving it as `type=file` fails in bsdtar.
     # Instead, we extract the bundled interpreter path (`$PY_BIN`) from the manifest itself using
-    # `PY_INTERPRETER_DIR_REGEX` and replace `.venv/bin/python3 uid=.*` with a `type=link` entry.
+    # `_PLATFORM_INTERPRETER_DIR_REGEX` and replace `.venv/bin/python3 uid=.*` with a `type=link` entry.
     venv_symlink_sed = "s|\\.venv/bin/python3 uid=.*|.venv/bin/python3 uid=0 gid=0 time=1672560000 mode=0777 type=link link='\"$$PY_BIN\"'|"
 
     # Workaround unsupported "strip_prefix" (`s,^/,,`) and rewrite `.venv/bin/python3` to a symlink.
@@ -122,28 +147,26 @@ def python_layers(name, binary, **kwargs):
         name = name + "_tar_manifest",
         srcs = [":" + name + "_tar_manifest_prefix"],
         outs = [name + "_tar_manifest.spec"],
-        cmd = (
+        cmd = _select_cmd_by_platform(lambda interp_dir: (
             "PY_BIN=/$$(grep -m1 '{interp_dir}bin/python3 ' $< | sed -e 's,^/,,' -e 's, .*,,'); " +
             "sed -e 's,^/,,' -e '{venv_symlink_sed}' $< >$@"
         ).format(
-            interp_dir = PY_INTERPRETER_DIR_REGEX,
+            interp_dir = interp_dir,
             venv_symlink_sed = venv_symlink_sed,
-        ),
+        )),
         compatible_with = kwargs.get("compatible_with"),
         testonly = kwargs.get("testonly"),
         tags = kwargs.get("tags"),
     )
 
     # One layer with only the python interpreter.
-    PY_INTERPRETER_REGEX = "^\\S*\\.runfiles/\\S*\\({interp_dir}\\|.*rules_Upython++python+python.*libpython.*\\)".format(
-        interp_dir = PY_INTERPRETER_DIR_REGEX,
-    )
-
     native.genrule(
         name = name + "_interpreter_tar_manifest",
         srcs = [":" + name + "_tar_manifest"],
         outs = [name + "_interpreter_tar_manifest.spec"],
-        cmd = _build_interpreter_manifest_cmd(PY_INTERPRETER_REGEX),
+        cmd = _select_cmd_by_platform(
+            lambda interp_dir: _build_interpreter_manifest_cmd(_interpreter_regex(interp_dir)),
+        ),
         compatible_with = kwargs.get("compatible_with"),
         testonly = kwargs.get("testonly"),
         tags = kwargs.get("tags"),
@@ -174,7 +197,12 @@ def python_layers(name, binary, **kwargs):
         name = name + "_packages_tar_manifest",
         srcs = [":" + name + "_tar_manifest"],
         outs = [name + "_packages_tar_manifest.spec"],
-        cmd = "if ! grep -v '{}' $< | grep '{}' >$@; then touch $@; fi".format(PY_INTERPRETER_REGEX, PACKAGES_REGEX),
+        cmd = _select_cmd_by_platform(
+            lambda interp_dir: "if ! grep -v '{}' $< | grep '{}' >$@; then touch $@; fi".format(
+                _interpreter_regex(interp_dir),
+                PACKAGES_REGEX,
+            ),
+        ),
         compatible_with = kwargs.get("compatible_with"),
         testonly = kwargs.get("testonly"),
         tags = kwargs.get("tags"),
@@ -197,7 +225,12 @@ def python_layers(name, binary, **kwargs):
         name = name + "_app_tar_manifest",
         srcs = [":" + name + "_tar_manifest"],
         outs = [name + "_app_tar_manifest.spec"],
-        cmd = "grep -v '{}' $< | grep -v '{}' >$@".format(PACKAGES_REGEX, PY_INTERPRETER_REGEX),
+        cmd = _select_cmd_by_platform(
+            lambda interp_dir: "grep -v '{}' $< | grep -v '{}' >$@".format(
+                PACKAGES_REGEX,
+                _interpreter_regex(interp_dir),
+            ),
+        ),
         compatible_with = kwargs.get("compatible_with"),
         testonly = kwargs.get("testonly"),
         tags = kwargs.get("tags"),
