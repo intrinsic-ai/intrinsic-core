@@ -331,6 +331,22 @@ absl::StatusOr<SensorImage> ToSensorImageImpl(
                        camera_t_sensor, std::move(image));
   };
 
+  auto cvt_to_rgb_sensor_image = [&](int code) {
+    Image<Rgb8u> image(dimensions);
+    cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
+    cv::cvtColor(src_image, dst_image, code);
+    return to_sensor_image(std::move(image));
+  };
+
+  auto cvt_12bit_to_rgb_sensor_image = [&](int code) {
+    Image<Rgb8u> image(dimensions);
+    cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
+    cv::Mat src_8u;
+    src_image.convertTo(src_8u, CV_8UC1, 255.0 / 4095.0);
+    cv::cvtColor(src_8u, dst_image, code);
+    return to_sensor_image(std::move(image));
+  };
+
   switch (pixel_format) {
     case ARV_PIXEL_FORMAT_MONO_8:
     case kPixelFormatConfidence8: {
@@ -375,149 +391,92 @@ absl::StatusOr<SensorImage> ToSensorImageImpl(
       return to_sensor_image(std::move(image));
     }
     case ARV_PIXEL_FORMAT_BAYER_RG_8: {
-      // BAYER_RG 8u -> BGR 8u (we need to convert to BGR as it is OpenCV's
-      // default color convention).
+      // BAYER_RG 8u -> RGB 8u.
       VLOG(1) << "BayerRG8, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerRG2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerRGGB2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_RG_12: {
-      // BAYER_RG 12u -> BGR 8u.
+      // BAYER_RG 12u -> RGB 8u.
       VLOG(1) << "BayerRG12, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::Mat src_8u;
-      src_image.convertTo(src_8u, CV_8UC1, 255.0 / 4095.0);
-      cv::cvtColor(src_8u, dst_image, cv::COLOR_BayerRG2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_12bit_to_rgb_sensor_image(cv::COLOR_BayerRGGB2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_RG_12_PACKED:
     case ARV_PIXEL_FORMAT_BAYER_RG_12P: {
-      // BayerRG12Packed/BayerRG12P -> BGR 8u.
+      // BayerRG12Packed/BayerRG12P -> RGB 8u.
       // The src_image has already been unpacked to CV_8UC1.
       VLOG(1) << "BayerRG12Packed|BayerRG12P, " << dimensions.cols << " x "
               << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerRG2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerRGGB2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_GR_8: {
-      // BAYER_GR 8u -> BGR 8u (we need to convert to BGR as it is OpenCV's
-      // default color convention).
+      // BAYER_GR 8u -> RGB 8u.
       VLOG(1) << "BayerGR8, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerGR2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerGRBG2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_GR_12: {
-      // BAYER_GR 12u -> BGR 8u.
+      // BAYER_GR 12u -> RGB 8u.
       VLOG(1) << "BayerGR12, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::Mat src_8u;
-      src_image.convertTo(src_8u, CV_8UC1, 255.0 / 4095.0);
-      cv::cvtColor(src_8u, dst_image, cv::COLOR_BayerGR2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_12bit_to_rgb_sensor_image(cv::COLOR_BayerGRBG2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_GR_12_PACKED:
     case ARV_PIXEL_FORMAT_BAYER_GR_12P: {
-      // BayerGR12Packed/BayerGR12P -> BGR 8u.
+      // BayerGR12Packed/BayerGR12P -> RGB 8u.
       // The src_image has already been unpacked to CV_8UC1.
       VLOG(1) << "BayerGR12Packed|BayerGR12P, " << dimensions.cols << " x "
               << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerGR2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerGRBG2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_GB_8: {
-      // BAYER_GB 8u -> BGR 8u (we need to convert to BGR as it is OpenCV's
-      // default color convention).
+      // BAYER_GB 8u -> RGB 8u.
       VLOG(1) << "BayerGB8, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerGB2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerGBRG2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_GB_12: {
-      // BAYER_GB 12u -> BGR 8u.
+      // BAYER_GB 12u -> RGB 8u.
       VLOG(1) << "BayerGB12, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::Mat src_8u;
-      src_image.convertTo(src_8u, CV_8UC1, 255.0 / 4095.0);
-      cv::cvtColor(src_8u, dst_image, cv::COLOR_BayerGB2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_12bit_to_rgb_sensor_image(cv::COLOR_BayerGBRG2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_GB_12_PACKED:
     case ARV_PIXEL_FORMAT_BAYER_GB_12P: {
-      // BayerGB12Packed/BayerGB12P -> BGR 8u.
+      // BayerGB12Packed/BayerGB12P -> RGB 8u.
       // The src_image has already been unpacked to CV_8UC1.
       VLOG(1) << "BayerGB12Packed|BayerGB12P, " << dimensions.cols << " x "
               << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerGB2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerGBRG2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_BG_8: {
-      // BAYER_BG 8u -> BGR 8u (we need to convert to BGR as it is OpenCV's
-      // default color convention).
+      // BAYER_BG 8u -> RGB 8u.
       VLOG(1) << "BayerBG8, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerBG2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerBGGR2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_BG_12: {
-      // BAYER_BG 12u -> BGR 8u.
+      // BAYER_BG 12u -> RGB 8u.
       VLOG(1) << "BayerBG12, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::Mat src_8u;
-      src_image.convertTo(src_8u, CV_8UC1, 255.0 / 4095.0);
-      cv::cvtColor(src_8u, dst_image, cv::COLOR_BayerBG2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_12bit_to_rgb_sensor_image(cv::COLOR_BayerBGGR2RGB);
     }
     case ARV_PIXEL_FORMAT_BAYER_BG_12_PACKED:
     case ARV_PIXEL_FORMAT_BAYER_BG_12P: {
-      // BayerBG12Packed/BayerBG12P -> BGR 8u.
+      // BayerBG12Packed/BayerBG12P -> RGB 8u.
       // The src_image has already been unpacked to CV_8UC1.
       VLOG(1) << "BayerBG12Packed|BayerBG12P, " << dimensions.cols << " x "
               << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_BayerBG2BGR);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_BayerBGGR2RGB);
     }
     case ARV_PIXEL_FORMAT_YUV_422_PACKED: {
       VLOG(1) << "YUV422Packed, " << dimensions.cols << " x "
               << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_YUV2RGB_Y422);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_YUV2RGB_Y422);
     }
     case ARV_PIXEL_FORMAT_YUV_422_YUYV_PACKED: {
       VLOG(1) << "YUV422_YUYV_Packed, " << dimensions.cols << " x "
               << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_YUV2RGB_YUYV);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_YUV2RGB_YUYV);
     }
     case kPixelFormatYCbCr422_8: {
       // "Typically the terms YCbCr and YUV are used interchangeably."
       // (see https://en.wikipedia.org/wiki/YCbCr#YCbCr)
       VLOG(1) << "YCbCr422_8, " << dimensions.cols << " x " << dimensions.rows;
-      Image<Rgb8u> image(dimensions);
-      cv::Mat dst_image = intrinsic::perception::ToCvMat(image);
-      cv::cvtColor(src_image, dst_image, cv::COLOR_YUV2BGR_YVYU);
-      return to_sensor_image(std::move(image));
+      return cvt_to_rgb_sensor_image(cv::COLOR_YUV2RGB_YUYV);
     }
     case kPixelFormatCoord3D_A32f:
     case kPixelFormatCoord3D_B32f: {

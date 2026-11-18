@@ -175,7 +175,8 @@ Image<Bgra8u> DecodeImagePng(const std::vector<uint8_t>& buffer) {
 
 template <>
 Image<Rgb8u> DecodeImagePng(const std::vector<uint8_t>& buffer) {
-  return ConvertImage<Rgb8u>(DecodeImagePng<Bgr8u>(buffer));
+  // TODO: b/417927632 - Use sandboxed imdecode.
+  return MoveToImage<Rgb8u>(cv::imdecode(buffer, cv::IMREAD_COLOR_RGB));
 }
 
 template <>
@@ -303,7 +304,7 @@ Image<Gray8u> DecodeImageJpeg(const std::vector<uint8_t>& buffer) {
 
 template <>
 Image<Rgb8u> DecodeImageJpeg(const std::vector<uint8_t>& buffer) {
-  return ConvertImage<Rgb8u>(DecodeImageJpeg<Bgr8u>(buffer));
+  return MoveToImage<Rgb8u>(cv::imdecode(buffer, cv::IMREAD_COLOR_RGB));
 }
 
 }  // namespace perception

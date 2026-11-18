@@ -356,9 +356,8 @@ absl::StatusOr<Image<Bgr8u>> ReadImageFromString(
 template <>
 absl::StatusOr<Image<Rgb8u>> ReadImageFromString(
     absl::string_view serialized_image) {
-  INTR_ASSIGN_OR_RETURN(Image<Bgr8u> bgr_image,
-                        ReadImageFromString<Bgr8u>(serialized_image));
-  return ConvertImage<Rgb8u>(bgr_image);
+  return ReadImageFromStringCv<Rgb8u>(serialized_image, cv::IMREAD_COLOR_RGB,
+                                      CV_8UC3);
 }
 
 template <>
@@ -382,8 +381,7 @@ absl::StatusOr<Image<Bgr8u>> ReadImage(absl::string_view filename) {
 
 template <>
 absl::StatusOr<Image<Rgb8u>> ReadImage(absl::string_view filename) {
-  INTR_ASSIGN_OR_RETURN(Image<Bgr8u> bgr_image, ReadImage<Bgr8u>(filename));
-  return ConvertImage<Rgb8u>(bgr_image);
+  return ReadImageCv<Rgb8u>(filename, cv::IMREAD_COLOR_RGB, CV_8UC3);
 }
 
 template <>
