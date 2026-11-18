@@ -510,7 +510,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/util/status:ret_check",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/status:statusor",
-        "@opencv//:calib3d",
         "@opencv//:core",
         "@opencv//:imgproc",
     ],

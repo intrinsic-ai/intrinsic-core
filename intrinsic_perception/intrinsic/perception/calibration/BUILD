@@ -109,8 +109,9 @@ cc_library(
         "@com_google_protobuf//:protobuf_lite",
         "@intrinsic_apis//intrinsic/perception/proto:vector_cc_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:pattern_detection_result_cc_proto",
-        "@opencv//:calib3d",
+        "@opencv//:calib",
         "@opencv//:core",
+        "@opencv//:geometry",
         "@opencv//:imgproc",
     ],
 )
@@ -139,7 +140,7 @@ cc_library(
         "@com_google_ceres_solver//:ceres",
         "@intrinsic_apis//intrinsic/perception/proto/v1:camera_setup_cc_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:camera_to_robot_calibration_cc_proto",
-        "@opencv//:calib3d",
+        "@opencv//:calib",
         "@opencv//:core",
     ],
 )
@@ -161,7 +162,7 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
         "@intrinsic_apis//intrinsic/perception/proto/v1:pattern_detection_result_cc_proto",
-        "@opencv//:calib3d",
+        "@opencv//:calib",
         "@opencv//:core",
     ],
 )
@@ -275,7 +276,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
-        "@opencv//:calib3d",
+        "@opencv//:calib",
         "@opencv//:core",
     ],
 )

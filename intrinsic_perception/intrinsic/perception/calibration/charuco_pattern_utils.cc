@@ -148,19 +148,6 @@ absl::StatusOr<CharucoDetection> FindCharucoMarker(
         "No chessboard corners of a ChArUco pattern were found in the image.");
   }
 
-  // TODO: b/491438285 - Remove this once we upgrade to OpenCV 4.14 as the issue
-  // got resolved, see: https://github.com/opencv/opencv/milestone/62?closed=1).
-  //
-  // OpenCV's charuco board detection uses a different convention where pixels
-  // are located. Our convention (and most of other OpenCV modules) assume that
-  // the pixel coordinate (0.0, 0.0) refers to the center of the pixel and that
-  // the pixel area is between (-0.5, -0.5) and (0.5, 0.5) respectively.
-  // The charuco board implementation places the pixel at (0.5, 0.5), thus, we
-  // subtract this offset here.
-  // See also https://github.com/opencv/opencv/issues/25539.
-  for (cv::Point2f& corner : charuco_corners) {
-    corner -= cv::Point2f(0.5f, 0.5f);
-  }
   LOG(INFO) << "Found " << marker_ids.size() << " marker corners in image.";
   LOG(INFO) << "Found " << charuco_ids.size() << " charuco corners in image.";
   return CharucoDetection{.aruco_ids = marker_ids,

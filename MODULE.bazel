@@ -545,6 +545,12 @@ bazel_dep(name = "etherlab-ethercat", version = "1.6.7.bcr.1")
 bazel_dep(name = "ffmpeg", version = "7.1.1.bcr.beta.13")  
 bazel_dep(name = "flatbuffers", version = "25.12.19.bcr.1", repo_name = "com_github_google_flatbuffers")
 bazel_dep(name = "fmt", version = "12.2.0.bcr.1")  
+
+# TODO(b/585605362): Remove once ogre-next upgrades its transitive freeimage
+# dependency to >= 3.19.10.bcr.7 (or 3.19.33), which links against external BCR
+# codec libraries instead of bundled third-party libraries (avoiding duplicate
+# symbol errors with @opencv//:imgcodecs).
+bazel_dep(name = "freeimage", version = "3.19.33")  
 bazel_dep(name = "fuzztest", version = "20250805.0", repo_name = "com_google_fuzztest")
 bazel_dep(name = "glib", version = "2.84.4.bcr.1")  
 
@@ -604,7 +610,7 @@ bazel_dep(name = "onetbb", version = "2022.3.0")
 bazel_dep(name = "open-inference-protocol", version = "0.0.0-20250512-d49cc23.bcr.1", repo_name = "open_inference_protocol")  
 bazel_dep(name = "open62541", version = "1.4.14.bcr.1")  
 bazel_dep(name = "opencensus-cpp", version = "0.0.0-20230502-50eb5de.bcr.3", repo_name = "io_opencensus_cpp")
-bazel_dep(name = "opencv", version = "4.12.0.bcr.5")  
+bazel_dep(name = "opencv", version = "5.1.0.bcr.3")  
 bazel_dep(name = "opengl-registry", version = "0.0.0-20250707", repo_name = "opengl_registry")  
 bazel_dep(name = "openmesh", version = "11.0")  
 bazel_dep(name = "opentelemetry-cpp", version = "1.24.0", repo_name = "io_opentelemetry_cpp")  
@@ -1043,13 +1049,6 @@ register_toolchains("@jq_toolchains//:all")
 # allows us to build OpenCV on linux x86_64 with Qt6 support.
 rules_qt_fetch = use_extension("@rules_qt//extension:qt.bzl", "fetch")
 use_repo(rules_qt_fetch, "qt_linux_x86_64")
-
-# ffmpeg@7.1.1.bcr.beta.7 depends on opencv@4.13.0.bcr.2, which doesn't have patches
-# yet for webp or Qt6. So, we'll force a downgrade until the patches land in the BCR.
-single_version_override(
-    module_name = "opencv",
-    version = "4.12.0.bcr.5",
-)
 
 # TODO(b/567681027): Upstream a patch to toybox to use libxcrypt under llvm.
 # The patch also adds a bazel_dep on libxcrypt to toybox's own MODULE.bazel,

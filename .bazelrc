@@ -167,6 +167,15 @@ common --@ffmpeg//:enable_libvpx_vp9_encoder=True
 common --@ffmpeg//:enable_libaom_av1_decoder=True
 common --@ffmpeg//:enable_libaom_av1_encoder=True
 
+# Disable OpenCV's DNN module by default so @opencv//:objdetect, :features, and :video
+# do not compile or link :dnn and its ONNX protobuf dependencies, enable Eigen
+# integration across OpenCV modules (:core, :calib, :geometry), and set the CPU
+# SIMD baseline to SSE4.2 (matching --copt=-mcrc32 while keeping 16-byte Eigen
+# alignment until b/451846278 enables -mavx2 workspace-wide).
+common --@opencv//:with_dnn=False
+common --@opencv//:with_eigen=True
+common --@opencv//:cpu_baseline=sse4_2
+
 # TODO(b/451846278): Review AVX setup
 common --copt='-DPCL_SILENCE_MALLOC_WARNING'
 

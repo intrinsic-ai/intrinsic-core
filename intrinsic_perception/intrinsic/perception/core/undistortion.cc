@@ -28,7 +28,6 @@
 #include "intrinsic/perception/core/intrinsic_params.h"
 #include "intrinsic/perception/core/opencv_wrapper.h"
 #include "intrinsic/util/status/ret_check.h"
-#include "opencv2/calib3d.hpp"
 #include "opencv2/core/base.hpp"
 #include "opencv2/core/core.hpp"
 #include "opencv2/core/hal/interface.h"
