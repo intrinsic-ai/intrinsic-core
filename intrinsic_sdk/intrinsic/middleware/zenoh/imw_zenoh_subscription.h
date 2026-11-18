@@ -15,11 +15,14 @@
 #ifndef MIDDLEWARE_ZENOH_IMW_ZENOH_SUBSCRIPTION_H_
 #define MIDDLEWARE_ZENOH_IMW_ZENOH_SUBSCRIPTION_H_
 
+#include <cstddef>
+#include <cstdint>
+#include <list>
 #include <string>
-#include <utility>
+#include <thread>
 #include <vector>
 
-#include "absl/log/log.h"
+#include "absl/base/thread_annotations.h"
 #include "absl/synchronization/mutex.h"
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "zenoh.h"  // NOLINT(build/include_subdir)
@@ -32,6 +35,10 @@ class IMWZenohSubscription {
                        imw_subscription_callback_fn* callback,
                        void* user_context);
 
+  IMWZenohSubscription(const std::string& keyexpr,
+                       imw_subscription_message_callback_fn* callback,
+                       void* user_context);
+
   IMWZenohSubscription(IMWZenohSubscription&& other) = delete;
   IMWZenohSubscription(const IMWZenohSubscription&) = delete;
   IMWZenohSubscription& operator=(const IMWZenohSubscription&) = delete;
@@ -42,10 +49,18 @@ class IMWZenohSubscription {
   z_owned_subscriber_t& get_zenoh_sub() { return zenoh_sub_; }
   const std::string& get_keyexpr() const { return keyexpr_; }
   void add_callback(imw_subscription_callback_fn* fptr, void* user_context);
-  bool remove_callback(imw_subscription_callback_fn* fptr,
-                       const void* user_context);
+  void add_message_callback(imw_subscription_message_callback_fn* fptr,
+                            void* user_context);
+  bool detach_callback(imw_subscription_callback_fn* fptr,
+                       const void* user_context, uint64_t* detached_id,
+                       bool* needs_drain);
+  bool detach_message_callback(imw_subscription_message_callback_fn* fptr,
+                               const void* user_context, uint64_t* detached_id,
+                               bool* needs_drain);
+  void wait_for_entry_drain(uint64_t id);
   bool clear_callbacks();
-  bool is_empty() const { return callbacks_.empty(); }
+  void wait_for_all_callbacks();
+  bool is_empty() const;
   void invoke_callbacks(const char* keyexpr, const void* blob, size_t blob_len,
                         const imw_message_metadata_t& metadata);
   struct Statistics {
@@ -55,12 +70,34 @@ class IMWZenohSubscription {
   Statistics get_statistics();
 
  private:
+  struct CallbackEntry {
+    uint64_t id = 0;
+    imw_subscription_callback_fn* legacy_callback = nullptr;
+    imw_subscription_message_callback_fn* message_callback = nullptr;
+    void* user_context = nullptr;
+    std::vector<std::thread::id> active_threads;
+    size_t refs = 0;
+    bool removed = false;
+  };
+
+  IMWZenohSubscription(const std::string& keyexpr, CallbackEntry initial_entry);
+
+  void AddEntry(CallbackEntry entry);
+  std::vector<std::list<CallbackEntry>::iterator> CollectTargetsLocked()
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(mutex_);
+  bool DetachEntry(imw_subscription_callback_fn* legacy_cb,
+                   imw_subscription_message_callback_fn* message_cb,
+                   const void* user_context, const char* kind_label,
+                   uint64_t* detached_id, bool* needs_drain);
+
   std::string keyexpr_;
-  std::vector<std::pair<imw_subscription_callback_fn*, void*>> callbacks_;
   z_owned_subscriber_t zenoh_sub_;
-  absl::Mutex mutex_;  // protects internal data structures
-  size_t n_bytes;
-  size_t n_messages;
+  mutable absl::Mutex mutex_;  // leaf lock guarding callback list and stats
+  absl::CondVar cv_;
+  uint64_t next_entry_id_ ABSL_GUARDED_BY(mutex_) = 0;
+  std::list<CallbackEntry> callbacks_ ABSL_GUARDED_BY(mutex_);
+  size_t n_bytes ABSL_GUARDED_BY(mutex_);
+  size_t n_messages ABSL_GUARDED_BY(mutex_);
 };
 
 }  // namespace intrinsic

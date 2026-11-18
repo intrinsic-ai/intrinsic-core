@@ -64,10 +64,16 @@ class IMWZenoh {
   imw_ret_t create_subscription(const char* keyexpr,
                                 imw_subscription_callback_fn* callback,
                                 const char* qos, void* user_context);
+  imw_ret_t create_message_subscription(
+      const char* keyexpr, imw_subscription_message_callback_fn* callback,
+      const char* qos, void* user_context);
 
   imw_ret_t destroy_subscription(const char* keyexpr,
                                  imw_subscription_callback_fn* callback,
                                  const void* user_context);
+  imw_ret_t destroy_message_subscription(
+      const char* keyexpr, imw_subscription_message_callback_fn* callback,
+      const void* user_context);
 
   imw_ret_t query(const char* keyexpr, imw_query_callback_fn* callback,
                   imw_query_on_done_callback_fn* on_done,
@@ -132,6 +138,15 @@ class IMWZenoh {
     std::weak_ptr<IMWZenohLivelinessSubscription> subscription;
   };
 
+  imw_ret_t create_subscription_internal(
+      const char* keyexpr, imw_subscription_callback_fn* legacy_callback,
+      imw_subscription_message_callback_fn* message_callback, const char* qos,
+      void* user_context);
+  imw_ret_t destroy_subscription_internal(
+      const char* keyexpr, imw_subscription_callback_fn* legacy_callback,
+      imw_subscription_message_callback_fn* message_callback,
+      const void* user_context);
+
   static void data_callback(IMWZenohSubscription& sub,
                             const z_loaned_sample_t* sample);
   void queryable_callback(const std::string& queryable_keyexpr,
@@ -168,6 +183,7 @@ class IMWZenoh {
       }
     }
     for (auto& sub : subs_to_undeclare) {
+      sub->wait_for_all_callbacks();
       z_undeclare_subscriber(z_move(sub->get_zenoh_sub()));
     }
   }

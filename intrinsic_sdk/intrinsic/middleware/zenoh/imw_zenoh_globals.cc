@@ -340,11 +340,27 @@ imw_ret_t imw_create_subscription(const char* keyexpr,
   });
 }
 
+imw_ret_t imw_create_message_subscription(
+    const char* keyexpr, imw_subscription_message_callback_fn* callback,
+    const char* qos, void* user_context) {
+  return CreateEntity([&](IMWZenoh& s) {
+    return s.create_message_subscription(keyexpr, callback, qos, user_context);
+  });
+}
+
 imw_ret_t imw_destroy_subscription(const char* keyexpr,
                                    imw_subscription_callback_fn* callback,
                                    const void* user_context) {
   return DestroyEntity([&](IMWZenoh& s) {
     return s.destroy_subscription(keyexpr, callback, user_context);
+  });
+}
+
+imw_ret_t imw_destroy_message_subscription(
+    const char* keyexpr, imw_subscription_message_callback_fn* callback,
+    const void* user_context) {
+  return DestroyEntity([&](IMWZenoh& s) {
+    return s.destroy_message_subscription(keyexpr, callback, user_context);
   });
 }
 

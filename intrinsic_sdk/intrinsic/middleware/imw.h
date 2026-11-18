@@ -62,6 +62,10 @@ typedef void imw_subscription_callback_fn(const char* keyexpr,
                                           const size_t bytes_len,
                                           void* user_context);
 
+typedef void imw_subscription_message_callback_fn(
+    const char* keyexpr, const void* bytes, const size_t bytes_len,
+    const imw_message_metadata_t* metadata, void* user_context);
+
 typedef void imw_queryable_callback_fn(const char* keyexpr,
                                        const void* query_bytes,
                                        const size_t query_bytes_len,
@@ -112,11 +116,17 @@ imw_ret_t imw_publish(const char* keyexpr, const void* bytes,
 imw_ret_t imw_create_subscription(const char* keyexpr,
                                   imw_subscription_callback_fn* callback,
                                   const char* qos, void* user_context);
+imw_ret_t imw_create_message_subscription(
+    const char* keyexpr, imw_subscription_message_callback_fn* callback,
+    const char* qos, void* user_context);
 imw_ret_t imw_publisher_has_matching_subscribers(const char* keyexpr,
                                                  bool* has_matching);
 imw_ret_t imw_destroy_subscription(const char* keyexpr,
                                    imw_subscription_callback_fn* callback,
                                    const void* user_context);
+imw_ret_t imw_destroy_message_subscription(
+    const char* keyexpr, imw_subscription_message_callback_fn* callback,
+    const void* user_context);
 int imw_keyexpr_includes(const char* left, const char* right);
 int imw_keyexpr_intersects(const char* left, const char* right);
 int imw_keyexpr_is_canon(const char* keyexpr);

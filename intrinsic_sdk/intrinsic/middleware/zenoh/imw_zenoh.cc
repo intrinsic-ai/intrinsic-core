@@ -19,6 +19,7 @@
 #include <time.h>
 #include <unistd.h>
 
+#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
@@ -631,11 +632,17 @@ imw_ret_t IMWZenoh::publisher_has_matching_subscribers(const char* keyexpr,
   return IMW_OK;
 }
 
-imw_ret_t IMWZenoh::create_subscription(const char* keyexpr,
-                                        imw_subscription_callback_fn* callback,
-                                        const char* qos, void* user_context) {
+imw_ret_t IMWZenoh::create_subscription_internal(
+    const char* keyexpr, imw_subscription_callback_fn* legacy_callback,
+    imw_subscription_message_callback_fn* message_callback, const char* qos,
+    void* user_context) {
   if (!z_internal_check(session_)) {
     LOG(ERROR) << "Invalid session in IMWZenoh::create_subscription";
+    return IMW_ERROR;
+  }
+  if (keyexpr == nullptr ||
+      (legacy_callback == nullptr && message_callback == nullptr)) {
+    LOG(ERROR) << "Invalid arguments in IMWZenoh::create_subscription";
     return IMW_ERROR;
   }
 
@@ -647,7 +654,11 @@ imw_ret_t IMWZenoh::create_subscription(const char* keyexpr,
   // repeat subscription that we should add to an existing subscription
   for (auto it = subscriptions_.begin(); it != subscriptions_.end(); ++it) {
     if ((*it)->get_keyexpr() == keyexpr_s) {
-      (*it)->add_callback(callback, user_context);
+      if (message_callback != nullptr) {
+        (*it)->add_message_callback(message_callback, user_context);
+      } else {
+        (*it)->add_callback(legacy_callback, user_context);
+      }
       return IMW_OK;
     }
   }
@@ -658,8 +669,11 @@ imw_ret_t IMWZenoh::create_subscription(const char* keyexpr,
     return IMW_ERROR;
   }
 
-  auto sub =
-      std::make_shared<IMWZenohSubscription>(keyexpr_s, callback, user_context);
+  auto sub = (message_callback != nullptr)
+                 ? std::make_shared<IMWZenohSubscription>(
+                       keyexpr_s, message_callback, user_context)
+                 : std::make_shared<IMWZenohSubscription>(
+                       keyexpr_s, legacy_callback, user_context);
 
   z_owned_closure_sample_t closure;
   z_closure_sample(&closure, IMWZenoh::static_data_callback,
@@ -682,6 +696,21 @@ imw_ret_t IMWZenoh::create_subscription(const char* keyexpr,
   subscriptions_.push_back(std::move(sub));
 
   return IMW_OK;
+}
+
+imw_ret_t IMWZenoh::create_subscription(const char* keyexpr,
+                                        imw_subscription_callback_fn* callback,
+                                        const char* qos, void* user_context) {
+  return create_subscription_internal(keyexpr, callback,
+                                      /*message_callback=*/nullptr, qos,
+                                      user_context);
+}
+
+imw_ret_t IMWZenoh::create_message_subscription(
+    const char* keyexpr, imw_subscription_message_callback_fn* callback,
+    const char* qos, void* user_context) {
+  return create_subscription_internal(keyexpr, /*legacy_callback=*/nullptr,
+                                      callback, qos, user_context);
 }
 
 imw_ret_t IMWZenoh::create_liveliness_subscription(
@@ -735,49 +764,74 @@ imw_ret_t IMWZenoh::create_liveliness_subscription(
   return IMW_OK;
 }
 
-imw_ret_t IMWZenoh::destroy_subscription(const char* keyexpr,
-                                         imw_subscription_callback_fn* callback,
-                                         const void* user_context) {
+imw_ret_t IMWZenoh::destroy_subscription_internal(
+    const char* keyexpr, imw_subscription_callback_fn* legacy_callback,
+    imw_subscription_message_callback_fn* message_callback,
+    const void* user_context) {
   if (!z_internal_check(session_)) {
     LOG(ERROR) << "Invalid session in IMWZenoh::destroy_subscription";
     return IMW_ERROR;
   }
+  if (keyexpr == nullptr ||
+      (legacy_callback == nullptr && message_callback == nullptr)) {
+    LOG(ERROR) << "Invalid arguments in IMWZenoh::destroy_subscription";
+    return IMW_ERROR;
+  }
 
   const string keyexpr_s(keyexpr);
-  std::shared_ptr<IMWZenohSubscription> sub_to_undeclare;
-  bool found = false;
+  std::shared_ptr<IMWZenohSubscription> sub;
+  uint64_t detached_id = 0;
+  bool needs_drain = false;
+  bool undeclare = false;
   {
     absl::MutexLock lock(&subscriptions_mutex_);
-    for (auto it = subscriptions_.begin(); it != subscriptions_.end(); ++it) {
-      if ((*it)->get_keyexpr() != keyexpr_s) continue;
-
-      found = true;
-      // We've found the subscription for the requested keyexpr, so we need to
-      // remove this callback, and potentially also undeclare the Zenoh
-      // subscriber if there are no additional callbacks left
-      if (!(*it)->remove_callback(callback, user_context)) {
-        LOG(ERROR) << "Could not remove callback for " << keyexpr_s;
-        return IMW_ERROR;
-      }
-      if ((*it)->is_empty()) {
-        sub_to_undeclare = *it;
-        subscriptions_.erase(it);
-      }
-      break;
+    auto it = std::find_if(subscriptions_.begin(), subscriptions_.end(),
+                           [&keyexpr_s](const auto& entry) {
+                             return entry->get_keyexpr() == keyexpr_s;
+                           });
+    if (it == subscriptions_.end()) {
+      LOG(ERROR) << "Could not find a subscription for " << keyexpr_s;
+      return IMW_ERROR;
+    }
+    const bool removed =
+        (message_callback != nullptr)
+            ? (*it)->detach_message_callback(message_callback, user_context,
+                                             &detached_id, &needs_drain)
+            : (*it)->detach_callback(legacy_callback, user_context,
+                                     &detached_id, &needs_drain);
+    if (!removed) {
+      LOG(ERROR) << "Could not remove callback for " << keyexpr_s;
+      return IMW_ERROR;
+    }
+    sub = *it;
+    if (sub->is_empty()) {
+      undeclare = true;
+      subscriptions_.erase(it);
     }
   }
 
-  if (sub_to_undeclare != nullptr) {
-    z_undeclare_subscriber(z_move(sub_to_undeclare->get_zenoh_sub()));
-    return IMW_OK;
+  if (undeclare) {
+    sub->wait_for_all_callbacks();
+    z_undeclare_subscriber(z_move(sub->get_zenoh_sub()));
+  } else if (needs_drain) {
+    sub->wait_for_entry_drain(detached_id);
   }
-  if (found) {
-    return IMW_OK;
-  }
+  return IMW_OK;
+}
 
-  // If we get here, that means we didn't find a matching subscriber. Bad.
-  LOG(ERROR) << "Could not find a subscription for " << keyexpr_s;
-  return IMW_ERROR;
+imw_ret_t IMWZenoh::destroy_subscription(const char* keyexpr,
+                                         imw_subscription_callback_fn* callback,
+                                         const void* user_context) {
+  return destroy_subscription_internal(keyexpr, callback,
+                                       /*message_callback=*/nullptr,
+                                       user_context);
+}
+
+imw_ret_t IMWZenoh::destroy_message_subscription(
+    const char* keyexpr, imw_subscription_message_callback_fn* callback,
+    const void* user_context) {
+  return destroy_subscription_internal(keyexpr, /*legacy_callback=*/nullptr,
+                                       callback, user_context);
 }
 
 imw_ret_t IMWZenoh::destroy_liveliness_subscription(
