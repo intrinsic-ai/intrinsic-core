@@ -378,7 +378,7 @@ $ bazel run //intrinsic/config:empty_application --\
 			startDeployApplication := time.Now()
 			solutionDeploymentClient := solutiondeploymentpb.NewSolutionDeploymentServiceClient(ingressConn)
 			if err := updateSolutionDeployment(ctx, solutionDeploymentClient, lroClient, solutionDeployment, validationPolicy); err != nil {
-				if deployApplication != nil && status.Code(err) != codes.Unimplemented {
+				if deployApplication != nil && status.Code(err) == codes.Unimplemented {
 					if err := deployApplication(ctx, ingressConn, solutionDeployment); err != nil {
 						return deployError("deploy application", err)
 					}
