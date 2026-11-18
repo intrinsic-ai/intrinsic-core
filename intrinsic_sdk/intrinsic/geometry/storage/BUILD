@@ -133,3 +133,44 @@ cc_library(
         ":geometry_serializer",
     ],
 )
+
+cc_library(
+    name = "geometry_storage_uri",
+    srcs = ["geometry_storage_uri.cc"],
+    hdrs = ["geometry_storage_uri.h"],
+    visibility = [
+        "//intrinsic_runtime/intrinsic/geometry/storage:__pkg__",
+        "//intrinsic_sdk/intrinsic/geometry/storage:__pkg__",
+    ],
+    deps = [
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_storage_refs_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "kvstore_storage",
+    srcs = ["kvstore_storage.cc"],
+    hdrs = ["kvstore_storage.h"],
+    deps = [
+        ":geometry_library",
+        ":geometry_storage_uri",
+        "//intrinsic_sdk/intrinsic/geometry/api:io",
+        "//intrinsic_sdk/intrinsic/geometry/api:renderable_generation",
+        "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
+        "//intrinsic_sdk/intrinsic/util:hash",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/log:die_if_null",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/time",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
