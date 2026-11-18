@@ -29,9 +29,9 @@ go_library(
         "//intrinsic_sdk/intrinsic/skills:skillbundle",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd:waitforskill",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd/directupload",
+        "//intrinsic_sdk/intrinsic/util/grpc:lroutil",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/assets/proto:installed_assets_go_proto",
-        "@org_golang_google_grpc//status:go_default_library",
     ],
 )

@@ -83,6 +83,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets/services:bundleimages",
         "//intrinsic_sdk/intrinsic/skills/tools/skill/cmd/directupload",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
+        "//intrinsic_sdk/intrinsic/util/grpc:lroutil",
         "//intrinsic_sdk/intrinsic/util/status:extstatus",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
@@ -90,7 +91,6 @@ go_library(
         "@intrinsic_apis//intrinsic/assets/proto/v1:asset_artifacts_go_proto",
         "@intrinsic_apis//intrinsic/assets/proto/v1:reference_go_proto",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
-        "@org_golang_google_grpc//status:go_default_library",
     ],
 )
 
@@ -176,11 +176,11 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/assets/errors:report",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
+        "//intrinsic_sdk/intrinsic/util/grpc:lroutil",
         "//intrinsic_sdk/intrinsic/util/status:extstatus",
         "@com_github_spf13_cobra//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/assets/proto:installed_assets_go_proto",
-        "@org_golang_google_grpc//status:go_default_library",
     ],
 )
 

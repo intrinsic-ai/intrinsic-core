@@ -371,6 +371,7 @@ go_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [
         "//intrinsic_sdk/intrinsic/util/go:seekable",
+        "//intrinsic_sdk/intrinsic/util/grpc:lroutil",
         "//intrinsic_sdk/intrinsic/util/proto:walkmessages",
         "@com_github_golang_glog//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",

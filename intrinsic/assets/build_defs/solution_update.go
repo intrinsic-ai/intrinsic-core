@@ -44,6 +44,7 @@ import (
 	"intrinsic/tools/inctl/util/color"
 	"intrinsic/tools/inctl/util/introspection"
 	"intrinsic/tools/inctl/util/traceutil"
+	"intrinsic/util/grpc/lroutil"
 	"intrinsic/util/proto/protoio"
 	"intrinsic/util/status/extstatus"
 
@@ -109,20 +110,8 @@ func updateSolutionDeployment(ctx context.Context, client solutiondeploymentpb.S
 		}
 
 		name := op.GetName()
-		for !op.GetDone() {
-			op, err = lroClient.WaitOperation(ctx, &lropb.WaitOperationRequest{
-				Name: name,
-			})
-			if err != nil {
-				if status.Code(err) == codes.Unavailable {
-					log.WarningContextf(ctx, "Retrying UpdateSolutionDeployment due to transient error: %v", err)
-					return err // Retry
-				}
-				return backoff.Permanent(fmt.Errorf("unable to check status of solution update operation %q: %w", name, err))
-			}
-		}
-
-		if err := status.ErrorProto(op.GetError()); err != nil {
+		op, err = lroutil.WaitOperation(ctx, lroClient, op)
+		if err != nil {
 			if status.Code(err) == codes.Unavailable {
 				log.WarningContextf(ctx, "Retrying UpdateSolutionDeployment due to transient error: %v", err)
 				return err // Retry

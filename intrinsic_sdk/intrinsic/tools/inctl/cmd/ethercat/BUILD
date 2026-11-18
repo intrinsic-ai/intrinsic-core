@@ -34,6 +34,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/assets:idutils",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:cobrautil",
+        "//intrinsic_sdk/intrinsic/util/grpc:lroutil",
         "//intrinsic_sdk/intrinsic/util/proto:descriptor",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",
@@ -52,7 +53,6 @@ go_library(
         "@libxml2-go//parser:go_default_library",
     ] + [] + [
         "@org_golang_google_grpc//:go_default_library",
-        "@org_golang_google_grpc//status:go_default_library",
         "@org_golang_google_protobuf//proto",
         "@org_golang_google_protobuf//types/known/anypb",
         "@org_golang_x_net//html/charset:go_default_library",

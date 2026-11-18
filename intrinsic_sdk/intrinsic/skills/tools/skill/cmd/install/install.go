@@ -27,15 +27,14 @@ import (
 	"intrinsic/skills/skillbundle"
 	"intrinsic/skills/tools/skill/cmd/directupload/directupload"
 	"intrinsic/skills/tools/skill/cmd/waitforskill"
+	"intrinsic/util/grpc/lroutil"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/status"
 
 	iagrpcpb "intrinsic/assets/proto/installed_assets_go_proto"
 	iapb "intrinsic/assets/proto/installed_assets_go_proto"
 
 	lrogrpcpb "cloud.google.com/go/longrunning/autogen/longrunningpb"
-	lropb "cloud.google.com/go/longrunning/autogen/longrunningpb"
 )
 
 // Command returns the command for installing a skill.
@@ -119,17 +118,8 @@ $ inctl skill install abc/skill.bundle.tar --solution=my-solution
 			}
 
 			log.Printf("Awaiting completion of the installation")
-			lroClient := lrogrpcpb.NewOperationsClient(conn)
-			for !op.GetDone() {
-				op, err = lroClient.WaitOperation(ctx, &lropb.WaitOperationRequest{
-					Name: op.GetName(),
-				})
-				if err != nil {
-					return fmt.Errorf("unable to check status of installation: %v", err)
-				}
-			}
-
-			if err := status.ErrorProto(op.GetError()); err != nil {
+			op, err = lroutil.WaitOperation(ctx, lrogrpcpb.NewOperationsClient(conn), op)
+			if err != nil {
 				return fmt.Errorf("installation failed: %w", err)
 			}
 

@@ -57,6 +57,7 @@ go_binary(
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:introspection",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:traceutil",
+        "//intrinsic_sdk/intrinsic/util/grpc:lroutil",
         "//intrinsic_sdk/intrinsic/util/proto:protoio",
         "//intrinsic_sdk/intrinsic/util/status:extstatus",
         "@com_github_cenkalti_backoff_v4//:go_default_library",

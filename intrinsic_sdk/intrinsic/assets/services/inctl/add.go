@@ -28,6 +28,7 @@ import (
 	"intrinsic/assets/cmdutils"
 	"intrinsic/assets/idutils"
 	"intrinsic/assets/version"
+	"intrinsic/util/grpc/lroutil"
 
 	"github.com/spf13/cobra"
 	"google.golang.org/protobuf/proto"
@@ -132,16 +133,8 @@ $ inctl service add ai.intrinsic.basler_camera \
 				}
 			}()
 			log.Printf("Awaiting completion of the add operation")
-			for !op.GetDone() {
-				op, err = lroClient.WaitOperation(ctx, &lropb.WaitOperationRequest{
-					Name: op.GetName(),
-				})
-				if err != nil {
-					return fmt.Errorf("unable to check status of create operation for %q: %v", name, err)
-				}
-			}
-
-			if err := op.GetError(); err != nil {
+			op, err = lroutil.WaitOperation(ctx, lroClient, op)
+			if err != nil {
 				return fmt.Errorf("failed to add %q: %v", name, err)
 			}
 

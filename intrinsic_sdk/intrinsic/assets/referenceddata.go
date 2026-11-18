@@ -29,6 +29,7 @@ import (
 	"time"
 
 	"intrinsic/util/go/seekable"
+	"intrinsic/util/grpc/lroutil"
 	"intrinsic/util/proto/walkmessages"
 
 	log "github.com/golang/glog"
@@ -699,17 +700,9 @@ func (p *artifactsProcessor) Process(ctx context.Context, rdr *Reader, opts *Pro
 	}
 
 	// Wait for the LRO to complete.
-	for !op.GetDone() {
-		op, err = p.lroClient.WaitOperation(ctx, &lropb.WaitOperationRequest{
-			Name: op.GetName(),
-		})
-		if err != nil {
-			return fmt.Errorf("failed to wait for operation: %w", err)
-		}
-	}
-
-	if errProto := op.GetError(); errProto != nil {
-		return fmt.Errorf("processing operation failed: %v", status.FromProto(errProto).Err())
+	op, err = lroutil.WaitOperation(ctx, p.lroClient, op)
+	if err != nil {
+		return fmt.Errorf("processing operation failed: %w", err)
 	}
 
 	resp := &assetartifactspb.ProcessResponse{}

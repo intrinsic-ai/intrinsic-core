@@ -29,10 +29,10 @@ import (
 	"intrinsic/assets/errors/report"
 	"intrinsic/tools/inctl/util/agents"
 	"intrinsic/tools/inctl/util/color"
+	"intrinsic/util/grpc/lroutil"
 	"intrinsic/util/status/extstatus"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/status"
 
 	adgrpcpb "intrinsic/assets/proto/asset_deployment_go_proto"
 	adpb "intrinsic/assets/proto/asset_deployment_go_proto"
@@ -100,16 +100,8 @@ $ inctl service delete --project=my_project --cluster=some_cluster \
 				}
 			}()
 			log.Printf("Awaiting completion of the delete operation")
-			for !op.GetDone() {
-				op, err = lroClient.WaitOperation(ctx, &lropb.WaitOperationRequest{
-					Name: op.GetName(),
-				})
-				if err != nil {
-					return fmt.Errorf("unable to check status of delete operation for %q: %v", name, err)
-				}
-			}
-
-			if err := status.ErrorProto(op.GetError()); err != nil {
+			op, err = lroutil.WaitOperation(ctx, lroClient, op)
+			if err != nil {
 				return wrapError(fmt.Sprintf("failed to delete %q", name), err)
 			}
 

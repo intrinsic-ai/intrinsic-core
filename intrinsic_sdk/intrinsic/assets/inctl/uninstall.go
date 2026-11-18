@@ -24,16 +24,15 @@ import (
 	"intrinsic/assets/errors/report"
 	"intrinsic/assets/idutils"
 	"intrinsic/tools/inctl/util/color"
+	"intrinsic/util/grpc/lroutil"
 	"intrinsic/util/status/extstatus"
 
 	"github.com/spf13/cobra"
-	"google.golang.org/grpc/status"
 
 	iagrpcpb "intrinsic/assets/proto/installed_assets_go_proto"
 	iapb "intrinsic/assets/proto/installed_assets_go_proto"
 
 	lrogrpcpb "cloud.google.com/go/longrunning/autogen/longrunningpb"
-	lropb "cloud.google.com/go/longrunning/autogen/longrunningpb"
 )
 
 // GetCommand returns a command to uninstall an asset.
@@ -90,17 +89,8 @@ func GetCommand() *cobra.Command {
 			}
 
 			log.Printf("Awaiting completion of the uninstallation")
-			lroClient := lrogrpcpb.NewOperationsClient(conn)
-			for !op.GetDone() {
-				op, err = lroClient.WaitOperation(ctx, &lropb.WaitOperationRequest{
-					Name: op.GetName(),
-				})
-				if err != nil {
-					return fmt.Errorf("waiting for uninstallation failed: %w", err)
-				}
-			}
-
-			if err := status.ErrorProto(op.GetError()); err != nil {
+			op, err = lroutil.WaitOperation(ctx, lrogrpcpb.NewOperationsClient(conn), op)
+			if err != nil {
 				return wrapError("uninstalling failed", err)
 			}
 			log.Printf("Finished uninstalling %q", idString)

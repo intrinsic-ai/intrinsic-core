@@ -31,11 +31,11 @@ import (
 	"github.com/spf13/cobra"
 	"golang.org/x/net/html/charset"
 	"google.golang.org/grpc"
-	"google.golang.org/grpc/status"
 	"gopkg.in/xmlpath.v2"
 
 	"intrinsic/assets/cmdutils"
 	"intrinsic/assets/idutils"
+	"intrinsic/util/grpc/lroutil"
 	"intrinsic/util/proto/descriptor"
 
 	dapb "intrinsic/assets/data/proto/v1/data_asset_go_proto"
@@ -978,12 +978,11 @@ func installAsset(ctx context.Context, client iagrpcpb.InstalledAssetsClient, da
 // Returns:
 //   - error: An error if the operation fails.
 func waitForOperation(ctx context.Context, conn *grpc.ClientConn, op *lropb.Operation) error {
-	op, err := lrogrpcpb.NewOperationsClient(conn).WaitOperation(ctx, &lropb.WaitOperationRequest{Name: op.GetName()})
+	op, err := lroutil.WaitOperation(ctx, lrogrpcpb.NewOperationsClient(conn), op)
 	if err != nil {
-		return fmt.Errorf("%w: %v", errWaitForInstallationFailed, err)
-	}
-	err = status.ErrorProto(op.GetError())
-	if err != nil {
+		if !op.GetDone() {
+			return fmt.Errorf("%w: %v", errWaitForInstallationFailed, err)
+		}
 		return fmt.Errorf("%w: %v", errInstallationOpFailed, err)
 	}
 	return nil

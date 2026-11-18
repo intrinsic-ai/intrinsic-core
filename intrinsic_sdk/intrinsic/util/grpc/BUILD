@@ -202,6 +202,18 @@ go_library(
     ],
 )
 
+go_library(
+    name = "lroutil",
+    srcs = ["lro_util.go"],
+    importpath = "intrinsic/util/grpc/lroutil",
+    deps = [
+        "@com_google_cloud_go_longrunning//autogen/longrunningpb",
+        "@org_golang_google_grpc//:go_default_library",
+        "@org_golang_google_grpc//status:go_default_library",
+        "@org_golang_google_protobuf//types/known/durationpb",
+    ],
+)
+
 py_library(
     name = "userconfig",
     srcs = ["userconfig.py"],
