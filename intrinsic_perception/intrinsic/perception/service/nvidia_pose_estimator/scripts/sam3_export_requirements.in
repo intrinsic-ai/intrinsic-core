@@ -1,0 +1,68 @@
+# Copyright 2026 Intrinsic Innovation LLC
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+#     https://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+# Python dependencies for the SAM 3 PyTorch -> ONNX export venv created by
+# prepare_sam3_models.sh. The upstream `sam3` package itself is installed from a
+# pinned git commit with `--no-deps --no-index`, so its runtime dependencies are
+# listed here explicitly.
+#
+# Only packages that the ONNX export imports are listed: sam3's training, video and
+# visualization extras (hydra-core, omegaconf, opencv, scipy, ...) are not needed.
+#
+# Every direct dependency is pinned exactly. torch/torchvision match the exact pins in
+# foundationpose_perception_pipeline's pyproject.toml at PIPELINE_GIT_COMMIT (the
+# versions the exported engines were produced on), and numpy/setuptools stay within
+# its upper bounds. Other pins follow //:requirements.txt where compatible.
+#
+# The lockfile is compiled for Linux x86_64 and for exactly the Python version of the
+# export venv (EXPORT_PYTHON_VERSION in prepare_sam3_models.sh). Regenerate it after
+# editing this file (from the repository root):
+#
+# LINT.IfChange(lockfile_command)
+#   uv pip compile --python-version 3.12 --python-platform x86_64-manylinux_2_28 \
+#     --generate-hashes --index-url https://pypi.org/simple \
+#     intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/scripts/sam3_export_requirements.in \
+#     -o intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/scripts/sam3_export_requirements.txt
+# LINT.ThenChange(
+#   //intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/scripts/prepare_sam3_models.sh:export_python_version,
+#   //intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/scripts/sam3_export_requirements.txt,
+# )
+
+# LINT.IfChange(pins)
+# Build backend for the sdist-only packages in the lockfile and the `sam3` git checkout,
+# which prepare_sam3_models.sh builds without build isolation (or, with uv, constrained
+# to these hash-pinned versions). setuptools 81 removed pkg_resources, which sam3 imports.
+setuptools==80.10.2
+wheel==0.46.3
+
+# Export tooling. torch.onnx.export(..., dynamo=False) runs torch's TorchScript exporter,
+# which imports onnx but not onnxscript.
+torch==2.10.0
+torchvision==0.25.0
+huggingface-hub==0.36.2
+onnx==1.18.0
+einops==0.8.1
+pycocotools==2.0.10
+pyyaml==6.0.2
+psutil==7.0.0
+
+# Runtime dependencies of sam3 (see its pyproject.toml at SAM3_GIT_COMMIT).
+numpy==1.26.4
+timm==1.0.19
+tqdm==4.67.1
+ftfy==6.1.1
+regex==2026.3.32
+iopath==0.1.10
+typing-extensions==4.15.0
+# LINT.ThenChange(//intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/scripts/sam3_export_requirements.txt)

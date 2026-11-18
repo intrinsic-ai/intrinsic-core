@@ -45,15 +45,31 @@ SCRIPT_DIR="$(cd "$(dirname "${BASH_SOURCE[0]}")" && pwd)"
 DEFAULT_OUTPUT_DIR="$(cd "${SCRIPT_DIR}/.." && pwd)/models"
 OUTPUT_DIR="${NVIDIA_POSE_ESTIMATOR_MODELS_DIR:-${DEFAULT_OUTPUT_DIR}}"
 VENV_DIR="${SAM3_EXPORT_VENV_DIR:-/tmp/sam3_onnx_export_venv}"
+# Hash-pinned export dependencies (see sam3_export_requirements.in to regenerate).
+REQUIREMENTS_FILE="${SCRIPT_DIR}/sam3_export_requirements.txt"
+# Package index for the export dependencies: PyPI, unless UV_DEFAULT_INDEX or PIP_INDEX_URL
+# points at a mirror. Every download is checked against the lockfile hashes either way.
+INDEX_URL="${UV_DEFAULT_INDEX:-${PIP_INDEX_URL:-https://pypi.org/simple}}"
 FORCE=0
 
 SAM3_REPO_ID="facebook/sam3"
 SAM3_FILENAME="sam3.pt"
 SAM3_EXPECTED_SHA256="9999e2341ceef5e136daa386eecb55cb414446a00ac2b55eb2dfd2f7c3cf8c9e"
+# When bumping SAM3_GIT_COMMIT, check that the runtime dependencies in sam3's
+# pyproject.toml are still covered by sam3_export_requirements.in (sam3 is installed
+# with --no-deps).
 # LINT.IfChange(sam3_commit)
 SAM3_GIT_COMMIT="608457d816009fc369a02c692f27efdd7256b442"
 # LINT.ThenChange(//intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/BUILD:sam3_version)
+# The export runs foundationpose_perception_pipeline's tools/export_sam3_to_onnx.py. When
+# bumping PIPELINE_GIT_COMMIT, check that its pyproject.toml still requires
+# EXPORT_PYTHON_VERSION and that its torch/torchvision pins still match
+# sam3_export_requirements.in.
 PIPELINE_GIT_COMMIT="cd4965a1095fc1fd66da6e2a10b0488ebbf586eb"
+# The lockfile is compiled for exactly this Python version.
+# LINT.IfChange(export_python_version)
+EXPORT_PYTHON_VERSION="3.12"
+# LINT.ThenChange(//intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/scripts/sam3_export_requirements.in:lockfile_command)
 
 while [[ $# -gt 0 ]]; do
   case "$1" in
@@ -131,50 +147,75 @@ elif [[ -x "${HOME}/.local/bin/uv" ]]; then
   UV_CMD="${HOME}/.local/bin/uv"
 fi
 
-if [[ ! -x "${VENV_DIR}/bin/python" ]]; then
-  if [[ -n "${UV_CMD}" ]]; then
-    "${UV_CMD}" venv --seed "${VENV_DIR}"
-  elif ! python3 -m venv "${VENV_DIR}" 2>/dev/null; then
+# The venv is reused across runs only while it has EXPORT_PYTHON_VERSION and was set up from
+# the current lockfile. Otherwise it is rebuilt from scratch, because installing on top of it
+# would leave behind packages that the lockfile no longer lists.
+INSTALLED_REQUIREMENTS_FILE="${VENV_DIR}/installed_sam3_export_requirements.txt"
+VENV_PYTHON_VERSION="$("${VENV_DIR}/bin/python" -c 'import sys; print("%d.%d" % sys.version_info[:2])' 2>/dev/null || true)"
+if [[ "${VENV_PYTHON_VERSION}" != "${EXPORT_PYTHON_VERSION}" ]] ||
+  ! cmp -s "${REQUIREMENTS_FILE}" "${INSTALLED_REQUIREMENTS_FILE}"; then
+  # Only ever delete a directory that is a venv.
+  if [[ -f "${VENV_DIR}/pyvenv.cfg" ]]; then
     rm -rf "${VENV_DIR}"
-    python3 -m venv --without-pip "${VENV_DIR}"
-    curl -sSL https://bootstrap.pypa.io/get-pip.py | "${VENV_DIR}/bin/python"
+  fi
+  if [[ -n "${UV_CMD}" ]]; then
+    "${UV_CMD}" venv --python "${EXPORT_PYTHON_VERSION}" "${VENV_DIR}"
+  elif ! "python${EXPORT_PYTHON_VERSION}" -m venv "${VENV_DIR}"; then
+    echo "❌ Error: Could not create a Python ${EXPORT_PYTHON_VERSION} venv. Install uv (https://docs.astral.sh/uv/)" >&2
+    echo "   or python${EXPORT_PYTHON_VERSION} with its venv module, then re-run this script." >&2
+    exit 1
   fi
 fi
 
-# Install torch, huggingface_hub, onnx, and pinned upstream SAM 3 + perception pipeline
+# Clones (or updates) a git repository, checks out a pinned commit, and deletes untracked and
+# ignored files (such as the build/ and *.egg-info outputs of an earlier install), so files
+# from a previously checked-out commit cannot end up in the next build.
+checkout_pinned_repo() {
+  local url="$1" dir="$2" commit="$3"
+  if [[ ! -d "${dir}/.git" ]]; then
+    # Start over if an earlier clone was interrupted.
+    rm -rf "${dir}"
+    git clone --quiet "${url}" "${dir}"
+  fi
+  git -C "${dir}" fetch --quiet origin "${commit}"
+  git -C "${dir}" checkout --quiet --force "${commit}"
+  git -C "${dir}" clean --quiet -fdx
+}
+
+# Install torch, huggingface_hub, onnx, etc. from the hash-pinned lockfile, then the
+# pinned upstream SAM 3 checkout without resolving any further dependencies (its
+# runtime dependencies are part of the lockfile). Some lockfile entries (iopath) are
+# only published as sdists, so building them must also use the hash-pinned setuptools
+# and wheel from the lockfile rather than whatever is latest on the index.
 echo "=== Installing export dependencies (torch, sam3@${SAM3_GIT_COMMIT:0:8}, onnx) ==="
-DEPS=(
-  "setuptools<81"
-  "numpy<2"
-  torch
-  torchvision
-  huggingface_hub
-  onnx
-  onnxscript
-  einops
-  hydra-core
-  omegaconf
-  opencv-python-headless
-  pycocotools
-  scipy
-  pyyaml
-  psutil
-  "git+https://github.com/facebookresearch/sam3.git@${SAM3_GIT_COMMIT}"
-)
+SAM3_SRC_DIR="${VENV_DIR}/sam3"
+checkout_pinned_repo https://github.com/facebookresearch/sam3.git "${SAM3_SRC_DIR}" "${SAM3_GIT_COMMIT}"
 if [[ -n "${UV_CMD}" ]]; then
-  "${UV_CMD}" pip install --python "${VENV_DIR}/bin/python" --index-url https://pypi.org/simple --link-mode=copy --quiet "${DEPS[@]}"
+  # --build-constraints keeps build isolation but pins (and hash-checks) the build backend.
+  "${UV_CMD}" pip install --python "${VENV_DIR}/bin/python" --index-url "${INDEX_URL}" --link-mode=copy --quiet --require-hashes --build-constraints "${REQUIREMENTS_FILE}" -r "${REQUIREMENTS_FILE}"
+  "${UV_CMD}" pip install --python "${VENV_DIR}/bin/python" --link-mode=copy --quiet --no-build-isolation --no-deps --no-index "${SAM3_SRC_DIR}"
+  "${UV_CMD}" pip check --python "${VENV_DIR}/bin/python"
 else
-  PIP_INDEX_URL=https://pypi.org/simple "${VENV_DIR}/bin/pip" install --upgrade --quiet pip wheel "setuptools<81"
-  PIP_INDEX_URL=https://pypi.org/simple "${VENV_DIR}/bin/pip" install --quiet "${DEPS[@]}"
+  # The pip bundled with Python 3.12 has no --build-constraint, so first install the
+  # hash-pinned setuptools and wheel wheels from the lockfile, then build the sdists
+  # against them without build isolation.
+  BUILD_REQUIREMENTS_FILE="${VENV_DIR}/sam3_export_build_requirements.txt"
+  awk '/^(setuptools|wheel)==/ { keep = 1 } keep { print } keep && !/\\$/ { keep = 0 }' \
+    "${REQUIREMENTS_FILE}" >"${BUILD_REQUIREMENTS_FILE}"
+  if [[ "$(grep -cE '^(setuptools|wheel)==' "${BUILD_REQUIREMENTS_FILE}")" -ne 2 ]]; then
+    echo "❌ Error: ${REQUIREMENTS_FILE} must pin setuptools and wheel." >&2
+    exit 1
+  fi
+  PIP_INDEX_URL="${INDEX_URL}" "${VENV_DIR}/bin/pip" install --quiet --require-hashes --only-binary :all: --no-deps -r "${BUILD_REQUIREMENTS_FILE}"
+  PIP_INDEX_URL="${INDEX_URL}" "${VENV_DIR}/bin/pip" install --quiet --require-hashes --no-build-isolation -r "${REQUIREMENTS_FILE}"
+  "${VENV_DIR}/bin/pip" install --quiet --no-build-isolation --no-deps --no-index "${SAM3_SRC_DIR}"
+  "${VENV_DIR}/bin/pip" check
 fi
+cp "${REQUIREMENTS_FILE}" "${INSTALLED_REQUIREMENTS_FILE}"
 
 # Clone or update the perception pipeline tools repo for export_sam3_to_onnx.py
 PIPELINE_SRC_DIR="${VENV_DIR}/foundationpose_perception_pipeline"
-if [[ ! -d "${PIPELINE_SRC_DIR}" ]]; then
-  git clone --quiet https://github.com/intrinsic-opensource/foundationpose_perception_pipeline.git "${PIPELINE_SRC_DIR}"
-fi
-git -C "${PIPELINE_SRC_DIR}" fetch --quiet origin "${PIPELINE_GIT_COMMIT}"
-git -C "${PIPELINE_SRC_DIR}" checkout --quiet "${PIPELINE_GIT_COMMIT}"
+checkout_pinned_repo https://github.com/intrinsic-opensource/foundationpose_perception_pipeline.git "${PIPELINE_SRC_DIR}" "${PIPELINE_GIT_COMMIT}"
 
 # 5. Download sam3.pt from HuggingFace and run ONNX export
 echo "=== Downloading ${SAM3_FILENAME} from HuggingFace (${SAM3_REPO_ID}) ==="
