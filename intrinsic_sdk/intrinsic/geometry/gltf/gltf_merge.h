@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef INTRINSIC_GEOMETRY_INTERNAL_UTIL_GLTF_MERGE_H_
-#define INTRINSIC_GEOMETRY_INTERNAL_UTIL_GLTF_MERGE_H_
+#ifndef INTRINSIC_GEOMETRY_GLTF_GLTF_MERGE_H_
+#define INTRINSIC_GEOMETRY_GLTF_GLTF_MERGE_H_
 
 #include <string>
 #include <vector>
@@ -63,4 +63,4 @@ void AttachSubModelToModel(tinygltf::Model& main_model,
 
 }  // namespace intrinsic::geo
 
-#endif  // INTRINSIC_GEOMETRY_INTERNAL_UTIL_GLTF_MERGE_H_
+#endif  // INTRINSIC_GEOMETRY_GLTF_GLTF_MERGE_H_

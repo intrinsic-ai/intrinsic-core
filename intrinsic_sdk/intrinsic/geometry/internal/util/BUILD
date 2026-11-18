@@ -92,30 +92,3 @@ cc_library(
         "@or_tools//ortools/base:path",
     ],
 )
-
-cc_library(
-    name = "gltf_merge",
-    srcs = ["gltf_merge.cc"],
-    hdrs = ["gltf_merge.h"],
-    deps = [
-        "@abseil-cpp//absl/strings",
-        "@tinygltf",
-    ],
-)
-
-cc_library(
-    name = "gltf_helpers",
-    srcs = ["gltf_helpers.cc"],
-    hdrs = ["gltf_helpers.h"],
-    visibility = [
-        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-    ],
-    deps = [
-        "@abseil-cpp//absl/log",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@tinygltf",
-    ],
-)

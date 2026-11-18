@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/geometry/internal/util/gltf_merge.h"
+#include "intrinsic/geometry/gltf/gltf_merge.h"
 
 #include <cstddef>
 #include <utility>
