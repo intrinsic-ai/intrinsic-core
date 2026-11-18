@@ -341,6 +341,14 @@ absl::StatusOr<Pose3d> ComputePoseFromPatternDetection(
         "2D-3D correspondences, but only got %d.",
         pattern_detection.image_points_size()));
   }
+  if (pattern_detection.marker_points_size() !=
+      pattern_detection.image_points_size()) {
+    return absl::InvalidArgumentError(
+        absl::StrFormat("PatternDetection size mismatch: %d marker points vs "
+                        "%d image points.",
+                        pattern_detection.marker_points_size(),
+                        pattern_detection.image_points_size()));
+  }
   std::vector<cv::Point3f> points_3d;
   points_3d.reserve(pattern_detection.marker_points_size());
   std::transform(pattern_detection.marker_points().begin(),
@@ -361,8 +369,11 @@ absl::StatusOr<Pose3d> ComputePoseFromPatternDetection(
       camera_params.distortion_params.value_or(DistortionParams()));
   cv::Mat translation;
   cv::Mat rotation;
-  const bool found = cv::solvePnP(points_3d, points_2d, intrinsic_params,
-                                  distortion_params, rotation, translation);
+  bool found = false;
+  INTR_RETURN_IF_ERROR(TryCatchCvFunction([&]() {
+    found = cv::solvePnP(points_3d, points_2d, intrinsic_params,
+                         distortion_params, rotation, translation);
+  }));
   // solvePnP may return NaN values for rotation or translation.
   if (!found || !cv::checkRange(rotation) || !cv::checkRange(translation)) {
     return absl::NotFoundError("No pose could be computed.");

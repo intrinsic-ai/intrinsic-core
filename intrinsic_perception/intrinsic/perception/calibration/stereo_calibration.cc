@@ -17,6 +17,7 @@
 #include <cstddef>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/core/camera_params.h"
@@ -74,6 +75,14 @@ absl::StatusOr<StereoCalibrationResult> CalibrateStereoExtrinsic(
       camera_params1.distortion_params.value_or(DistortionParams{}));
   const cv::Size image_size = DimensionsToCvSize(camera_params0.Dimensions());
 
+  if (obj_points.empty() || img_points0.empty() || img_points1.empty()) {
+    return absl::InvalidArgumentError("Calibration points cannot be empty.");
+  }
+  if (obj_points.size() != img_points0.size() ||
+      obj_points.size() != img_points1.size()) {
+    return absl::InvalidArgumentError("Calibration points size mismatch.");
+  }
+
   const auto obj_points_cv = ToCvPoints(obj_points).value();
   const auto img_points0_cv = ToCvPoints(img_points0).value();
   const auto img_points1_cv = ToCvPoints(img_points1).value();
@@ -105,10 +114,14 @@ absl::StatusOr<StereoCalibrationResult> CalibrateStereoExtrinsic(
   cv::TermCriteria stereocalib_criteria(
       cv::TermCriteria::MAX_ITER + cv::TermCriteria::EPS, 1000, 1e-5);
   cv::Mat rotation, translation, essential_matrix, fundamental_matrix;
-  const double rpe = cv::stereoCalibrate(
-      obj_points_cv, img_points0_cv, img_points1_cv, intrinsics0, dist_coeffs0,
-      intrinsics1, dist_coeffs1, image_size, rotation, translation,
-      essential_matrix, fundamental_matrix, flags, stereocalib_criteria);
+  double rpe = 0.0;
+  INTR_RETURN_IF_ERROR(TryCatchCvFunction([&]() {
+    rpe = cv::stereoCalibrate(obj_points_cv, img_points0_cv, img_points1_cv,
+                              intrinsics0, dist_coeffs0, intrinsics1,
+                              dist_coeffs1, image_size, rotation, translation,
+                              essential_matrix, fundamental_matrix, flags,
+                              stereocalib_criteria);
+  }));
 
   INTR_ASSIGN_OR_RETURN(const Pose3d cam1_t_cam0,
                         FromCVPose(rotation, translation));

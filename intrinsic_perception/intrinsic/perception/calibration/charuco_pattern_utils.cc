@@ -15,6 +15,7 @@
 #include "intrinsic/perception/calibration/charuco_pattern_utils.h"
 
 #include <algorithm>
+#include <cmath>
 #include <cstdint>
 #include <optional>
 #include <utility>
@@ -100,18 +101,38 @@ absl::StatusOr<cv::Ptr<cv::aruco::CharucoBoard>> CreateCharucoBoard(
     return absl::InvalidArgumentError(
         absl::StrFormat("Invalid ArucoDictionary given: %s", ""));
   }
+  if (charuco_pattern.squares_x() <= 1 || charuco_pattern.squares_y() <= 1) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "CharucoPattern squares_x (%d) and squares_y (%d) must be > 1.",
+        charuco_pattern.squares_x(), charuco_pattern.squares_y()));
+  }
+  if (!std::isfinite(charuco_pattern.marker_length()) ||
+      !std::isfinite(charuco_pattern.square_length()) ||
+      charuco_pattern.marker_length() <= 0.0f ||
+      charuco_pattern.square_length() <= charuco_pattern.marker_length()) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "CharucoPattern must have 0 < marker_length (%f) < square_length (%f).",
+        charuco_pattern.marker_length(), charuco_pattern.square_length()));
+  }
   const cv::aruco::Dictionary dictionary =
       cv::aruco::getPredefinedDictionary(it->second);
-  return cv::makePtr<cv::aruco::CharucoBoard>(
-      cv::Size(charuco_pattern.squares_x(), charuco_pattern.squares_y()),
-      charuco_pattern.square_length(), charuco_pattern.marker_length(),
-      dictionary);
+  cv::Ptr<cv::aruco::CharucoBoard> board;
+  INTR_RETURN_IF_ERROR(TryCatchCvFunction([&]() {
+    board = cv::makePtr<cv::aruco::CharucoBoard>(
+        cv::Size(charuco_pattern.squares_x(), charuco_pattern.squares_y()),
+        charuco_pattern.square_length(), charuco_pattern.marker_length(),
+        dictionary);
+  }));
+  return board;
 }
 
 absl::StatusOr<CharucoDetection> FindCharucoMarker(
     const Image<Rgb8u>& image,
     const intrinsic_proto::perception::v1::CharucoPattern& charuco_pattern,
     const std::optional<CameraParams>& camera_params) {
+  if (image.empty()) {
+    return absl::InvalidArgumentError("Input image is empty.");
+  }
   INTR_ASSIGN_OR_RETURN(cv::Ptr<cv::aruco::CharucoBoard> charucoboard,
                         CreateCharucoBoard(charuco_pattern));
 
@@ -137,9 +158,11 @@ absl::StatusOr<CharucoDetection> FindCharucoMarker(
   std::vector<int> marker_ids;
   std::vector<std::vector<cv::Point2f>> marker_corners;
   cv::Mat gray_image;
-  cv::cvtColor(UnsafeConstCastCvMat(image), gray_image, cv::COLOR_BGR2GRAY);
-  detector.detectBoard(gray_image, charuco_corners, charuco_ids, marker_corners,
-                       marker_ids);
+  INTR_RETURN_IF_ERROR(TryCatchCvFunction([&]() {
+    cv::cvtColor(UnsafeConstCastCvMat(image), gray_image, cv::COLOR_BGR2GRAY);
+    detector.detectBoard(gray_image, charuco_corners, charuco_ids,
+                         marker_corners, marker_ids);
+  }));
 
   INTR_RETURN_IF_ERROR(CheckForDuplicateMarkers(marker_ids));
 
@@ -194,11 +217,17 @@ absl::StatusOr<Image<Rgb8u>> FindAndDrawCharucoBoard(
 absl::StatusOr<Mesh> CreateCharucoMesh(
     const intrinsic_proto::perception::v1::CharucoPattern& pattern,
     const CreateCharucoMeshOptions& options) {
+  if (options.texture_size <= 0) {
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "texture_size (%d) must be > 0.", options.texture_size));
+  }
   // Create charuco texture.
   INTR_ASSIGN_OR_RETURN(const auto charuco_board, CreateCharucoBoard(pattern));
   cv::Mat texture_cv;
-  charuco_board->generateImage(
-      cv::Size(options.texture_size, options.texture_size), texture_cv);
+  INTR_RETURN_IF_ERROR(TryCatchCvFunction([&]() {
+    charuco_board->generateImage(
+        cv::Size(options.texture_size, options.texture_size), texture_cv);
+  }));
   Image<Gray8u> texture = MoveToImage<Gray8u>(std::move(texture_cv));
 
   std::vector<Vector3f> vertices;
