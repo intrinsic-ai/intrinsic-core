@@ -36,6 +36,7 @@ cc_library(
     deps = [
         ":liveliness_get_context",
         ":zenoh_helpers",
+        "//intrinsic_sdk/intrinsic/middleware:imw_interface",
         "//intrinsic_sdk/intrinsic/middleware/zenoh:imw_zenoh",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",

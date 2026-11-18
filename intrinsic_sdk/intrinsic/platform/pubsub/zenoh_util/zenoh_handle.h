@@ -31,6 +31,9 @@ namespace intrinsic {
 typedef std::function<void(const char*, const void*, const size_t)>
     imw_callback_functor_t;
 
+using imw_message_callback_functor_t = std::function<void(
+    const char*, const void*, const size_t, const imw_message_metadata_t*)>;
+
 typedef std::function<void(const char*, bool)>
     imw_liveliness_callback_functor_t;
 
@@ -38,13 +41,27 @@ typedef std::function<void(const char*)> imw_on_done_functor_t;
 
 typedef void (*imw_on_done_callback_ptr_t)(const char*, void*);
 
+// Non-owning callback bundle passed as `user_context` to `imw_query` and
+// `imw_query_messages`. Pointed-to functors must outlive
+// `zenoh_query_static_on_done`, which runs `on_done` once (if non-null) and
+// then invokes `on_destroy` to release caller-owned or self-retained state.
+// When `imw_query` or `imw_query_messages` returns non-OK before Zenoh accepts
+// the query, `zenoh_query_static_on_done` does not run and callers must
+// release self-retained state directly (e.g., via `KVQuery::CancelSelfRetain`).
 struct QueryContext {
-  imw_callback_functor_t* callback;
-  imw_on_done_functor_t* on_done;
+  imw_callback_functor_t* callback = nullptr;
+  imw_on_done_functor_t* on_done = nullptr;
+  imw_message_callback_functor_t* message_callback = nullptr;
+  std::function<void()> on_destroy;
 };
 
 void zenoh_static_callback(const char* keyexpr, const void* blob,
                            size_t blob_len, void* fptr);
+
+void zenoh_static_message_callback(const char* keyexpr, const void* blob,
+                                   size_t blob_len,
+                                   const imw_message_metadata_t* metadata,
+                                   void* fptr);
 
 void zenoh_static_liveliness_callback(const char* keyexpr, bool alive,
                                       void* fptr);
@@ -56,6 +73,11 @@ void zenoh_static_liveliness_get_on_done_callback(const char* keyexpr,
 
 void zenoh_query_static_callback(const char* keyexpr, const void* blob,
                                  size_t blob_len, void* fptr);
+
+void zenoh_query_message_static_callback(const char* keyexpr, const void* blob,
+                                         size_t blob_len,
+                                         const imw_message_metadata_t* metadata,
+                                         void* fptr);
 
 void zenoh_query_static_on_done(const char* keyexpr, void* fptr);
 
@@ -91,9 +113,19 @@ struct ZenohHandle {
       imw_create_subscription;
 
   std::add_pointer_t<imw_ret_t(const char* keyexpr,
+                               imw_subscription_message_callback_fn* callback,
+                               const char* qos, void* user_context)>
+      imw_create_message_subscription;
+
+  std::add_pointer_t<imw_ret_t(const char* keyexpr,
                                imw_subscription_callback_fn* callback,
                                const void* user_context)>
       imw_destroy_subscription;
+
+  std::add_pointer_t<imw_ret_t(const char* keyexpr,
+                               imw_subscription_message_callback_fn* callback,
+                               const void* user_context)>
+      imw_destroy_message_subscription;
 
   std::add_pointer_t<int(const char* left, const char* right)>
       imw_keyexpr_intersects;
@@ -118,9 +150,24 @@ struct ZenohHandle {
                                const size_t reply_bytes_len)>
       imw_queryable_reply;
 
+  std::add_pointer_t<imw_ret_t(
+      const void* query_context, const char* keyexpr, const void* reply_bytes,
+      const size_t reply_bytes_len, imw_encoding_t encoding)>
+      imw_queryable_reply_with_encoding;
+
   std::add_pointer_t<imw_ret_t(const char* keyexpr, const void* bytes,
                                const size_t bytes_len)>
       imw_set;
+
+  std::add_pointer_t<imw_ret_t(const char* keyexpr, const void* bytes,
+                               const size_t bytes_len, imw_encoding_t encoding)>
+      imw_set_with_encoding;
+
+  std::add_pointer_t<imw_ret_t(const char* keyexpr, const void* bytes,
+                               const size_t bytes_len, imw_encoding_t encoding,
+                               imw_payload_deleter_fn* deleter,
+                               void* deleter_context)>
+      imw_set_with_encoding_and_deleter;
 
   std::add_pointer_t<imw_ret_t(
       const char* keyexpr, imw_query_callback_fn* callback,
@@ -128,6 +175,13 @@ struct ZenohHandle {
       const size_t query_payload_len, void* user_context,
       imw_query_options_t* options)>
       imw_query;
+
+  std::add_pointer_t<imw_ret_t(
+      const char* keyexpr, imw_query_message_callback_fn* callback,
+      imw_query_on_done_callback_fn* on_done, const void* query_payload,
+      const size_t query_payload_len, void* user_context,
+      imw_query_options_t* options)>
+      imw_query_messages;
 
   std::add_pointer_t<imw_ret_t(const char* keyexp)> imw_delete_keyexpr;
 

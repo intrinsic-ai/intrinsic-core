@@ -49,9 +49,16 @@ Subscription::~Subscription() { Unsubscribe(); }
 
 void Subscription::Unsubscribe() {
   if (!topic_name_.empty() && subscription_data_ != nullptr) {
-    Zenoh().imw_destroy_subscription(
-        subscription_data_->prefixed_name.c_str(), zenoh_static_callback,
-        subscription_data_->callback_functor.get());
+    if (subscription_data_->message_callback_functor != nullptr) {
+      Zenoh().imw_destroy_message_subscription(
+          subscription_data_->prefixed_name.c_str(),
+          zenoh_static_message_callback,
+          subscription_data_->message_callback_functor.get());
+    } else if (subscription_data_->callback_functor != nullptr) {
+      Zenoh().imw_destroy_subscription(
+          subscription_data_->prefixed_name.c_str(), zenoh_static_callback,
+          subscription_data_->callback_functor.get());
+    }
     topic_name_.clear();
   }
 }

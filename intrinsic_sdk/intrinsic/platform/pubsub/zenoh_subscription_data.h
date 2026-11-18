@@ -24,6 +24,7 @@ namespace intrinsic {
 
 struct SubscriptionData {
   std::unique_ptr<imw_callback_functor_t> callback_functor;
+  std::unique_ptr<imw_message_callback_functor_t> message_callback_functor;
   std::string prefixed_name;
 };
 

@@ -17,7 +17,9 @@
 #include <dlfcn.h>
 
 #include <cstdlib>
+#include <functional>
 #include <string>
+#include <utility>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -33,6 +35,14 @@ namespace intrinsic {
 void zenoh_static_callback(const char* keyexpr, const void* blob,
                            const size_t blob_len, void* fptr) {
   (*static_cast<imw_callback_functor_t*>(fptr))(keyexpr, blob, blob_len);
+}
+
+void zenoh_static_message_callback(const char* keyexpr, const void* blob,
+                                   const size_t blob_len,
+                                   const imw_message_metadata_t* metadata,
+                                   void* fptr) {
+  (*static_cast<imw_message_callback_functor_t*>(fptr))(keyexpr, blob, blob_len,
+                                                        metadata);
 }
 
 void zenoh_static_liveliness_callback(const char* keyexpr, bool alive,
@@ -54,12 +64,33 @@ void zenoh_static_liveliness_get_on_done_callback(const char* keyexpr,
 void zenoh_query_static_callback(const char* keyexpr, const void* blob,
                                  const size_t blob_len, void* fptr) {
   QueryContext* query_context = static_cast<QueryContext*>(fptr);
-  (*(query_context->callback))(keyexpr, blob, blob_len);
+  if (query_context != nullptr && query_context->callback != nullptr) {
+    (*(query_context->callback))(keyexpr, blob, blob_len);
+  }
+}
+
+void zenoh_query_message_static_callback(const char* keyexpr, const void* blob,
+                                         const size_t blob_len,
+                                         const imw_message_metadata_t* metadata,
+                                         void* fptr) {
+  QueryContext* query_context = static_cast<QueryContext*>(fptr);
+  if (query_context != nullptr && query_context->message_callback != nullptr) {
+    (*(query_context->message_callback))(keyexpr, blob, blob_len, metadata);
+  }
 }
 
 void zenoh_query_static_on_done(const char* keyexpr, void* fptr) {
   QueryContext* query_context = static_cast<QueryContext*>(fptr);
-  (*(query_context->on_done))(keyexpr);
+  if (query_context == nullptr) {
+    return;
+  }
+  std::function<void()> cleanup = std::move(query_context->on_destroy);
+  if (query_context->on_done != nullptr && *(query_context->on_done)) {
+    (*(query_context->on_done))(keyexpr);
+  }
+  if (cleanup) {
+    cleanup();
+  }
 }
 
 ZenohHandle* ZenohHandle::CreateZenohHandle() {
@@ -80,7 +111,11 @@ void ZenohHandle::Initialize() {
   this->imw_publisher_has_matching_subscribers =
       ::intrinsic::imw_publisher_has_matching_subscribers;
   this->imw_create_subscription = ::intrinsic::imw_create_subscription;
+  this->imw_create_message_subscription =
+      ::intrinsic::imw_create_message_subscription;
   this->imw_destroy_subscription = ::intrinsic::imw_destroy_subscription;
+  this->imw_destroy_message_subscription =
+      ::intrinsic::imw_destroy_message_subscription;
   this->imw_keyexpr_includes = ::intrinsic::imw_keyexpr_includes;
   this->imw_keyexpr_intersects = ::intrinsic::imw_keyexpr_intersects;
   this->imw_keyexpr_is_canon = ::intrinsic::imw_keyexpr_is_canon;
@@ -88,8 +123,14 @@ void ZenohHandle::Initialize() {
   this->imw_create_queryable = ::intrinsic::imw_create_queryable;
   this->imw_destroy_queryable = ::intrinsic::imw_destroy_queryable;
   this->imw_queryable_reply = ::intrinsic::imw_queryable_reply;
+  this->imw_queryable_reply_with_encoding =
+      ::intrinsic::imw_queryable_reply_with_encoding;
   this->imw_query = ::intrinsic::imw_query;
+  this->imw_query_messages = ::intrinsic::imw_query_messages;
   this->imw_set = ::intrinsic::imw_set;
+  this->imw_set_with_encoding = ::intrinsic::imw_set_with_encoding;
+  this->imw_set_with_encoding_and_deleter =
+      ::intrinsic::imw_set_with_encoding_and_deleter;
   this->imw_delete_keyexpr = ::intrinsic::imw_delete_keyexpr;
   this->imw_create_liveliness_subscription =
       ::intrinsic::imw_create_liveliness_subscription;
