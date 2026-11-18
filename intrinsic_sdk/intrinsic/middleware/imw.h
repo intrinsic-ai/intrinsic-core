@@ -167,11 +167,28 @@ imw_ret_t imw_query_messages(const char* keyexpr,
                              const void* query_payload,
                              const size_t query_payload_len, void* user_context,
                              imw_query_options_t* options);
+typedef void imw_payload_deleter_fn(void* data, void* context);
+
 imw_ret_t imw_set(const char* keyexpr, const void* bytes,
                   const size_t bytes_len);
 imw_ret_t imw_set_with_encoding(const char* keyexpr, const void* bytes,
                                 const size_t bytes_len,
                                 imw_encoding_t encoding);
+// Sets a key using caller-owned storage transferred to the middleware. Always
+// invokes `deleter(const_cast<void*>(bytes), deleter_context)` exactly once
+// (if non-null) once the middleware finishes with the buffer, including on
+// every error return path and when `bytes_len == 0` or
+// `encoding == IMW_ENCODING_VARINT_PREFIXED_BYTES`. For non-empty non-default
+// encodings, wraps `[bytes, bytes + bytes_len)` without copying
+// (`z_bytes_from_buf`), so
+// `deleter` must be thread-safe and the bytes must remain valid and immutable
+// until `deleter` runs (the middleware never mutates `bytes`).
+imw_ret_t imw_set_with_encoding_and_deleter(const char* keyexpr,
+                                            const void* bytes,
+                                            const size_t bytes_len,
+                                            imw_encoding_t encoding,
+                                            imw_payload_deleter_fn* deleter,
+                                            void* deleter_context);
 imw_ret_t imw_delete_keyexpr(const char* keyexpr);
 imw_ret_t imw_create_liveliness_subscription(
     const char* keyexpr, imw_liveliness_callback_fn* callback,

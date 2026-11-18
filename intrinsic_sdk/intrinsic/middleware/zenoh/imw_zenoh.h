@@ -102,6 +102,12 @@ class IMWZenoh {
 
   imw_ret_t set(const char* keyexpr, const void* bytes, const size_t bytes_len,
                 imw_encoding_t encoding = IMW_ENCODING_VARINT_PREFIXED_BYTES);
+  imw_ret_t set_with_encoding_and_deleter(const char* keyexpr,
+                                          const void* bytes,
+                                          const size_t bytes_len,
+                                          imw_encoding_t encoding,
+                                          imw_payload_deleter_fn* deleter,
+                                          void* deleter_context);
 
   imw_ret_t delete_keyexpr(const char* keyexpr);
 

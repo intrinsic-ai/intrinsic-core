@@ -450,6 +450,23 @@ imw_ret_t imw_set_with_encoding(const char* keyexpr, const void* bytes,
   return singleton->set(keyexpr, bytes, bytes_len, encoding);
 }
 
+imw_ret_t imw_set_with_encoding_and_deleter(const char* keyexpr,
+                                            const void* bytes,
+                                            const size_t bytes_len,
+                                            imw_encoding_t encoding,
+                                            imw_payload_deleter_fn* deleter,
+                                            void* deleter_context) {
+  const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
+  if (singleton == nullptr) {
+    if (deleter != nullptr) {
+      deleter(const_cast<void*>(bytes), deleter_context);
+    }
+    return IMW_NOT_INITIALIZED;
+  }
+  return singleton->set_with_encoding_and_deleter(
+      keyexpr, bytes, bytes_len, encoding, deleter, deleter_context);
+}
+
 imw_ret_t imw_delete_keyexpr(const char* keyexpr) {
   const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
   if (singleton == nullptr) return IMW_NOT_INITIALIZED;

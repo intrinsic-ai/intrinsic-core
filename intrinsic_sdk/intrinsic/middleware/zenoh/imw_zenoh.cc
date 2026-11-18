@@ -25,6 +25,7 @@
 #include <vector>
 
 #include "absl/base/no_destructor.h"
+#include "absl/cleanup/cleanup.h"
 #include "absl/log/log.h"
 #include "absl/strings/escaping.h"
 #include "absl/strings/str_format.h"
@@ -1267,6 +1268,54 @@ imw_ret_t IMWZenoh::set(const char* keyexpr, const void* bytes,
     return IMW_ERROR;
   }
 
+  return PutPayloadWithEncoding(z_loan(session_), z_loan(view_keyexpr),
+                                &payload, encoding);
+}
+
+imw_ret_t IMWZenoh::set_with_encoding_and_deleter(
+    const char* keyexpr, const void* bytes, const size_t bytes_len,
+    imw_encoding_t encoding, imw_payload_deleter_fn* deleter,
+    void* deleter_context) {
+  absl::Cleanup invoke_deleter = [&] {
+    if (deleter != nullptr) {
+      deleter(const_cast<void*>(bytes), deleter_context);
+    }
+  };
+
+  z_view_keyexpr_t view_keyexpr;
+  if (!ValidateSetArgs(session_, keyexpr, encoding, &view_keyexpr)) {
+    return IMW_ERROR;
+  }
+  if (bytes_len > 0 && bytes == nullptr) {
+    LOG(ERROR) << "Payload pointer is null with non-zero length: " << bytes_len;
+    return IMW_ERROR;
+  }
+
+  z_owned_bytes_t payload;
+  if (encoding == IMW_ENCODING_VARINT_PREFIXED_BYTES) {
+    if (!SerializePayloadForEncoding(bytes, bytes_len, encoding,
+                                     /*raw_override=*/false, &payload)) {
+      return IMW_ERROR;
+    }
+    return PutPayloadWithEncoding(z_loan(session_), z_loan(view_keyexpr),
+                                  &payload, encoding);
+  }
+  if (bytes_len == 0) {
+    z_bytes_empty(&payload);
+    return PutPayloadWithEncoding(z_loan(session_), z_loan(view_keyexpr),
+                                  &payload, encoding);
+  }
+
+  const z_result_t result = z_bytes_from_buf(
+      &payload, const_cast<uint8_t*>(static_cast<const uint8_t*>(bytes)),
+      bytes_len, deleter, deleter_context);
+  if (result != Z_OK) {
+    LOG(ERROR) << "z_bytes_from_buf failed: " << static_cast<int>(result);
+    return IMW_ERROR;
+  }
+  // Ownership of `bytes` and `deleter` now belongs to `payload`, which `z_put`
+  // always consumes and drops on both success and failure.
+  std::move(invoke_deleter).Cancel();
   return PutPayloadWithEncoding(z_loan(session_), z_loan(view_keyexpr),
                                 &payload, encoding);
 }
