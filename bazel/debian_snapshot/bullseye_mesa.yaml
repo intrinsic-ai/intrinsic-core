@@ -23,6 +23,7 @@ version: 1
 
 archs:
   - "amd64"
+  - "arm64"
 
 sources:
   - type: deb

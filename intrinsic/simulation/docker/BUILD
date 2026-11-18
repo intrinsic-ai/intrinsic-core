@@ -24,17 +24,28 @@ package(
 # When GL and X libraries are installed from apt package layer, the following
 # symlinks are not created automatically. But they are required for Python
 # graphics libraries to load correctly.
+_GL_SYMLINKS = {
+    "libEGL.so": "libEGL.so.1",
+    "libGL.so": "libGL.so.1",
+    "libGLX.so": "libGLX.so.0",
+    "libX11.so": "libX11.so.6",
+    "libXext.so": "libXext.so.6",
+    "libXfixes.so": "libXfixes.so.3",
+    "libXrender.so": "libXrender.so.1",
+}
+
 pkg_tar(
     name = "gl_symlinks",
-    symlinks = {
-        "/usr/lib/x86_64-linux-gnu/libEGL.so": "libEGL.so.1",
-        "/usr/lib/x86_64-linux-gnu/libGL.so": "libGL.so.1",
-        "/usr/lib/x86_64-linux-gnu/libGLX.so": "libGLX.so.0",
-        "/usr/lib/x86_64-linux-gnu/libX11.so": "libX11.so.6",
-        "/usr/lib/x86_64-linux-gnu/libXext.so": "libXext.so.6",
-        "/usr/lib/x86_64-linux-gnu/libXfixes.so": "libXfixes.so.3",
-        "/usr/lib/x86_64-linux-gnu/libXrender.so": "libXrender.so.1",
-    },
+    symlinks = select({
+        "@platforms//cpu:aarch64": {
+            "/usr/lib/aarch64-linux-gnu/" + link: target
+            for link, target in _GL_SYMLINKS.items()
+        },
+        "@platforms//cpu:x86_64": {
+            "/usr/lib/x86_64-linux-gnu/" + link: target
+            for link, target in _GL_SYMLINKS.items()
+        },
+    }),
 )
 
 # Gzserver uses a custom base image to support sensor rendering on non-GPU hosts.
@@ -42,7 +53,10 @@ pkg_tar(
 # bazel build.
 oci_image(
     name = "bullseye_mesa_base_image",
-    architecture = "amd64",
+    architecture = select({
+        "@platforms//cpu:aarch64": "arm64",
+        "@platforms//cpu:x86_64": "amd64",
+    }),
     entrypoint = [],
     os = "linux",
     tars = [
