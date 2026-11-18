@@ -349,11 +349,10 @@ absl::StatusOr<std::string> SceneObjectToSdf(
     SceneObjectKinematicsToSdf(scene_object.properties().kinematics(), sdf);
   }
 
-  // NOTE: we don't set `is_static` in SDF yet. This should happen when we
-  // extend the functionality to export from "SceneObject proto + default
-  // config" to SDF, and vice versa.
-
   if (scene_object.has_simulation_spec()) {
+    if (scene_object.simulation_spec().is_static()) {
+      absl::StrAppend(&sdf, "<static>true</static>");
+    }
     INTR_ASSIGN_OR_RETURN(std::string sim_spec_sdf,
                           SimSpecToSdf(scene_object.simulation_spec()));
     absl::StrAppend(&sdf, sim_spec_sdf);
