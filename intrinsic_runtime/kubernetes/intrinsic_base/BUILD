@@ -90,12 +90,14 @@ helm_chart(
         "//intrinsic/world/binary:world-template",
         "//intrinsic/world/service/updater:world_updater_template",
         "//intrinsic_runtime/httpjson:http-gateway-template",
-        "//intrinsic_runtime/intrinsic/longrunning/service:operations-template",
         "//intrinsic_runtime/intrinsic/proto_tools/templates:proto-builder-template",
         "//intrinsic_runtime/intrinsic/scene/service:scene_object_import_template",  # needed for scene_object_import
         # keep-sorted end
     ] + [
+        # keep-sorted start
         "//intrinsic/storage/data_store:core-template",
+        "//intrinsic_runtime/intrinsic/longrunning/service:operations-template",
+        # keep-sorted end
     ],
     values = ":core_base_values.yaml",
     visibility = ["//visibility:public"],
