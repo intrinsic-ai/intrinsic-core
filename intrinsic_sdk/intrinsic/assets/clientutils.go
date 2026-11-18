@@ -47,7 +47,7 @@ const (
 )
 
 var (
-	errNoInfoToAuthenticate = errors.New("GCP project or api-key is required for authentication, but neither could be determined (try providing `--org=<org>@<project>` to specify the project)")
+	errNoInfoToAuthenticate = fmt.Errorf("%w: GCP project or api-key is required for authentication, but neither could be determined (try providing `--org=<org>@<project>` to specify the project)", auth.ErrCredentialsRequired)
 )
 
 // DialClusterFromInctl creates a connection to a cluster from an inctl command.
@@ -91,13 +91,13 @@ func DialCluster(ctx context.Context, project, org, address, cluster, solution s
 			Project: project,
 		})
 		if err != nil {
-			return ctx, nil, "", fmt.Errorf("could not create connection options for cluster: %v", err)
+			return ctx, nil, "", fmt.Errorf("could not create connection options for cluster: %w", err)
 		}
 		defer conn.Close()
 
 		cluster, err = getClusterNameFromSolution(ctx, conn, solution)
 		if err != nil {
-			return ctx, nil, "", fmt.Errorf("could not get cluster name from solution: %v", err)
+			return ctx, nil, "", fmt.Errorf("could not get cluster name from solution: %w", err)
 		}
 	}
 
@@ -108,7 +108,7 @@ func DialCluster(ctx context.Context, project, org, address, cluster, solution s
 		Project: project,
 	})
 	if err != nil {
-		return ctx, nil, "", fmt.Errorf("could not create connection options for the installer: %v", err)
+		return ctx, nil, "", fmt.Errorf("could not create connection options for the installer: %w", err)
 	}
 
 	return ctx, conn, address, nil
@@ -471,7 +471,7 @@ func resolveClusterAddress(address string, project string) (string, error) {
 	}
 
 	if project == "" {
-		return "", fmt.Errorf("project is required if no address is specified")
+		return "", fmt.Errorf("%w: project is required if no address is specified", auth.ErrCredentialsRequired)
 	}
 
 	return fmt.Sprintf("dns:///www.endpoints.%s.cloud.goog:443", project), nil
