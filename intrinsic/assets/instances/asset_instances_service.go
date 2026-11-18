@@ -213,6 +213,27 @@ func (s *service) GetAssetInstance(ctx context.Context, req *aigrpcpb.GetAssetIn
 	return instanceconversion.AsView(instanceconversion.ConvertResourceInstanceToAssetInstance(ri, rtr), req.GetView()), nil
 }
 
+func (s *service) batchGetRTRs(ctx context.Context, ris []*ripb.ResourceInstance) (map[string]*rtrpb.ResourceTypeRuntime, error) {
+	seen := make(map[string]struct{}, len(ris))
+	uniqueIDVs := make([]string, 0, len(ris))
+	for _, ri := range ris {
+		idv := ri.GetTypeIdVersion()
+		if _, ok := seen[idv]; !ok {
+			seen[idv] = struct{}{}
+			uniqueIDVs = append(uniqueIDVs, idv)
+		}
+	}
+	rtrs, err := s.rtrClient.BatchGet(ctx, uniqueIDVs)
+	if err != nil {
+		return nil, status.Errorf(codes.Internal, "could not get runtime info for assets: %v", err)
+	}
+	rtrByIDV := make(map[string]*rtrpb.ResourceTypeRuntime, len(rtrs))
+	for _, rtr := range rtrs {
+		rtrByIDV[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
+	}
+	return rtrByIDV, nil
+}
+
 func (s *service) BatchGetAssetInstances(ctx context.Context, req *aigrpcpb.BatchGetAssetInstancesRequest) (*aigrpcpb.BatchGetAssetInstancesResponse, error) {
 	if len(req.GetNames()) == 0 {
 		return nil, status.Errorf(codes.InvalidArgument, "no names were requested")
@@ -232,18 +253,23 @@ func (s *service) BatchGetAssetInstances(ctx context.Context, req *aigrpcpb.Batc
 		riByName[ri.GetName()] = ri
 	}
 
-	instances := make([]*aigrpcpb.AssetInstance, 0, len(req.GetNames()))
+	ris := make([]*ripb.ResourceInstance, 0, len(req.GetNames()))
 	for _, name := range req.GetNames() {
 		ri, found := riByName[name]
 		if !found {
 			return nil, status.Errorf(codes.NotFound, "instance %q not found", name)
 		}
+		ris = append(ris, ri)
+	}
 
-		rtr, err := s.rtrClient.Get(ctx, ri.GetTypeIdVersion())
-		if err != nil {
-			return nil, status.Errorf(codes.Internal, "could not get runtime info for asset %q: %v", ri.GetTypeIdVersion(), err)
-		}
+	rtrByIDV, err := s.batchGetRTRs(ctx, ris)
+	if err != nil {
+		return nil, err
+	}
 
+	instances := make([]*aigrpcpb.AssetInstance, 0, len(ris))
+	for _, ri := range ris {
+		rtr := rtrByIDV[ri.GetTypeIdVersion()]
 		instances = append(instances, instanceconversion.AsView(instanceconversion.ConvertResourceInstanceToAssetInstance(ri, rtr), req.GetView()))
 	}
 
@@ -271,17 +297,9 @@ func (s *service) ListAssetInstances(ctx context.Context, req *aigrpcpb.ListAsse
 	if err != nil {
 		return nil, err
 	}
-	var idvs []string
-	for _, r := range app.GetResources().GetResourceInstances() {
-		idvs = append(idvs, r.GetTypeIdVersion())
-	}
-	rtrs, err := s.rtrClient.BatchGet(ctx, idvs)
+	rtrByIDV, err := s.batchGetRTRs(ctx, app.GetResources().GetResourceInstances())
 	if err != nil {
-		return nil, status.Errorf(codes.Internal, "could not get runtime info for assets: %v", err)
-	}
-	rtrByIDV := make(map[string]*rtrpb.ResourceTypeRuntime)
-	for _, rtr := range rtrs {
-		rtrByIDV[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
+		return nil, err
 	}
 
 	instances := make([]*aigrpcpb.AssetInstance, 0, len(app.GetResources().GetResourceInstances()))
