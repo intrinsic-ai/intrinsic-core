@@ -31,6 +31,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "grpcpp/channel.h"
 #include "grpcpp/client_context.h"
 #include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/assets/id_utils.h"
@@ -620,6 +621,16 @@ absl::Status SkillClientGenerator::ResolveSkillParameters(
   return absl::OkStatus();
 }
 
+absl::StatusOr<std::shared_ptr<grpc::Channel>>
+SkillClientGenerator::GetSkillServiceChannel(absl::string_view grpc_target,
+                                             absl::Time deadline) {
+  if (skill_service_channel_creator_for_test_) {
+    return skill_service_channel_creator_for_test_(grpc_target, deadline);
+  }
+  return connect::CreateClientChannel(
+      grpc_target, deadline, connect::UnlimitedMessageSizeGrpcChannelArgs());
+}
+
 absl::StatusOr<SkillInstance> SkillClientGenerator::CreateSkillInstance(
     const intrinsic_proto::executive::BehaviorCall& behavior_call) {
   const stats::ScopedSpan span("SkillClientGenerator/CreateSkillInstance");
@@ -643,6 +654,11 @@ absl::StatusOr<SkillInstance> SkillClientGenerator::CreateSkillInstance(
       {.grpc_targets = *skill_reg.grpc_targets,
        .resource_handles = resource_handles_,
        .connect_timeout = skill_service_connect_timeout_,
+       .create_skill_service_channel =
+           [this](absl::string_view grpc_target, absl::Time deadline) {
+             skills_mutex_.AssertHeld();
+             return GetSkillServiceChannel(grpc_target, deadline);
+           },
        .skill_service_client_creator_mock = skill_service_client_creator_mock_,
        .required_equipment_keys = skill_reg.required_equipment_keys,
        .id_version = skill_reg.id_version});
@@ -665,8 +681,13 @@ absl::Status SkillClientGenerator::ClearSkillOperations(
   }
   INTR_ASSIGN_OR_RETURN(
       std::unique_ptr<skills::SkillServiceClientInterface> client,
-      CreateSkillServiceClient(instance_proto, clear_operations_timeout,
-                               skill_service_client_creator_mock_));
+      CreateSkillServiceClient(
+          instance_proto, clear_operations_timeout,
+          [this](absl::string_view grpc_target, absl::Time deadline) {
+            skills_mutex_.AssertHeld();
+            return GetSkillServiceChannel(grpc_target, deadline);
+          },
+          skill_service_client_creator_mock_));
 
   return client->ClearOperations();
 }

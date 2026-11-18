@@ -27,9 +27,13 @@
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/clock.h"
+#include "absl/time/time.h"
+#include "grpcpp/channel.h"
 #include "grpcpp/client_context.h"
 #include "intrinsic/executive/proto/behavior_call.pb.h"
 #include "intrinsic/skills/internal/skill_service_client.h"
+#include "intrinsic/skills/proto/skill_service.grpc.pb.h"
 #include "intrinsic/skills/proto/skills.pb.h"
 #include "intrinsic/stats/scoped_span.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -41,16 +45,28 @@ absl::StatusOr<std::unique_ptr<skills::SkillServiceClientInterface>>
 CreateSkillServiceClient(
     const intrinsic_proto::skills::SkillInstance& instance_proto,
     std::optional<absl::Duration> connect_timeout,
+    const SkillServiceChannelCreator& create_skill_service_channel,
     SkillServiceClientCreator skill_service_client_creator_mock) {
   const stats::ScopedSpan span_client("SkillInstance/CreateSkillServiceClient");
   std::unique_ptr<skills::SkillServiceClientInterface> client;
   if (skill_service_client_creator_mock) {
     INTR_ASSIGN_OR_RETURN(client,
                           skill_service_client_creator_mock(instance_proto));
-  } else if (connect_timeout.has_value()) {
-    INTR_ASSIGN_OR_RETURN(client,
-                          skills::CreateSkillServiceClient(
-                              instance_proto, {.timeout = *connect_timeout}));
+  } else if (connect_timeout.has_value() && create_skill_service_channel) {
+    const absl::Time deadline = absl::Now() + *connect_timeout;
+    INTR_ASSIGN_OR_RETURN(
+        std::shared_ptr<grpc::Channel> project_channel,
+        create_skill_service_channel(
+            instance_proto.project_handle().grpc_target(), deadline));
+    INTR_ASSIGN_OR_RETURN(
+        std::shared_ptr<grpc::Channel> execute_channel,
+        create_skill_service_channel(
+            instance_proto.execute_handle().grpc_target(), deadline));
+    client = std::make_unique<skills::SkillServiceClient>(
+        instance_proto,
+        intrinsic_proto::skills::Projector::NewStub(project_channel),
+        intrinsic_proto::skills::Executor::NewStub(execute_channel),
+        skills::SkillServiceClientConfig{.timeout = *connect_timeout});
   } else {
     return absl::FailedPreconditionError(
         "CreateSkillServiceClient: A skill client was requested, but neither a "
@@ -89,6 +105,7 @@ absl::StatusOr<SkillInstance> SkillInstance::Create(
   INTR_ASSIGN_OR_RETURN(skill_instance.client_,
                         CreateSkillServiceClient(
                             skill_instance.instance_, context.connect_timeout,
+                            context.create_skill_service_channel,
                             context.skill_service_client_creator_mock));
 
   // Concurrent logging belongs to the lifetime of the instance: It is

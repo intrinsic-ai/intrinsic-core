@@ -15,8 +15,10 @@
 #ifndef INTRINSIC_EXECUTIVE_ENGINE_SKILL_CLIENT_GENERATOR_H_
 #define INTRINSIC_EXECUTIVE_ENGINE_SKILL_CLIENT_GENERATOR_H_
 
+#include <memory>
 #include <optional>
 #include <string>
+#include <utility>
 #include <vector>
 
 #include "absl/base/thread_annotations.h"
@@ -26,6 +28,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "grpcpp/channel.h"
 #include "intrinsic/assets/dependencies/resolver.h"
 #include "intrinsic/assets/proto/installed_assets.grpc.pb.h"
 #include "intrinsic/assets/proto/v1alpha1/asset_info_internal.grpc.pb.h"
@@ -74,6 +77,14 @@ class SkillClientGenerator {
       SkillServiceClientCreator skill_service_client_creator_mock) {
     skill_service_client_creator_mock_ =
         std::move(skill_service_client_creator_mock);
+  }
+
+  // Set a creator for skill service channels for testing. If set, this will be
+  // used instead of creating a real gRPC channel.
+  void SetSkillServiceChannelCreatorForTest(
+      SkillServiceChannelCreator skill_service_channel_creator) {
+    skill_service_channel_creator_for_test_ =
+        std::move(skill_service_channel_creator);
   }
 
   // Register functions in CLIPS to expose updating and adding skill-infos.
@@ -198,8 +209,13 @@ class SkillClientGenerator {
 
   absl::Status GetAndCacheResources();
 
+  absl::StatusOr<std::shared_ptr<grpc::Channel>> GetSkillServiceChannel(
+      absl::string_view grpc_target, absl::Time deadline)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(skills_mutex_);
+
   absl::Status ClearSkillOperations(
-      const SkillRegistrationInternal& skill_registration);
+      const SkillRegistrationInternal& skill_registration)
+      ABSL_EXCLUSIVE_LOCKS_REQUIRED(skills_mutex_);
 
   skills::SkillRegistryClientInterface* skillreg_client_;  // externally owned.
   resources::ResourceRegistryClientInterface*
@@ -209,6 +225,8 @@ class SkillClientGenerator {
   // Mutually exclusive with skill_service_client_creator_mock_ during
   // execution.
   std::optional<absl::Duration> skill_service_connect_timeout_;
+  // Creator for skill service channels, used for testing.
+  SkillServiceChannelCreator skill_service_channel_creator_for_test_;
   // Mock creator for skill service clients, used for testing.
   // If set, this takes precedence over skill_service_connect_timeout_.
   SkillServiceClientCreator skill_service_client_creator_mock_;

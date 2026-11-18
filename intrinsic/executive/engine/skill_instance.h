@@ -28,6 +28,7 @@
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
+#include "grpcpp/channel.h"
 #include "grpcpp/client_context.h"
 #include "intrinsic/assets/proto/v1alpha1/asset_info_internal.pb.h"
 #include "intrinsic/executive/proto/behavior_call.pb.h"
@@ -43,11 +44,16 @@ using SkillServiceClientCreator = std::function<
     absl::StatusOr<std::unique_ptr<skills::SkillServiceClientInterface>>(
         intrinsic_proto::skills::SkillInstance)>;
 
+using SkillServiceChannelCreator =
+    std::function<absl::StatusOr<std::shared_ptr<grpc::Channel>>(
+        absl::string_view grpc_target, absl::Time deadline)>;
+
 // Establishes a connection to the skill service.
 absl::StatusOr<std::unique_ptr<skills::SkillServiceClientInterface>>
 CreateSkillServiceClient(
     const intrinsic_proto::skills::SkillInstance& instance_proto,
     std::optional<absl::Duration> connect_timeout,
+    const SkillServiceChannelCreator& create_skill_service_channel,
     SkillServiceClientCreator skill_service_client_creator_mock);
 
 // An instance for a specific skill call
@@ -77,6 +83,7 @@ class SkillInstance {
                               intrinsic_proto::resources::ResourceHandle>&
         resource_handles;
     std::optional<absl::Duration> connect_timeout;
+    SkillServiceChannelCreator create_skill_service_channel = nullptr;
     SkillServiceClientCreator skill_service_client_creator_mock = nullptr;
     std::vector<std::string> required_equipment_keys;
     std::string id_version;

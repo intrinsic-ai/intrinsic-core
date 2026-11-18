@@ -180,6 +180,7 @@ cc_library(
         "//intrinsic/util:unique_id",
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",
         "//intrinsic_sdk/intrinsic/skills/internal:skill_registry_client_interface",
+        "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/container:flat_hash_map",
