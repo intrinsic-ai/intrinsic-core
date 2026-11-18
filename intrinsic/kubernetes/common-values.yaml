@@ -49,6 +49,9 @@ release_channel: ""
 primaryCluster: false
 cloudInference:
   bucket_suffix: ""
+# Keep domain keys in sync with baseca.CloudDomains (global project IDs and
+# artifacts are intentionally excluded from workcell ChartAssignments).
+# LINT.IfChange(cloud_domains)
 accounts:
   project: ""
   domain: ""
@@ -60,5 +63,6 @@ portal:
 assets:
   project: ""
   domain: ""
+# LINT.ThenChange(//intrinsic/kubernetes/intrinsic_base/baseca.go:cloud_domains)
 artifacts:
   projects: []

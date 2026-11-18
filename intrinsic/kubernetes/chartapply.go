@@ -159,9 +159,9 @@ func parseAndValidateFlagValues(chart *helmchart.Chart, commaSeparatedValues str
 	return flagValues, nil
 }
 
-// getClusterValues loads ArgoCD-rendered cluster values from the cluster-management ConfigMap,
+// GetClusterValues loads ArgoCD-rendered cluster values from the cluster-management ConfigMap,
 // if present. Returns nil without error if the ConfigMap or values.yaml entry does not exist.
-func getClusterValues(ctx context.Context, kubeClient kubernetes.Interface) (v1alpha1.ConfigValues, error) {
+func GetClusterValues(ctx context.Context, kubeClient kubernetes.Interface) (v1alpha1.ConfigValues, error) {
 	if kubeClient == nil {
 		return nil, nil
 	}
@@ -590,7 +590,7 @@ func ApplyChart(ctx context.Context, chart *helmchart.Chart, newImages []*imagep
 	// Load ArgoCD-managed cluster values from the cluster-management ConfigMap, if available.
 	var clusterValues v1alpha1.ConfigValues
 	if clusterConfig.KubeCS != nil {
-		clusterValues, err = getClusterValues(ctx, clusterConfig.KubeCS)
+		clusterValues, err = GetClusterValues(ctx, clusterConfig.KubeCS)
 		if err != nil {
 			return fmt.Errorf("load cluster values: %w", err)
 		}
