@@ -26,14 +26,16 @@
 #include "grpcpp/server.h"
 #include "grpcpp/server_builder.h"
 #include "intrinsic/geometry/service/geometry_service_impl.h"
+#include "intrinsic/geometry/storage/cas_and_kvstore_storage.h"
 #include "intrinsic/geometry/storage/cas_client.h"
-#include "intrinsic/geometry/storage/cas_storage.h"
 #include "intrinsic/geometry/storage/geo_cache.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/longrunning/cc/operation_scheduler.h"
 #include "intrinsic/longrunning/cc/operation_scheduler_interface.h"
 #include "intrinsic/longrunning/cc/operations_service_impl.h"
 #include "intrinsic/longrunning/cc/wrappers.h"
+#include "intrinsic/platform/pubsub/kvstore.h"
+#include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/storage/content_addressable_storage/proto/cas_service.grpc.pb.h"
 #include "intrinsic/util/grpc/grpc.h"
 #include "intrinsic/util/macros.h"
@@ -48,17 +50,21 @@ using ::intrinsic_proto::content_addressable_storage::v1::
 absl::StatusOr<std::unique_ptr<GeometryServiceImpl>> CreateCloudGeometryService(
     std::shared_ptr<longrunning::OperationSchedulerInterface> scheduler,
     std::shared_ptr<ContentAddressableStorageService::Stub> cas_stub,
-    int cache_size) {
+    std::shared_ptr<KeyValueStore> kv_store, int cache_size) {
   if (scheduler == nullptr) {
     return absl::InvalidArgumentError("Cannot have a nullptr scheduler");
+  }
+  if (kv_store == nullptr) {
+    return absl::InvalidArgumentError("Cannot have a nullptr kv_store");
   }
 
   return std::make_unique<GeometryServiceImpl>(
       std::move(scheduler),
-      [cas_stub = std::move(cas_stub)](
-          grpc::ServerContext* context,
-          GeometryFingerprintCache& cache) -> std::unique_ptr<GeometryLibrary> {
-        return GetCasGeometryLibrary(cas_stub, context, cache);
+      [cas_stub = std::move(cas_stub), kv_store = std::move(kv_store)](
+          grpc::ServerContext* context, GeometryFingerprintCache& cache)
+          -> absl::StatusOr<std::unique_ptr<GeometryLibrary>> {
+        return CreateCasAndKvStoreGeometryLibrary(cas_stub, context, cache,
+                                                  kv_store);
       },
       cache_size);
 }
@@ -66,6 +72,10 @@ absl::StatusOr<std::unique_ptr<GeometryServiceImpl>> CreateCloudGeometryService(
 }  // namespace
 
 absl::Status RunGeometryServer(const GeometryServerOptions& options) {
+  const PubSub pubsub;
+  INTR_ASSIGN_OR_RETURN(KeyValueStore kv_store_value, pubsub.KeyValueStore());
+  auto kv_store = std::make_shared<KeyValueStore>(std::move(kv_store_value));
+
   INTR_ASSIGN_OR_RETURN(
       auto scheduler,
       longrunning::wrap_internal::WrapSchedulerWithPrefix(
@@ -77,6 +87,7 @@ absl::Status RunGeometryServer(const GeometryServerOptions& options) {
   INTR_ASSIGN_OR_RETURN(
       auto geometry_service,
       CreateCloudGeometryService(scheduler, std::move(cas_service_stub),
+                                 std::move(kv_store),
                                  options.geometry_cas_cache_size));
 
   longrunning::OperationsServiceImpl operations_service(scheduler);
