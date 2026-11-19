@@ -71,7 +71,7 @@ RealtimeStatusOr<JointStatePVA> DesignInitialStateResidual(
         "TrajectoryTracker requires a non-empty trajectory.");
   }
   if (previous_joint_setpoint.size() != trajectory.data().front().size()) {
-    return icon::InvalidArgumentError(absl::StrCat(
+    return InvalidArgumentError(RealtimeStatus::StrCat(
         "Dimension mismatch for trajectory (", trajectory.data().front().size(),
         ") and setpoint (", previous_joint_setpoint.size(), ")."));
   }
