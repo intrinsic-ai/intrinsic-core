@@ -116,6 +116,7 @@ type KVStore interface {
 	// Get returns the value for the given key. Wildcard queries are not supported
 	// with this method, use the GetAll method instead. If wildcard values are
 	// sent as part of the config, an error is returned. Timeout may be nil.
+	// Non-Protobuf entries (such as raw-byte APPLICATION_OCTET_STREAM values) return [ErrWrongEncoding].
 	Get(key string, timeout *time.Duration) (*anypb.Any, error)
 
 	// GetAll invokes the valueCallback for a given key that matches the expression.
@@ -198,4 +199,7 @@ var (
 
 	// ErrAborted is returned if the set operation was aborted due to a write race.
 	ErrAborted = fmt.Errorf("aborted")
+
+	// ErrWrongEncoding is returned by Get when a key exists with a non-Protobuf encoding.
+	ErrWrongEncoding = fmt.Errorf("wrong encoding")
 )

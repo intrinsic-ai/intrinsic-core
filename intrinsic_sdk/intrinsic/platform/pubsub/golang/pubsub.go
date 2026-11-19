@@ -43,6 +43,7 @@ import (
 	"runtime/cgo"
 	"strings"
 	"sync"
+	"sync/atomic"
 	"time"
 	"unsafe"
 
@@ -74,8 +75,8 @@ import (
 // We forward declare functions that will be implemented below so we can take their address from Go code.
 void intrinsic_ImwSubscriptionCallback(void*, void*, size_t, void*);
 void intrinsic_ImwMessageSubscriptionCallback(void*, void*, size_t, int, int, uintptr_t);
-void intrinsic_ImwQueryStaticCallback(void*, void*, size_t, void*);
-void intrinsic_ImwQueryDoneStaticCallback(void*, void*);
+void intrinsic_ImwQueryMessageStaticCallback(void*, void*, size_t, int, int, uintptr_t);
+void intrinsic_ImwQueryDoneStaticCallback(void*, uintptr_t);
 void intrinsic_ImwQueryableStaticCallback(void*, void*, size_t, void*, void*);
 void intrinsic_ImwLivelinessSubscriptionCallback(void*, bool, void*);
 void intrinsic_ImwLivelinessGetCallback(void*, void*);
@@ -713,6 +714,17 @@ func (kv *kvStoreHandle) SetWithVerification(ctx context.Context, key string, va
 	return kv.SetAnyWithVerification(ctx, key, valueAny, opts...)
 }
 
+func wrapContextDeadlineErr(ctx context.Context, deadlinePrefix string, key string) error {
+	err := ctx.Err()
+	if err == nil {
+		return nil
+	}
+	if errors.Is(err, context.DeadlineExceeded) {
+		return fmt.Errorf("timeout waiting for %s%q: %w", deadlinePrefix, key, kvstore.ErrDeadlineExceeded)
+	}
+	return fmt.Errorf("context canceled while waiting for %q: %w", key, err)
+}
+
 func verificationContextErr(ctx context.Context, key string) error {
 	if err := ctx.Err(); err != nil {
 		if errors.Is(err, context.DeadlineExceeded) {
@@ -932,18 +944,31 @@ func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey st
 	return nil
 }
 
-type queryHandle struct {
-	query func(keyexpr string, bytes []byte)
-	done  func(keyexpr string)
+type encodedMessage struct {
+	bytes    []byte
+	encoding imwEncoding
+	isProto  bool
+}
 
-	handle    cgo.Handle
-	closeOnce sync.Once
+type queryOptions struct {
+	timeout                    *time.Duration
+	keysOnly                   bool
+	includeNonProtobufMetadata bool
+}
+
+type queryHandle struct {
+	onMessage                  func(keyexpr string, bytes []byte, encoding imwEncoding)
+	done                       func(keyexpr string)
+	keysOnly                   bool
+	includeNonProtobufMetadata bool
+
+	handle      cgo.Handle
+	closed      atomic.Bool
+	releaseOnce sync.Once
 }
 
 func (q *queryHandle) Close() {
-	q.closeOnce.Do(func() {
-		q.handle.Delete()
-	})
+	q.closed.Store(true)
 }
 
 type queryableHandle struct {
@@ -1004,73 +1029,59 @@ func (ps *Handle) CreateQueryable(keyexpr string, callback func(string, []byte, 
 }
 
 func (kv *kvStoreHandle) GetAll(key string, valueCallback func(*anypb.Any), ondoneCallback func(string)) (kvstore.KVQuery, error) {
-	queryCallback := func(keyexpr string, bytes []byte) {
-		valueCallback(value(bytes))
+	queryCallback := func(keyexpr string, bytes []byte, _ imwEncoding) {
+		val := &anypb.Any{}
+		if err := proto.Unmarshal(bytes, val); err != nil {
+			log.Errorf("Failed to unmarshal KVStore value for %q: %v", keyexpr, err)
+			return
+		}
+		if valueCallback != nil {
+			valueCallback(val)
+		}
 	}
-	return kv.query(kv.addKeyPrefix(key), queryCallback, ondoneCallback, nil)
+	return kv.queryMessages(kv.addKeyPrefix(key), queryCallback, ondoneCallback, queryOptions{})
 }
 
 func (kv *kvStoreHandle) ListAllKeys(key string, keyCallback func(string), ondoneCallback func(string)) (kvstore.KVQuery, error) {
-	queryCallback := func(keyexpr string, bytes []byte) {
-		keyCallback(keyexpr)
+	queryCallback := func(keyexpr string, _ []byte, _ imwEncoding) {
+		if keyCallback != nil {
+			keyCallback(keyexpr)
+		}
 	}
-	return kv.query(kv.addKeyPrefix(key), queryCallback, ondoneCallback, nil)
+	return kv.queryMessages(kv.addKeyPrefix(key), queryCallback, ondoneCallback, queryOptions{
+		keysOnly:                   true,
+		includeNonProtobufMetadata: true,
+	})
 }
 
-func value(bytes []byte) *anypb.Any {
-	value := &anypb.Any{}
-	if err := proto.Unmarshal(bytes, value); err != nil {
-		panic(err)
-	}
-	return value
-}
-
-// query invokes the queryCallback for each given key that matches the expression.
+// queryMessages invokes onMessage for each matching PUT message according to opts
+// (DELETE tombstones are always skipped; raw-byte messages are skipped unless
+// opts.includeNonProtobufMetadata is true; payloads are skipped when
+// opts.keysOnly is true or for non-Protobuf messages).
 // The key expression is used as-is, i.e. no prefixes are added to it.
 //
 // This function is not exported because the raw keys contain prefixes not known
 // to the client code, such as `kv_store` or `kv_store_repl`.
-func (kv *kvStoreHandle) query(rawKey string, queryCallback func(keyexpr string, bytes []byte), ondoneCallback func(string), timeout *time.Duration) (kvstore.KVQuery, error) {
-	var qh *queryHandle
-	qh = &queryHandle{
-		query: queryCallback,
-		done: func(keyexpr string) {
-			ondoneCallback(keyexpr)
-		},
+func (kv *kvStoreHandle) queryMessages(rawKey string, onMessage func(keyexpr string, bytes []byte, encoding imwEncoding), ondoneCallback func(string), opts queryOptions) (kvstore.KVQuery, error) {
+	qh := &queryHandle{
+		onMessage:                  onMessage,
+		done:                       ondoneCallback,
+		keysOnly:                   opts.keysOnly,
+		includeNonProtobufMetadata: opts.includeNonProtobufMetadata,
 	}
 	qh.handle = cgo.NewHandle(qh)
 
 	var timeoutMs uint64
-	if timeout != nil && *timeout > 0 {
-		timeoutMs = uint64(max(timeout.Milliseconds(), 1))
+	if opts.timeout != nil && *opts.timeout > 0 {
+		timeoutMs = uint64(max(opts.timeout.Milliseconds(), 1))
 	}
 
-	if err := kv.zenohHandle.ImwQuery(rawKey, qh, timeoutMs); err != nil {
-		qh.handle.Delete()
+	if err := kv.zenohHandle.ImwQueryMessages(rawKey, qh, timeoutMs); err != nil {
+		qh.releaseOnce.Do(qh.handle.Delete)
 		return nil, err
 	}
 
 	return qh, nil
-}
-
-//export intrinsic_ImwQueryStaticCallback
-func intrinsic_ImwQueryStaticCallback(keyexpr unsafe.Pointer, responseBytes unsafe.Pointer, responseBytesLen C.size_t, userContext unsafe.Pointer) {
-	if userContext == nil {
-		return
-	}
-	h := *(*cgo.Handle)(userContext)
-	callbacks := h.Value().(*queryHandle)
-	callbacks.query(C.GoString((*C.char)(keyexpr)), C.GoBytes(responseBytes, C.int(responseBytesLen)))
-}
-
-//export intrinsic_ImwQueryDoneStaticCallback
-func intrinsic_ImwQueryDoneStaticCallback(keyexpr unsafe.Pointer, userContext unsafe.Pointer) {
-	if userContext == nil {
-		return
-	}
-	h := *(*cgo.Handle)(userContext)
-	callbacks := h.Value().(*queryHandle)
-	callbacks.done(C.GoString((*C.char)(keyexpr)))
 }
 
 func (kv *kvStoreHandle) Get(key string, timeout *time.Duration) (*anypb.Any, error) {
@@ -1085,31 +1096,89 @@ func (kv *kvStoreHandle) Get(key string, timeout *time.Duration) (*anypb.Any, er
 // This function is not exported because the raw keys contain prefixes not known
 // to the client code, such as `kv_store` or `kv_store_repl`.
 func (kv *kvStoreHandle) getRaw(rawKey string, timeout *time.Duration) (*anypb.Any, error) {
-	bytes, err := kv.getRawBytes(context.Background(), rawKey, timeout)
+	msg, err := kv.getEncodedMessage(context.Background(), rawKey, timeout, false)
 	if err != nil {
 		return nil, err
 	}
+	if !msg.isProto {
+		if msg.encoding == imwEncodingApplicationOctetStream {
+			return nil, fmt.Errorf("key %q stores raw bytes, not a protobuf message: %w", rawKey, kvstore.ErrWrongEncoding)
+		}
+		return nil, fmt.Errorf("key %q has unsupported non-protobuf encoding (%d): %w", rawKey, msg.encoding, kvstore.ErrWrongEncoding)
+	}
 	val := &anypb.Any{}
-	if err := proto.Unmarshal(bytes, val); err != nil {
+	if err := proto.Unmarshal(msg.bytes, val); err != nil {
 		return nil, fmt.Errorf("failed to unmarshal value for %q: %w", rawKey, err)
 	}
 	return val, nil
 }
 
-func rawQueryContextErr(ctx context.Context, rawKey string) error {
-	err := ctx.Err()
-	if err == nil {
-		return nil
+func (kv *kvStoreHandle) getRawBytes(ctx context.Context, rawKey string, timeout *time.Duration) ([]byte, error) {
+	msg, err := kv.getEncodedMessage(ctx, rawKey, timeout, false)
+	if err != nil {
+		return nil, err
 	}
-	if errors.Is(err, context.DeadlineExceeded) {
-		return fmt.Errorf("timeout waiting for %q: %w", rawKey, kvstore.ErrDeadlineExceeded)
+	if !msg.isProto {
+		return nil, fmt.Errorf("%q not found: %w", rawKey, kvstore.ErrNotFound)
 	}
-	return fmt.Errorf("context canceled while waiting for %q: %w", rawKey, err)
+	return msg.bytes, nil
 }
 
-// getRawBytes returns the raw bytes for the given key.
+type encodedQueryResult struct {
+	message encodedMessage
+	err     error
+}
+
+type encodedQueryAccumulator struct {
+	rawKey           string
+	resultCh         chan *encodedQueryResult
+	once             sync.Once
+	fallbackMu       sync.Mutex
+	fallbackNonProto *encodedMessage
+}
+
+func (a *encodedQueryAccumulator) sendFirst(msg encodedMessage, err error) {
+	a.once.Do(func() {
+		a.resultCh <- &encodedQueryResult{message: msg, err: err}
+	})
+}
+
+func (a *encodedQueryAccumulator) sendFallbackOrErr(ctx context.Context, fallbackErr error) {
+	a.fallbackMu.Lock()
+	fb := a.fallbackNonProto
+	a.fallbackMu.Unlock()
+	if fb != nil && !errors.Is(ctx.Err(), context.Canceled) {
+		a.sendFirst(*fb, nil)
+		return
+	}
+	a.sendFirst(encodedMessage{}, fallbackErr)
+}
+
+func (a *encodedQueryAccumulator) onMessage(_ string, bytes []byte, encoding imwEncoding) {
+	if isProtobufEncoding(encoding) {
+		a.sendFirst(encodedMessage{bytes: bytes, encoding: encoding, isProto: true}, nil)
+		return
+	}
+	a.fallbackMu.Lock()
+	if a.fallbackNonProto == nil {
+		a.fallbackNonProto = &encodedMessage{bytes: bytes, encoding: encoding, isProto: false}
+	}
+	a.fallbackMu.Unlock()
+}
+
+func (a *encodedQueryAccumulator) onDone(ctx context.Context) {
+	if err := wrapContextDeadlineErr(ctx, "", a.rawKey); err != nil {
+		a.sendFallbackOrErr(ctx, err)
+		return
+	}
+	a.sendFallbackOrErr(ctx, fmt.Errorf("%q not found: %w", a.rawKey, kvstore.ErrNotFound))
+}
+
+// getEncodedMessage returns the first Protobuf PUT message (with its encoding
+// metadata) for the given key, falling back to a non-Protobuf reply only if no
+// matching queryable returns Protobuf before query completion.
 // The key is used as-is, i.e. no prefixes are added to it.
-func (kv *kvStoreHandle) getRawBytes(ctx context.Context, rawKey string, timeout *time.Duration) ([]byte, error) {
+func (kv *kvStoreHandle) getEncodedMessage(ctx context.Context, rawKey string, timeout *time.Duration, keysOnly bool) (encodedMessage, error) {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -1118,8 +1187,8 @@ func (kv *kvStoreHandle) getRawBytes(ctx context.Context, rawKey string, timeout
 		ctx, cancel = context.WithTimeout(ctx, *timeout)
 		defer cancel()
 	}
-	if err := rawQueryContextErr(ctx, rawKey); err != nil {
-		return nil, err
+	if err := wrapContextDeadlineErr(ctx, "", rawKey); err != nil {
+		return encodedMessage{}, err
 	}
 
 	var effectiveTimeout *time.Duration
@@ -1131,73 +1200,37 @@ func (kv *kvStoreHandle) getRawBytes(ctx context.Context, rawKey string, timeout
 		effectiveTimeout = &cTimeout
 	}
 
-	// queryResult represents the final outcome of processing a query.
-	// That outcome may be raw bytes obtained from the KV store, or an error.
-	type queryResult struct {
-		result []byte
-		err    error
+	acc := &encodedQueryAccumulator{
+		rawKey:   rawKey,
+		resultCh: make(chan *encodedQueryResult, 1),
 	}
 
-	// Channel for query results.
-	resultCh := make(chan *queryResult, 1)
+	callerDone := make(chan struct{})
+	defer close(callerDone)
 
-	// Channel for notifying the goroutine executing the query that the query can be
-	// closed. The query can only be closed after it completes, so a value is pushed
-	// to this channel at the end of onDoneCallback.
-	canCloseQueryCh := make(chan struct{}, 1)
-
-	var once sync.Once
-
-	sendFirstQueryResult := func(result []byte, err error) {
-		once.Do(func() {
-			resultCh <- &queryResult{result: result, err: err}
-		})
-	}
-
-	queryCallback := func(keyexpr string, bytes []byte) {
-		// The first received result will be the one returned to the client.
-		// When the `key` parameter is really a key (not a keyexpr with
-		// wildcards), then this behavior is always correct.
-		// If the `key` parameter contains wildcards, then the first value
-		// passed to this callback will be returned to the caller of `Get`.
-		sendFirstQueryResult(bytes, nil /* error */)
-	}
-
-	onDoneCallback := func(keyexpr string) {
-		if err := rawQueryContextErr(ctx, rawKey); err != nil {
-			sendFirstQueryResult(nil /* result */, err)
-		} else {
-			sendFirstQueryResult(
-				nil, /* result */
-				fmt.Errorf("%q not found: %w", rawKey, kvstore.ErrNotFound))
-		}
-		canCloseQueryCh <- struct{}{}
-	}
-
-	// Starting the query in a separate goroutine. Callbacks will be called
-	// in that goroutine.
 	go func() {
-		query, err := kv.query(rawKey, queryCallback, onDoneCallback, effectiveTimeout)
+		query, err := kv.queryMessages(rawKey, acc.onMessage, func(string) { acc.onDone(ctx) }, queryOptions{
+			timeout:                    effectiveTimeout,
+			keysOnly:                   keysOnly,
+			includeNonProtobufMetadata: true,
+		})
 		if err != nil {
-			sendFirstQueryResult(nil /* result */, err)
+			acc.sendFirst(encodedMessage{}, err)
 			return
 		}
-		// When a value for the given key exists in the KV store,
-		// kv.query blocks until the query completes. But when there is
-		// no value, kv.query may return before onDoneCallback is called.
-		// We need to keep the query alive until all callbacks are called,
-		// otherwise, we'll get a "use of invalid handle" error.
-		<-canCloseQueryCh
+		// Wait until getEncodedMessage returns (on the first message or ctx.Done())
+		// before marking the query closed, while handleDone still owns handle.Delete().
+		<-callerDone
 		query.Close()
 	}()
 
 	select {
-	case result := <-resultCh:
-		return result.result, result.err
+	case result := <-acc.resultCh:
+		return result.message, result.err
 	case <-ctx.Done():
-		sendFirstQueryResult(nil /* result */, rawQueryContextErr(ctx, rawKey))
-		result := <-resultCh
-		return result.result, result.err
+		acc.sendFallbackOrErr(ctx, wrapContextDeadlineErr(ctx, "", rawKey))
+		result := <-acc.resultCh
+		return result.message, result.err
 	}
 }
 
@@ -1328,7 +1361,7 @@ type zenohHandle interface {
 	ImwDestroyLivelinessSubscription(keyExpr string, sub *livelinessSubscriptionHandle) error
 	ImwLivelinessGet(keyExpr string, query *livelinessQueryHandle) error
 	ImwSet(keyExpr string, value []byte) error
-	ImwQuery(keyExpr string, query *queryHandle, timeoutMs uint64) error
+	ImwQueryMessages(keyExpr string, query *queryHandle, timeoutMs uint64) error
 	ImwCreateQueryable(keyExpr string, queryable *queryableHandle, isRosService bool) error
 	ImwDestroyQueryable(keyExpr string, queryable *queryableHandle) error
 	ImwQueryableReply(queryContext unsafe.Pointer, keyExpr string, reply []byte) error
@@ -1667,11 +1700,58 @@ func (z *zenohHandleImpl) ImwSet(keyExpr string, value []byte) error {
 	return z.imwSet(keyExpr, value, imwEncodingVarintPrefixedBytes)
 }
 
-func (z *zenohHandleImpl) ImwQuery(keyExpr string, query *queryHandle, timeoutMs uint64) error {
+func (q *queryHandle) handleMessage(keyexpr string, responseBytes unsafe.Pointer, responseBytesLen uint64, messageKind int, encoding imwEncoding) {
+	if messageKind == imwMessageKindDelete || q.onMessage == nil || q.closed.Load() {
+		return
+	}
+	isProto := isProtobufEncoding(encoding)
+	if !isProto && !q.includeNonProtobufMetadata {
+		return
+	}
+	var payload []byte
+	if isProto && !q.keysOnly {
+		var ok bool
+		payload, ok = copyCBytes(responseBytes, responseBytesLen)
+		if !ok {
+			return
+		}
+	}
+	q.onMessage(keyexpr, payload, encoding)
+}
+
+func (q *queryHandle) handleDone(keyexpr string) {
+	defer q.releaseOnce.Do(q.handle.Delete)
+	if !q.closed.Load() && q.done != nil {
+		q.done(keyexpr)
+	}
+}
+
+//export intrinsic_ImwQueryMessageStaticCallback
+func intrinsic_ImwQueryMessageStaticCallback(keyexpr unsafe.Pointer, responseBytes unsafe.Pointer, responseBytesLen C.size_t, messageKind C.int, encoding C.int, userContext C.uintptr_t) {
+	if userContext == 0 || int(messageKind) == imwMessageKindDelete {
+		return
+	}
+	callbacks := cgo.Handle(userContext).Value().(*queryHandle)
+	if callbacks.closed.Load() {
+		return
+	}
+	callbacks.handleMessage(C.GoString((*C.char)(keyexpr)), responseBytes, uint64(responseBytesLen), int(messageKind), imwEncoding(encoding))
+}
+
+//export intrinsic_ImwQueryDoneStaticCallback
+func intrinsic_ImwQueryDoneStaticCallback(keyexpr unsafe.Pointer, userContext C.uintptr_t) {
+	if userContext == 0 {
+		return
+	}
+	callbacks := cgo.Handle(userContext).Value().(*queryHandle)
+	callbacks.handleDone(C.GoString((*C.char)(keyexpr)))
+}
+
+func (z *zenohHandleImpl) ImwQueryMessages(keyExpr string, query *queryHandle, timeoutMs uint64) error {
 	keyExprString := C.CString(keyExpr)
 	defer C.free(unsafe.Pointer(keyExprString))
 
-	if res := C.ZenohHandleImwQuery(z.ptr, keyExprString, C.zenoh_handle_imw_query_callback_fn(C.intrinsic_ImwQueryStaticCallback), C.zenoh_handle_imw_query_on_done_fn(C.intrinsic_ImwQueryDoneStaticCallback), nil, 0, unsafe.Pointer(&query.handle), C.uint64_t(timeoutMs), false); res != 0 {
+	if res := C.ZenohHandleImwQueryMessages(z.ptr, keyExprString, C.zenoh_handle_imw_query_message_callback_fn(C.intrinsic_ImwQueryMessageStaticCallback), C.zenoh_handle_imw_message_query_on_done_fn(C.intrinsic_ImwQueryDoneStaticCallback), C.uintptr_t(query.handle), C.uint64_t(timeoutMs)); res != 0 {
 		return errorFromImwRet(res)
 	}
 
@@ -1700,18 +1780,22 @@ func (z *zenohHandleImpl) ImwDestroyQueryable(keyExpr string, queryable *queryab
 	return nil
 }
 
-func (z *zenohHandleImpl) ImwQueryableReply(queryContext unsafe.Pointer, keyExpr string, reply []byte) error {
+func (z *zenohHandleImpl) imwQueryableReply(queryContext unsafe.Pointer, keyExpr string, reply []byte, encoding imwEncoding) error {
 	keyExprString := C.CString(keyExpr)
 	defer C.free(unsafe.Pointer(keyExprString))
 
 	replyBytes := C.CBytes(reply)
 	defer C.free(replyBytes)
 
-	if res := C.ZenohHandleImwQueryableReply(z.ptr, queryContext, keyExprString, replyBytes, C.size_t(len(reply))); res != 0 {
+	if res := C.ZenohHandleImwQueryableReplyWithEncoding(z.ptr, queryContext, keyExprString, replyBytes, C.size_t(len(reply)), C.int(encoding)); res != 0 {
 		return errorFromImwRet(res)
 	}
 
 	return nil
+}
+
+func (z *zenohHandleImpl) ImwQueryableReply(queryContext unsafe.Pointer, keyExpr string, reply []byte) error {
+	return z.imwQueryableReply(queryContext, keyExpr, reply, imwEncodingVarintPrefixedBytes)
 }
 
 func (z *zenohHandleImpl) Ptr() unsafe.Pointer {
