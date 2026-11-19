@@ -28,6 +28,7 @@ package_group(
         "//intrinsic_perception/...",
         "//intrinsic_runtime/...",
         "//intrinsic_sdk/...",
+        "//intrinsic_simulation/...",
     ],
 )
 
@@ -45,6 +46,7 @@ package_group(
         "//intrinsic_perception/...",
         "//intrinsic_runtime/...",
         "//intrinsic_sdk/...",
+        "//intrinsic_simulation/...",
     ],
 )
 
@@ -62,6 +64,7 @@ package_group(
         "//intrinsic_perception/...",
         "//intrinsic_runtime/...",
         "//intrinsic_sdk/...",
+        "//intrinsic_simulation/...",
     ],
 )
 
@@ -79,6 +82,7 @@ package_group(
         "//intrinsic_perception/...",
         "//intrinsic_runtime/...",
         "//intrinsic_sdk/...",
+        "//intrinsic_simulation/...",
     ],
 )
 
@@ -97,6 +101,7 @@ package_group(
         "//intrinsic_perception/...",
         "//intrinsic_runtime/...",
         "//intrinsic_sdk/...",
+        "//intrinsic_simulation/...",
         "//third_party/...",
     ],
 )

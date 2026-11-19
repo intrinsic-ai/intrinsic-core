@@ -30,7 +30,7 @@ GOOGLE3_OR_IOC_LOCATIONS = [
     "intrinsic_motion_planning",
     "intrinsic_perception",
     "intrinsic_inference",
-    "incode/intrinsic_simulation",
+    "intrinsic_simulation",
     "intrinsic_hardware",
 ]
 # LINT.ThenChange(//.vscode/settings.json:proto_includes)

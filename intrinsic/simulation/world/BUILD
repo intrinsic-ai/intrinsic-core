@@ -68,7 +68,7 @@ cc_library(
     hdrs = ["world_to_sdf.h"],
     # Add models required for auto-injection (e.g. model://sun)
     data = [
-        "//intrinsic/models/gazebo:base_models",
+        "//intrinsic_simulation/models/gazebo:base_models",
     ],
     deps = [
         ":gen_node",

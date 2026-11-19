@@ -42,7 +42,7 @@ sdf_world(
         "//intrinsic/models/assets/quad_table",
         "//intrinsic/models/assets/table_cube",
         "//intrinsic/models/assets/universal_plate",
-        "//intrinsic/models/gazebo:base_models",
+        "//intrinsic_simulation/models/gazebo:base_models",
         "//third_party/kuka/kr6_r900_2:kr6_r900_2_resources",
     ],
     updates_pbtxts = ["4_robots_cube_world_updates.pbtxt"],
@@ -65,7 +65,7 @@ sdf_world(
         "//intrinsic/models/assets/quad_table",
         "//intrinsic/models/assets/table_cube",
         "//intrinsic/models/assets/universal_plate",
-        "//intrinsic/models/gazebo:base_models",
+        "//intrinsic_simulation/models/gazebo:base_models",
         "//third_party/kuka/kr6_r900_2:kr6_r900_2_resources",
     ],
     updates_pbtxts = [
