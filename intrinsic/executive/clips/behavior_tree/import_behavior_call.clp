@@ -196,6 +196,8 @@
       (pb-get-field ?behavior-call-proto "skill_execution_options.conflict_handling_mode"))
     (if (eq ?conflict-handling-mode FAIL) then (bind ?ch-mode FAIL))
     (if (eq ?conflict-handling-mode WAIT) then (bind ?ch-mode WAIT))
+    (if (eq ?conflict-handling-mode REPROJECT_ON_VOLUME) then
+      (bind ?ch-mode REPROJECT-ON-VOLUME))
   )
 
   (bind ?asserted-fact

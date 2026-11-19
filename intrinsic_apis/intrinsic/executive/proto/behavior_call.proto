@@ -104,6 +104,7 @@ message BehaviorCall {
       CONFLICT_HANDLING_MODE_UNSPECIFIED = 0;
       FAIL = 1;
       WAIT = 2;
+      REPROJECT_ON_VOLUME = 3;
     }
     // Experimental: This field might change or be removed in the future.
     ConflictHandlingMode conflict_handling_mode = 4;
