@@ -23,6 +23,10 @@ cc_library(
         "behavior_tree_visitor.h",
         "behavior_tree_visitor.inc",
     ],
+    visibility = [
+        "//intrinsic/executive:__subpackages__",
+        "//intrinsic_runtime/intrinsic/proto_tools/registry:__pkg__",
+    ],
     deps = [
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",

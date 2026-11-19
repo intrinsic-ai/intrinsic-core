@@ -24,13 +24,23 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/str_split.h"
+#include "google/protobuf/descriptor.h"
 #include "google/protobuf/descriptor.pb.h"
 #include "grpcpp/client_context.h"
+#include "intrinsic_runtime/intrinsic/proto_tools/util/descriptor_pool_loader.h"
 #include "intrinsic/assets/id_utils.h"
+#include "intrinsic/assets/processes/proto/process_asset.pb.h"
+#include "intrinsic/assets/proto/asset_type.pb.h"
 #include "intrinsic/assets/proto/installed_assets.grpc.pb.h"
 #include "intrinsic/assets/proto/installed_assets.pb.h"
+#include "intrinsic/assets/proto/metadata.pb.h"
 #include "intrinsic/assets/proto/view.pb.h"
+#include "intrinsic/executive/cc/behavior_tree_visitor.h"
+#include "intrinsic/executive/proto/behavior_tree.pb.h"
+#include "intrinsic/executive/proto/code_execution.pb.h"
+#include "intrinsic/skills/proto/skills.pb.h"
 #include "intrinsic/util/grpc/grpc.h"
+#include "intrinsic/util/proto/descriptors.h"
 #include "intrinsic/util/proto/parsed_type_url.h"
 #include "intrinsic/util/proto/type_url.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
@@ -63,6 +73,7 @@ CallGetInstalledAsset(
     std::string_view asset_id,
     intrinsic_proto::assets::v1::InstalledAssetsReader::StubInterface&
         installed_assets_stub,
+    intrinsic_proto::catalog::AssetViewType view,
     std::string_view retrieval_context) {
   INTR_ASSIGN_OR_RETURN(
       std::string asset_name, assets::NameFrom(asset_id),
@@ -80,16 +91,90 @@ CallGetInstalledAsset(
   intrinsic_proto::assets::v1::GetInstalledAssetRequest request;
   request.mutable_id()->set_package(asset_package);
   request.mutable_id()->set_name(asset_name);
-  request.set_view(intrinsic_proto::catalog::ASSET_VIEW_TYPE_ALL_METADATA);
+  request.set_view(view);
   intrinsic_proto::assets::v1::InstalledAsset asset;
 
   INTR_RETURN_IF_ERROR(ToAbslStatus(installed_assets_stub.GetInstalledAsset(
                            &context, request, &asset)))
       .With(AttachExtendedStatus(
-          12100, absl::StrFormat("Failed to get metadata for asset '%s' %s",
+          12100, absl::StrFormat("Failed to get installed asset '%s' %s",
                                  asset_id, retrieval_context)));
 
   return asset;
+}
+
+bool FileDescriptorSetContainsType(
+    const google::protobuf::FileDescriptorSet& fds,
+    std::string_view full_name) {
+  absl::StatusOr<std::unique_ptr<executive::LoadedDescriptorPool>> loaded_pool =
+      executive::LoadedDescriptorPool::CreateUnowned(fds);
+  if (!loaded_pool.ok()) {
+    return false;
+  }
+
+  return (*loaded_pool)->descriptor_pool()->FindMessageTypeByName(full_name) !=
+         nullptr;
+}
+
+// Collects the file descriptor sets of all code nodes of the given process
+// behavior tree in the order in which they are visited.
+absl::StatusOr<std::vector<const google::protobuf::FileDescriptorSet*>>
+CollectFileDescriptorSetsFromBehaviorTree(
+    const intrinsic_proto::executive::BehaviorTree& bt) {
+  std::vector<const google::protobuf::FileDescriptorSet*> fds_list;
+
+  auto visit_node =
+      [&fds_list](const intrinsic_proto::executive::BehaviorTree&,
+                  const intrinsic_proto::executive::BehaviorTree::Node& node) {
+        if (node.task().execute_code().has_file_descriptor_set()) {
+          fds_list.push_back(&node.task().execute_code().file_descriptor_set());
+        }
+        return absl::OkStatus();
+      };
+  INTR_RETURN_IF_ERROR(
+      executive::VisitBehaviorTree(bt, {.visit_node = visit_node}));
+
+  return fds_list;
+}
+
+// Returns the file descriptor set of the given process behavior tree which
+// defines 'message_type'.
+absl::StatusOr<google::protobuf::FileDescriptorSet>
+FindFileDescriptorSetInBehaviorTree(
+    const intrinsic_proto::executive::BehaviorTree& bt,
+    std::string_view message_type) {
+  // TODO(b/510731384): Use file descriptor set from asset's metadata instead of
+  // merging parameter and return value sets.
+  const intrinsic_proto::skills::Skill& description = bt.description();
+
+  const google::protobuf::FileDescriptorSet& params_fds =
+      description.parameter_description().parameter_descriptor_fileset();
+  const google::protobuf::FileDescriptorSet& return_fds =
+      description.return_value_description().descriptor_fileset();
+
+  if (message_type.empty() ||
+      FileDescriptorSetContainsType(params_fds, message_type) ||
+      FileDescriptorSetContainsType(return_fds, message_type)) {
+    google::protobuf::FileDescriptorSet tree_fds = params_fds;
+    INTR_RETURN_IF_ERROR(MergeFileDescriptorSet(return_fds, tree_fds));
+    return tree_fds;
+  }
+
+  INTR_ASSIGN_OR_RETURN(
+      std::vector<const google::protobuf::FileDescriptorSet*> fds_list,
+      CollectFileDescriptorSetsFromBehaviorTree(bt));
+  for (const google::protobuf::FileDescriptorSet* fds : fds_list) {
+    if (FileDescriptorSetContainsType(*fds, message_type)) {
+      return *fds;
+    }
+  }
+
+  return CreateStatus(
+      12102,
+      absl::StrFormat("Message '%s' is not defined by the parameters, return "
+                      "value or any code node of the process",
+                      message_type),
+      absl::StatusCode::kNotFound);
 }
 
 }  // namespace
@@ -122,16 +207,39 @@ absl::StatusOr<google::protobuf::FileDescriptorSet> AssetResolverImpl::Resolve(
         absl::StatusCode::kInvalidArgument);
   }
   const std::string asset_id = std::move(path_parts[0]);
+  const std::string retrieval_context =
+      absl::StrFormat("for type URL %s", parsed_url.type_url);
 
   INTR_ASSIGN_OR_RETURN(
       intrinsic_proto::assets::v1::InstalledAsset asset,
       CallGetInstalledAsset(
           asset_id, *installed_assets_stub_,
-          absl::StrFormat("for type URL %s", parsed_url.type_url)));
+          intrinsic_proto::catalog::ASSET_VIEW_TYPE_ALL_METADATA,
+          retrieval_context));
 
-  // TODO(b/530915170): Return only the relevant part of the descriptor set when
-  // a specific message or enum was requested.
-  return asset.metadata().file_descriptor_set();
+  if (asset.metadata().asset_type() !=
+      intrinsic_proto::assets::ASSET_TYPE_PROCESS) {
+    // TODO(b/530915170): Return only the relevant part of the descriptor set
+    // when a specific message was requested.
+    return asset.metadata().file_descriptor_set();
+  }
+
+  INTR_ASSIGN_OR_RETURN(
+      intrinsic_proto::assets::v1::InstalledAsset full_asset,
+      CallGetInstalledAsset(asset_id, *installed_assets_stub_,
+                            intrinsic_proto::catalog::ASSET_VIEW_TYPE_FULL,
+                            retrieval_context));
+  if (!full_asset.deployment_data().has_process()) {
+    return CreateStatus(
+        12103,
+        absl::StrFormat("Process asset '%s' has no process deployment data %s",
+                        asset_id, retrieval_context),
+        absl::StatusCode::kFailedPrecondition);
+  }
+
+  return FindFileDescriptorSetInBehaviorTree(
+      full_asset.deployment_data().process().process().behavior_tree(),
+      parsed_url.message_type);
 }
 
 }  // namespace intrinsic::proto_registry

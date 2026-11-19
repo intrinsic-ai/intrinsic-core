@@ -140,9 +140,12 @@ cc_library(
     srcs = ["resolver_asset.cc"],
     hdrs = ["resolver_asset.h"],
     deps = [
+        "//intrinsic/executive/cc:behavior_tree_visitor",
         "//intrinsic_runtime/intrinsic/proto_tools/registry:resolver",
+        "//intrinsic_runtime/intrinsic/proto_tools/util:descriptor_pool_loader",
         "//intrinsic_sdk/intrinsic/assets:id_utils",
         "//intrinsic_sdk/intrinsic/util/grpc",
+        "//intrinsic_sdk/intrinsic/util/proto:descriptors",
         "//intrinsic_sdk/intrinsic/util/proto:parsed_type_url",
         "//intrinsic_sdk/intrinsic/util/proto:type_url",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
@@ -154,9 +157,15 @@ cc_library(
         "@abseil-cpp//absl/strings:str_format",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_protobuf//:protobuf",
+        "@intrinsic_apis//intrinsic/assets/processes/proto:process_asset_cc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:asset_type_cc_proto",
         "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_grpc_proto",
         "@intrinsic_apis//intrinsic/assets/proto:installed_assets_cc_proto",
+        "@intrinsic_apis//intrinsic/assets/proto:metadata_cc_proto",
         "@intrinsic_apis//intrinsic/assets/proto:view_cc_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_cc_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:code_execution_cc_proto",
+        "@intrinsic_apis//intrinsic/skills/proto:skills_cc_proto",
     ],
 )
 

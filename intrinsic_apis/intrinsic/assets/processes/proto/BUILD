@@ -12,6 +12,7 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
+load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
@@ -37,6 +38,11 @@ go_proto_library(
         "@intrinsic_apis//intrinsic/assets/proto/v1:reference_go_proto",
         "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
     ],
+)
+
+cc_proto_library(
+    name = "process_asset_cc_proto",
+    deps = [":process_asset_proto"],
 )
 
 py_proto_library(

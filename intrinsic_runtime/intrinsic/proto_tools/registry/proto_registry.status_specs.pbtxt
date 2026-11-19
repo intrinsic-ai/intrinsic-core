@@ -39,6 +39,22 @@ status_info: [
       "The proto registry does not recognize this message as a well-known "
       "type. Use an asset type URL if this is a custom message."
   },
+  {
+    code: 12102
+    title: "Unknown message type in process asset"
+    recovery_instructions:
+      "The requested message type is not defined by the process asset's "
+      "parameters, return value, or any of its code nodes. Check the type URL "
+      "and make sure the currently installed process asset uses this message."
+  },
+  {
+    code: 12103
+    title: "Process asset is missing its process definition"
+    recovery_instructions:
+      "The installed asset is reported as a process asset, but its "
+      "deployment data does not contain a process definition. Reinstall the "
+      "process asset or check that it was built correctly."
+  },
   # Codes 13000-14060 are reserved / have been used before. Only 13003 is still in use.
   {
     code: 13003
