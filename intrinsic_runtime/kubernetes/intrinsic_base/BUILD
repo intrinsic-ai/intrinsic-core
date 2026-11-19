@@ -66,7 +66,7 @@ helm_chart(
         "solution_service": "//intrinsic_runtime/solution_service:solution-service-image.tar",
         "workcell_spec_service": "//intrinsic/kubernetes/workcell_spec:workcell-spec-service-image.tar",
         "world": "//intrinsic/world/binary:world-image.tar",
-        "world_updater": "//intrinsic/world/service/updater:world-updater-image.tar",
+        "world_updater": "//intrinsic_runtime/intrinsic/world/service/updater:world-updater-image.tar",
         "zenoh_introspection": "//intrinsic/platform/pubsub/introspection:zenoh-introspection-image.tar",
         # keep-sorted end
     } | {
@@ -88,10 +88,10 @@ helm_chart(
         "//intrinsic/skills/templates:skill-registry-template",
         "//intrinsic/storage/artifacts:artifacts-service-template",
         "//intrinsic/world/binary:world-template",
-        "//intrinsic/world/service/updater:world_updater_template",
         "//intrinsic_runtime/httpjson:http-gateway-template",
         "//intrinsic_runtime/intrinsic/proto_tools/templates:proto-builder-template",
         "//intrinsic_runtime/intrinsic/scene/service:scene_object_import_template",  # needed for scene_object_import
+        "//intrinsic_runtime/intrinsic/world/service/updater:world_updater_template",
         # keep-sorted end
     ] + [
         # keep-sorted start

@@ -129,7 +129,7 @@ constexpr absl::Duration kSimControlTimeout = absl::Seconds(90);
 // LINT.IfChange(init_world_id)
 constexpr absl::string_view kInitWorldId = "init_world";
 // LINT.ThenChange(
-//   //intrinsic/world/service/object_world_service.cc:published_world_ids
+//   //intrinsic_runtime/intrinsic/world/service/object_world_service.cc:published_world_ids
 // )
 
 std::unique_ptr<grpc::ClientContext> CreateClientContext(

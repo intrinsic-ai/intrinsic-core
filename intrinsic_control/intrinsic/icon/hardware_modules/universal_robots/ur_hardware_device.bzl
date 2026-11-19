@@ -126,7 +126,7 @@ def ur_hardware_device(name, display_name, is_core_variant = False):
             "@intrinsic_apis//intrinsic/icon/hal/proto:hardware_module_config_proto",
             "@intrinsic_apis//intrinsic/icon/hal/proto:hardware_module_inspection_proto",
             "@intrinsic_apis//intrinsic/icon/hardware_modules/sim_bus:sim_bus_hardware_module_proto",
-            "//intrinsic/world/service/robot_calibration:robot_calibration_data_service_proto",
+            "//intrinsic_runtime/intrinsic/world/service/robot_calibration:robot_calibration_data_service_proto",
         ],
     )
 

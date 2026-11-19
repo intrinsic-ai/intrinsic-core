@@ -44,8 +44,6 @@ cc_library(
         "//intrinsic/world/objects:object_world",
         "//intrinsic/world/proto/v1:pubsub_world_updates_cc_proto",
         "//intrinsic/world/pubsub:tf_echo_guard_interfaces",
-        "//intrinsic/world/service:world_storage",
-        "//intrinsic/world/service/objects:object_world_updates_utils",
         "//intrinsic/world/util:ros_joint_state_util",
         "//intrinsic/world/util:tf_frame_util",
         "//intrinsic_control/intrinsic/icon/cc_client:client",
@@ -53,6 +51,8 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/equipment:equipment_utils",
         "//intrinsic_control/intrinsic/icon/utils:async_buffer",
+        "//intrinsic_runtime/intrinsic/world/service:world_storage",
+        "//intrinsic_runtime/intrinsic/world/service/objects:object_world_updates_utils",
         "//intrinsic_sdk/intrinsic/logging/proto:log_item_cc_proto",
         "//intrinsic_sdk/intrinsic/platform/pubsub",
         "//intrinsic_sdk/intrinsic/platform/pubsub:subscription",
@@ -112,7 +112,7 @@ go_proto_library(
         "@io_bazel_rules_go//proto:go_proto",
     ],
     importpath = "intrinsic/world/service/updater/world_updater_go_proto",
-    protos = [":world_updater_proto"],
+    proto = ":world_updater_proto",
 )
 
 proto_library(
@@ -134,10 +134,10 @@ cc_binary(
         ":world_updater",
         ":world_updater_config_cc_proto",
         "//intrinsic/stats:opencensus",
-        "//intrinsic/world/service:world_service_cc_grpc_proto",
-        "//intrinsic/world/service/robot_calibration:robot_kinematics_updater",
         "//intrinsic_control/intrinsic/icon/equipment:channel_factory",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
+        "//intrinsic_runtime/intrinsic/world/service:world_service_cc_grpc_proto",
+        "//intrinsic_runtime/intrinsic/world/service/robot_calibration:robot_kinematics_updater",
         "//intrinsic_sdk/intrinsic/connect/cc/grpc:channel",
         "//intrinsic_sdk/intrinsic/resources/client:resource_registry_client_cc",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
@@ -165,4 +165,10 @@ cc_oci_image(
     visibility = [
         "//intrinsic_runtime/kubernetes/intrinsic_base:__pkg__",
     ],
+)
+
+go_proto_library(
+    name = "world_updater_config_go_proto",
+    importpath = "intrinsic/world/service/updater/world_updater_config_go_proto",
+    proto = ":world_updater_config_proto",
 )

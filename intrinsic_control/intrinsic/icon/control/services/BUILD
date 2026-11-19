@@ -259,7 +259,7 @@ cc_library(
         ":world_service",
         "//intrinsic/world",
         "//intrinsic/world/objects:object_world",
-        "//intrinsic/world/service/test:world_service_fake",
+        "//intrinsic_runtime/intrinsic/world/service/test:world_service_fake",
         "//intrinsic_sdk/intrinsic/geometry/storage:gzf_storage",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/scene/util:scene_object_gzf",

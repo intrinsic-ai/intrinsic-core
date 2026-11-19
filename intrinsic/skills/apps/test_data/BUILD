@@ -44,7 +44,6 @@ package_group(
         "//intrinsic/skills/apps/testing",
         "//intrinsic/skills/examples",
         "//intrinsic/world",
-        "//intrinsic/world/service/robot_calibration",
         "//intrinsic_control/intrinsic/icon/skills",
         "//intrinsic_kinematics/intrinsic/kinematics/utils",
         "//intrinsic_motion_planning/intrinsic/motion_planning/motion_planner",
@@ -54,6 +53,7 @@ package_group(
         "//intrinsic_perception/intrinsic/perception/client/v1/python/camera",
         "//intrinsic_perception/intrinsic/perception/skills/calibration",
         "//intrinsic_perception/intrinsic/perception/skills/multi_view",
+        "//intrinsic_runtime/intrinsic/world/service/robot_calibration",
         "//incode/ml/rl/skills",
     ],
 )

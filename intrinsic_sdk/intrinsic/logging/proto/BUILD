@@ -240,7 +240,7 @@ proto_library(
     srcs = ["visualization_context.proto"],
     deps = [
         "//intrinsic/config/proto:cluster_proto",
-        "//intrinsic/world/service:world_service_proto",
+        "//intrinsic_runtime/intrinsic/world/service:world_service_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:renderable_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:renderable_proto",
         "@intrinsic_apis//intrinsic/logging/proto:blob_proto",
@@ -259,7 +259,7 @@ go_proto_library(
     protos = [":visualization_context_proto"],
     deps = [
         "//intrinsic/config/proto:cluster_go_proto",
-        "//intrinsic/world/service:world_service_go_proto",
+        "//intrinsic_runtime/intrinsic/world/service:world_service_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:renderable_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:renderable_go_proto",
         "@intrinsic_apis//intrinsic/logging/proto:blob_go_proto",

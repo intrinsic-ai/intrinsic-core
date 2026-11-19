@@ -26,6 +26,7 @@ package(default_visibility = [
     "//intrinsic_kinematics/intrinsic/kinematics:__subpackages__",
     "//intrinsic_motion_planning:__subpackages__",
     "//intrinsic_runtime/intrinsic/scene:__subpackages__",
+    "//intrinsic_runtime/intrinsic/world:__subpackages__",
     "//intrinsic_sdk/intrinsic/skills:__subpackages__",
     "//intrinsic_sdk/intrinsic/world:__subpackages__",
 ])

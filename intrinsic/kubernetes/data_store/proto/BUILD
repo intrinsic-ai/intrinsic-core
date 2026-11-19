@@ -54,7 +54,6 @@ cluster_visibility = [
     "//intrinsic/testing/fleet_manager:__pkg__",
     "//intrinsic/tools:__subpackages__",
     "//intrinsic/world/public/objects:__subpackages__",
-    "//intrinsic/world/service:__subpackages__",
     "//intrinsic/storage/hot_shared_state:__subpackages__",
 ]
 

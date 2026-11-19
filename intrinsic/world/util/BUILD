@@ -95,7 +95,7 @@ cc_library(
         "//intrinsic/world/objects:object_world",
         "//intrinsic/world/objects:object_world_proto_utils",
         "//intrinsic/world/objects:simple_transform_node_visitor",
-        "//intrinsic/world/service/objects:object_world_updates_utils",
+        "//intrinsic_runtime/intrinsic/world/service/objects:object_world_updates_utils",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_options",
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_library",

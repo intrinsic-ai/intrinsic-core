@@ -16,7 +16,7 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/world/service:__subpackages__"])
+package(default_visibility = ["//intrinsic_runtime/intrinsic/world/service:__subpackages__"])
 
 cc_library(
     name = "object_world_converter",
@@ -24,8 +24,8 @@ cc_library(
     hdrs = ["object_world_converter.h"],
     visibility = [
         "//intrinsic/world/conversion:__subpackages__",
-        "//intrinsic/world/service:__subpackages__",
         "//intrinsic_motion_planning/intrinsic/motion_planning/service:__pkg__",
+        "//intrinsic_runtime/intrinsic/world/service:__subpackages__",
     ],
     deps = [
         "//intrinsic/world",
@@ -36,9 +36,9 @@ cc_library(
         "//intrinsic/world/objects:object_world",
         "//intrinsic/world/objects:object_world_creation_utils",
         "//intrinsic/world/proto:ppr_component_cc_proto",
-        "//intrinsic/world/service:world_mutex",
         "//intrinsic_control/intrinsic/icon/proto:cart_space_conversion",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits_xd",
+        "//intrinsic_runtime/intrinsic/world/service:world_mutex",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_serializer",
         "//intrinsic_sdk/intrinsic/math:pose3",
@@ -77,10 +77,10 @@ cc_library(
     visibility = [
         "//intrinsic/simulation/service:__subpackages__",
         "//intrinsic/simulation/world:__pkg__",
-        "//intrinsic/world/service:__subpackages__",
         "//intrinsic/world/test:__subpackages__",
         "//intrinsic/world/tools:__subpackages__",
         "//intrinsic/world/util:__subpackages__",
+        "//intrinsic_runtime/intrinsic/world/service:__subpackages__",
     ],
     deps = [
         ":object_world_converter",
@@ -131,8 +131,8 @@ cc_library(
     hdrs = ["world_comparator.h"],
     visibility = [
         "//intrinsic/world/conversion:__pkg__",
-        "//intrinsic/world/service:__subpackages__",
         "//intrinsic_motion_planning/intrinsic/motion_planning/service:__pkg__",
+        "//intrinsic_runtime/intrinsic/world/service:__subpackages__",
     ],
     deps = [
         "//intrinsic/world/objects:object_world_creation_utils",

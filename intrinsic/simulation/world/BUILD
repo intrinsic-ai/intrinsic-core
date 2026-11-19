@@ -44,7 +44,7 @@ cc_library(
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
         ":world_updater",
-        "//intrinsic/world/service:world_service_cc_proto",
+        "//intrinsic_runtime/intrinsic/world/service:world_service_cc_proto",
         "//intrinsic_sdk/intrinsic/util:macros",
         "//intrinsic_sdk/intrinsic/util/grpc",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",

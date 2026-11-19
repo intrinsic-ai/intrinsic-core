@@ -82,8 +82,8 @@ cc_library(
     hdrs = ["ur_kinematics_calibration_service.h"],
     deps = [
         ":ur_calibration_utils",
-        "//intrinsic/world/service/robot_calibration:robot_calibration_data_service_cc_grpc_proto",
-        "//intrinsic/world/service/robot_calibration:robot_calibration_data_service_cc_proto",
+        "//intrinsic_runtime/intrinsic/world/service/robot_calibration:robot_calibration_data_service_cc_grpc_proto",
+        "//intrinsic_runtime/intrinsic/world/service/robot_calibration:robot_calibration_data_service_cc_proto",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/util:invalid_until_set",
         "//intrinsic_sdk/intrinsic/util/status:status_builder_grpc",

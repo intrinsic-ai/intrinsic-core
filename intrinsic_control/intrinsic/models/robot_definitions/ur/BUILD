@@ -51,11 +51,11 @@ sdf_scene_object(
     ],
     visibility = [
         "//intrinsic/tools/inctl/util:__pkg__",
-        "//intrinsic/world/service:__pkg__",
         "//intrinsic_control:__pkg__",
         "//intrinsic_control/intrinsic/icon/control/services:__pkg__",
         "//intrinsic_control/intrinsic/icon/hardware_modules:__subpackages__",
         "//intrinsic_kinematics/intrinsic/kinematics:__pkg__",
+        "//intrinsic_runtime/intrinsic/world/service:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:__pkg__",
     ],
     deps = [

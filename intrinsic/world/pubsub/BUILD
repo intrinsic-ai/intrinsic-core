@@ -14,7 +14,10 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic/world:__subpackages__"])
+package(default_visibility = [
+    "//intrinsic/world:__subpackages__",
+    "//intrinsic_runtime/intrinsic/world:__subpackages__",
+])
 
 cc_library(
     name = "tf_echo_guard_interfaces",
@@ -51,14 +54,15 @@ cc_library(
     visibility = [
         "//intrinsic/logging:__subpackages__",
         "//intrinsic/world:__subpackages__",
+        "//intrinsic_runtime/intrinsic/world:__subpackages__",
     ],
     deps = [
         ":tf_echo_guard_interfaces",
         "//intrinsic/world",
         "//intrinsic/world/proto:tf_associations_cc_proto",
-        "//intrinsic/world/service:world_mutex",
-        "//intrinsic/world/service:world_storage",
         "//intrinsic/world/util:tf_frame_util",
+        "//intrinsic_runtime/intrinsic/world/service:world_mutex",
+        "//intrinsic_runtime/intrinsic/world/service:world_storage",
         "//intrinsic_sdk/intrinsic/platform/pubsub",
         "//intrinsic_sdk/intrinsic/platform/pubsub:publisher",
         "//intrinsic_sdk/intrinsic/util/proto:repeated_field_util",

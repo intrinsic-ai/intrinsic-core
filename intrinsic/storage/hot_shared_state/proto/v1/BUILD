@@ -118,7 +118,6 @@ cc_proto_library(
     name = "resource_set_service_cc_proto",
     visibility = [
         "//intrinsic/executive/engine:__subpackages__",
-        "//intrinsic/world/service:__subpackages__",
     ],
     deps = [":resource_set_service_proto"],
 )

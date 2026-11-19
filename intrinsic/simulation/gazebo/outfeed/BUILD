@@ -27,7 +27,7 @@ cc_library(
         "//intrinsic/simulation/gazebo/components:world_component",
         "//intrinsic/simulation/gazebo/proto:outfeed_service_cc_grpc_proto",
         "//intrinsic/simulation/gazebo/proto:outfeed_service_cc_proto",
-        "//intrinsic/world/service:world_service_cc_grpc_proto",
+        "//intrinsic_runtime/intrinsic/world/service:world_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_deserializer",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/util/status:return",

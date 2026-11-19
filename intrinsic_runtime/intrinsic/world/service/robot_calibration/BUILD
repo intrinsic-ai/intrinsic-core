@@ -37,13 +37,13 @@ cc_proto_library(
 
 go_proto_library(
     name = "robot_calibration_data_service_go_proto",
-    importpath = "intrinsic/world/service/robot_calibration/robot_calibration_data_service_go_proto",
-    protos = [":robot_calibration_data_service_proto"],
-    deps = [
-        "@intrinsic_apis//intrinsic/icon/proto:cart_space_go_proto",
-        "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_go_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_go_proto",
+    compilers = [
+        "@io_bazel_rules_go//proto:go_proto",
+        "@io_bazel_rules_go//proto:go_grpc_v2",
     ],
+    importpath = "intrinsic/world/service/robot_calibration/robot_calibration_data_service_go_proto",
+    proto = ":robot_calibration_data_service_proto",
+    deps = ["@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_go_proto"],
 )
 
 cc_grpc_library(
@@ -58,7 +58,7 @@ proto_library(
     name = "robot_update_service_proto",
     srcs = ["robot_update_service.proto"],
     deps = [
-        ":robot_calibration_data_service_proto",
+        "//intrinsic_runtime/intrinsic/world/service/robot_calibration:robot_calibration_data_service_proto",
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_proto",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_proto",
     ],
@@ -84,14 +84,12 @@ go_proto_library(
         "@io_bazel_rules_go//proto:go_proto",
     ],
     importpath = "intrinsic/world/service/robot_calibration/robot_update_service_go_proto",
-    protos = [":robot_update_service_proto"],
+    proto = ":robot_update_service_proto",
     visibility = ["//intrinsic:intrinsic_internal"],
     deps = [
         ":robot_calibration_data_service_go_proto",
         "@intrinsic_apis//intrinsic/icon/proto:cart_space_go_proto",
         "@intrinsic_apis//intrinsic/kinematics/types:joint_limits_go_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_updates_go_proto",
-        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
 )
 

@@ -25,9 +25,9 @@ cc_library(
     hdrs = ["log_item_builder.h"],
     deps = [
         "//intrinsic/world:cc_proto",
-        "//intrinsic/world/service:world_compatibility_service_cc_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/path_planning:path_planner_cc_proto",
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto/v1:motion_planner_service_cc_proto",
+        "//intrinsic_runtime/intrinsic/world/service:world_compatibility_service_cc_proto",
         "//intrinsic_sdk/intrinsic/logging/proto:log_item_cc_proto",
         "//intrinsic_sdk/intrinsic/skills/proto:skill_service_cc_proto",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_rpc",
