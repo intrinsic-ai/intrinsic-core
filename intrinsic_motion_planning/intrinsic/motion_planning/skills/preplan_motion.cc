@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "incode/motion_planning/skills/preplan_motion.h"
+#include "intrinsic/motion_planning/skills/preplan_motion.h"
 
 #include <memory>
 #include <optional>
@@ -25,12 +25,12 @@
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "google/protobuf/message.h"
-#include "incode/motion_planning/skills/move_robot.h"
-#include "incode/motion_planning/skills/preplan_motion.pb.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/motion_planning/motion_planner_client.h"
 #include "intrinsic/motion_planning/service/debug/timing_debug_logger.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
+#include "intrinsic/motion_planning/skills/move_robot.h"
+#include "intrinsic/motion_planning/skills/preplan_motion.pb.h"
 #include "intrinsic/skills/apps/attach_object_to_robot.h"
 #include "intrinsic/skills/apps/attach_object_to_robot.pb.h"
 #include "intrinsic/skills/apps/detach_object.h"

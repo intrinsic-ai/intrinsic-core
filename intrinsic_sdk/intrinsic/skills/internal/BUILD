@@ -30,7 +30,6 @@ package(default_visibility = [
     "//intrinsic_sdk/intrinsic/executive:__subpackages__",
     "//intrinsic_sdk/intrinsic/skills:__subpackages__",
     "//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__",
-    "//incode/motion_planning/skills:__subpackages__",
 ])
 
 py_library(
@@ -189,7 +188,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills:__subpackages__",
         "//intrinsic_sdk/intrinsic/testing:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__",
-        "//incode/motion_planning/skills:__subpackages__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_library",
@@ -223,7 +221,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills:__subpackages__",
         "//intrinsic_sdk/intrinsic/testing:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__",
-        "//incode/motion_planning/skills:__subpackages__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/geometry/storage:geometry_library",
@@ -601,7 +598,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/skills:__subpackages__",
         "//intrinsic_sdk/intrinsic/testing:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inbuild:__subpackages__",
-        "//incode/motion_planning/skills:__subpackages__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/skills/cc:equipment_pack",

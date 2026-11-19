@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "incode/motion_planning/skills/preplan_motion.h"
+#include "intrinsic/motion_planning/skills/preplan_motion.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -30,7 +30,6 @@
 #include "absl/status/status_matchers.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
-#include "incode/motion_planning/skills/preplan_motion.pb.h"
 #include "internal/testing.h"
 #include "intrinsic/assets/proto/id.pb.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
@@ -46,6 +45,7 @@
 #include "intrinsic/motion_planning/service/motion_planner_service_in_process.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_proxy.h"
 #include "intrinsic/motion_planning/skills/move_robot.pb.h"
+#include "intrinsic/motion_planning/skills/preplan_motion.pb.h"
 #include "intrinsic/skills/apps/attach_object_to_robot.pb.h"
 #include "intrinsic/skills/apps/detach_object.pb.h"
 #include "intrinsic/skills/apps/update_world.pb.h"
@@ -83,7 +83,7 @@ constexpr char kObjectName[] = "object";
 char const kWorldId[] = "my_world";
 
 constexpr char kManifestPath[] =
-    "incode/motion_planning/skills/preplan_motion_manifest.pbbin";
+    "intrinsic/motion_planning/skills/preplan_motion_manifest.pbbin";
 
 constexpr std::string_view kTestMotionPlannerServiceAssetVersion =
     "0.20260427.7-RC17";

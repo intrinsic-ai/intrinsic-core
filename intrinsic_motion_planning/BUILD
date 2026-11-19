@@ -18,9 +18,9 @@ filegroup(
     name = "ioc_export_targets",
     srcs = [
         "//intrinsic_motion_planning/intrinsic/motion_planning/service:motion_planner_service_asset",
-        "//incode/motion_planning/skills:clear_motion_planner_service_cache_skill",
-        "//incode/motion_planning/skills:move_robot_skill",
-        "//incode/motion_planning/skills:preplan_motion_skill",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/skills:clear_motion_planner_service_cache_skill",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/skills:move_robot_skill",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/skills:preplan_motion_skill",
     ],
 )
 
@@ -29,8 +29,8 @@ test_suite(
     tests = [
         "//intrinsic_motion_planning/intrinsic/motion_planning/motion_planner:motion_planner_test",
         "//intrinsic_motion_planning/intrinsic/motion_planning/service:motion_planner_service_test",
-        "//incode/motion_planning/skills:clear_motion_planner_service_cache_test",
-        "//incode/motion_planning/skills:move_robot_test",
-        "//incode/motion_planning/skills:preplan_motion_test",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/skills:clear_motion_planner_service_cache_test",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/skills:move_robot_test",
+        "//intrinsic_motion_planning/intrinsic/motion_planning/skills:preplan_motion_test",
     ],
 )

@@ -32,9 +32,9 @@ documentation: {
 options {
   supports_cancellation: false
   python_config {
-    skill_module: "incode.motion_planning.skills.clear_motion_planner_service_cache"
-    proto_module: "incode.motion_planning.skills.clear_motion_planner_service_cache_pb2"
-    create_skill: "incode.motion_planning.skills.clear_motion_planner_service_cache.ClearMotionPlannerServiceCache"
+    skill_module: "intrinsic.motion_planning.skills.clear_motion_planner_service_cache"
+    proto_module: "intrinsic.motion_planning.skills.clear_motion_planner_service_cache_pb2"
+    create_skill: "intrinsic.motion_planning.skills.clear_motion_planner_service_cache.ClearMotionPlannerServiceCache"
   }
 }
 parameter {

@@ -638,7 +638,6 @@ cc_proto_library(
     visibility = [
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
         "//intrinsic_perception/intrinsic/perception/skills/calibration:__pkg__",
-        "//incode/motion_planning/skills:__pkg__",
     ],
     deps = [
         ":update_robot_joint_positions_proto",

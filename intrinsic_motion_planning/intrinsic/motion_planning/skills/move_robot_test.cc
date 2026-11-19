@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "incode/motion_planning/skills/move_robot.h"
+#include "intrinsic/motion_planning/skills/move_robot.h"
 
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
@@ -127,7 +127,7 @@ constexpr double kTinyTimeIncrement = 0.000001;
 
 
 constexpr char kEchoManifestPath[] =
-    "incode/motion_planning/skills/move_robot_manifest.pbbin";
+    "intrinsic/motion_planning/skills/move_robot_manifest.pbbin";
 
 constexpr char kDioBlock[] = "digital_in";
 constexpr uint32_t kSignalIndex = 0;

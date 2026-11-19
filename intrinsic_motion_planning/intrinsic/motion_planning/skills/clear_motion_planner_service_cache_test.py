@@ -21,10 +21,10 @@ from absl import logging
 from absl.testing import absltest
 from python.runfiles import runfiles
 
-from incode.motion_planning.skills import clear_motion_planner_service_cache as clear_mps_cache
-from incode.motion_planning.skills import clear_motion_planner_service_cache_pb2 as clear_mps_cache_pb2
 from intrinsic.assets.proto.v1 import resolved_dependency_pb2
 from intrinsic.motion_planning import motion_planner_client
+from intrinsic.motion_planning.skills import clear_motion_planner_service_cache as clear_mps_cache
+from intrinsic.motion_planning.skills import clear_motion_planner_service_cache_pb2 as clear_mps_cache_pb2
 from intrinsic.skills.internal import preview_context_impl
 from intrinsic.skills.testing import skill_test_utils
 
@@ -49,7 +49,7 @@ class ClearMotionPlannerServiceCacheParamsTest(absltest.TestCase):
 
   def test_manifest_contains_expected_values(self):
     manifest_path = runfiles.Create().Rlocation(
-        'intrinsic-core/incode/motion_planning/skills/clear_motion_planner_service_cache_manifest.pbbin'
+        'intrinsic-core/intrinsic_motion_planning/intrinsic/motion_planning/skills/clear_motion_planner_service_cache_manifest.pbbin'
     )
     manifest = skill_test_utils.get_skill_manifest(manifest_path)
     self.assertEqual(manifest.id.name, 'clear_motion_planner_service_cache')

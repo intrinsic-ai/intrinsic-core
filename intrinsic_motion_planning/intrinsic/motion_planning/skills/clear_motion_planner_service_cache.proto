@@ -19,7 +19,7 @@ package intrinsic_proto.skills;
 import "intrinsic/assets/proto/field_metadata.proto";
 import "intrinsic/assets/proto/v1/resolved_dependency.proto";
 
-option go_package = "incode/motion_planning/skills/clear_motion_planner_service_cache_go_proto";
+option go_package = "intrinsic/motion_planning/skills/clear_motion_planner_service_cache_go_proto";
 
 message ClearMotionPlannerServiceCacheParams {
   // The `MotionPlannerService` (MPS) Asset specification.

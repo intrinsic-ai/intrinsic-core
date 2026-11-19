@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "incode/motion_planning/skills/move_robot_util.h"
+#include "intrinsic/motion_planning/skills/move_robot_util.h"
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"

@@ -19,7 +19,7 @@
 
 #include "absl/status/statusor.h"
 #include "google/protobuf/message.h"
-#include "incode/motion_planning/skills/preplan_motion.pb.h"
+#include "intrinsic/motion_planning/skills/preplan_motion.pb.h"
 #include "intrinsic/skills/cc/skill_interface.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
 #include "intrinsic/skills/proto/skill_service.pb.h"

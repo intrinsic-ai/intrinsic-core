@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "incode/motion_planning/skills/move_robot.h"
+#include "intrinsic/motion_planning/skills/move_robot.h"
 
 #include <limits>
 #include <memory>
@@ -33,7 +33,6 @@
 #include "absl/time/time.h"
 #include "google/protobuf/duration.pb.h"
 #include "google/protobuf/message.h"
-#include "incode/motion_planning/skills/move_robot_util.h"
 #include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
@@ -67,6 +66,7 @@
 #include "intrinsic/motion_planning/proto/v1/motion_blending_parameter.pb.h"
 #include "intrinsic/motion_planning/service/debug/timing_debug_logger.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
+#include "intrinsic/motion_planning/skills/move_robot_util.h"
 
 #include "intrinsic/motion_planning/proto/v1/motion_events.pb.h"
 

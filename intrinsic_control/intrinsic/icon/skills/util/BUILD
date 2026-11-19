@@ -108,7 +108,6 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/skills:__subpackages__",
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__subpackages__",
         "//intrinsic_perception/intrinsic/perception/skills:__subpackages__",
-        "//incode/motion_planning/skills:__pkg__",
     ],
     deps = [
         "//intrinsic_sdk/intrinsic/util/status:status_macros",

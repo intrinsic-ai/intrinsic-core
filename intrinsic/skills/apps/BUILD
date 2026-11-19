@@ -61,7 +61,6 @@ cc_library(
     visibility = [
         "//intrinsic/manipulation/skills:__subpackages__",
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
-        "//incode/motion_planning/skills:__pkg__",
     ],
     deps = [
         ":detach_object_cc_proto",
@@ -121,7 +120,6 @@ cc_library(
     visibility = [
         "//intrinsic/manipulation/skills:__subpackages__",
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
-        "//incode/motion_planning/skills:__pkg__",
     ],
     deps = [
         ":attach_object_to_robot_cc_proto",
@@ -220,7 +218,6 @@ cc_proto_library(
     name = "update_world_cc_proto",
     visibility = [
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
-        "//incode/motion_planning/skills:__pkg__",
     ],
     deps = [":update_world_proto"],
 )

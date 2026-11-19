@@ -16,8 +16,8 @@
 
 from absl import logging
 
-from incode.motion_planning.skills import clear_motion_planner_service_cache_pb2
 from intrinsic.motion_planning import motion_planner_client
+from intrinsic.motion_planning.skills import clear_motion_planner_service_cache_pb2
 from intrinsic.skills.proto import footprint_pb2
 from intrinsic.skills.python import skill_interface as skl
 from intrinsic.skills.python import skill_interface_utils
