@@ -65,16 +65,17 @@ absl::StatusOr<
 ProtoRegistryService::GetFileDescriptorSet(
     std::string_view requested_type_url, std::string_view requested_name,
     std::string_view requested_asset_id) {
-  std::string type_url_prefix;
   FileDescriptorSetName name;
+  ParsedUrl parsed_url;
 
   if (!requested_type_url.empty()) {
-    type_url_prefix = std::string(ExtractTypeUrlPrefix(requested_type_url));
-    INTR_ASSIGN_OR_RETURN(
-        name, FileDescriptorSetNameForTypeUrlPrefix(type_url_prefix));
+    INTR_ASSIGN_OR_RETURN(parsed_url, ParseTypeUrl(requested_type_url));
+    INTR_ASSIGN_OR_RETURN(name,
+                          FileDescriptorSetNameForTypeUrl(requested_type_url));
   } else if (!requested_asset_id.empty()) {
-    type_url_prefix = GenerateIntrinsicTypeUrl(kIntrinsicTypeUrlAreaAssets,
-                                               requested_asset_id);
+    std::string type_url_prefix = GenerateIntrinsicTypeUrl(
+        kIntrinsicTypeUrlAreaAssets, requested_asset_id);
+    INTR_ASSIGN_OR_RETURN(parsed_url, ParseTypeUrlPrefix(type_url_prefix));
     INTR_ASSIGN_OR_RETURN(
         name, FileDescriptorSetNameForTypeUrlPrefix(type_url_prefix));
   } else {  // requested_name is set
@@ -82,12 +83,18 @@ ProtoRegistryService::GetFileDescriptorSet(
     FileDescriptorSetNameProto unobfuscated_name;
     INTR_ASSIGN_OR_RETURN(unobfuscated_name,
                           UnobfuscateFileDescriptorSetName(name));
-    type_url_prefix = unobfuscated_name.type_url_prefix();
+    if (!unobfuscated_name.type_url_prefix().empty()) {
+      INTR_ASSIGN_OR_RETURN(
+          parsed_url, ParseTypeUrlPrefix(unobfuscated_name.type_url_prefix()));
+    } else {
+      INTR_ASSIGN_OR_RETURN(parsed_url,
+                            ParseTypeUrl(unobfuscated_name.type_url()));
+    }
   }
 
-  // Resolve only requires a parsed type URL prefix, not a full type URL.
-  ParsedUrl parsed_url;
-  INTR_ASSIGN_OR_RETURN(parsed_url, ParseTypeUrlPrefix(type_url_prefix));
+  // parsed_url is a full type URL, except for the cases when it comes
+  // from the requested_asset_id branch. Then it's a type URL prefix without a
+  // message name.
   google::protobuf::FileDescriptorSet fds;
   INTR_ASSIGN_OR_RETURN(fds, resolver_->Resolve(parsed_url));
 
