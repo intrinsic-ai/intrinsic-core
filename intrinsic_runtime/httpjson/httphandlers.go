@@ -23,6 +23,7 @@ import (
 	"intrinsic_runtime/httpjson/webpubsub"
 
 	acsggp "intrinsic/assets/proto/v1/asset_configuration_go_proto"
+	sssggp "intrinsic/assets/services/proto/v1/system_service_state_go_proto"
 	bbggp "intrinsic/executive/proto/blackboard_service_go_proto"
 	esggp "intrinsic/executive/proto/executive_service_go_proto"
 	pbggp "intrinsic/executive/proto/proto_builder_go_proto"
@@ -158,6 +159,12 @@ func RegisterHandlers(
 
 	// Register handlers for the connectivity diagnostics service
 	err = cdsggp.RegisterIpcConnectivityDiagnosticsServiceHandlerFromEndpoint(ctx, mux, cliArgs.ConnectivityDiagnosticsServiceAddress, insecureOpts)
+	if err != nil {
+		return err
+	}
+
+	// Register handlers for the SystemServiceState service
+	err = sssggp.RegisterSystemServiceStateHandlerFromEndpoint(ctx, mux, cliArgs.SystemServiceStateAddress, insecureOpts)
 	if err != nil {
 		return err
 	}

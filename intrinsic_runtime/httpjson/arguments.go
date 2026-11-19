@@ -37,6 +37,7 @@ type CLIArguments struct {
 	ProtoRegistryAddress                  string
 	SceneObjectImportServiceAddress       string
 	SolutionServiceAddress                string
+	SystemServiceStateAddress             string
 	TrainServiceAddress                   string
 	LoggerServiceAddress                  string
 	ReplayServiceAddress                  string
@@ -82,6 +83,7 @@ func Get() *CLIArguments {
 		flag.StringVar(&instance.ProtoRegistryAddress, "proto-registry-endpoint", ingressAddress, "Proto Registry service endpoint")
 		flag.StringVar(&instance.SceneObjectImportServiceAddress, "scene-object-import-service-endpoint", ingressAddress, "Scene object import service endpoint")
 		flag.StringVar(&instance.SolutionServiceAddress, "solution-service-endpoint", ingressAddress, "Solution service endpoint")
+		flag.StringVar(&instance.SystemServiceStateAddress, "system-service-state-endpoint", ingressAddress, "System service state service endpoint")
 		flag.StringVar(&instance.TrainServiceAddress, "train-service-endpoint", ingressAddress, "Train service endpoint")
 		flag.StringVar(&instance.ReplayServiceAddress, "replay-service-endpoint", ingressAddress, "Replay service endpoint")
 		flag.StringVar(&instance.LoggerServiceAddress, "logger-service-endpoint", ingressAddress, "Logger service endpoint")
