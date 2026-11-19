@@ -22,7 +22,6 @@
 #include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "absl/types/span.h"
-#include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 #include "intrinsic/logging/structured_logging_client.h"
@@ -82,11 +81,6 @@ absl::StatusOr<
     std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>>
 CreateObjectWorldServiceStub(const std::string& world_service_address,
                              const absl::Duration& grpc_connect_timeout);
-
-absl::StatusOr<
-    std::unique_ptr<intrinsic_proto::geometry::GeometryService::Stub>>
-CreateGeometryServiceStub(const std::string& geometry_service_address,
-                          const absl::Duration& grpc_connect_timeout);
 
 struct StructuredLoggingClientAndStub {
   std::unique_ptr<intrinsic_proto::data_logger::DataLogger::StubInterface> stub;

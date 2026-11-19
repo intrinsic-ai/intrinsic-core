@@ -34,10 +34,10 @@
 #include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/assets/proto/installed_assets.grpc.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
-#include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
-#include "intrinsic/geometry/proto/geometry_service.pb.h"
+#include "intrinsic/geometry/storage/cas_and_kvstore_storage.h"
+#include "intrinsic/geometry/storage/cas_client.h"
+#include "intrinsic/geometry/storage/geo_cache.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
-#include "intrinsic/geometry/storage/geometry_service_storage.h"
 #include "intrinsic/icon/release/file_helpers.h"
 #include "intrinsic/icon/release/portable/init_intrinsic.h"
 #include "intrinsic/logging/data_logger_client.h"
@@ -48,9 +48,12 @@
 #include "intrinsic/motion_planning/service/motion_planner_service_asset_utils.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_utils.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.h"
+#include "intrinsic/platform/pubsub/kvstore.h"
+#include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/resources/proto/runtime_context.pb.h"
 #include "intrinsic/skills/internal/world_service_utils.h"
 #include "intrinsic/stats/opencensus.h"
+#include "intrinsic/storage/content_addressable_storage/proto/cas_service.grpc.pb.h"
 #include "intrinsic/util/macros.h"
 #include "intrinsic/util/proto/any.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -62,13 +65,16 @@
 ABSL_FLAG(std::string, world_service_address,
           "world.app-intrinsic-base.svc.cluster.local:8080",
           "gRpc target for the World service");
-ABSL_FLAG(std::string, geometry_service_address,
-          "geomservice.app-intrinsic-base.svc.cluster.local:8080",
-          "gRpc target for the geometry service");
+// TODO(b/587253361): Delete once no launcher passes this flag anymore.
+ABSL_RETIRED_FLAG(std::string, geometry_service_address,
+                  "geomservice.app-intrinsic-base.svc.cluster.local:8080",
+                  "Retired; MPS uses CAS and KeyValueStore directly.");
 ABSL_FLAG(absl::Duration, grpc_connect_timeout,
           intrinsic::connect::kGrpcClientConnectDefaultTimeout,
           "Time to wait for other grpc services to become available.");
-ABSL_FLAG(std::string, cas_grpc_service_address, "",
+ABSL_FLAG(std::string, cas_grpc_service_address,
+          "content-addressable-storage.app-intrinsic-base.svc.cluster.local:"
+          "9747",
           "(optional) Address of the Intrinsic ContentAddressableStorage gRPC "
           "service.");
 ABSL_FLAG(std::string, workcell_name, "",
@@ -93,11 +99,6 @@ int MainImpl() {
       CreateObjectWorldServiceStub(absl::GetFlag(FLAGS_world_service_address),
                                    absl::GetFlag(FLAGS_grpc_connect_timeout)));
 
-  ASSIGN_OR_DIE(
-      std::unique_ptr<intrinsic_proto::geometry::GeometryService::StubInterface>
-          geometry_service,
-      CreateGeometryServiceStub(absl::GetFlag(FLAGS_geometry_service_address),
-                                absl::GetFlag(FLAGS_grpc_connect_timeout)));
   ASSIGN_OR_DIE(const auto context,
                 GetBinaryProto<intrinsic_proto::config::RuntimeContext>(
                     absl::GetFlag(FLAGS_runtime_context_file)));
@@ -108,8 +109,32 @@ int MainImpl() {
           intrinsic_proto::motion_planning::v1::MotionPlannerServiceConfig>(
           context.config()));
 
-  auto geo_lib(GetGeometryServiceGeometryLibrary(
-      geometry_service.get(), proto_config.geometry_service_cache_size()));
+  constexpr int kDefaultGeometryCacheSize = 1000;
+  constexpr absl::Duration kKvStoreTimeout = absl::Seconds(5);
+
+  // `cas_service_stub`, `pubsub`, `kv_store`, and `geo_cache` are declared
+  // before `geo_lib` and `fetch_world_thread` so they outlive `server->Wait()`
+  // and `fetch_world_thread.join()`.
+  ASSIGN_OR_DIE(
+      const std::shared_ptr<intrinsic_proto::content_addressable_storage::v1::
+                                ContentAddressableStorageService::StubInterface>
+          cas_service_stub,
+      geo::MakeCASServiceStub(absl::GetFlag(FLAGS_cas_grpc_service_address)));
+
+  PubSub pubsub;
+  ASSIGN_OR_DIE(KeyValueStore kv_store_value, pubsub.KeyValueStore());
+  const std::shared_ptr<KeyValueStore> kv_store =
+      std::make_shared<KeyValueStore>(std::move(kv_store_value));
+
+  const int configured_cache_size = proto_config.geometry_service_cache_size();
+  geo::GeometryFingerprintCache geo_cache(configured_cache_size > 0
+                                              ? configured_cache_size
+                                              : kDefaultGeometryCacheSize);
+
+  ASSIGN_OR_DIE(std::unique_ptr<GeometryLibrary> geo_lib,
+                geo::CreateCasAndKvStoreGeometryLibrary(
+                    cas_service_stub, /*context=*/nullptr, geo_cache, kv_store,
+                    /*kv_read_timeout=*/kKvStoreTimeout));
 
   // Launch a background thread to fetch the default 'world' from the world
   // service and deserialize it. This will effectively cache the geometry from

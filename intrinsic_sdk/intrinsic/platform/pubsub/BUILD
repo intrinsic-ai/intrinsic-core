@@ -143,6 +143,22 @@ cc_library(
 )
 
 cc_library(
+    name = "fake_kvstore",
+    srcs = ["fake_kvstore.cc"],
+    hdrs = ["fake_kvstore.h"],
+    deps = [
+        ":kvstore",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/container:node_hash_map",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/synchronization",
+        "@com_google_protobuf//:protobuf",
+    ],
+)
+
+cc_library(
     name = "zenoh_publisher_data",
     hdrs = ["zenoh_publisher_data.h"],
 )

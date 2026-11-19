@@ -37,7 +37,6 @@
 #include "grpcpp/channel.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/eigenmath/types.h"
-#include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/kinematics/types/joint_trajectories.h"
 #include "intrinsic/logging/structured_logging_client.h"
@@ -143,18 +142,6 @@ CreateWorldServiceStub(const std::string& world_service_address,
                                    absl::Now() + grpc_connect_timeout));
   return intrinsic_proto::world::internal::WorldService::NewStub(
       world_service_channel);
-}
-
-absl::StatusOr<
-    std::unique_ptr<intrinsic_proto::geometry::GeometryService::Stub>>
-CreateGeometryServiceStub(const std::string& geometry_service_address,
-                          const absl::Duration& grpc_connect_timeout) {
-  INTR_ASSIGN_OR_RETURN(
-      const std::shared_ptr<grpc::Channel> channel,
-      connect::CreateClientChannel(
-          geometry_service_address, absl::Now() + grpc_connect_timeout,
-          connect::UnlimitedMessageSizeGrpcChannelArgs()));
-  return intrinsic_proto::geometry::GeometryService::NewStub(channel);
 }
 
 StructuredLoggingClientAndStub CreateStructuredLoggingClient(

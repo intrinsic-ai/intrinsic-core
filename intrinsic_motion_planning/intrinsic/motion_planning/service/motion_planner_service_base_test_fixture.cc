@@ -39,10 +39,9 @@
 #include "grpcpp/support/channel_arguments.h"
 #include "internal/testing.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
-#include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
-#include "intrinsic/geometry/service/in_memory_geometry_service.h"
+#include "intrinsic/geometry/storage/cas_and_kvstore_storage.h"
+#include "intrinsic/geometry/storage/geo_cache.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
-#include "intrinsic/geometry/storage/geometry_service_storage.h"
 #include "intrinsic/icon/proto/joint_trajectory_conversion.h"
 #include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/kinematics/types/joint_state.h"
@@ -64,7 +63,9 @@
 #include "intrinsic/motion_planning/service/motion_planner_service_utils.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.h"
 #include "intrinsic/motion_planning/skills/motion_planning_util.h"
+#include "intrinsic/platform/pubsub/fake_kvstore.h"
 #include "intrinsic/skills/internal/world_service_utils.h"
+#include "intrinsic/storage/content_addressable_storage/proto/cas_service.grpc.pb.h"
 #include "intrinsic/storage/content_addressable_storage/testing/in_memory_cas_service.h"
 #include "intrinsic/util/path_resolver/path_resolver.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
@@ -175,7 +176,19 @@ void MotionPlannerServiceBaseTest::Init(
     WorldHashMap<std::string, World> worlds_by_name,
     const StructuredLoggingClient* logger_client,
     const bool enable_motion_planner_service_swept_volumes) {
-  geometry_service_ = std::make_unique<InMemoryGeometryService>();
+  // Tear down existing services and geometry libraries before resetting
+  // `geo_cache_` and `cas_service_` in case `Init()` is called more than once.
+  mps_with_asset_version_server_.reset();
+  mps_proxy_server_.reset();
+  server_.reset();
+  motion_planner_service_with_asset_version_.reset();
+  motion_planner_service_proxy_.reset();
+  motion_planner_service_.reset();
+  object_world_service_stub_.reset();
+  fake_world_service_geo_library_.reset();
+  fake_world_service_.reset();
+  geometry_and_cas_server_.reset();
+
   cas_service_ = std::make_unique<InMemoryCasService>();
 
   int port = 0;
@@ -184,19 +197,25 @@ void MotionPlannerServiceBaseTest::Init(
                            grpc::experimental::LocalServerCredentials(
                                grpc_local_connect_type::LOCAL_TCP),
                            &port);
-  builder.RegisterService(geometry_service_.get());
   builder.RegisterService(cas_service_.get());
   builder.SetMaxSendMessageSize(-1);
   builder.SetMaxReceiveMessageSize(-1);
   geometry_and_cas_server_ = builder.BuildAndStart();
   const std::string cas_address = absl::StrCat("dns:///localhost:", port);
 
-  geometry_service_stub_ = intrinsic_proto::geometry::GeometryService::NewStub(
-      geometry_and_cas_server_->InProcessChannel(
-          connect::UnlimitedMessageSizeGrpcChannelArgs()));
-
-  auto geo_lib =
-      GetGeometryServiceGeometryLibrary(geometry_service_stub_.get());
+  cas_service_stub_ =
+      std::shared_ptr<intrinsic_proto::content_addressable_storage::v1::
+                          ContentAddressableStorageService::Stub>(
+          intrinsic_proto::content_addressable_storage::v1::
+              ContentAddressableStorageService::NewStub(
+                  geometry_and_cas_server_->InProcessChannel(
+                      connect::UnlimitedMessageSizeGrpcChannelArgs())));
+  fake_kv_store_ = std::make_shared<FakeKeyValueStore>();
+  geo_cache_ = std::make_unique<geo::GeometryFingerprintCache>();
+  ASSERT_OK_AND_ASSIGN(
+      std::unique_ptr<GeometryLibrary> geo_lib,
+      geo::CreateCasAndKvStoreGeometryLibrary(
+          cas_service_stub_, /*context=*/nullptr, *geo_cache_, fake_kv_store_));
 
   ASSERT_OK_AND_ASSIGN(
       fake_world_service_,
@@ -216,10 +235,6 @@ void MotionPlannerServiceBaseTest::Init(
   std::unique_ptr<MotionPlannerNonvolatileCache>
       plan_trajectory_with_asset_version_nonvolatile_cache = nullptr;
   if (use_nonvolatile_cache) {
-    cas_service_stub_ = intrinsic_proto::content_addressable_storage::v1::
-        ContentAddressableStorageService::NewStub(
-            geometry_and_cas_server_->InProcessChannel(
-                connect::UnlimitedMessageSizeGrpcChannelArgs()));
     ASSERT_OK_AND_ASSIGN(
         plan_trajectory_nonvolatile_cache,
         MotionPlannerNonvolatileCache::CreateWithContentAddressableStorage(

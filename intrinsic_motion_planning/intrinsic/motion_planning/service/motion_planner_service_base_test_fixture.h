@@ -28,8 +28,7 @@
 #include "absl/strings/string_view.h"
 #include "google/protobuf/empty.pb.h"
 #include "grpcpp/server.h"
-#include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
-#include "intrinsic/geometry/service/in_memory_geometry_service.h"
+#include "intrinsic/geometry/storage/geo_cache.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/kinematics/types/cartesian_limits.h"
 #include "intrinsic/logging/structured_logging_client.h"
@@ -43,6 +42,8 @@
 #include "intrinsic/motion_planning/service/motion_planner_service.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_proxy.h"
 #include "intrinsic/motion_planning/service/motion_planner_service_test_fixture.h"
+#include "intrinsic/platform/pubsub/fake_kvstore.h"
+#include "intrinsic/storage/content_addressable_storage/proto/cas_service.grpc.pb.h"
 #include "intrinsic/storage/content_addressable_storage/testing/in_memory_cas_service.h"
 #include "intrinsic/util/proto/parse_text_proto.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
@@ -167,14 +168,15 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
           request);
 
  protected:
-  std::unique_ptr<InMemoryGeometryService> geometry_service_;
   std::unique_ptr<InMemoryCasService> cas_service_;
   std::unique_ptr<grpc::Server> geometry_and_cas_server_;
-  std::unique_ptr<intrinsic_proto::geometry::GeometryService::Stub>
-      geometry_service_stub_;
-  std::unique_ptr<intrinsic_proto::content_addressable_storage::v1::
+  std::shared_ptr<intrinsic_proto::content_addressable_storage::v1::
                       ContentAddressableStorageService::Stub>
       cas_service_stub_;
+  // Declared before `fake_world_service_`, `fake_world_service_geo_library_`,
+  // and `motion_planner_service_` so they outlive all consumers.
+  std::shared_ptr<FakeKeyValueStore> fake_kv_store_;
+  std::unique_ptr<geo::GeometryFingerprintCache> geo_cache_;
   std::unique_ptr<FakeWorldService> fake_world_service_;
   std::shared_ptr<GeometryLibrary> fake_world_service_geo_library_;
   std::shared_ptr<intrinsic_proto::world::ObjectWorldService::StubInterface>
