@@ -90,6 +90,9 @@ type KVStore interface {
 	// verification timeout is applied.
 	// Returns [ErrDeadlineExceeded] if the timeout expires.
 	// Under HighConsistency mode, returns [ErrAborted] if concurrent modification is detected.
+	// Concurrent raw-byte (APPLICATION_OCTET_STREAM) writes to an unset or Protobuf key also abort
+	// HighConsistency with [ErrAborted] (while overwriting a pre-existing raw-byte entry cannot
+	// detect concurrent raw-to-raw mutations without reading raw payloads).
 	SetWithVerification(ctx context.Context, key string, value proto.Message, opts ...SetWithVerificationOption) error
 
 	// SetAny sets the value for the given key. The value is expected to be Any proto,
@@ -111,6 +114,9 @@ type KVStore interface {
 	// verification timeout is applied.
 	// Returns [ErrDeadlineExceeded] if the timeout expires.
 	// Under HighConsistency mode, returns [ErrAborted] if concurrent modification is detected.
+	// Concurrent raw-byte (APPLICATION_OCTET_STREAM) writes to an unset or Protobuf key also abort
+	// HighConsistency with [ErrAborted] (while overwriting a pre-existing raw-byte entry cannot
+	// detect concurrent raw-to-raw mutations without reading raw payloads).
 	SetAnyWithVerification(ctx context.Context, key string, valueAny *anypb.Any, opts ...SetWithVerificationOption) error
 
 	// Get returns the value for the given key. Wildcard queries are not supported
@@ -120,22 +126,30 @@ type KVStore interface {
 	Get(key string, timeout *time.Duration) (*anypb.Any, error)
 
 	// GetAll invokes the valueCallback for a given key that matches the expression.
+	// Raw-byte (APPLICATION_OCTET_STREAM) entries and malformed non-Any payloads are skipped.
+	// ondoneCallback may be invoked synchronously before GetAll returns, so callers sending to
+	// a channel inside ondoneCallback on the same goroutine must use a buffered channel or close.
 	GetAll(key string, valueCallback func(*anypb.Any), ondoneCallback func(string)) (KVQuery, error)
 
 	// ListAllKeys invokes the keyCallback for a given key that matches the expression.
+	// It lists all live keys matching key (including both Protobuf and raw-byte entries) without
+	// copying payload bytes. ondoneCallback may run synchronously before ListAllKeys returns.
 	ListAllKeys(key string, keyCallback func(string), ondoneCallback func(string)) (KVQuery, error)
 
 	// Delete removes a value from the store for the given key.
 	Delete(key string) error
 
 	// AdminCloudCopy copies local key-value pairs to the cloud key value
-	// store.
+	// store. It transfers anypb.Any Protobuf values only, so copying a raw-byte
+	// key returns [ErrWrongEncoding].
 	AdminCloudCopy(sourceKey string, targetKey string, timeout time.Duration) error
 
 	// Subscribe creates a subscription to changes in the KV store.
 	//
 	// It assumes that all values whose keys match the given key expression have
-	// the same type.
+	// the same type. Raw-byte (APPLICATION_OCTET_STREAM) PUT updates are ignored, whereas
+	// Zenoh DELETE tombstones carry no prior encoding so deletionCallback still fires when a
+	// raw-byte key matching keyExpression is deleted.
 	//
 	// Parameters:
 	// - keyExpression - key expression to subscribe to.
@@ -156,6 +170,10 @@ type KVStore interface {
 	// It doesn't make any assumptions about types of values that match the given
 	// key expression. The calling code is responsible for extracting those values
 	// from `anypb.Any` protos and checking their type.
+	// Despite the name, SubscribeToRawValues delivers unmarshaled anypb.Any Protobuf values
+	// and ignores APPLICATION_OCTET_STREAM raw-byte PUT updates, whereas Zenoh DELETE tombstones
+	// carry no prior encoding so deletionCallback still fires when a raw-byte key matching
+	// keyExpression is deleted.
 	//
 	// Parameters:
 	// - keyExpression - key expression to subscribe to.
@@ -183,10 +201,11 @@ type KVStore interface {
 	GetGlobalReplicationNamespace() string
 }
 
-// KVQuery is a handle for a GetALl KVStore query. Keep the handle alive to
-// continue the query.
+// KVQuery is a handle for a GetAll or ListAllKeys KVStore query. Keep the handle
+// alive to continue the query.
 type KVQuery interface {
-	// Close closes out the query
+	// Close suppresses subsequent query callbacks; any callback already in flight
+	// may still finish, and CGo handle state is released once the query completes.
 	Close()
 }
 

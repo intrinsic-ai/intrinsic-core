@@ -106,11 +106,6 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwLivelinessGet(
 typedef void (*zenoh_handle_imw_queryable_callback_fn)(
     const char* keyexpr, const void* query_bytes, const size_t query_bytes_len,
     const void* query_context, void* user_context);
-typedef void (*zenoh_handle_imw_query_callback_fn)(
-    const char* keyexpr, const void* response_bytes,
-    const size_t response_bytes_len, void* user_context);
-typedef void (*zenoh_handle_imw_query_on_done_fn)(const char* keyexpr,
-                                                  void* userContext);
 typedef void (*zenoh_handle_imw_query_message_callback_fn)(
     const char* keyexpr, const void* response_bytes,
     const size_t response_bytes_len, int message_kind, int encoding,
@@ -119,9 +114,6 @@ typedef void (*zenoh_handle_imw_message_query_on_done_fn)(
     const char* keyexpr, uintptr_t user_context);
 
 // KV stuff now...
-ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSet(void* handle, const char* keyexpr,
-                                            const void* bytes,
-                                            size_t bytes_len);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSetWithEncoding(void* handle,
                                                         const char* keyexpr,
                                                         const void* bytes,
@@ -137,18 +129,9 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreateQueryable(
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroyQueryable(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_queryable_callback_fn callback, void* user_context);
-ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReply(
-    void* handle, const void* query_context, const char* keyexpr,
-    const void* reply_bytes, size_t reply_bytes_len);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReplyWithEncoding(
     void* handle, const void* query_context, const char* keyexpr,
     const void* reply_bytes, size_t reply_bytes_len, int encoding);
-ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQuery(
-    void* handle, const char* keyexpr,
-    zenoh_handle_imw_query_callback_fn callback,
-    zenoh_handle_imw_query_on_done_fn on_done, const void* query_payload,
-    size_t query_payload_len, void* user_context, uint64_t timeout_ms,
-    bool call_ros_service);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryMessages(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_query_message_callback_fn callback,

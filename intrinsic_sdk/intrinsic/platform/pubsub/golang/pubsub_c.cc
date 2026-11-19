@@ -358,15 +358,6 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroyQueryable(
   return zenoh_handle->imw_destroy_queryable(keyexpr, callback, user_context);
 }
 
-ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReply(
-    void* handle, const void* query_context, const char* keyexpr,
-    const void* reply_bytes, const size_t reply_bytes_len) {
-  intrinsic::ZenohHandle* zenoh_handle =
-      static_cast<intrinsic::ZenohHandle*>(handle);
-  return zenoh_handle->imw_queryable_reply(query_context, keyexpr, reply_bytes,
-                                           reply_bytes_len);
-}
-
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReplyWithEncoding(
     void* handle, const void* query_context, const char* keyexpr,
     const void* reply_bytes, const size_t reply_bytes_len, int encoding) {
@@ -381,30 +372,6 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReplyWithEncoding(
   auto* zenoh_handle = static_cast<intrinsic::ZenohHandle*>(handle);
   return zenoh_handle->imw_queryable_reply_with_encoding(
       query_context, keyexpr, reply_bytes, reply_bytes_len, *imw_encoding);
-}
-
-ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQuery(
-    void* handle, const char* keyexpr,
-    zenoh_handle_imw_query_callback_fn callback,
-    zenoh_handle_imw_query_on_done_fn on_done, const void* query_payload,
-    size_t query_payload_len, void* user_context, uint64_t timeout_ms,
-    bool call_ros_service) {
-  intrinsic::ZenohHandle* zenoh_handle =
-      static_cast<intrinsic::ZenohHandle*>(handle);
-  intrinsic::imw_query_options_t options{
-      .timeout_ms = timeout_ms,
-      .call_ros_service = call_ros_service,
-  };
-  return zenoh_handle->imw_query(keyexpr, callback, on_done, query_payload,
-                                 query_payload_len, user_context, &options);
-}
-
-ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSet(void* handle, const char* keyexpr,
-                                            const void* bytes,
-                                            const size_t bytes_len) {
-  intrinsic::ZenohHandle* zenoh_handle =
-      static_cast<intrinsic::ZenohHandle*>(handle);
-  return zenoh_handle->imw_set(keyexpr, bytes, bytes_len);
 }
 
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryMessages(

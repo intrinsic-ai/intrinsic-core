@@ -725,16 +725,6 @@ func wrapContextDeadlineErr(ctx context.Context, deadlinePrefix string, key stri
 	return fmt.Errorf("context canceled while waiting for %q: %w", key, err)
 }
 
-func verificationContextErr(ctx context.Context, key string) error {
-	if err := ctx.Err(); err != nil {
-		if errors.Is(err, context.DeadlineExceeded) {
-			return fmt.Errorf("timeout waiting for verification for key %q: %w", key, kvstore.ErrDeadlineExceeded)
-		}
-		return err
-	}
-	return nil
-}
-
 func (kv *kvStoreHandle) SetAnyWithVerification(ctx context.Context, key string, valueAny *anypb.Any, opts ...kvstore.SetWithVerificationOption) error {
 	if ctx == nil {
 		ctx = context.Background()
@@ -760,7 +750,7 @@ func (kv *kvStoreHandle) SetAnyWithVerification(ctx context.Context, key string,
 	if err := validZenohKey(key); err != nil {
 		return err
 	}
-	if err := verificationContextErr(ctx, key); err != nil {
+	if err := wrapContextDeadlineErr(ctx, "verification for key ", key); err != nil {
 		return err
 	}
 
@@ -774,32 +764,35 @@ func (kv *kvStoreHandle) SetAnyWithVerification(ctx context.Context, key string,
 		log.Warningf("Setting value with large byte size (actual: %d, threshold: %d) for key %q. This can lead to performance issues.", len(valueBytes), payloadByteSizeWarningThreshold, key)
 	}
 
-	var initialBytes []byte
-	var hasInitialValue bool
+	var initial rawKeyState
 	if options.Mode == kvstore.HighConsistency {
 		timeout := kvStoreTiming.highConsistencyInitialGetTimeout
-		initialBytes, err = kv.getRawBytes(ctx, prefixedKey, &timeout)
+		msg, err := kv.getEncodedMessage(ctx, prefixedKey, &timeout, false)
 		if err == nil {
-			hasInitialValue = true
+			initial = msg.toRawKeyState()
 		} else if !errors.Is(err, kvstore.ErrNotFound) {
 			// If the initial read failed for another reason (e.g. timeout),
 			// we log a warning and proceed without an initial value.
-			// Leaving hasInitialValue as false means that if a value actually
-			// existed in the store and we couldn't read it, the verification
-			// loop will treat any non-matching value as a conflict and abort.
+			// Leaving initial unset means that if a value actually existed
+			// in the store and we couldn't read it, the verification loop
+			// will treat any non-matching value as a conflict and abort.
 			log.Warningf("Initial read failed during high consistency check for key %q: %v", key, err)
-			hasInitialValue = false
 		}
 	}
 
-	if err := verificationContextErr(ctx, key); err != nil {
+	if err := wrapContextDeadlineErr(ctx, "verification for key ", key); err != nil {
 		return err
 	}
 	if err := kv.zenohHandle.ImwSet(prefixedKey, valueBytes); err != nil {
 		return err
 	}
 
-	return kv.waitForVerification(ctx, prefixedKey, key, valueBytes, initialBytes, hasInitialValue, options)
+	return kv.waitForVerification(ctx, verificationRequest{
+		prefixedKey: prefixedKey,
+		key:         key,
+		valueBytes:  valueBytes,
+		initial:     initial,
+	}, options)
 }
 
 // TODO(methyldragon): Remove the deprecated highConsistency parameter so the two-argument
@@ -854,36 +847,77 @@ func (kv *kvStoreHandle) SetAny(key string, valueAny *anypb.Any, highConsistency
 	return kv.zenohHandle.ImwSet(prefixedKey, valueBytes)
 }
 
-// fetchCurrentRawState returns the current raw byte state of a key based on the output of a getRawBytes operation.
-// The boolean return value indicates whether the key exists in the store.
-// Returning (nil, false, nil) represents an unset key (kvstore.ErrNotFound), while returning
-// a non-nil error indicates a transient failure or unexpected state.
-func fetchCurrentRawState(key string, currentBytes []byte, err error) ([]byte, bool, error) {
-	switch {
-	case err == nil:
-		// Value exists.
-		return currentBytes, true, nil
-	case errors.Is(err, kvstore.ErrNotFound):
-		// Value does not exist (unset).
-		return nil, false, nil
-	case errors.Is(err, kvstore.ErrDeadlineExceeded):
-		// Transient network timeout reading value. Propagate to retry.
-		return nil, false, err
-	default:
-		return nil, false, fmt.Errorf("failed to read current state for key %q during verification check: %w", key, err)
+type encodedMessage struct {
+	bytes    []byte
+	encoding imwEncoding
+	isProto  bool
+}
+
+func (m encodedMessage) toRawKeyState() rawKeyState {
+	return rawKeyState{
+		bytes:   m.bytes,
+		isProto: m.isProto,
+		exists:  true,
 	}
 }
 
-// waitForVerification polls the KVStore until the specified key converges to the given valueBytes.
+type rawKeyState struct {
+	bytes   []byte
+	isProto bool
+	exists  bool
+}
+
+type verificationRequest struct {
+	prefixedKey string
+	key         string
+	valueBytes  []byte
+	initial     rawKeyState
+}
+
+// classifyRawStateRead translates the output of getEncodedMessage into a rawKeyState.
+// A zero rawKeyState with nil error represents an unset key (kvstore.ErrNotFound).
+func classifyRawStateRead(key string, msg encodedMessage, err error) (rawKeyState, error) {
+	switch {
+	case err == nil:
+		return msg.toRawKeyState(), nil
+	case errors.Is(err, kvstore.ErrNotFound):
+		return rawKeyState{}, nil
+	case errors.Is(err, kvstore.ErrDeadlineExceeded):
+		// Transient network timeout reading value. Propagate to retry.
+		return rawKeyState{}, err
+	default:
+		return rawKeyState{}, fmt.Errorf("failed to read current state for key %q during verification check: %w", key, err)
+	}
+}
+
+func evaluateVerificationMessage(key string, valueBytes []byte, initial rawKeyState, current rawKeyState, mode kvstore.VerificationMode) error {
+	if mode == kvstore.FirstReply {
+		// Retry when missing or still holding a prior raw-byte value before ImwSet lands.
+		if current.exists && current.isProto {
+			return nil
+		}
+		return kvstore.ErrDeadlineExceeded
+	}
+
+	// HighConsistency mode
+	if current.exists && current.isProto && bytes.Equal(current.bytes, valueBytes) {
+		return nil
+	}
+	if current.exists != initial.exists || current.isProto != initial.isProto || (current.isProto && !bytes.Equal(current.bytes, initial.bytes)) {
+		return backoff.Permanent(fmt.Errorf("value for key %q was modified by another process while waiting for high consistency: %w", key, kvstore.ErrAborted))
+	}
+	return kvstore.ErrDeadlineExceeded
+}
+
+// waitForVerification polls the KVStore until the specified key converges to req.valueBytes.
 //
 // It uses exponential backoff internally via the backoff library until ctx expires or is canceled.
 // Under HighConsistency mode, it aborts with kvstore.ErrAborted if the value changes to a value other than the newly-written
-// valueBytes, indicating a race condition with other writers (using initialBytes/hasInitialValue to know what the
-// key started with).
-// Under FirstReply mode, it just returns as soon as any value exists.
+// valueBytes (or switches between unset, Protobuf, and raw-byte states), indicating a race condition with other writers.
+// Under FirstReply mode, it returns as soon as any Protobuf value exists.
 //
 // Returns kvstore.ErrDeadlineExceeded if the value did not converge in time.
-func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey string, key string, valueBytes []byte, initialBytes []byte, hasInitialValue bool, options kvstore.SetWithVerificationOptions) error {
+func (kv *kvStoreHandle) waitForVerification(ctx context.Context, req verificationRequest, options kvstore.SetWithVerificationOptions) error {
 	if ctx == nil {
 		ctx = context.Background()
 	}
@@ -900,9 +934,8 @@ func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey st
 		}
 
 		timeout := kvStoreTiming.verificationGetTimeout
-		currentBytes, err := kv.getRawBytes(ctx, prefixedKey, &timeout)
-
-		stateBytes, exists, err := fetchCurrentRawState(key, currentBytes, err)
+		msg, err := kv.getEncodedMessage(ctx, req.prefixedKey, &timeout, options.Mode == kvstore.FirstReply)
+		current, err := classifyRawStateRead(req.key, msg, err)
 		if err != nil {
 			if errors.Is(err, kvstore.ErrDeadlineExceeded) {
 				return err // Retryable
@@ -910,24 +943,7 @@ func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey st
 			return backoff.Permanent(err)
 		}
 
-		if options.Mode == kvstore.FirstReply {
-			if exists {
-				return nil
-			}
-			return kvstore.ErrDeadlineExceeded
-		}
-
-		// HighConsistency mode
-		if exists && bytes.Equal(stateBytes, valueBytes) {
-			// Key value is committed.
-			return nil
-		}
-
-		if exists != hasInitialValue || (exists && !bytes.Equal(stateBytes, initialBytes)) {
-			return backoff.Permanent(fmt.Errorf("value for key %q was modified by another process while waiting for high consistency: %w", key, kvstore.ErrAborted))
-		}
-
-		return kvstore.ErrDeadlineExceeded
+		return evaluateVerificationMessage(req.key, req.valueBytes, req.initial, current, options.Mode)
 	}
 
 	if err := backoff.Retry(operation, backoff.WithContext(b, ctx)); err != nil {
@@ -936,18 +952,12 @@ func (kv *kvStoreHandle) waitForVerification(ctx context.Context, prefixedKey st
 			return err
 		}
 
-		if errors.Is(ctx.Err(), context.Canceled) {
-			return ctx.Err()
+		if ctxErr := wrapContextDeadlineErr(ctx, "verification for key ", req.key); ctxErr != nil {
+			return ctxErr
 		}
-		return fmt.Errorf("timeout waiting for verification for key %q: %w", key, kvstore.ErrDeadlineExceeded)
+		return fmt.Errorf("timeout waiting for verification for key %q: %w", req.key, kvstore.ErrDeadlineExceeded)
 	}
 	return nil
-}
-
-type encodedMessage struct {
-	bytes    []byte
-	encoding imwEncoding
-	isProto  bool
 }
 
 type queryOptions struct {
@@ -1111,17 +1121,6 @@ func (kv *kvStoreHandle) getRaw(rawKey string, timeout *time.Duration) (*anypb.A
 		return nil, fmt.Errorf("failed to unmarshal value for %q: %w", rawKey, err)
 	}
 	return val, nil
-}
-
-func (kv *kvStoreHandle) getRawBytes(ctx context.Context, rawKey string, timeout *time.Duration) ([]byte, error) {
-	msg, err := kv.getEncodedMessage(ctx, rawKey, timeout, false)
-	if err != nil {
-		return nil, err
-	}
-	if !msg.isProto {
-		return nil, fmt.Errorf("%q not found: %w", rawKey, kvstore.ErrNotFound)
-	}
-	return msg.bytes, nil
 }
 
 type encodedQueryResult struct {
