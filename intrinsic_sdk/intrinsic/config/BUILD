@@ -49,7 +49,6 @@ go_library(
     srcs = ["environments.go"],
     importpath = "intrinsic/config/environments",
     visibility = [
-        "//intrinsic/frontend/onprem:__pkg__",
         "//intrinsic/kubernetes:__pkg__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
         "//intrinsic/tools/inctl/cmd/cluster:__pkg__",
