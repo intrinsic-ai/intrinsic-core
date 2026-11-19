@@ -39,6 +39,7 @@ import (
 	"errors"
 	"flag"
 	"fmt"
+	"math"
 	"runtime/cgo"
 	"strings"
 	"sync"
@@ -66,11 +67,13 @@ import (
 )
 
 /*
+#include <stdint.h>
 #include <stdlib.h>  // for C.free
 #include "intrinsic/platform/pubsub/golang/pubsub_c.h"
 
 // We forward declare functions that will be implemented below so we can take their address from Go code.
 void intrinsic_ImwSubscriptionCallback(void*, void*, size_t, void*);
+void intrinsic_ImwMessageSubscriptionCallback(void*, void*, size_t, int, int, uintptr_t);
 void intrinsic_ImwQueryStaticCallback(void*, void*, size_t, void*);
 void intrinsic_ImwQueryDoneStaticCallback(void*, void*);
 void intrinsic_ImwQueryableStaticCallback(void*, void*, size_t, void*, void*);
@@ -114,7 +117,29 @@ const (
 	replicationKeyPrefix       = "kv_store_repl"
 	workcellInfoKey            = "workcell_info"
 	globalReplicationNamespace = "global"
+
+	imwMessageKindPut    = int(C.ZENOH_HANDLE_IMW_MESSAGE_KIND_PUT)
+	imwMessageKindDelete = int(C.ZENOH_HANDLE_IMW_MESSAGE_KIND_DELETE)
+
+	imwEncodingVarintPrefixedBytes    = imwEncoding(C.ZENOH_HANDLE_IMW_ENCODING_VARINT_PREFIXED_BYTES)
+	imwEncodingApplicationOctetStream = imwEncoding(C.ZENOH_HANDLE_IMW_ENCODING_APPLICATION_OCTET_STREAM)
+	imwEncodingApplicationProtobuf    = imwEncoding(C.ZENOH_HANDLE_IMW_ENCODING_APPLICATION_PROTOBUF)
+	imwEncodingUnknown                = imwEncoding(C.ZENOH_HANDLE_IMW_ENCODING_UNKNOWN)
 )
+
+type imwEncoding int
+
+func isProtobufEncoding(encoding imwEncoding) bool {
+	switch encoding {
+	case imwEncodingApplicationProtobuf,
+		imwEncodingVarintPrefixedBytes: // Legacy KVStore and HTTP REST framing (until b/585031754)
+		return true
+	case imwEncodingApplicationOctetStream, imwEncodingUnknown:
+		return false
+	default:
+		return false
+	}
+}
 
 // kvStroreTimingConfig contains timeouts and retry intervals
 // used by the KV store.
@@ -452,6 +477,9 @@ func (ps *Handle) LivelinessGetAllSynchronous(keyExpr string) ([]string, error) 
 //   - It doesn't modify the key in any way, e.g. doesn't add the `in/` prefix we use for pub/sub.
 //   - When the value corresponding to the given key changes, this function expects to receive `anypb.Any`,
 //     not `pubsubpb.PubSubPacket`.
+//   - Raw-byte (`APPLICATION_OCTET_STREAM`) values are ignored so Go KVStore watches only decode protobuf
+//     (`VARINT_PREFIXED_BYTES` and `APPLICATION_PROTOBUF`) updates, whereas Zenoh `DELETE` tombstones carry no prior
+//     encoding so `deletionCallback` still fires when a raw-byte key matching `key` is deleted.
 func (ps *Handle) NewKVStoreSubscription(key string, config pubsubinterface.TopicConfig, msgCallback func(string, *anypb.Any), deletionCallback func(string)) (pubsubinterface.Subscription, error) {
 	log.Infof("KVStore Subscribe for key: %s", key)
 	topicQos, err := topicConfigToZenohQos(config)
@@ -460,29 +488,36 @@ func (ps *Handle) NewKVStoreSubscription(key string, config pubsubinterface.Topi
 	}
 
 	subscription := &subscriptionHandle{
-		topicName:     key,
-		fullTopicName: key, // Not adding a prefix
-		zenohHandle:   ps.zenohHandle,
-		exemplar:      &anypb.Any{},
-		callback: func(sub *subscriptionHandle, key string, bytes []byte) {
-			if len(bytes) == 0 {
-				deletionCallback(key)
+		topicName:      key,
+		fullTopicName:  key, // Not adding a prefix
+		zenohHandle:    ps.zenohHandle,
+		acceptEncoding: isProtobufEncoding,
+		messageCallback: func(sub *subscriptionHandle, key string, bytes []byte, isDelete bool) {
+			if isDelete {
+				if deletionCallback != nil {
+					deletionCallback(key)
+				}
 				return
 			}
-			any := &anypb.Any{} // It's Any, not a PubSubPacket.
-			if err := proto.Unmarshal(bytes, any); err != nil {
+			anyVal := &anypb.Any{} // It's Any, not a PubSubPacket.
+			if err := proto.Unmarshal(bytes, anyVal); err != nil {
 				log.Errorf("Failed to unmarshal packet: %v", err)
 				return
 			}
-			msgCallback(key, any)
+			if msgCallback != nil {
+				msgCallback(key, anyVal)
+			}
 		},
 	}
 	subh := cgo.NewHandle(subscription)
 	subscription.subHandle = subh
 
-	if err := ps.zenohHandle.ImwCreateSubscription(key, subscription, topicQos); err != nil {
+	messageSubCtx, err := ps.zenohHandle.ImwCreateMessageSubscription(key, subscription, topicQos)
+	if err != nil {
+		subscription.subHandle.Delete()
 		return nil, err
 	}
+	subscription.messageSubscriptionContext = messageSubCtx
 
 	return subscription, nil
 }
@@ -535,10 +570,13 @@ func (ps *Handle) Close() {
 }
 
 type subscriptionHandle struct {
-	topicName     string
-	fullTopicName string
-	zenohHandle   zenohHandle
-	callback      func(sub *subscriptionHandle, topic string, bytes []byte)
+	topicName                  string
+	fullTopicName              string
+	zenohHandle                zenohHandle
+	callback                   func(sub *subscriptionHandle, topic string, bytes []byte)
+	acceptEncoding             func(imwEncoding) bool
+	messageCallback            func(sub *subscriptionHandle, topic string, bytes []byte, isDelete bool)
+	messageSubscriptionContext unsafe.Pointer
 
 	callbackPtr unsafe.Pointer
 	exemplar    proto.Message
@@ -551,7 +589,12 @@ func (s *subscriptionHandle) TopicName() string { return s.topicName }
 
 func (s *subscriptionHandle) Close() {
 	s.closeOnce.Do(func() {
-		if err := s.zenohHandle.ImwDestroySubscription(s.fullTopicName, s); err != nil {
+		if s.messageSubscriptionContext != nil {
+			if err := s.zenohHandle.ImwDestroyMessageSubscription(s.fullTopicName, s.messageSubscriptionContext); err != nil {
+				panic(err)
+			}
+			s.messageSubscriptionContext = nil
+		} else if err := s.zenohHandle.ImwDestroySubscription(s.fullTopicName, s); err != nil {
 			panic(err)
 		}
 		s.subHandle.Delete()
@@ -1218,10 +1261,14 @@ func (kv *kvStoreHandle) Subscribe(
 	typeCheckingCallback := func(key string, any *anypb.Any) {
 		msg := exemplar.ProtoReflect().New().Interface()
 		if err := any.UnmarshalTo(msg); err != nil {
-			errCallback(key, any, err)
+			if errCallback != nil {
+				errCallback(key, any, err)
+			}
 			return
 		}
-		msgCallback(key, msg)
+		if msgCallback != nil {
+			msgCallback(key, msg)
+		}
 	}
 
 	return kv.ps.NewKVStoreSubscription(
@@ -1272,7 +1319,9 @@ type zenohHandle interface {
 	ImwPublish(keyExpr string, bytes []byte) error
 	ImwPublisherHasMatchingSubscribers(keyExpr string) (bool, error)
 	ImwCreateSubscription(keyExpr string, sub *subscriptionHandle, qos string) error
+	ImwCreateMessageSubscription(keyExpr string, sub *subscriptionHandle, qos string) (unsafe.Pointer, error)
 	ImwDestroySubscription(keyExpr string, sub *subscriptionHandle) error
+	ImwDestroyMessageSubscription(keyExpr string, subscriptionContext unsafe.Pointer) error
 	ImwDeclareLivelinessToken(keyExpr string) error
 	ImwDropLivelinessToken(keyExpr string) error
 	ImwCreateLivelinessSubscription(keyExpr string, notifyAboutExistingTokens bool, sub *livelinessSubscriptionHandle) error
@@ -1408,6 +1457,42 @@ func intrinsic_ImwSubscriptionCallback(keyexpr unsafe.Pointer, bytes unsafe.Poin
 	sub.callback(sub, C.GoString((*C.char)(keyexpr)), C.GoBytes(bytes, C.int(bytesLen)))
 }
 
+func copyCBytes(ptr unsafe.Pointer, n uint64) ([]byte, bool) {
+	if n == 0 {
+		return nil, true
+	}
+	if ptr == nil || n > math.MaxInt32 {
+		log.Errorf("Dropping IMW message with invalid buffer (ptr=%p, len=%d)", ptr, n)
+		return nil, false
+	}
+	return C.GoBytes(ptr, C.int(n)), true
+}
+
+func (s *subscriptionHandle) handleMessage(keyexpr string, bytes unsafe.Pointer, bytesLen uint64, messageKind int, encoding imwEncoding) {
+	isDelete := messageKind == imwMessageKindDelete
+	if !isDelete && s.acceptEncoding != nil && !s.acceptEncoding(encoding) {
+		return
+	}
+	var payload []byte
+	if !isDelete {
+		var ok bool
+		payload, ok = copyCBytes(bytes, bytesLen)
+		if !ok {
+			return
+		}
+	}
+	s.messageCallback(s, keyexpr, payload, isDelete)
+}
+
+//export intrinsic_ImwMessageSubscriptionCallback
+func intrinsic_ImwMessageSubscriptionCallback(keyexpr unsafe.Pointer, bytes unsafe.Pointer, bytesLen C.size_t, messageKind C.int, encoding C.int, userContext C.uintptr_t) {
+	if userContext == 0 {
+		return
+	}
+	sub := cgo.Handle(userContext).Value().(*subscriptionHandle)
+	sub.handleMessage(C.GoString((*C.char)(keyexpr)), bytes, uint64(bytesLen), int(messageKind), imwEncoding(encoding))
+}
+
 func (z *zenohHandleImpl) ImwCreateSubscription(keyExpr string, sub *subscriptionHandle, qos string) error {
 	inKeyExprString := C.CString(keyExpr)
 	defer C.free(unsafe.Pointer(inKeyExprString))
@@ -1422,11 +1507,44 @@ func (z *zenohHandleImpl) ImwCreateSubscription(keyExpr string, sub *subscriptio
 	return nil
 }
 
+func (z *zenohHandleImpl) ImwCreateMessageSubscription(keyExpr string, sub *subscriptionHandle, qos string) (unsafe.Pointer, error) {
+	inKeyExprString := C.CString(keyExpr)
+	defer C.free(unsafe.Pointer(inKeyExprString))
+
+	qosString := C.CString(qos)
+	defer C.free(unsafe.Pointer(qosString))
+
+	var messageSubCtx unsafe.Pointer
+	if res := C.ZenohHandleImwCreateMessageSubscription(
+		z.ptr,
+		inKeyExprString,
+		C.zenoh_handle_imw_subscription_message_callback_fn(C.intrinsic_ImwMessageSubscriptionCallback),
+		qosString,
+		C.uintptr_t(sub.subHandle),
+		&messageSubCtx,
+	); res != 0 {
+		return nil, errorFromImwRet(res)
+	}
+
+	return messageSubCtx, nil
+}
+
 func (z *zenohHandleImpl) ImwDestroySubscription(keyExpr string, sub *subscriptionHandle) error {
 	inKeyExprString := C.CString(keyExpr)
 	defer C.free(unsafe.Pointer(inKeyExprString))
 
 	if res := C.ZenohHandleImwDestroySubscription(z.ptr, inKeyExprString, C.zenoh_handle_imw_subscription_callback_fn(C.intrinsic_ImwSubscriptionCallback), unsafe.Pointer(&sub.subHandle)); res != 0 {
+		return errorFromImwRet(res)
+	}
+
+	return nil
+}
+
+func (z *zenohHandleImpl) ImwDestroyMessageSubscription(keyExpr string, subscriptionContext unsafe.Pointer) error {
+	inKeyExprString := C.CString(keyExpr)
+	defer C.free(unsafe.Pointer(inKeyExprString))
+
+	if res := C.ZenohHandleImwDestroyMessageSubscription(z.ptr, inKeyExprString, subscriptionContext); res != 0 {
 		return errorFromImwRet(res)
 	}
 
@@ -1532,17 +1650,21 @@ func (z *zenohHandleImpl) ImwLivelinessGet(keyExpr string, query *livelinessQuer
 	return nil
 }
 
-func (z *zenohHandleImpl) ImwSet(keyExpr string, value []byte) error {
+func (z *zenohHandleImpl) imwSet(keyExpr string, value []byte, encoding imwEncoding) error {
 	keyExprString := C.CString(keyExpr)
 	defer C.free(unsafe.Pointer(keyExprString))
 
 	bytesArray := C.CBytes(value)
 	defer C.free(bytesArray)
 
-	if res := C.ZenohHandleImwSet(z.ptr, keyExprString, bytesArray, C.size_t(len(value))); res != 0 {
+	if res := C.ZenohHandleImwSetWithEncoding(z.ptr, keyExprString, bytesArray, C.size_t(len(value)), C.int(encoding)); res != 0 {
 		return errorFromImwRet(res)
 	}
 	return nil
+}
+
+func (z *zenohHandleImpl) ImwSet(keyExpr string, value []byte) error {
+	return z.imwSet(keyExpr, value, imwEncodingVarintPrefixedBytes)
 }
 
 func (z *zenohHandleImpl) ImwQuery(keyExpr string, query *queryHandle, timeoutMs uint64) error {
