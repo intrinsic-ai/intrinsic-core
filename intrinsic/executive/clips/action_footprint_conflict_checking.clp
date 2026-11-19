@@ -77,10 +77,9 @@
   needs to be rescheduled at a later time (UNSPECIFIED or FAIL mode)."
   ?af <- (plan-action (id ?id) (plan-id ?plan-id) (uid ?uid)
                       (state FOOTPRINT-CHECKING) (skill-id ?skill-id)
-                      (conflict-handling-mode ?ch-mode&UNSPECIFIED|FAIL)
+                      (conflict-handling-mode ?ch-mode)
                       (footprint-proto ?footprint-proto))
-  (test (or (eq ?ch-mode FAIL)
-            (not (get-flag-value enable_executive_skill_conflict_default_wait))))
+  (test (not (plan-action-should-wait-on-conflict ?ch-mode)))
   (skill-info (skill-id ?skill-id))
   ?wu <- (world-update (action-uid ?uid) (status FOOTPRINT-CONFLICT)
                        (footprint-conflict-proto-ids $?deps))
@@ -109,13 +108,13 @@
 )
 
 (defrule footprint-conflict-detection-conflicts-found-wait
-  "Footprint conflict detection found conflicts in WAIT mode. Transition action to
-  FOOTPRINT-CONFLICT-WAITING, assert blocker dependency facts, and set trace event."
+  "Footprint conflict detection found conflicts in WAIT or REPROJECT-ON-VOLUME
+  mode. Transition action to FOOTPRINT-CONFLICT-WAITING, assert blocker
+  dependency facts, and set trace event."
   ?af <- (plan-action (uid ?uid) (state FOOTPRINT-CHECKING)
-                      (conflict-handling-mode ?ch-mode&WAIT|UNSPECIFIED)
+                      (conflict-handling-mode ?ch-mode)
                       (span-reference-id ?span-id))
-  (test (or (eq ?ch-mode WAIT)
-            (get-flag-value enable_executive_skill_conflict_default_wait)))
+  (test (plan-action-should-wait-on-conflict ?ch-mode))
   ?wu <- (world-update (action-uid ?uid) (status FOOTPRINT-CONFLICT)
                        (conflicting-action-uids $?blockers))
  =>
@@ -156,6 +155,34 @@
   ?af <- (plan-action (uid ?waiting-uid) (state FOOTPRINT-CONFLICT-WAITING))
   (not (action-footprint-dependency (waiting-action-uid ?waiting-uid)))
  =>
+  (plan-action-reset-for-reprojection ?af)
+)
+
+(defrule footprint-reproject-on-volume
+  "REPROJECT-ON-VOLUME: A blocker of a waiting action is running and has added
+  footprint volumes to the world which were not visible to the waiting action's
+  last projection. Re-project right away so it can try to plan around them."
+  ?af <- (plan-action (uid ?waiting-uid) (state FOOTPRINT-CONFLICT-WAITING)
+                      (conflict-handling-mode REPROJECT-ON-VOLUME)
+                      (action-uids-running-at-projection $?running-at-projection)
+                      (span-reference-id ?span-id))
+  (action-footprint-dependency (waiting-action-uid ?waiting-uid)
+                               (blocker-action-uid ?blocker-uid))
+  ; ?blocker-uid was not running when ?waiting-uid started projecting, so its
+  ; footprint volumes were likely not in the world snapshot used by that
+  ; projection.
+  (test (not (member$ ?blocker-uid ?running-at-projection)))
+  ; Check whether ?blocker-uid has now transitioned to RUNNING (=at this point
+  ; swept volumes must have been added to the world).
+  (plan-action (uid ?blocker-uid) (state RUNNING)
+               (footprint-proto ?blocker-footprint&~0))
+  ; We only care for blockers which added volumes. Equipment/object-only
+  ; footprints add nothing to the world that re-projection could plan around.
+  (test (> (pb-get-repeated-length ?blocker-footprint "volume") 0))
+ =>
+  (if (<> ?span-id ?*TRACING-INVALID-SPAN-ID*) then
+    (span-add-event-annotation ?span-id "footprint_conflict_reprojecting")
+  )
   (plan-action-reset-for-reprojection ?af)
 )
 

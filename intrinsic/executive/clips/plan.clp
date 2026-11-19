@@ -104,8 +104,11 @@
   ;                     running/ready actions for conflicts
   ; FOOTPRINT-CONFLICT-WAITING: footprint conflict checking detected a conflict
   ;                             with a currently running action and the action's
-  ;                             conflict handling mode is set to WAIT. The action
-  ;                             waits until all conflicting blocking actions finish.
+  ;                             conflict handling mode is set to WAIT or
+  ;                             REPROJECT-ON-VOLUME. The action waits until all
+  ;                             conflicting blocking actions finish (or, for
+  ;                             REPROJECT-ON-VOLUME, until a blocker has added
+  ;                             new footprint volumes to the world).
   ; READY: conflict checking has been completed and no conflicts have been
   ;        found. The action is now ready for execution. Actions in this state
   ;        can be suspended.
@@ -152,11 +155,17 @@
                         SUCCEEDED FAILED CANCELED)
         (default ACCEPTED))
 
-  ; Specifies how footprint conflicts detected after action projection should be handled.
-  ; UNSPECIFIED / FAIL: default behavior; report footprint conflict error and fail action execution.
-  ; WAIT: enter FOOTPRINT-CONFLICT-WAITING state and pause action execution until all conflicting running actions finish.
+  ; Specifies how footprint conflicts detected after action projection should be
+  ; handled.
+  ; UNSPECIFIED / FAIL: default behavior; report footprint conflict error and
+  ; fail action execution.
+  ; WAIT: enter FOOTPRINT-CONFLICT-WAITING state and pause action execution
+  ; until all conflicting running actions finish.
+  ; REPROJECT-ON-VOLUME: like WAIT, but additionally re-project as soon as a
+  ; conflicting action added footprint volumes to the world which were not
+  ; visible to this action's last projection.
   (slot conflict-handling-mode (type SYMBOL)
-        (allowed-values UNSPECIFIED FAIL WAIT)
+        (allowed-values UNSPECIFIED FAIL WAIT REPROJECT-ON-VOLUME)
         (default UNSPECIFIED))
 
   ; This is tracks the state slot and updates the run metadata proto if they
@@ -174,6 +183,11 @@
   ; Contains all IDs of actions which were running at the time projection
   ; started.
   (multislot projection-running-actions (type INTEGER))
+
+  ; UIDs of all actions that were RUNNING when the projection world was cloned,
+  ; i.e., the skill was aware of their volumes during projection. Used by the
+  ; REPROJECT-ON-VOLUME conflict handling mode to trigger an early reprojection.
+  (multislot action-uids-running-at-projection (type SYMBOL))
 
   ; Temporary world used for projection. It will be cloned from the main world
   ; before projection and has a unique ID. After projection success or failure
@@ -259,7 +273,18 @@
   ; Re-projection will create a new footprint proto.
   (bind ?footprint-proto (fact-slot-value ?af footprint-proto))
   (if (<> ?footprint-proto 0) then (pb-remove ?footprint-proto))
-  (return (modify ?af (state SELECTED) (footprint-proto 0)))
+  (return (modify ?af (state SELECTED)
+                      (footprint-proto 0)
+                      (action-uids-running-at-projection (create$))))
+)
+
+; Returns TRUE if an action with ?ch-mode should wait on a conflict, or FALSE
+; if it should fail.
+(deffunction plan-action-should-wait-on-conflict (?ch-mode)
+  (if (eq ?ch-mode UNSPECIFIED) then
+    (return (get-flag-value enable_executive_skill_conflict_default_wait))
+  )
+  (return (or (eq ?ch-mode WAIT) (eq ?ch-mode REPROJECT-ON-VOLUME)))
 )
 
 (deffunction plan-action-remove (?uid)

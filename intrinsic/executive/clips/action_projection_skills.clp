@@ -47,6 +47,11 @@
     (log-context-create ?session-log-id ?bt-log-id ?action-log-id
                         ?parent-log-id ?operation-name))
 
+  (bind ?action-uids-running-at-projection (create$))
+  (do-for-all-facts ((?pa plan-action)) (eq ?pa:state RUNNING)
+    (bind ?action-uids-running-at-projection
+      (append$ ?action-uids-running-at-projection ?pa:uid))
+  )
   (bind ?world-id-projection (world-clone ?world-id "project" ?parent-span-id))
 
   (skill-project-async ?uid
@@ -69,7 +74,9 @@
   (modify ?af (state PROJECTING)
               (world-id-projection ?world-id-projection)
               (projection-start-time (now))
-              (projection-running-actions ?running-actions))
+              (projection-running-actions ?running-actions)
+              (action-uids-running-at-projection
+                ?action-uids-running-at-projection))
 )
 
 (defrule action-projection-skill-succeeded
