@@ -18,6 +18,7 @@
 #include <gtest/gtest.h>
 
 #include <memory>
+#include <optional>
 
 #include "grpcpp/server_builder.h"
 #include "grpcpp/support/channel_arguments.h"
@@ -25,12 +26,15 @@
 #include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/api/shape_factory.h"
 #include "intrinsic/geometry/proto/geometry_service.grpc.pb.h"
+#include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
 #include "intrinsic/geometry/service/in_memory_geometry_service.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/geometry/storage/geometry_service_storage.h"
 
 namespace intrinsic::icon {
 namespace {
+
+using intrinsic_proto::geometry::v1::GeometryStorageRefs;
 
 TEST(GeometryFromGeometryLibraryTest, ValidStub) {
   auto geo_service = std::make_unique<InMemoryGeometryService>();
@@ -44,8 +48,8 @@ TEST(GeometryFromGeometryLibraryTest, ValidStub) {
           geo_server->InProcessChannel(grpc::ChannelArguments())));
   Geometry sphere = MakeSphere(1.0);
 
-  ASSERT_OK_AND_ASSIGN(auto geo_refs,
-                       geo_lib->Serializer().SaveGeometry(sphere));
+  ASSERT_OK_AND_ASSIGN(const GeometryStorageRefs geo_refs,
+                       geo_lib->Serializer().SaveGeometryV1(sphere, {}));
 
   auto stub = intrinsic_proto::geometry::GeometryService::NewStub(
       geo_server->InProcessChannel(grpc::ChannelArguments()));
@@ -54,8 +58,9 @@ TEST(GeometryFromGeometryLibraryTest, ValidStub) {
   EXPECT_NE(service->GetGeometryLibrary(), nullptr);
 
   ASSERT_OK_AND_ASSIGN(
-      auto deserialized_sphere,
-      service->GetGeometryLibrary()->Deserializer().GetGeometry(geo_refs, {}));
+      const Geometry deserialized_sphere,
+      service->GetGeometryLibrary()->Deserializer().GetGeometry(geo_refs,
+                                                                std::nullopt));
   EXPECT_EQ(deserialized_sphere, sphere);
 }
 

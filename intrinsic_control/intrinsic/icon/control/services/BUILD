@@ -167,6 +167,7 @@ cc_test(
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_cel_cpp//internal:testing_no_main",
         "@com_google_googletest//:gtest_main",
+        "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_storage_refs_cc_proto",
     ],
 )
 
