@@ -58,7 +58,7 @@ py_library(
         "//conditions:default": [],
     }),
     deps = [
-        "//incode/util/runfiles",
+        "@rules_python//python/runfiles",
     ],
 )
 
@@ -167,8 +167,8 @@ py_library(
     deps = [
         ":perception_pipeline_lib",
         "//intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/proto:nvidia_service_config_py_pb2",
-        "//incode/util/runfiles",
         "@com_google_protobuf//:protobuf_python",
+        "@rules_python//python/runfiles",
     ],
 )
 

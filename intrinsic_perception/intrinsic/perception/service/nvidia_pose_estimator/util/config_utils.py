@@ -33,9 +33,9 @@ from foundationpose_perception_pipeline.inference.config import RefinementConfig
 from foundationpose_perception_pipeline.inference.config import SelectionConfig
 from google.protobuf import any_pb2
 from google.protobuf import text_format
+from python.runfiles import runfiles
 
 from intrinsic_perception.intrinsic.perception.service.nvidia_pose_estimator.proto import nvidia_service_config_pb2
-from incode.util.runfiles import runfiles
 
 _DepthSource = nvidia_service_config_pb2.DepthSource
 _Sam3RefinementPolicy = nvidia_service_config_pb2.Sam3RefinementPolicy
@@ -66,8 +66,8 @@ _PROPOSAL_SELECTION_POLICIES: dict[int, str] = {
 _DEFAULT_PACKAGE_DIR = Path(__file__).resolve().parent.parent
 _DEFAULT_CONFIG_RELPATH = Path("configs") / "default_config.textproto"
 _DEFAULT_CONFIG_RLOCATION = (
-    f"{__package__.rpartition('.')[0].replace('.', '/')}/"
-    f"{_DEFAULT_CONFIG_RELPATH.as_posix()}"
+    "intrinsic-core/intrinsic_perception/intrinsic/perception/service/"
+    "nvidia_pose_estimator/configs/default_config.textproto"
 )
 
 
@@ -94,12 +94,10 @@ def resolve_service_config(
       without at least 2 stereo sensors.
   """
   pkg_dir = package_dir or _DEFAULT_PACKAGE_DIR
-  try:
-    default_config_path = runfiles.RlocationCurrentRepository(
-        _DEFAULT_CONFIG_RLOCATION
-    )
-  except (AssertionError, OSError):
-    default_config_path = None
+  default_config_path = None
+  r = runfiles.Create()
+  if r is not None:
+    default_config_path = r.Rlocation(_DEFAULT_CONFIG_RLOCATION)
   if not default_config_path or not os.path.exists(default_config_path):
     candidate = pkg_dir / _DEFAULT_CONFIG_RELPATH
     if candidate.is_file():

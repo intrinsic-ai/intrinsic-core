@@ -30,7 +30,7 @@ from pathlib import Path
 import re
 import sys
 
-from incode.util.runfiles import runfiles
+from python.runfiles import runfiles
 
 _SYSTEM_LIB_DIR = Path("/usr/lib/x86_64-linux-gnu")
 _FP_LIBRARY_DIRNAME = "foundation-pose-inference-library"
@@ -41,7 +41,10 @@ _FP_LIBRARY_VERSIONED = "libfoundation_pose_nvidia.so.0.1.0"
 _RUNFILES_FP_LIBRARY_SO = (
     f"foundation_pose_inference_library/{_FP_LIBRARY_VERSIONED}"
 )
-_RUNFILES_BINDINGS = "intrinsic_perception/intrinsic/perception/service/nvidia_pose_estimator/third_party/bindings"
+_RUNFILES_BINDINGS = (
+    "intrinsic-core/intrinsic_perception/intrinsic/perception/service/"
+    "nvidia_pose_estimator/third_party/bindings"
+)
 _LIB_PATH_ENV = "FP_INFERENCE_LIB_PATH"
 # Set to "1" to tolerate a missing FoundationPose library (unit tests only).
 _ALLOW_MISSING_LIBRARY_ENV = "FP_ALLOW_MISSING_LIBRARY"
@@ -51,23 +54,11 @@ _INITIALIZED: bool = False
 
 
 def _rlocation(runfiles_path: str) -> Path | None:
-  """Resolves a repository-relative runfiles path, or None if unavailable."""
-  try:
-    resolved = runfiles.RlocationCurrentRepository(runfiles_path)
-  except (AssertionError, OSError):
-    return None
-  return Path(resolved) if resolved else None
-
-
-def _rlocation_external(runfiles_path: str) -> Path | None:
-  """Resolves a runfiles path rooted at an external repository, or None."""
+  """Resolves a runfiles path, or None if unavailable."""
   r = runfiles.Create()
   if r is None:
     return None
-  try:
-    resolved = r.Rlocation(runfiles_path)
-  except (AssertionError, OSError):
-    return None
+  resolved = r.Rlocation(runfiles_path)
   return Path(resolved) if resolved else None
 
 
@@ -104,7 +95,7 @@ def _get_sdk_lib_dirs() -> list[Path]:
     if entry:
       dirs.insert(0, Path(entry).expanduser())
 
-  if rf := _rlocation_external(_RUNFILES_FP_LIBRARY_SO):
+  if rf := _rlocation(_RUNFILES_FP_LIBRARY_SO):
     dirs.append(rf.parent)
 
   return [d for d in dirs if d.is_dir()]
