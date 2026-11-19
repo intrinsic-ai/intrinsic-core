@@ -26,7 +26,9 @@ cc_library(
     name = "environments_cc",
     srcs = ["environments.cc"],
     hdrs = ["environments.h"],
-    visibility = ["//intrinsic_sdk/intrinsic/util/grpc:__pkg__"],
+    visibility = [
+        "//intrinsic_sdk/intrinsic/util/grpc:__pkg__",
+    ],
     deps = [
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
