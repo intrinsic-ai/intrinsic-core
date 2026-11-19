@@ -23,6 +23,7 @@ cc_library(
     srcs = ["gltf_io.cc"],
     hdrs = ["gltf_io.h"],
     visibility = [
+        "//intrinsic/geometry:__subpackages__",
         "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
@@ -41,6 +42,7 @@ cc_library(
     srcs = ["gltf_materials.cc"],
     hdrs = ["gltf_materials.h"],
     visibility = [
+        "//intrinsic/geometry:__subpackages__",
         "//intrinsic_runtime/intrinsic/scene:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
