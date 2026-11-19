@@ -71,9 +71,9 @@
 #include "intrinsic/skills/internal/world_service_utils.h"
 #include "intrinsic/storage/content_addressable_storage/proto/cas_service.grpc.pb.h"
 #include "intrinsic/storage/content_addressable_storage/testing/in_memory_cas_service.h"
-#include "intrinsic/util/path_resolver/path_resolver.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/util/testing/runfiles.h"
 #include "intrinsic/world/component/robot_component.h"
 #include "intrinsic/world/entity.h"
 #include "intrinsic/world/entity_id.h"
@@ -158,9 +158,11 @@ absl::Status SetCartesianLimitsInWorld(World& world,
 absl::StatusOr<WorldHashMap<std::string, World>> CreateDefault4RobotsCubeWorld(
     bool set_infinite_jerk_limits) {
   WorldHashMap<std::string, World> worlds;
-  const std::string world_gzf_filename =
-      PathResolver::ResolveRunfilesPathForTest(
-          "intrinsic/world/test_data/4_robots_cube_object_world.gzf");
+  INTR_ASSIGN_OR_RETURN(const std::string world_gzf_filename,
+                        intrinsic::testing::ResolveRlocation(
+                            BAZEL_CURRENT_REPOSITORY,
+                            "intrinsic-core/intrinsic/world/test_data/"
+                            "4_robots_cube_object_world.gzf"));
   INTR_ASSIGN_OR_RETURN(auto gz_file, GZFile::Open(world_gzf_filename));
   INTR_ASSIGN_OR_RETURN(World world, World::FromFile(*gz_file));
   INTR_RETURN_IF_ERROR(SetCartesianLimitsInWorld(

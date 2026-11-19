@@ -91,7 +91,6 @@
 #include "intrinsic/storage/content_addressable_storage/cpp/client_helpers.h"
 #include "intrinsic/storage/content_addressable_storage/testing/in_memory_cas_service.h"
 #include "intrinsic/util/eigen.h"
-#include "intrinsic/util/path_resolver/path_resolver.h"
 #include "intrinsic/util/proto/parse_text_proto.h"
 #include "intrinsic/util/proto/type_url.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"

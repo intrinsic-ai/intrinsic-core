@@ -17,6 +17,20 @@ load("//bazel:cc_macros.bzl", "cc_library")
 # Helper utilities for handling testing.
 
 cc_library(
+    name = "runfiles",
+    testonly = 1,
+    srcs = ["runfiles.cc"],
+    hdrs = ["runfiles.h"],
+    visibility = ["//intrinsic:intrinsic_internal"],
+    deps = [
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@rules_cc//cc/runfiles",
+    ],
+)
+
+cc_library(
     name = "status_payload_matchers",
     testonly = 1,
     hdrs = ["status_payload_matchers.h"],

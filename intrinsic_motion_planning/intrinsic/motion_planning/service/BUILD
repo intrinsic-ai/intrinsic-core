@@ -299,11 +299,11 @@ cc_library(
         "//intrinsic_sdk/intrinsic/platform/pubsub:fake_kvstore",
         "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
         "//intrinsic_sdk/intrinsic/util:eigen",
-        "//intrinsic_sdk/intrinsic/util/path_resolver",
         "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
         "//intrinsic_sdk/intrinsic/util/proto:type_url",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/testing:runfiles",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world/gzfile",
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
@@ -327,6 +327,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:geometric_constraints_cc_proto",
         "@intrinsic_apis//intrinsic/motion_planning/proto/v1:motion_planner_config_cc_proto",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_cc_grpc_proto",
+        "@rules_cc//cc/runfiles",
     ],
 )
 
@@ -392,7 +393,6 @@ cc_test(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/util:eigen",
-        "//intrinsic_sdk/intrinsic/util/path_resolver",
         "//intrinsic_sdk/intrinsic/util/proto:parse_text_proto",
         "//intrinsic_sdk/intrinsic/util/proto:type_url",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",

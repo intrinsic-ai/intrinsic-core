@@ -34,7 +34,6 @@
 #include "intrinsic/motion_planning/proto/v1/robot_specification.pb.h"
 #include "intrinsic/skills/apps/testing/test_world.h"
 #include "intrinsic/util/eigen.h"
-#include "intrinsic/util/path_resolver/path_resolver.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/dof_kinematic_view.h"
 #include "intrinsic/world/entity_id.h"

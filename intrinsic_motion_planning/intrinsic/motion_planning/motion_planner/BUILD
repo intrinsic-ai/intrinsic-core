@@ -325,7 +325,6 @@ cc_library(
         "//intrinsic_motion_planning/intrinsic/motion_planning/proto:motion_planner_service_proto_utils",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/util:eigen",
-        "//intrinsic_sdk/intrinsic/util/path_resolver",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",
         "//intrinsic_sdk/intrinsic/world/gzfile",
