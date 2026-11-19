@@ -43,17 +43,38 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwPublish(void* handle,
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwPublisherHasMatchingSubscribers(
     void* handle, const char* keyexpr, bool* has_matching);
 
+typedef enum {
+  ZENOH_HANDLE_IMW_MESSAGE_KIND_PUT = 0,
+  ZENOH_HANDLE_IMW_MESSAGE_KIND_DELETE = 1,
+} zenoh_handle_imw_message_kind_t;
+
+typedef enum {
+  ZENOH_HANDLE_IMW_ENCODING_VARINT_PREFIXED_BYTES = 0,
+  ZENOH_HANDLE_IMW_ENCODING_APPLICATION_OCTET_STREAM = 1,
+  ZENOH_HANDLE_IMW_ENCODING_APPLICATION_PROTOBUF = 2,
+  ZENOH_HANDLE_IMW_ENCODING_UNKNOWN = 3,
+} zenoh_handle_imw_encoding_t;
+
 typedef void (*zenoh_handle_imw_subscription_callback_fn)(
     const char* keyexpr, const void* bytes, const size_t bytes_len,
     void* user_context);
+typedef void (*zenoh_handle_imw_subscription_message_callback_fn)(
+    const char* keyexpr, const void* bytes, const size_t bytes_len,
+    int message_kind, int encoding, uintptr_t user_context);
 
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreateSubscription(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_subscription_callback_fn callback, const char* qos,
     void* user_context);
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreateMessageSubscription(
+    void* handle, const char* keyexpr,
+    zenoh_handle_imw_subscription_message_callback_fn callback, const char* qos,
+    uintptr_t user_context, void** out_subscription_context);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroySubscription(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_subscription_callback_fn callback, void* user_context);
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroyMessageSubscription(
+    void* handle, const char* keyexpr, void* subscription_context);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDeclareLivelinessToken(
     void* handle, const char* keyexpr);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDropLivelinessToken(
@@ -95,6 +116,11 @@ typedef void (*zenoh_handle_imw_query_on_done_fn)(const char* keyexpr,
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSet(void* handle, const char* keyexpr,
                                             const void* bytes,
                                             size_t bytes_len);
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSetWithEncoding(void* handle,
+                                                        const char* keyexpr,
+                                                        const void* bytes,
+                                                        size_t bytes_len,
+                                                        int encoding);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDeleteKeyExpr(void* handle,
                                                       const char* keyexpr);
 
@@ -108,6 +134,9 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroyQueryable(
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReply(
     void* handle, const void* query_context, const char* keyexpr,
     const void* reply_bytes, size_t reply_bytes_len);
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReplyWithEncoding(
+    void* handle, const void* query_context, const char* keyexpr,
+    const void* reply_bytes, size_t reply_bytes_len, int encoding);
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQuery(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_query_callback_fn callback,

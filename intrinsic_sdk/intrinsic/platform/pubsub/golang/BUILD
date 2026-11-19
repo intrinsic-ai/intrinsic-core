@@ -21,20 +21,12 @@ cc_library(
     name = "pubsub_c",
     srcs = ["pubsub_c.cc"],
     hdrs = ["pubsub_c.h"],
-    visibility = ["//visibility:private"],
+    visibility = ["//intrinsic_sdk/intrinsic/platform/pubsub/golang:__pkg__"],
     deps = [
+        "//intrinsic_sdk/intrinsic/middleware:imw_interface",
         "//intrinsic_sdk/intrinsic/platform/pubsub/zenoh_util:zenoh_config",
         "//intrinsic_sdk/intrinsic/platform/pubsub/zenoh_util:zenoh_handle",
         "@abseil-cpp//absl/base:core_headers",
-        "@abseil-cpp//absl/log:check",
-        "@abseil-cpp//absl/memory",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@abseil-cpp//absl/synchronization",
-        "@abseil-cpp//absl/time",
-        "@com_google_protobuf//:protobuf",
-        "@intrinsic_apis//intrinsic/platform/pubsub/adapters:pubsub_cc_proto",
     ],
 )
 

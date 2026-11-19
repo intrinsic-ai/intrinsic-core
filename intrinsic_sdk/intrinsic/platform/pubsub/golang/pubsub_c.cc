@@ -15,15 +15,82 @@
 #include "intrinsic/platform/pubsub/golang/pubsub_c.h"
 
 #include <cstdint>
-#include <cstdio>
 #include <cstring>
+#include <memory>
+#include <optional>
 
 #include "absl/base/attributes.h"
-#include "google/protobuf/any.pb.h"
-#include "google/protobuf/descriptor.pb.h"
-#include "intrinsic/platform/pubsub/adapters/pubsub.pb.h"
+#include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_config.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_handle.h"
+
+namespace {
+
+static_assert(ZENOH_HANDLE_IMW_MESSAGE_KIND_PUT ==
+              static_cast<int>(intrinsic::IMW_MESSAGE_KIND_PUT));
+static_assert(ZENOH_HANDLE_IMW_MESSAGE_KIND_DELETE ==
+              static_cast<int>(intrinsic::IMW_MESSAGE_KIND_DELETE));
+static_assert(ZENOH_HANDLE_IMW_ENCODING_VARINT_PREFIXED_BYTES ==
+              static_cast<int>(intrinsic::IMW_ENCODING_VARINT_PREFIXED_BYTES));
+static_assert(
+    ZENOH_HANDLE_IMW_ENCODING_APPLICATION_OCTET_STREAM ==
+    static_cast<int>(intrinsic::IMW_ENCODING_APPLICATION_OCTET_STREAM));
+static_assert(ZENOH_HANDLE_IMW_ENCODING_APPLICATION_PROTOBUF ==
+              static_cast<int>(intrinsic::IMW_ENCODING_APPLICATION_PROTOBUF));
+static_assert(ZENOH_HANDLE_IMW_ENCODING_UNKNOWN ==
+              static_cast<int>(intrinsic::IMW_ENCODING_UNKNOWN));
+
+std::optional<intrinsic::imw_encoding_t> TryToImwEncoding(int encoding) {
+  switch (encoding) {
+    case ZENOH_HANDLE_IMW_ENCODING_VARINT_PREFIXED_BYTES:
+      return intrinsic::IMW_ENCODING_VARINT_PREFIXED_BYTES;
+    case ZENOH_HANDLE_IMW_ENCODING_APPLICATION_OCTET_STREAM:
+      return intrinsic::IMW_ENCODING_APPLICATION_OCTET_STREAM;
+    case ZENOH_HANDLE_IMW_ENCODING_APPLICATION_PROTOBUF:
+      return intrinsic::IMW_ENCODING_APPLICATION_PROTOBUF;
+    case ZENOH_HANDLE_IMW_ENCODING_UNKNOWN:
+    default:
+      return std::nullopt;
+  }
+}
+
+struct MessageSubscriptionContext {
+  zenoh_handle_imw_subscription_message_callback_fn callback = nullptr;
+  uintptr_t user_context = 0;
+};
+
+struct UnpackedMessageMetadata {
+  int message_kind;
+  int encoding;
+};
+
+UnpackedMessageMetadata UnpackMessageMetadata(
+    const intrinsic::imw_message_metadata_t* metadata) {
+  if (metadata == nullptr) {
+    return UnpackedMessageMetadata{
+        .message_kind = ZENOH_HANDLE_IMW_MESSAGE_KIND_PUT,
+        .encoding = ZENOH_HANDLE_IMW_ENCODING_VARINT_PREFIXED_BYTES,
+    };
+  }
+  return UnpackedMessageMetadata{
+      .message_kind = static_cast<int>(metadata->kind),
+      .encoding = static_cast<int>(metadata->encoding),
+  };
+}
+
+void MessageSubscriptionTrampoline(
+    const char* keyexpr, const void* bytes, const size_t bytes_len,
+    const intrinsic::imw_message_metadata_t* metadata, void* user_context) {
+  auto* ctx = static_cast<MessageSubscriptionContext*>(user_context);
+  if (ctx == nullptr || ctx->callback == nullptr) {
+    return;
+  }
+  const UnpackedMessageMetadata unpacked = UnpackMessageMetadata(metadata);
+  ctx->callback(keyexpr, bytes, bytes_len, unpacked.message_kind,
+                unpacked.encoding, ctx->user_context);
+}
+
+}  // namespace
 
 extern "C" char* GetZenohPeerConfigWrapper(const char* router_override) {
   return strdup(intrinsic::GetZenohPeerConfig(router_override).c_str());
@@ -96,6 +163,28 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreateSubscription(
                                                user_context);
 }
 
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreateMessageSubscription(
+    void* handle, const char* keyexpr,
+    zenoh_handle_imw_subscription_message_callback_fn callback, const char* qos,
+    uintptr_t user_context, void** out_subscription_context) {
+  if (handle == nullptr || callback == nullptr ||
+      out_subscription_context == nullptr) {
+    return intrinsic::IMW_ERROR;
+  }
+  *out_subscription_context = nullptr;
+  auto* zenoh_handle = static_cast<intrinsic::ZenohHandle*>(handle);
+  auto ctx =
+      std::make_unique<MessageSubscriptionContext>(MessageSubscriptionContext{
+          .callback = callback, .user_context = user_context});
+  const int ret = zenoh_handle->imw_create_message_subscription(
+      keyexpr, MessageSubscriptionTrampoline, qos, ctx.get());
+  if (ret != intrinsic::IMW_OK) {
+    return ret;
+  }
+  *out_subscription_context = ctx.release();
+  return ret;
+}
+
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroySubscription(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_subscription_callback_fn callback, void* user_context) {
@@ -105,6 +194,21 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroySubscription(
   // type punning on callback?
   return zenoh_handle->imw_destroy_subscription(keyexpr, callback,
                                                 user_context);
+}
+
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDestroyMessageSubscription(
+    void* handle, const char* keyexpr, void* subscription_context) {
+  if (handle == nullptr || subscription_context == nullptr) {
+    return intrinsic::IMW_ERROR;
+  }
+  auto* zenoh_handle = static_cast<intrinsic::ZenohHandle*>(handle);
+  auto* ctx = static_cast<MessageSubscriptionContext*>(subscription_context);
+  const int ret = zenoh_handle->imw_destroy_message_subscription(
+      keyexpr, MessageSubscriptionTrampoline, ctx);
+  if (ret == intrinsic::IMW_OK) {
+    delete ctx;
+  }
+  return ret;
 }
 
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDeclareLivelinessToken(
@@ -151,6 +255,31 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwLivelinessGet(
                                           user_context);
 }
 
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSetWithEncoding(void* handle,
+                                                        const char* keyexpr,
+                                                        const void* bytes,
+                                                        const size_t bytes_len,
+                                                        int encoding) {
+  if (handle == nullptr) {
+    return intrinsic::IMW_ERROR;
+  }
+  const std::optional<intrinsic::imw_encoding_t> imw_encoding =
+      TryToImwEncoding(encoding);
+  if (!imw_encoding.has_value()) {
+    return intrinsic::IMW_ERROR;
+  }
+  auto* zenoh_handle = static_cast<intrinsic::ZenohHandle*>(handle);
+  return zenoh_handle->imw_set_with_encoding(keyexpr, bytes, bytes_len,
+                                             *imw_encoding);
+}
+
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDeleteKeyExpr(void* handle,
+                                                      const char* keyexpr) {
+  intrinsic::ZenohHandle* zenoh_handle =
+      static_cast<intrinsic::ZenohHandle*>(handle);
+  return zenoh_handle->imw_delete_keyexpr(keyexpr);
+}
+
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwCreateQueryable(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_queryable_callback_fn callback, void* user_context,
@@ -180,6 +309,22 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReply(
                                            reply_bytes_len);
 }
 
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryableReplyWithEncoding(
+    void* handle, const void* query_context, const char* keyexpr,
+    const void* reply_bytes, const size_t reply_bytes_len, int encoding) {
+  if (handle == nullptr) {
+    return intrinsic::IMW_ERROR;
+  }
+  const std::optional<intrinsic::imw_encoding_t> imw_encoding =
+      TryToImwEncoding(encoding);
+  if (!imw_encoding.has_value()) {
+    return intrinsic::IMW_ERROR;
+  }
+  auto* zenoh_handle = static_cast<intrinsic::ZenohHandle*>(handle);
+  return zenoh_handle->imw_queryable_reply_with_encoding(
+      query_context, keyexpr, reply_bytes, reply_bytes_len, *imw_encoding);
+}
+
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQuery(
     void* handle, const char* keyexpr,
     zenoh_handle_imw_query_callback_fn callback,
@@ -202,10 +347,4 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSet(void* handle, const char* keyexpr,
   intrinsic::ZenohHandle* zenoh_handle =
       static_cast<intrinsic::ZenohHandle*>(handle);
   return zenoh_handle->imw_set(keyexpr, bytes, bytes_len);
-}
-ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwDeleteKeyExpr(void* handle,
-                                                      const char* keyexpr) {
-  intrinsic::ZenohHandle* zenoh_handle =
-      static_cast<intrinsic::ZenohHandle*>(handle);
-  return zenoh_handle->imw_delete_keyexpr(keyexpr);
 }
