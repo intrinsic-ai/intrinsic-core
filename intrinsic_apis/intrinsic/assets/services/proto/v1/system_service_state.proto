@@ -44,7 +44,7 @@ service SystemServiceState {
   // Returns the current state of the requested Service instance.
   rpc GetInstanceState(GetInstanceStateRequest) returns (InstanceState) {
     option (google.api.http) = {
-      get: "/v1/serviceState/{name}"
+      get: "/systemServiceState/v1/instanceStates/{name}"
     };
   }
 
@@ -52,7 +52,7 @@ service SystemServiceState {
   rpc ListInstanceStates(ListInstanceStatesRequest)
       returns (ListInstanceStatesResponse) {
     option (google.api.http) = {
-      get: "/v1/serviceState"
+      get: "/systemServiceState/v1/instanceStates"
     };
   }
 
@@ -76,7 +76,8 @@ service SystemServiceState {
   //    Service, but is left to the Service author to implement.
   rpc EnableService(EnableServiceRequest) returns (EnableServiceResponse) {
     option (google.api.http) = {
-      post: "/v1/serviceState/{name}:enable"
+      post: "/systemServiceState/v1/services/{name}:enable"
+      body: "*"
     };
   }
 
@@ -101,7 +102,8 @@ service SystemServiceState {
   //    be servicing requests. It is left to the Service author to implement.
   rpc DisableService(DisableServiceRequest) returns (DisableServiceResponse) {
     option (google.api.http) = {
-      post: "/v1/serviceState/{name}:disable"
+      post: "/systemServiceState/v1/services/{name}:disable"
+      body: "*"
     };
   }
 
@@ -114,7 +116,8 @@ service SystemServiceState {
   // Note: This will stop all ongoing processes in the Service.
   rpc RestartService(RestartServiceRequest) returns (RestartServiceResponse) {
     option (google.api.http) = {
-      post: "/v1/serviceState/{name}:restart"
+      post: "/systemServiceState/v1/services/{name}:restart"
+      body: "*"
     };
   }
 }
