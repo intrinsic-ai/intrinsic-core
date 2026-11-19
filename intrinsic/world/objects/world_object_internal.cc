@@ -721,75 +721,72 @@ absl::Status WorldObject::SetSimulationComponent(
   return absl::OkStatus();
 }
 
-absl::StatusOr<const WorldHashMap<std::string, std::string>*>
-WorldObject::GetUserDataMap() const {
-  if (!GetCollectionEntity()) {
+namespace {
+
+absl::StatusOr<const UserDataComponent* absl_nonnull> GetUserDataComponent(
+    const WorldObject& object) {
+  const std::optional<CollectionsEntityId> collection_id =
+      object.GetCollectionEntity();
+  if (!collection_id.has_value()) {
     return absl::NotFoundError(
         absl::Substitute("Object with name \"$0\" has no collection entity and "
                          "thus cannot have any user data associated with it.",
-                         GetName().value()));
+                         object.GetName().value()));
   }
   INTR_ASSIGN_OR_RETURN(const WorldEntity* collection_entity,
-                        GetEntityWorld().GetEntityById(*GetCollectionEntity()));
+                        object.GetEntityWorld().GetEntityById(*collection_id));
   if (!collection_entity->HasComponent<UserDataComponent>()) {
     return absl::NotFoundError(
         absl::Substitute("Object with name \"$0\" has no UserDataComponent.",
-                         GetName().value()));
+                         object.GetName().value()));
   }
+  return collection_entity->GetComponent<UserDataComponent>();
+}
+
+absl::StatusOr<UserDataComponent* absl_nonnull> GetOrCreateUserDataComponent(
+    const WorldObject& object, absl::StatusOr<World*> mutable_world) {
+  const std::optional<CollectionsEntityId> collection_id =
+      object.GetCollectionEntity();
+  if (!collection_id.has_value()) {
+    return absl::NotFoundError(
+        absl::Substitute("Object with name \"$0\" has no collection entity and "
+                         "thus cannot have any user data associated with it.",
+                         object.GetName().value()));
+  }
+  INTR_ASSIGN_OR_RETURN(World * world, mutable_world);
+  return world->GetOrCreateComponentByEntityId<UserDataComponent>(
+      *collection_id);
+}
+
+}  // namespace
+
+absl::StatusOr<const WorldHashMap<std::string, std::string>*>
+WorldObject::GetUserDataMap() const {
   INTR_ASSIGN_OR_RETURN(const UserDataComponent* user_data_component,
-                        collection_entity->GetComponent<UserDataComponent>());
+                        GetUserDataComponent(*this));
   return &user_data_component->UserDataMap();
 }
 
 absl::StatusOr<WorldHashMap<std::string, std::string>*>
 WorldObject::GetMutableUserDataMap() {
-  if (!GetCollectionEntity()) {
-    return absl::NotFoundError(
-        absl::Substitute("Object with name \"$0\" has no collection entity and "
-                         "thus cannot have any user data associated with it.",
-                         GetName().value()));
-  }
-  INTR_ASSIGN_OR_RETURN(World * world, GetMutableEntityWorld());
   INTR_ASSIGN_OR_RETURN(
       UserDataComponent * user_data_component,
-      world->GetOrCreateComponentByEntityId<UserDataComponent>(
-          *GetCollectionEntity()));
+      GetOrCreateUserDataComponent(*this, GetMutableEntityWorld()));
   return &user_data_component->MutableUserDataMap();
 }
 
 absl::StatusOr<const WorldObject::UserDataProtos* absl_nonnull>
 WorldObject::GetUserDataProtos() const {
-  if (!GetCollectionEntity()) {
-    return absl::NotFoundError(
-        absl::Substitute("Object with name \"$0\" has no collection entity and "
-                         "thus cannot have any user data associated with it.",
-                         GetName().value()));
-  }
-  INTR_ASSIGN_OR_RETURN(const WorldEntity* collection_entity,
-                        GetEntityWorld().GetEntityById(*GetCollectionEntity()));
-  if (!collection_entity->HasComponent<UserDataComponent>()) {
-    return absl::NotFoundError(
-        absl::Substitute("Object with name \"$0\" has no UserDataComponent.",
-                         GetName().value()));
-  }
   INTR_ASSIGN_OR_RETURN(const UserDataComponent* user_data_component,
-                        collection_entity->GetComponent<UserDataComponent>());
+                        GetUserDataComponent(*this));
   return &user_data_component->UserDataProtos();
 }
 
 absl::StatusOr<WorldObject::UserDataProtos* absl_nonnull>
 WorldObject::GetMutableUserDataProtos() {
-  if (!GetCollectionEntity()) {
-    return absl::NotFoundError(
-        absl::Substitute("Object with name \"$0\" has no collection entity and "
-                         "thus cannot have any user data associated with it.",
-                         GetName().value()));
-  }
-  INTR_ASSIGN_OR_RETURN(World * world, GetMutableEntityWorld());
   INTR_ASSIGN_OR_RETURN(
       UserDataComponent * user_data_component,
-      world->GetOrCreateComponentByEntityId<UserDataComponent>(
-          *GetCollectionEntity()));
+      GetOrCreateUserDataComponent(*this, GetMutableEntityWorld()));
   return &user_data_component->MutableUserDataProtos();
 }
 
