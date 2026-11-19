@@ -111,6 +111,12 @@ typedef void (*zenoh_handle_imw_query_callback_fn)(
     const size_t response_bytes_len, void* user_context);
 typedef void (*zenoh_handle_imw_query_on_done_fn)(const char* keyexpr,
                                                   void* userContext);
+typedef void (*zenoh_handle_imw_query_message_callback_fn)(
+    const char* keyexpr, const void* response_bytes,
+    const size_t response_bytes_len, int message_kind, int encoding,
+    uintptr_t user_context);
+typedef void (*zenoh_handle_imw_message_query_on_done_fn)(
+    const char* keyexpr, uintptr_t user_context);
 
 // KV stuff now...
 ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSet(void* handle, const char* keyexpr,
@@ -143,6 +149,11 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQuery(
     zenoh_handle_imw_query_on_done_fn on_done, const void* query_payload,
     size_t query_payload_len, void* user_context, uint64_t timeout_ms,
     bool call_ros_service);
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryMessages(
+    void* handle, const char* keyexpr,
+    zenoh_handle_imw_query_message_callback_fn callback,
+    zenoh_handle_imw_message_query_on_done_fn on_done, uintptr_t user_context,
+    uint64_t timeout_ms);
 
 #ifdef __cplusplus
 }  // extern "C"

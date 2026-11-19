@@ -14,12 +14,15 @@
 
 #include "intrinsic/platform/pubsub/golang/pubsub_c.h"
 
+#include <atomic>
 #include <cstdint>
 #include <cstring>
 #include <memory>
 #include <optional>
 
 #include "absl/base/attributes.h"
+#include "absl/base/thread_annotations.h"
+#include "absl/synchronization/mutex.h"
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_config.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_handle.h"
@@ -88,6 +91,61 @@ void MessageSubscriptionTrampoline(
   const UnpackedMessageMetadata unpacked = UnpackMessageMetadata(metadata);
   ctx->callback(keyexpr, bytes, bytes_len, unpacked.message_kind,
                 unpacked.encoding, ctx->user_context);
+}
+
+// Bridges ZenohHandle::imw_query_messages (`void*` + `const
+// imw_message_metadata_t*`) into CGo `uintptr_t` handles and unpacked
+// `(message_kind, encoding)` callbacks.
+//
+// Zenoh may invoke the reply closure destructor
+// (`MessageQueryOnDoneTrampoline`) synchronously inside `imw_query_messages` on
+// either success or `z_get` failure. `in_flight` and `closure_dropped` (guarded
+// by `mu`) defer `on_done` until `imw_query_messages` returns `IMW_OK`
+// (suppressing `on_done` if `z_get` failed), while `pending_owners` (`2`)
+// splits lifetime between `ZenohHandleImwQueryMessages` and
+// `MessageQueryOnDoneTrampoline` so whichever finishes second deletes `ctx` (or
+// `ZenohHandleImwQueryMessages` deletes `ctx` directly if registration failed
+// without dropping the closure).
+struct MessageQueryContext {
+  zenoh_handle_imw_query_message_callback_fn callback = nullptr;
+  zenoh_handle_imw_message_query_on_done_fn on_done = nullptr;
+  uintptr_t user_context = 0;
+  absl::Mutex mu;
+  bool in_flight ABSL_GUARDED_BY(mu) = true;
+  bool closure_dropped ABSL_GUARDED_BY(mu) = false;
+  std::atomic<int> pending_owners{2};
+};
+
+void MessageQueryTrampoline(const char* keyexpr, const void* response_bytes,
+                            const size_t response_bytes_len,
+                            const intrinsic::imw_message_metadata_t* metadata,
+                            void* user_context) {
+  auto* ctx = static_cast<MessageQueryContext*>(user_context);
+  if (ctx == nullptr || ctx->callback == nullptr) {
+    return;
+  }
+  const UnpackedMessageMetadata unpacked = UnpackMessageMetadata(metadata);
+  ctx->callback(keyexpr, response_bytes, response_bytes_len,
+                unpacked.message_kind, unpacked.encoding, ctx->user_context);
+}
+
+void MessageQueryOnDoneTrampoline(const char* keyexpr, void* user_context) {
+  auto* ctx = static_cast<MessageQueryContext*>(user_context);
+  if (ctx == nullptr) {
+    return;
+  }
+  bool invoke_now = false;
+  {
+    absl::MutexLock lock(&ctx->mu);
+    ctx->closure_dropped = true;
+    invoke_now = !ctx->in_flight;
+  }
+  if (invoke_now && ctx->on_done != nullptr) {
+    ctx->on_done(keyexpr, ctx->user_context);
+  }
+  if (ctx->pending_owners.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    delete ctx;
+  }
 }
 
 }  // namespace
@@ -347,4 +405,43 @@ ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwSet(void* handle, const char* keyexpr,
   intrinsic::ZenohHandle* zenoh_handle =
       static_cast<intrinsic::ZenohHandle*>(handle);
   return zenoh_handle->imw_set(keyexpr, bytes, bytes_len);
+}
+
+ABSL_ATTRIBUTE_UNUSED int ZenohHandleImwQueryMessages(
+    void* handle, const char* keyexpr,
+    zenoh_handle_imw_query_message_callback_fn callback,
+    zenoh_handle_imw_message_query_on_done_fn on_done, uintptr_t user_context,
+    uint64_t timeout_ms) {
+  if (handle == nullptr || keyexpr == nullptr || callback == nullptr) {
+    return intrinsic::IMW_ERROR;
+  }
+  auto* zenoh_handle = static_cast<intrinsic::ZenohHandle*>(handle);
+  intrinsic::imw_query_options_t options{
+      .timeout_ms = timeout_ms,
+      .call_ros_service = false,
+  };
+  auto* ctx = new MessageQueryContext;
+  ctx->callback = callback;
+  ctx->on_done = on_done;
+  ctx->user_context = user_context;
+  const int ret = zenoh_handle->imw_query_messages(
+      keyexpr, MessageQueryTrampoline, MessageQueryOnDoneTrampoline,
+      /*query_payload=*/nullptr, /*query_payload_len=*/0, ctx, &options);
+  bool closure_dropped = false;
+  {
+    absl::MutexLock lock(&ctx->mu);
+    ctx->in_flight = false;
+    closure_dropped = ctx->closure_dropped;
+  }
+  if (ret == intrinsic::IMW_OK && closure_dropped && ctx->on_done != nullptr) {
+    ctx->on_done(keyexpr, ctx->user_context);
+  }
+  // When imw_query_messages fails before registering reply_closure,
+  // MessageQueryOnDoneTrampoline will never run, so delete ctx directly.
+  const bool closure_owns_ctx = (ret == intrinsic::IMW_OK) || closure_dropped;
+  if (!closure_owns_ctx ||
+      ctx->pending_owners.fetch_sub(1, std::memory_order_acq_rel) == 1) {
+    delete ctx;
+  }
+  return ret;
 }
