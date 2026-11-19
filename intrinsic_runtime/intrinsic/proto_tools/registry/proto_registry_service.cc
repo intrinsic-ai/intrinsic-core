@@ -31,6 +31,7 @@
 #include "intrinsic_runtime/intrinsic/proto_tools/registry/file_descriptor_set_name.h"
 #include "intrinsic_runtime/intrinsic/proto_tools/registry/resolver.h"
 #include "intrinsic/proto_tools/proto/proto_registry.pb.h"
+#include "intrinsic/proto_tools/proto/proto_registry_internal.pb.h"
 #include "intrinsic/util/proto/parsed_type_url.h"
 #include "intrinsic/util/proto/type_url.h"
 #include "intrinsic/util/status/extended_status.pb.h"
@@ -42,6 +43,7 @@ namespace intrinsic::proto_registry {
 
 using intrinsic_proto::proto_registry::DetermineCompatibilityRequest;
 using intrinsic_proto::proto_registry::DetermineCompatibilityResponse;
+using intrinsic_proto::proto_registry::internal::FileDescriptorSetNameProto;
 
 ProtoRegistryService::ProtoRegistryService(
     std::shared_ptr<ProtoResolverMap> resolver)
@@ -77,8 +79,10 @@ ProtoRegistryService::GetFileDescriptorSet(
         name, FileDescriptorSetNameForTypeUrlPrefix(type_url_prefix));
   } else {  // requested_name is set
     name = FileDescriptorSetName(requested_name);
-    INTR_ASSIGN_OR_RETURN(type_url_prefix,
-                          TypeUrlPrefixForFileDescriptorSetName(name));
+    FileDescriptorSetNameProto unobfuscated_name;
+    INTR_ASSIGN_OR_RETURN(unobfuscated_name,
+                          UnobfuscateFileDescriptorSetName(name));
+    type_url_prefix = unobfuscated_name.type_url_prefix();
   }
 
   // Resolve only requires a parsed type URL prefix, not a full type URL.

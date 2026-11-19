@@ -87,6 +87,7 @@ cc_library(
     srcs = ["proto_registry_service.cc"],
     hdrs = ["proto_registry_service.h"],
     deps = [
+        "//intrinsic_runtime/intrinsic/proto_tools/proto:proto_registry_internal_cc_proto",
         "//intrinsic_runtime/intrinsic/proto_tools/registry:file_descriptor_set_name",
         "//intrinsic_runtime/intrinsic/proto_tools/registry:resolver",
         "//intrinsic_sdk/intrinsic/util/proto:parsed_type_url",

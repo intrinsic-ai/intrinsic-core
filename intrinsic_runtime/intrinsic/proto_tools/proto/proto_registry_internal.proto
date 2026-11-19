@@ -20,6 +20,9 @@ option go_package = "intrinsic/proto_tools/proto/proto_registry_internal_go_prot
 
 // Internal message representing a file descriptor set name. Can be used, e.g.,
 // for obfuscation.
-message FileDescriptorSetName {
-  string type_url_prefix = 7;
+message FileDescriptorSetNameProto {
+  oneof identifier {
+    string type_url_prefix = 7;
+    string type_url = 8;
+  }
 }

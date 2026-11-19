@@ -15,10 +15,10 @@
 #ifndef INTRINSIC_PROTO_TOOLS_REGISTRY_FILE_DESCRIPTOR_SET_NAME_H_
 #define INTRINSIC_PROTO_TOOLS_REGISTRY_FILE_DESCRIPTOR_SET_NAME_H_
 
-#include <string>
 #include <string_view>
 
 #include "absl/status/statusor.h"
+#include "intrinsic/proto_tools/proto/proto_registry_internal.pb.h"
 #include "intrinsic/util/string_type.h"
 
 namespace intrinsic::proto_registry {
@@ -34,9 +34,15 @@ INTRINSIC_DEFINE_STRING_TYPE(FileDescriptorSetName);
 absl::StatusOr<FileDescriptorSetName> FileDescriptorSetNameForTypeUrlPrefix(
     std::string_view type_url_prefix);
 
-// Converts an obfuscated FileDescriptorSetName back to a type URL prefix.
-absl::StatusOr<std::string> TypeUrlPrefixForFileDescriptorSetName(
-    const FileDescriptorSetName& name);
+// Returns an obfuscated FileDescriptorSetName for the given type URL.
+absl::StatusOr<FileDescriptorSetName> FileDescriptorSetNameForTypeUrl(
+    std::string_view type_url);
+
+// Converts an obfuscated FileDescriptorSetName back to its internal proto
+// representation, which holds either a type URL prefix or a type URL.
+absl::StatusOr<
+    intrinsic_proto::proto_registry::internal::FileDescriptorSetNameProto>
+UnobfuscateFileDescriptorSetName(const FileDescriptorSetName& name);
 
 }  // namespace intrinsic::proto_registry
 

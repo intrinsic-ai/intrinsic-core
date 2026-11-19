@@ -25,14 +25,15 @@
 
 namespace intrinsic::proto_registry {
 
-// Obfuscates the given type URL prefix following the scheme proposed by
+using ::intrinsic_proto::proto_registry::internal::FileDescriptorSetNameProto;
+
+namespace {
+
+// Obfuscates the given internal proto following the scheme proposed by
 // go/aip/158 for page tokens: store content in an internal proto and return the
 // serialized proto, base-64 encoded.
-absl::StatusOr<FileDescriptorSetName> FileDescriptorSetNameForTypeUrlPrefix(
-    std::string_view type_url_prefix) {
-  intrinsic_proto::proto_registry::internal::FileDescriptorSetName msg;
-  msg.set_type_url_prefix(type_url_prefix);
-
+absl::StatusOr<FileDescriptorSetName> Obfuscate(
+    const FileDescriptorSetNameProto& msg) {
   std::string msg_bytes;
   if (!msg.SerializeToString(&msg_bytes)) {
     return absl::InvalidArgumentError(absl::StrFormat(
@@ -42,7 +43,23 @@ absl::StatusOr<FileDescriptorSetName> FileDescriptorSetNameForTypeUrlPrefix(
   return FileDescriptorSetName(absl::WebSafeBase64Escape(msg_bytes));
 }
 
-absl::StatusOr<std::string> TypeUrlPrefixForFileDescriptorSetName(
+}  // namespace
+
+absl::StatusOr<FileDescriptorSetName> FileDescriptorSetNameForTypeUrlPrefix(
+    std::string_view type_url_prefix) {
+  FileDescriptorSetNameProto msg;
+  msg.set_type_url_prefix(type_url_prefix);
+  return Obfuscate(msg);
+}
+
+absl::StatusOr<FileDescriptorSetName> FileDescriptorSetNameForTypeUrl(
+    std::string_view type_url) {
+  FileDescriptorSetNameProto msg;
+  msg.set_type_url(type_url);
+  return Obfuscate(msg);
+}
+
+absl::StatusOr<FileDescriptorSetNameProto> UnobfuscateFileDescriptorSetName(
     const FileDescriptorSetName& name) {
   std::string msg_bytes;
   if (!absl::WebSafeBase64Unescape(name.value(), &msg_bytes)) {
@@ -50,13 +67,13 @@ absl::StatusOr<std::string> TypeUrlPrefixForFileDescriptorSetName(
         "cannot decode file descriptor set name: %s", name.value()));
   }
 
-  intrinsic_proto::proto_registry::internal::FileDescriptorSetName msg;
+  FileDescriptorSetNameProto msg;
   if (!msg.ParseFromString(msg_bytes)) {
     return absl::InvalidArgumentError(
         absl::StrFormat("invalid file descriptor set name: %s", name.value()));
   }
 
-  return msg.type_url_prefix();
+  return msg;
 }
 
 }  // namespace intrinsic::proto_registry
