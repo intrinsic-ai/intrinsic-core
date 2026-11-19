@@ -47,11 +47,33 @@ LoadFileDescriptorSetFromRunfiles(std::string_view runfiles_path) {
       PathResolver::ResolveRunfilesPath(runfiles_path));
 }
 
+// Adds every file of `fdset` to `db` without copying (via AddUnowned).
+// `fdset` must outlive `db`.
+absl::Status PopulateDatabase(const google::protobuf::FileDescriptorSet& fdset,
+                              google::protobuf::SimpleDescriptorDatabase& db) {
+  for (const google::protobuf::FileDescriptorProto& file : fdset.file()) {
+    if (!db.AddUnowned(&file)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Failed to add descriptor '%s' to descriptor database", file.name()));
+    }
+  }
+  return absl::OkStatus();
+}
+
 }  // namespace
 
 LoadedDescriptorPool::LoadedDescriptorPool(
     google::protobuf::FileDescriptorSet fdset)
-    : file_descriptor_set_(std::move(fdset)),
+    : owned_file_descriptor_set_(std::move(fdset)),
+      file_descriptor_set_(&owned_file_descriptor_set_),
+      descriptor_db_(
+          std::make_unique<google::protobuf::SimpleDescriptorDatabase>()),
+      descriptor_pool_(std::make_unique<google::protobuf::DescriptorPool>(
+          descriptor_db_.get())) {}
+
+LoadedDescriptorPool::LoadedDescriptorPool(
+    const google::protobuf::FileDescriptorSet* external_fdset)
+    : file_descriptor_set_(external_fdset),
       descriptor_db_(
           std::make_unique<google::protobuf::SimpleDescriptorDatabase>()),
       descriptor_pool_(std::make_unique<google::protobuf::DescriptorPool>(
@@ -61,17 +83,20 @@ absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>>
 LoadedDescriptorPool::Create(google::protobuf::FileDescriptorSet fdset) {
   // Move the fdset into its final destination first. That allows us to use
   // `AddUnowned` later, as we are sure file pointers will stay valid
-  // throughout the lifetime of the descriptor pool.
+  // throughout the lifetime of the descriptor pool. The pool only queries the
+  // database lazily, so it is fine to populate the database after the pool has
+  // been created.
   auto loaded = absl::WrapUnique(new LoadedDescriptorPool(std::move(fdset)));
+  INTR_RETURN_IF_ERROR(
+      PopulateDatabase(*loaded->file_descriptor_set_, *loaded->descriptor_db_));
+  return loaded;
+}
 
-  for (const google::protobuf::FileDescriptorProto& file :
-       loaded->file_descriptor_set_.file()) {
-    if (!loaded->descriptor_db_->AddUnowned(&file)) {
-      return absl::InvalidArgumentError(absl::StrFormat(
-          "Failed to add descriptor '%s' to descriptor database", file.name()));
-    }
-  }
-
+absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>>
+LoadedDescriptorPool::CreateUnowned(
+    const google::protobuf::FileDescriptorSet& fdset) {
+  auto loaded = absl::WrapUnique(new LoadedDescriptorPool(&fdset));
+  INTR_RETURN_IF_ERROR(PopulateDatabase(fdset, *loaded->descriptor_db_));
   return loaded;
 }
 

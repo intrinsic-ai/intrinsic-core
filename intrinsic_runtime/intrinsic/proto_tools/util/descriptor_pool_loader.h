@@ -35,6 +35,16 @@ class LoadedDescriptorPool {
   static absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>> Create(
       google::protobuf::FileDescriptorSet fdset);
 
+  // Creates a LoadedDescriptorPool that references `fdset` without copying it.
+  // `fdset` must outlive the returned LoadedDescriptorPool and must not be
+  // modified while the LoadedDescriptorPool is alive.
+  static absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>> CreateUnowned(
+      const google::protobuf::FileDescriptorSet& fdset);
+
+  // Forbid temporary objects.
+  static absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>> CreateUnowned(
+      google::protobuf::FileDescriptorSet&& fdset) = delete;
+
   // Creates a LoadedDescriptorPool by loading a FileDescriptorSet from a disk
   // path.
   static absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>> LoadFromPath(
@@ -52,7 +62,7 @@ class LoadedDescriptorPool {
   LoadedDescriptorPool& operator=(LoadedDescriptorPool&&) = delete;
 
   const google::protobuf::FileDescriptorSet& file_descriptor_set() const {
-    return file_descriptor_set_;
+    return *file_descriptor_set_;
   }
 
   google::protobuf::DescriptorDatabase* descriptor_db() {
@@ -70,10 +80,16 @@ class LoadedDescriptorPool {
   }
 
  private:
-  explicit LoadedDescriptorPool(
-      google::protobuf::FileDescriptorSet file_descriptor_set);
+  explicit LoadedDescriptorPool(google::protobuf::FileDescriptorSet fdset);
 
-  google::protobuf::FileDescriptorSet file_descriptor_set_;
+  explicit LoadedDescriptorPool(
+      const google::protobuf::FileDescriptorSet* external_fdset);
+
+  // Only set if loaded pool owns the file descriptor set.
+  google::protobuf::FileDescriptorSet owned_file_descriptor_set_;
+  // Points to 'owned_file_descriptor_set_' or an externally owned instance.
+  const google::protobuf::FileDescriptorSet* file_descriptor_set_;
+
   std::unique_ptr<google::protobuf::SimpleDescriptorDatabase> descriptor_db_;
   std::unique_ptr<google::protobuf::DescriptorPool> descriptor_pool_;
 };
