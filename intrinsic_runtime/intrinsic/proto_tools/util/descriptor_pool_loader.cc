@@ -15,16 +15,17 @@
 #include "intrinsic_runtime/intrinsic/proto_tools/util/descriptor_pool_loader.h"
 
 #include <memory>
+#include <string_view>
 #include <utility>
 
 #include "absl/memory/memory.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
+#include "absl/strings/str_format.h"
 #include "google/protobuf/descriptor.h"
 #include "google/protobuf/descriptor.pb.h"
 #include "google/protobuf/descriptor_database.h"
 #include "intrinsic/util/path_resolver/path_resolver.h"
-#include "intrinsic/util/proto/descriptors.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "ortools/base/file.h"
 
@@ -33,7 +34,7 @@ namespace intrinsic::executive {
 namespace {
 
 absl::StatusOr<google::protobuf::FileDescriptorSet>
-LoadFileDescriptorSetFromPath(absl::string_view file_path) {
+LoadFileDescriptorSetFromPath(std::string_view file_path) {
   google::protobuf::FileDescriptorSet fdset;
   INTR_RETURN_IF_ERROR(
       file::GetBinaryProto(file_path, &fdset, file::Defaults()));
@@ -41,7 +42,7 @@ LoadFileDescriptorSetFromPath(absl::string_view file_path) {
 }
 
 absl::StatusOr<google::protobuf::FileDescriptorSet>
-LoadFileDescriptorSetFromRunfiles(absl::string_view runfiles_path) {
+LoadFileDescriptorSetFromRunfiles(std::string_view runfiles_path) {
   return LoadFileDescriptorSetFromPath(
       PathResolver::ResolveRunfilesPath(runfiles_path));
 }
@@ -49,33 +50,40 @@ LoadFileDescriptorSetFromRunfiles(absl::string_view runfiles_path) {
 }  // namespace
 
 LoadedDescriptorPool::LoadedDescriptorPool(
-    google::protobuf::FileDescriptorSet fdset,
-    std::unique_ptr<google::protobuf::SimpleDescriptorDatabase> descriptor_db,
-    std::unique_ptr<google::protobuf::DescriptorPool> descriptor_pool)
+    google::protobuf::FileDescriptorSet fdset)
     : file_descriptor_set_(std::move(fdset)),
-      descriptor_db_(std::move(descriptor_db)),
-      descriptor_pool_(std::move(descriptor_pool)) {}
+      descriptor_db_(
+          std::make_unique<google::protobuf::SimpleDescriptorDatabase>()),
+      descriptor_pool_(std::make_unique<google::protobuf::DescriptorPool>(
+          descriptor_db_.get())) {}
 
 absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>>
 LoadedDescriptorPool::Create(google::protobuf::FileDescriptorSet fdset) {
-  auto db = std::make_unique<google::protobuf::SimpleDescriptorDatabase>();
-  INTR_RETURN_IF_ERROR(PopulateDescriptorDatabase(db.get(), fdset));
+  // Move the fdset into its final destination first. That allows us to use
+  // `AddUnowned` later, as we are sure file pointers will stay valid
+  // throughout the lifetime of the descriptor pool.
+  auto loaded = absl::WrapUnique(new LoadedDescriptorPool(std::move(fdset)));
 
-  auto pool = std::make_unique<google::protobuf::DescriptorPool>(db.get());
+  for (const google::protobuf::FileDescriptorProto& file :
+       loaded->file_descriptor_set_.file()) {
+    if (!loaded->descriptor_db_->AddUnowned(&file)) {
+      return absl::InvalidArgumentError(absl::StrFormat(
+          "Failed to add descriptor '%s' to descriptor database", file.name()));
+    }
+  }
 
-  return absl::WrapUnique(new LoadedDescriptorPool(
-      std::move(fdset), std::move(db), std::move(pool)));
+  return loaded;
 }
 
 absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>>
-LoadedDescriptorPool::LoadFromPath(absl::string_view file_path) {
+LoadedDescriptorPool::LoadFromPath(std::string_view file_path) {
   INTR_ASSIGN_OR_RETURN(google::protobuf::FileDescriptorSet fdset,
                         LoadFileDescriptorSetFromPath(file_path));
   return Create(std::move(fdset));
 }
 
 absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>>
-LoadedDescriptorPool::LoadFromRunfiles(absl::string_view runfiles_path) {
+LoadedDescriptorPool::LoadFromRunfiles(std::string_view runfiles_path) {
   INTR_ASSIGN_OR_RETURN(google::protobuf::FileDescriptorSet fdset,
                         LoadFileDescriptorSetFromRunfiles(runfiles_path));
   return Create(std::move(fdset));

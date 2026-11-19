@@ -22,11 +22,11 @@ cc_library(
     hdrs = ["descriptor_pool_loader.h"],
     deps = [
         "//intrinsic_sdk/intrinsic/util/path_resolver",
-        "//intrinsic_sdk/intrinsic/util/proto:descriptors",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/memory",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/strings:str_format",
         "@com_google_protobuf//:protobuf",
         "@or_tools//ortools/base:file",
     ],

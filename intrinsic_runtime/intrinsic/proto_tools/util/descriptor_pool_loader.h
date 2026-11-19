@@ -16,6 +16,7 @@
 #define INTRINSIC_EXECUTIVE_TOOLS_DESCRIPTOR_POOL_LOADER_H_
 
 #include <memory>
+#include <string_view>
 
 #include "absl/status/statusor.h"
 #include "google/protobuf/descriptor.h"
@@ -37,12 +38,12 @@ class LoadedDescriptorPool {
   // Creates a LoadedDescriptorPool by loading a FileDescriptorSet from a disk
   // path.
   static absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>> LoadFromPath(
-      absl::string_view file_path);
+      std::string_view file_path);
 
   // Creates a LoadedDescriptorPool by loading a FileDescriptorSet from Bazel
   // runfiles.
   static absl::StatusOr<std::unique_ptr<LoadedDescriptorPool>> LoadFromRunfiles(
-      absl::string_view runfiles_path);
+      std::string_view runfiles_path);
 
   LoadedDescriptorPool(const LoadedDescriptorPool&) = delete;
   LoadedDescriptorPool& operator=(const LoadedDescriptorPool&) = delete;
@@ -70,10 +71,7 @@ class LoadedDescriptorPool {
 
  private:
   explicit LoadedDescriptorPool(
-      google::protobuf::FileDescriptorSet file_descriptor_set_,
-      std::unique_ptr<google::protobuf::SimpleDescriptorDatabase>
-          descriptor_db_,
-      std::unique_ptr<google::protobuf::DescriptorPool> descriptor_pool_);
+      google::protobuf::FileDescriptorSet file_descriptor_set);
 
   google::protobuf::FileDescriptorSet file_descriptor_set_;
   std::unique_ptr<google::protobuf::SimpleDescriptorDatabase> descriptor_db_;
