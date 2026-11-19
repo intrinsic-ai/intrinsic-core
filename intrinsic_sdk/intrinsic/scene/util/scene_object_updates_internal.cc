@@ -207,6 +207,13 @@ absl::StatusOr<SceneObject> ProcessSceneObjectUpdate(
         absl::StrCat("Entity not found: ", update.entity_name()));
   }
 
+  if (entity_iter->has_joint()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Entity '", update.entity_name(),
+        "' is a joint. EntityPoseUpdate cannot be applied to joints; use "
+        "UpdateJointsRequest instead."));
+  }
+
   // Actually do the update now.
   *entity_iter->mutable_parent_t_this() = update.parent_t_this();
   return std::move(object);
