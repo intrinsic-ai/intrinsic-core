@@ -156,7 +156,6 @@ static constexpr char kPlannedTrajectoryTopicName[] = "planned_trajectory";
 // Default maximum number of inverse kinematics solutions to compute if
 // `max_num_solutions` is not set (or set to 0) in an IK request.
 constexpr int kDefaultMaxNumIkSolutions = 8;
-
 using intrinsic_proto::motion_planning::v1::BatchCheckRequest;
 using intrinsic_proto::motion_planning::v1::BatchCollisionQuery;
 using intrinsic_proto::motion_planning::v1::BatchCollisionQueryResult;
@@ -520,7 +519,6 @@ void ExecuteBatchCollisionQueries(
         proxy, robot, default_collision_check_spacing, query);
   }
 }
-
 }  // namespace
 
 void FromProto(
@@ -645,15 +643,18 @@ MotionPlannerService::Create(
         plan_trajectory_nonvolatile_cache,
     const MotionPlannerServiceConfig& mps_config,
     std::optional<std::string> mps_asset_version,
-    const StructuredLoggingClient* logger_client) {
-  INTR_ASSIGN_OR_RETURN(auto motion_planner,
+    const StructuredLoggingClient* logger_client
+) {
+  INTR_ASSIGN_OR_RETURN(std::unique_ptr<MotionPlanner> motion_planner,
                         MotionPlanner::Create(mps_config.flags));
 
   return absl::WrapUnique(new MotionPlannerService(
       object_world_service, geometry_library, std::move(motion_planner),
       mps_asset_id_name, std::move(plan_trajectory_cache),
       std::move(plan_trajectory_nonvolatile_cache), mps_config,
-      mps_asset_version, logger_client));
+      mps_asset_version,
+      logger_client
+      ));
 }
 
 MotionPlannerService::MotionPlannerService(
@@ -667,7 +668,8 @@ MotionPlannerService::MotionPlannerService(
         plan_trajectory_nonvolatile_cache,
     const MotionPlannerServiceConfig& mps_config,
     std::optional<std::string> mps_asset_version,
-    const StructuredLoggingClient* logger_client)
+    const StructuredLoggingClient* logger_client
+    )
     : object_world_service_(object_world_service),
       geometry_library_(geometry_library),
       mps_config_(mps_config),

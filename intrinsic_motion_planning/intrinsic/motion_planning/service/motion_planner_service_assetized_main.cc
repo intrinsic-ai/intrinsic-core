@@ -238,7 +238,9 @@ int MainImpl() {
           object_world_service.get(), geo_lib.get(),
           /*mps_asset_id_name=*/kMotionPlannerServiceName, std::move(cache),
           std::move(plan_trajectory_nonvolatile_cache), mps_config,
-          installed_mps_asset_version, logger_client.get()));
+          installed_mps_asset_version,
+          logger_client.get()
+          ));
 
   if (logger_stub != nullptr) {
     if (auto s = intrinsic::data_logger::StartUpIntrinsicLoggerViaStub(

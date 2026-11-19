@@ -88,7 +88,6 @@ struct MotionPlannerServiceConfig {
   // set. If false, such `PlanTrajectory`/`PlanPath` requests fail with
   // FAILED_PRECONDITION.
   bool enable_motion_planner_service_swept_volumes = false;
-
   // Threshold of max_diff_in_rad_for_starting_robot_configuration used to check
   // if a cached PlanTrajectory entry is valid.
   double max_diff_in_rad_for_starting_robot_configuration_threshold = 0.002;
@@ -138,7 +137,8 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
           plan_trajectory_nonvolatile_cache = nullptr,
       const MotionPlannerServiceConfig& mps_config = {},
       std::optional<std::string> mps_asset_version = std::nullopt,
-      const StructuredLoggingClient* logger_client = nullptr);
+      const StructuredLoggingClient* logger_client = nullptr
+  );
 
   ~MotionPlannerService() override {
     if (plan_trajectory_cache_ != nullptr) plan_trajectory_cache_->ClearCache();
@@ -201,7 +201,8 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
           plan_trajectory_nonvolatile_cache = nullptr,
       const MotionPlannerServiceConfig& mps_config = {},
       std::optional<std::string> mps_asset_version = std::nullopt,
-      const StructuredLoggingClient* logger_client = nullptr);
+      const StructuredLoggingClient* logger_client = nullptr
+  );
 
   // Returns both the initial World and its proto from the World Service with
   // ID `world_id`.

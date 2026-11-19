@@ -22,10 +22,15 @@
 #include <memory>
 #include <string>
 #include <string_view>
+#include <vector>
 
+#include "absl/base/thread_annotations.h"
+#include "absl/container/btree_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "google/protobuf/any.pb.h"
 #include "google/protobuf/empty.pb.h"
 #include "grpcpp/server.h"
 #include "intrinsic/geometry/storage/geo_cache.h"
@@ -65,6 +70,7 @@ inline const std::initializer_list<std::string> kSaveLoadMotionFieldIgnoreList =
      "lock_motion_id"};
 inline const std::initializer_list<std::string>
     kSaveLoadMotionRepeatedFieldOrderingIgnoreList = {
+        "swept_volumes.geometry",
         "lock_motion_id"};
 
 // If the flag `set_infinite_jerk_limits` is true, this function sets the jerk
@@ -82,6 +88,30 @@ absl::Status SetCartesianLimitsInWorld(World& world,
 // Cartesian limits for "agilus-04" and "iris622".
 absl::StatusOr<WorldHashMap<std::string, World>> CreateDefault4RobotsCubeWorld(
     bool set_infinite_jerk_limits = true);
+
+// `FakeKeyValueStore` subclass that tracks currently stored keys so tests can
+// inspect active ring-buffer slots without coupling to internal map storage.
+class InspectableFakeKeyValueStore final : public FakeKeyValueStore {
+ public:
+  using FakeKeyValueStore::FakeKeyValueStore;
+  using KeyValueStore::Set;
+  using KeyValueStore::SetWithVerification;
+
+  absl::Status Set(absl::string_view key,
+                   const google::protobuf::Any& value) override;
+
+  absl::Status SetWithVerification(
+      absl::string_view key, const google::protobuf::Any& value,
+      const SetWithVerificationOptions& options) override;
+
+  absl::Status Delete(absl::string_view key) override;
+
+  std::vector<std::string> ListKeys() const;
+
+ private:
+  mutable absl::Mutex mutex_;
+  absl::btree_set<std::string> keys_ ABSL_GUARDED_BY(mutex_);
+};
 
 class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
  public:
@@ -117,6 +147,7 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
           },
       const std::initializer_list<std::string>&
           repeated_field_ordering_ignore_list = {
+              "swept_volumes.geometry"
           });
 
   absl::StatusOr<intrinsic_proto::motion_planning::v1::PathPlanningResponse>
@@ -128,6 +159,7 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
                },
            const std::initializer_list<std::string>&
                repeated_field_ordering_ignore_list = {
+                   "swept_volumes.geometry"
                });
   absl::StatusOr<intrinsic_proto::motion_planning::v1::IkResponse> ComputeIk(
       const intrinsic_proto::motion_planning::v1::IkRequest& request);
@@ -175,7 +207,7 @@ class MotionPlannerServiceBaseTest : public MotionPlannerServiceBaseTestHelper {
       cas_service_stub_;
   // Declared before `fake_world_service_`, `fake_world_service_geo_library_`,
   // and `motion_planner_service_` so they outlive all consumers.
-  std::shared_ptr<FakeKeyValueStore> fake_kv_store_;
+  std::shared_ptr<InspectableFakeKeyValueStore> fake_kv_store_;
   std::unique_ptr<geo::GeometryFingerprintCache> geo_cache_;
   std::unique_ptr<FakeWorldService> fake_world_service_;
   std::shared_ptr<GeometryLibrary> fake_world_service_geo_library_;

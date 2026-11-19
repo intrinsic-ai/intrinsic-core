@@ -24,6 +24,7 @@
 #include <string>
 #include <string_view>
 #include <utility>
+#include <vector>
 
 #include "absl/log/check.h"
 #include "absl/log/log.h"
@@ -33,6 +34,8 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
+#include "google/protobuf/any.pb.h"
 #include "google/protobuf/empty.pb.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/server_builder.h"
@@ -64,6 +67,7 @@
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.h"
 #include "intrinsic/motion_planning/skills/motion_planning_util.h"
 #include "intrinsic/platform/pubsub/fake_kvstore.h"
+#include "intrinsic/platform/pubsub/kvstore.h"
 #include "intrinsic/skills/internal/world_service_utils.h"
 #include "intrinsic/storage/content_addressable_storage/proto/cas_service.grpc.pb.h"
 #include "intrinsic/storage/content_addressable_storage/testing/in_memory_cas_service.h"
@@ -171,6 +175,41 @@ absl::StatusOr<WorldHashMap<std::string, World>> CreateDefault4RobotsCubeWorld(
   return worlds;
 }
 
+absl::Status InspectableFakeKeyValueStore::Set(
+    absl::string_view key, const google::protobuf::Any& value) {
+  absl::MutexLock lock(&mutex_);
+  INTR_RETURN_IF_ERROR(FakeKeyValueStore::Set(key, value))
+      << "Failed to store key '" << key << "' in FakeKeyValueStore.";
+  keys_.emplace(key);
+  return absl::OkStatus();
+}
+
+absl::Status InspectableFakeKeyValueStore::SetWithVerification(
+    absl::string_view key, const google::protobuf::Any& value,
+    const SetWithVerificationOptions& /*options*/) {
+  // Call qualified `FakeKeyValueStore::Set` directly rather than
+  // `FakeKeyValueStore::SetWithVerification`, which dispatches virtually back
+  // into `Set()` and would re-enter `mutex_`.
+  absl::MutexLock lock(&mutex_);
+  INTR_RETURN_IF_ERROR(FakeKeyValueStore::Set(key, value))
+      << "Failed to store key '" << key << "' in FakeKeyValueStore.";
+  keys_.emplace(key);
+  return absl::OkStatus();
+}
+
+absl::Status InspectableFakeKeyValueStore::Delete(absl::string_view key) {
+  absl::MutexLock lock(&mutex_);
+  INTR_RETURN_IF_ERROR(FakeKeyValueStore::Delete(key))
+      << "Failed to delete key '" << key << "' from FakeKeyValueStore.";
+  keys_.erase(key);
+  return absl::OkStatus();
+}
+
+std::vector<std::string> InspectableFakeKeyValueStore::ListKeys() const {
+  absl::MutexLock lock(&mutex_);
+  return std::vector<std::string>(keys_.begin(), keys_.end());
+}
+
 void MotionPlannerServiceBaseTest::Init(
     bool use_nonvolatile_cache, MotionPlannerFlags extra_flags,
     WorldHashMap<std::string, World> worlds_by_name,
@@ -210,7 +249,7 @@ void MotionPlannerServiceBaseTest::Init(
               ContentAddressableStorageService::NewStub(
                   geometry_and_cas_server_->InProcessChannel(
                       connect::UnlimitedMessageSizeGrpcChannelArgs())));
-  fake_kv_store_ = std::make_shared<FakeKeyValueStore>();
+  fake_kv_store_ = std::make_shared<InspectableFakeKeyValueStore>();
   geo_cache_ = std::make_unique<geo::GeometryFingerprintCache>();
   ASSERT_OK_AND_ASSIGN(
       std::unique_ptr<GeometryLibrary> geo_lib,
@@ -262,7 +301,9 @@ void MotionPlannerServiceBaseTest::Init(
               .organization_id = std::string(kTestOrgId),
               .flags = extra_flags,
           },
-          /*mps_asset_version=*/std::nullopt, logger_client));
+          /*mps_asset_version=*/std::nullopt,
+          logger_client
+          ));
 
   server_ = grpc::ServerBuilder()
                 .RegisterService(motion_planner_service_.get())
@@ -302,7 +343,9 @@ void MotionPlannerServiceBaseTest::Init(
               .flags = extra_flags,
           },
           /*mps_asset_version=*/
-          std::string(kOtherMotionPlannerServiceAssetVersion), logger_client));
+          std::string(kOtherMotionPlannerServiceAssetVersion),
+          logger_client
+          ));
 
   mps_with_asset_version_server_ =
       grpc::ServerBuilder()

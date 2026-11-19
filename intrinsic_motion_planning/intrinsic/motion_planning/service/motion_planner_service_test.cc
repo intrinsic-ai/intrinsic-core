@@ -20,6 +20,7 @@
 #include <algorithm>
 #include <cmath>
 #include <cstddef>
+#include <cstdint>
 #include <initializer_list>
 #include <limits>
 #include <memory>
@@ -29,6 +30,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_set.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/log/scoped_mock_log.h"
@@ -39,8 +41,10 @@
 #include "absl/strings/match.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/barrier.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
+#include "absl/types/span.h"
 #include "google/protobuf/empty.pb.h"
 #include "grpcpp/client_context.h"
 #include "grpcpp/server_builder.h"
@@ -49,6 +53,12 @@
 #include "internal/testing.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/eigenmath/types.h"
+#include "intrinsic/geometry/api/exact_geometry.h"
+#include "intrinsic/geometry/api/geometry.h"
+#include "intrinsic/geometry/proto/v1/geometry.pb.h"
+#include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
+#include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
+#include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/icon/proto/joint_trajectory_conversion.h"
 #include "intrinsic/kinematics/types/cartesian_limits.h"
@@ -86,6 +96,7 @@
 #include "intrinsic/util/proto/type_url.h"
 #include "intrinsic/util/status/status_conversion_grpc.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/util/thread/thread.h"
 #include "intrinsic/world/collision/collision_checker.h"
 #include "intrinsic/world/collision/util/make_collision_settings.h"
 #include "intrinsic/world/component/robot_component.h"
@@ -99,6 +110,7 @@
 #include "intrinsic/world/objects/object_world_client.h"
 #include "intrinsic/world/objects/object_world_ids.h"
 #include "intrinsic/world/objects/world_object.h"
+#include "intrinsic/world/proto/geometry_component.pb.h"
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/proto/object_world_service.pb.h"
 #include "intrinsic/world/service/objects/object_world_converter.h"
@@ -161,6 +173,7 @@ TEST(MotionPlannerServiceConfigProtoTest, FromProto) {
   EXPECT_DOUBLE_EQ(
       config.max_diff_in_rad_for_starting_robot_configuration_threshold, 0.005);
 }
+
 class MotionPlannerServiceWithSweptVolumesDisabledTest
     : public MotionPlannerServiceBaseTest,
       public ::testing::Test {
