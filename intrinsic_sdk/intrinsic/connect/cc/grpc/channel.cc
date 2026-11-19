@@ -133,7 +133,7 @@ absl::Status WaitForChannelReady(std::shared_ptr<::grpc::Channel> channel,
     if (status.ok()) {
       return absl::OkStatus();
     }
-    LOG(ERROR) << "Unhealthy channel: " << status;
+    LOG_EVERY_N_SEC(ERROR, 5) << "Unhealthy channel: " << status;
     // Sleep to prevent busy-looping if CheckChannelHealth returns immediately.
     absl::SleepFor(kCheckChannelHealthRetryPause);
   }
@@ -284,7 +284,8 @@ absl::StatusOr<std::shared_ptr<grpc::Channel>> GrpcChannel::Connect() {
     status = CheckChannelHealth(channel, kCheckChannelHealthTimeout,
                                 check_channel_health_->server_instance_name);
     if (!status.ok()) {
-      LOG(ERROR) << "Unhealthy channel for " << address_ << ": " << status;
+      LOG_EVERY_N_SEC(ERROR, 5)
+          << "Unhealthy channel for " << address_ << ": " << status;
       // Sleep to prevent busy-looping if CheckChannelHealth returns
       // immediately.
       absl::SleepFor(kCheckChannelHealthRetryPause);

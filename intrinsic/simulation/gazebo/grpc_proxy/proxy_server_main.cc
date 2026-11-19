@@ -214,6 +214,10 @@ struct RelayData {
   // The local relay is started on the same port.
   int port = 0;
 
+  // True if the service is started by a Gazebo system plugin inside
+  // GazeboRunner (only available when SimulatorState is RUNNING or PAUSED).
+  bool requires_running_sim = false;
+
   // The address of the remote server that the channel is connected on.
   std::string remote_address = "";
 
@@ -260,14 +264,36 @@ absl::Status CloseRelaysWithError(std::vector<RelayData>& relays,
 // Updates active `GrpcRelay` instances to forward traffic to the specified
 // `remote_address`.
 // For each relay:
+// - If `requires_running_sim` is true and the simulator is not running or
+//   paused, closes the relay with an `ErrorProxyServer` without probing.
 // - If already connected to `remote_address`, skips update.
 // - Connects a channel directly to `remote_address:port`. If direct connection
 //   fails, starts an `ErrorProxyServer` on the port.
 // - Restarts the relay using the connected channel.
-absl::Status UpdateRelays(std::string_view remote_address,
-                          std::vector<RelayData>& relays,
-                          absl::Duration connect_timeout) {
+absl::Status UpdateRelays(
+    std::string_view remote_address,
+    const intrinsic_proto::simulation::first_party::SimulatorStatus&
+        simulator_status,
+    std::vector<RelayData>& relays, absl::Duration connect_timeout) {
+  using intrinsic_proto::simulation::first_party::SimulatorState;
+  const bool is_sim_running =
+      simulator_status.simulator_state() == SimulatorState::RUNNING ||
+      simulator_status.simulator_state() == SimulatorState::PAUSED;
+
   for (auto& relay_data : relays) {
+    // Avoid repeatedly probing for Gazebo plugin ports when GazeboRunner is
+    // not running
+    if (relay_data.requires_running_sim && !is_sim_running) {
+      absl::Status error_status = absl::UnavailableError(absl::StrCat(
+          "Gazebo simulation server is not running for service ",
+          relay_data.service_id,
+          simulator_status.has_status()
+              ? absl::StrCat(": ", simulator_status.status().message())
+              : ""));
+      INTR_RETURN_IF_ERROR(CloseRelayWithError(relay_data, error_status));
+      continue;
+    }
+
     if (relay_data.relay != nullptr &&
         relay_data.remote_address == remote_address) {
       continue;
@@ -427,7 +453,7 @@ absl::Status RunRemoteServersWatcherLoop(
             absl::StrCat("Failed to get Gazebo simulator info: ",
                          response.status().message())));
       } else {
-        LOG(WARNING)
+        LOG_EVERY_N_SEC(WARNING, 30)
             << "Failed to get simulator status from SimulationService: "
             << response.status();
       }
@@ -474,8 +500,8 @@ absl::Status RunRemoteServersWatcherLoop(
           remote_address.status().code(),
           absl::StrCat("Failed to get Gazebo address: ",
                        remote_address.status().message()));
-      LOG(WARNING) << error_status
-                   << ". Keeping existing relays active if present.";
+      LOG_EVERY_N_SEC(WARNING, 10)
+          << error_status << ". Keeping existing relays active if present.";
       for (auto& relay_data : relays) {
         // If the relay is already connected, then don't disconnect it,
         // otherwise start an error proxy service so that the port is opened.
@@ -486,29 +512,37 @@ absl::Status RunRemoteServersWatcherLoop(
       continue;
     }
 
-    INTR_RETURN_IF_ERROR(
-        UpdateRelays(*remote_address, relays, kWatcherLoopGrpcConnectTimeout));
+    INTR_RETURN_IF_ERROR(UpdateRelays(*remote_address,
+                                      response->simulator_status(), relays,
+                                      kWatcherLoopGrpcConnectTimeout));
   }
   return absl::OkStatus();
 }
 
 absl::Status RunProxyServer() {
-  static constexpr std::string_view kGrpcServiceAddressEnvVars[] = {
-      "PINCH_GRIPPER_SERVICE_ADDRESS",
-      "CAMERA_SERVICE_ADDRESS",
-      "GPIO_SERVICE_ADDRESS",
-      "SPAWNER_SERVICE_ADDRESS",
-      "OUTFEED_SERVICE_ADDRESS",
-      "HEALTH_AGGREGATOR_SERVICE_ADDRESS",
-      "SET_SIMULATED_INPUTS_SERVICE_ADDRESS"};
+  struct ServiceEnvVarConfig {
+    std::string_view env_var;
+    bool requires_running_sim;
+  };
+  static constexpr ServiceEnvVarConfig kGrpcServiceAddressConfigs[] = {
+      {"PINCH_GRIPPER_SERVICE_ADDRESS", false},
+      {"CAMERA_SERVICE_ADDRESS", false},
+      {"GPIO_SERVICE_ADDRESS", false},
+      {"SPAWNER_SERVICE_ADDRESS", true},
+      {"OUTFEED_SERVICE_ADDRESS", true},
+      {"HEALTH_AGGREGATOR_SERVICE_ADDRESS", true},
+      {"SET_SIMULATED_INPUTS_SERVICE_ADDRESS", false}};
 
   LOG(INFO) << "Starting proxy server to Gazebo simulator asset.";
 
   std::vector<RelayData> relays;
-  for (const auto& env_var : kGrpcServiceAddressEnvVars) {
-    INTR_ASSIGN_OR_RETURN(int port, PortFromEnvVar(env_var));
-    relays.push_back(
-        RelayData{.service_id = std::string(env_var), .port = port});
+  for (const auto& config : kGrpcServiceAddressConfigs) {
+    INTR_ASSIGN_OR_RETURN(int port, PortFromEnvVar(config.env_var));
+    relays.push_back(RelayData{
+        .service_id = std::string(config.env_var),
+        .port = port,
+        .requires_running_sim = config.requires_running_sim,
+    });
   }
 
   INTR_ASSIGN_OR_RETURN(
