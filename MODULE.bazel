@@ -761,7 +761,7 @@ oci.pull(
 )
 oci.pull(
     name = "nginx_base",
-    digest = "sha256:08f354a3b44c422021a5c0f5efb3e27f8f90236b5447d3bac4053f5f50ab6760",
+    digest = "sha256:84f7876d21d154885f99554d7ae325d8c2213f9169726ea7ab60642f2573a787",
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-mirror-dockerhub/library/nginx",
     platforms = ["linux/amd64"],
     tag = "1.31.9",  # tag needs to be specified for renovatebot to sync the digest
