@@ -267,6 +267,20 @@
   (span-end-failure ?span-reference-id ?status-code ?status-msg)
 )
 
+(deffunction tracing-abort-active-node-spans (?node ?message)
+  "Aborts any active spans associated with ?node."
+  (tracing-end-canceling-span-failure
+    ?node ?*TRACING-STATUS-ABORTED* ?message)
+  (tracing-end-suspend-span-failure
+    ?node ?*TRACING-STATUS-ABORTED* ?message)
+  (tracing-end-evaluating-condition-span-failure
+    ?node ?*TRACING-STATUS-ABORTED* ?message)
+  (span-end-failure (fact-slot-value ?node iteration-span-reference-id)
+                    ?*TRACING-STATUS-ABORTED* ?message)
+  (span-end-failure (fact-slot-value ?node span-reference-id)
+                    ?*TRACING-STATUS-ABORTED* ?message)
+)
+
 (deffunction tracing-start-condition-span (?condition)
   "Starts a span for evaluating this condition.
    Returns the span-reference-id of the started span."

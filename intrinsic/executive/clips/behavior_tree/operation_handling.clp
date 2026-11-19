@@ -24,6 +24,10 @@
 (deffunction behavior-tree-stepwise-step-through-tree (?top-tree-id))
 ; defined in task_node.clp
 (deffunction behavior-tree-task-node-print-active-actions (?op))
+; defined in behavior_tree/tracing.clp
+(deffunction tracing-end-condition-span-failure
+  (?condition ?status-code ?status-msg))
+(deffunction tracing-abort-active-node-spans (?node ?message))
 
 ; --------------------------------- FUNCTIONS ---------------------------------
 
@@ -43,6 +47,60 @@
 
 ; Functions that interact with the current operation's process tree
 
+; Ends all active behavior tree, node, and condition spans for an operation,
+; leaving the operation-envelope's execution span intact.
+(deffunction operation-end-all-tree-spans (?operation-name ?message)
+  (delayed-do-for-all-facts ((?bt behavior-tree))
+    (eq ?bt:operation-name ?operation-name)
+
+    (delayed-do-for-all-facts ((?c behavior-tree-condition))
+      (and (eq ?c:tree-id ?bt:id)
+           (<> ?c:span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+      (tracing-end-condition-span-failure
+        ?c ?*TRACING-STATUS-ABORTED* ?message)
+      (modify ?c (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+    )
+
+    (delayed-do-for-all-facts ((?node behavior-tree-node))
+      (and (eq ?node:tree-id ?bt:id)
+           (or (<> ?node:span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+               (<> ?node:iteration-span-reference-id
+                   ?*TRACING-INVALID-SPAN-ID*)
+               (<> ?node:condition-span-reference-id
+                   ?*TRACING-INVALID-SPAN-ID*)
+               (<> ?node:suspend-span-reference-id
+                   ?*TRACING-INVALID-SPAN-ID*)
+               (<> ?node:canceling-span-reference-id
+                   ?*TRACING-INVALID-SPAN-ID*)))
+      (tracing-abort-active-node-spans ?node ?message)
+      (modify ?node
+        (canceling-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+        (suspend-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+        (condition-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+        (iteration-span-reference-id ?*TRACING-INVALID-SPAN-ID*)
+        (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+    )
+
+    (if (<> ?bt:span-reference-id ?*TRACING-INVALID-SPAN-ID*) then
+      (span-end-failure ?bt:span-reference-id
+                        ?*TRACING-STATUS-ABORTED* ?message)
+      (modify ?bt (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+    )
+  )
+)
+
+; Ends all active spans for an operation, including its behavior tree spans and
+; the operation-envelope's execution span.
+(deffunction operation-end-all-spans (?operation-name ?message)
+  (operation-end-all-tree-spans ?operation-name ?message)
+  (do-for-fact ((?op operation-envelope))
+    (and (eq ?op:name ?operation-name)
+         (<> ?op:span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+    (span-end-failure ?op:span-reference-id ?*TRACING-STATUS-ABORTED* ?message)
+    (modify ?op (span-reference-id ?*TRACING-INVALID-SPAN-ID*))
+  )
+)
+
 ; Resets the operation including its process tree.
 ;
 ; Args:
@@ -55,16 +113,18 @@
 (deffunction operation-reset (?operation-name ?keep-blackboard)
   (do-for-fact ((?op operation-envelope))
     (eq ?op:name ?operation-name)
-
     (if (not (in$ ?op:state ?*OPERATION-WAITING-STATES*)) then
       (return (result-create FALSE
                 (str-cat "Cannot reset operation in state " ?op:state)))
     )
+  )
 
-    (if (neq ?op:span-reference-id ?*TRACING-INVALID-SPAN-ID*) then
-      (span-end-failure ?op:span-reference-id ?*TRACING-STATUS-ABORTED*
-          "Aborting active span as the operation is being deleted.")
-    )
+  (operation-end-all-spans
+    ?operation-name
+    "Aborting active span as the operation is being reset.")
+
+  (do-for-fact ((?op operation-envelope))
+    (eq ?op:name ?operation-name)
 
     (if (not ?keep-blackboard) then
       (bind ?bb-scopes
@@ -111,16 +171,19 @@
 
   (do-for-fact ((?op operation-envelope) (?bt behavior-tree))
     (and (eq ?op:name ?operation-name) (eq ?op:operation-tree-id ?bt:id))
-
     (if (not (in$ ?op:state ?*OPERATION-WAITING-STATES*)) then
       (return (result-create FALSE
                 (str-cat "Cannot delete operation in state " ?op:state)))
     )
+  )
 
-    (if (neq ?op:span-reference-id ?*TRACING-INVALID-SPAN-ID*) then
-      (span-end-failure ?op:span-reference-id ?*TRACING-STATUS-ABORTED*
-          "Aborting active span as the operation is being deleted.")
-    )
+  (operation-end-all-spans
+    ?operation-name
+    "Aborting active span as the operation is being deleted.")
+
+  (do-for-fact ((?op operation-envelope) (?bt behavior-tree))
+    (and (eq ?op:name ?operation-name) (eq ?op:operation-tree-id ?bt:id))
+
     (pb-remove ?op:parameter-proto)
 
     (if (<> ?op:parameter-descriptor-pool 0) then
@@ -694,6 +757,8 @@
   )
 
   (if (not ?world-updater-successful) then
+    (span-end-failure ?tree-span ?*TRACING-STATUS-ABORTED*
+      "Failed to start tree: world updater failed")
     (bind ?es-proto (extended-status-create 21001 ERROR))
     (bind ?op (operation-attach-extended-status ?op ?es-proto))
     (pb-remove ?es-proto)
@@ -708,6 +773,8 @@
     (bind ?parameter-cast-result
       (pb-cast-from-any-with-pool ?param-proto ?param-pool ?param-message-name))
     (if (not (result-ok ?parameter-cast-result)) then
+      (span-end-failure ?tree-span ?*TRACING-STATUS-ABORTED*
+        "Failed to start tree: parameter cast failed")
       (bind ?es-proto (extended-status-create 13002 ERROR))
       (extended-status-set-message ?es-proto USER
         (str-cat "Failed to cast the parameters when starting process tree"
@@ -746,11 +813,25 @@
                                           ?tree-span))
       (pb-remove ?recovery-state-proto)
       (if (not (result-ok ?recovery-result)) then
+        ; Check if recovery already attached ?tree-span to a behavior-tree fact.
+        ; If recovery failed before doing so, operation-end-all-tree-spans won't
+        ; see ?tree-span; checking avoids both leaking it and logging a double-end
+        ; error if it was already ended via the tree fact.
+        (bind ?tree-span-attached
+          (any-factp ((?t behavior-tree))
+            (and (<> ?tree-span ?*TRACING-INVALID-SPAN-ID*)
+                 (= ?t:span-reference-id ?tree-span))))
         (bind ?op
           (operation-attach-extended-status ?op
             (result-error ?recovery-result)))
         (modify ?op (state FAILED) (recovery-state-proto 0))
         (behavior-tree-reset ?operation-tree-id FALSE)
+        (operation-end-all-tree-spans
+          ?op-name "Failed to start tree: recovery failed")
+        (if (not ?tree-span-attached) then
+          (span-end-failure ?tree-span ?*TRACING-STATUS-ABORTED*
+            "Failed to start tree: recovery failed")
+        )
         (return)
       )
   )
