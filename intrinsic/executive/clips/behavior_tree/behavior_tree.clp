@@ -102,6 +102,11 @@
 
   ; The span-reference-id for behavior tree tracing of this tree.
   (slot span-reference-id (type INTEGER))
+
+  ; Asset id of the process asset whose behavior tree this tree belongs to,
+  ; e.g., "ai.intrinsic.my_process". Taken from the tree's description.id if
+  ; set, otherwise inherited from the parent tree. Empty if unknown.
+  (slot process-asset-id (type STRING) (default ""))
 )
 
 (deftemplate behavior-tree-condition
@@ -499,6 +504,24 @@
 (deffunction behavior-tree-get-log-id (?tree-id)
   (do-for-fact ((?bt behavior-tree)) (eq ?bt:id ?tree-id) (return ?bt:log-id))
   (return 0)
+)
+
+; Returns the process-asset-id of the behavior tree with id ?tree-ids
+; or "" if there is no such tree or the tree is not part of a known
+; process asset.
+(deffunction behavior-tree-get-process-asset-id (?tree-id)
+  (do-for-fact ((?bt behavior-tree)) (eq ?bt:id ?tree-id)
+    (return ?bt:process-asset-id))
+  (return "")
+)
+
+; Returns the type URL prefix of the process asset ?process-asset-id.
+; Falls back to type.googleapis.com if process asset id is empty.
+(deffunction behavior-tree-process-type-url-prefix (?process-asset-id)
+  (if (eq ?process-asset-id "") then
+    (return "type.googleapis.com/")
+  )
+  (return (str-cat "type.intrinsic.ai/assets/" ?process-asset-id))
 )
 
 (deffunction behavior-tree-update-counters

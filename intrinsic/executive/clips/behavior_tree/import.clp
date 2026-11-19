@@ -1455,8 +1455,20 @@
       " step")))
   )
 
+  ; The process asset this tree belongs to. Taken either from
+  ; the tree's own description or inherited from the parent tree.
+  (bind ?process-asset-id "")
+  (if (pb-has-field ?bt-proto "description") then
+    (bind ?process-asset-id (pb-get-field ?bt-proto "description.id"))
+  )
+  (if (and (eq ?process-asset-id "") (neq ?parent-tree-id nil)) then
+    (bind ?process-asset-id
+      (behavior-tree-get-process-asset-id ?parent-tree-id))
+  )
+
   (assert (plan (id ?plan-id) (type BEHAVIOR-TREE))
           (behavior-tree (id ?tree-id) (name ?bt-name)
+                         (process-asset-id ?process-asset-id)
                          (blackboard-scope ?blackboard-scope)
                          (operation-name ?operation-name)
                          (parent-behavior-tree-id ?parent-tree-id)
@@ -1628,13 +1640,17 @@
 
     (pb-remove ?bt-description)
   )
+  (bind ?operation-tree-id (result-value ?tree-import-result))
+  (bind ?type-url-prefix
+    (behavior-tree-process-type-url-prefix
+      (behavior-tree-get-process-asset-id ?operation-tree-id)))
   (bind ?operation-parameter-pool 0)
   (bind ?operation-return-value-pool 0)
   (if (<> ?operation-parameter-descriptor-set 0) then
     (bind ?operation-parameter-pool
       (pb-add-descriptor-pool ?operation-parameter-descriptor-set
         (str-cat "Parameter descriptors for Operation'" ?operation-name "'")
-        "type.googleapis.com/"  ; TODO(b/438412095) set Intrinsic type URL
+        ?type-url-prefix
         ?operation-name))
     (if (= ?operation-parameter-pool 0) then
       (return (result-create FALSE (str-cat "Failed to create operation "
@@ -1646,7 +1662,7 @@
     (bind ?operation-return-value-pool
       (pb-add-descriptor-pool ?operation-return-value-descriptor-set
         (str-cat "Return value descriptors for Operation '" ?operation-name "'")
-        "type.googleapis.com/"  ; TODO(b/438412095) set Intrinsic type URL
+        ?type-url-prefix
         ?operation-name))
     (if (= ?operation-return-value-pool 0) then
       (return (result-create FALSE (str-cat "Failed to create operation "
@@ -1654,8 +1670,6 @@
         (pb-tostring ?operation-return-value-descriptor-set))))
     )
   )
-
-  (bind ?operation-tree-id (result-value ?tree-import-result))
 
   ; start_tree_id and start_node_id are unset in the RunMetadata proto, which
   ; means starting from the root of the operation tree. Initialize the tracking

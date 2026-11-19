@@ -83,7 +83,8 @@
           (pb-add-descriptor-pool ?file-descriptor-set-proto
             (str-cat "code-execution-instance (operation_name: " ?operation-name
                     ", tree_id: " ?tree-id ", node_id: " ?node-id ")")
-            "type.googleapis.com/"  ; TODO(b/438412095) set Intrinsic type URL
+            (behavior-tree-process-type-url-prefix
+              (behavior-tree-get-process-asset-id ?tree-id))
             ?operation-name))
       (if (= ?file-descriptor-set-pool 0) then
         (return (result-create FALSE
