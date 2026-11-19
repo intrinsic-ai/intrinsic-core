@@ -17,6 +17,7 @@
 
 #include <algorithm>
 #include <cstddef>
+#include <cstdint>
 #include <functional>
 #include <string>
 #include <string_view>
@@ -33,10 +34,73 @@
 namespace intrinsic {
 
 namespace internal {
+
+// Scrambles all bits of an integer (the finalizer of MurmurHash3, fmix64).
+// Ref:
+// https://github.com/aappleby/smhasher/blob/07bb4de10a63e8cc2e1724865454eba635742383/src/MurmurHash3.cpp#L81-L90
+//
+// Why this is needed for absl::flat_hash_{set,map}:
+//
+// absl's Swiss tables use the hash value of a key directly, without remixing
+// it, unless the hasher is absl::Hash. A custom hasher's value `h` is only
+// XORed with a per-table seed, which is a 16 bit random value sign extended to
+// 64 bits: its upper 48 bits are all ones. The table then splits `h ^ seed`
+// into two parts:
+//  - H1, the lowest log2(capacity + 1) bits, selects the group where probing
+//    starts.
+//  - H2, the 7 most significant bits, is stored in the control byte of the
+//    slot. A lookup compares H2 against the 16 control bytes of a group in one
+//    instruction and only compares keys for the slots that match.
+//
+// std::hash of an integer is the identity function in libc++. Entity ids are
+// 32 bit values made of a 16 bit prefix followed by a small 16 bit counter, so
+// their identity hashes:
+//  - have the 32 most significant bits equal to zero. The H2 of every key is
+//    the same, the SIMD filter matches every full slot and each lookup does a
+//    key comparison for every full slot it visits.
+//  - differ in the lowest bits only by their counter, so that ids with
+//    different prefixes but the same counter start probing in the same group.
+//    Probe sequences grow long and lookups, misses in particular, scan large
+//    parts of the table.
+//
+// More details here:
+// https://github.com/abseil/abseil-cpp/blob/master/absl/container/internal/raw_hash_set.h
+//
+// fmix64 is a bijection on 64 bit values in which every output bit depends on
+// every input bit (avalanche). Both H1 and H2 are thus close to uniformly
+// distributed even for keys that differ only in a few low bits, which is what
+// Swiss tables assume. Being a bijection, distinct keys never collide on the
+// full 64 bit hash. It is stateless and constexpr, so that every library and
+// process computes the same hash for the same value, which b/380032603
+// requires (absl::Hash is not used for that reason).
+constexpr std::size_t MixIntegerHash(std::uint64_t x) noexcept {
+  x ^= x >> 33;
+  x *= 0xff51afd7ed558ccdULL;
+  x ^= x >> 33;
+  x *= 0xc4ceb9fe1a85ec53ULL;
+  x ^= x >> 33;
+  return static_cast<std::size_t>(x);
+}
+
+// Hashes a value of a type that has a hash function in the standard library.
+// Integers, enums, and pointers are scrambled, see MixIntegerHash().
 template <typename T>
-auto hash_world_object(const T& s) {
-  using ValueType = std::decay_t<decltype(s.value())>;
-  return std::hash<ValueType>{}(s.value());
+std::size_t HashValue(const T& value) noexcept {
+  if constexpr (std::is_integral_v<T> || std::is_enum_v<T>) {
+    static_assert(sizeof(T) <= sizeof(std::uint64_t));
+    return MixIntegerHash(static_cast<std::uint64_t>(value));
+  } else if constexpr (std::is_pointer_v<T>) {
+    static_assert(sizeof(std::uintptr_t) <= sizeof(std::uint64_t));
+    return MixIntegerHash(
+        static_cast<std::uint64_t>(reinterpret_cast<std::uintptr_t>(value)));
+  } else {
+    return std::hash<T>{}(value);
+  }
+}
+
+template <typename T>
+std::size_t hash_world_object(const T& s) noexcept {
+  return HashValue<std::decay_t<decltype(s.value())>>(s.value());
 }
 
 // A simple hash combine function, used to combine multiple hashes into one.
@@ -52,7 +116,7 @@ inline std::size_t hash_combine(std::size_t a, std::size_t b) {
 template <typename T>
 struct WorldHasher {
   std::size_t operator()(const T& s) const noexcept {
-    return std::hash<T>{}(s);
+    return internal::HashValue(s);
   }
 };
 
