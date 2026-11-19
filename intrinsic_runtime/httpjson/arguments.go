@@ -44,7 +44,7 @@ type CLIArguments struct {
 	ConnectivityDiagnosticsServiceAddress string
 	EnableHttpGatewayPubsub               bool
 	EnableTURNAuthServers                 bool
-	CloudProjectID                        string
+	PortalDomain                          string
 	GRPCPort                              int64
 }
 
@@ -89,7 +89,7 @@ func Get() *CLIArguments {
 		flag.StringVar(&instance.ConnectivityDiagnosticsServiceAddress, "connectivity-diagnostics-service-endpoint", ingressAddress, "Connectivity diagnostics service endpoint")
 		flag.BoolVar(&instance.EnableHttpGatewayPubsub, "enable_http_gateway_pubsub", false, "Whether to enable pubsub support on the HTTP gateway.")
 		flag.BoolVar(&instance.EnableTURNAuthServers, "enable_webrtc_turn_auth_servers", false, "Whether to use token-based TURN server authentication.")
-		flag.StringVar(&instance.CloudProjectID, "cloud_project_id", "giza-workcells", "Google Cloud Project ID")
+		flag.StringVar(&instance.PortalDomain, "portal_domain", "flowstate.intrinsic.ai", "Portal domain used for TURN credential exchange and ICE servers.")
 	})
 	return instance
 }

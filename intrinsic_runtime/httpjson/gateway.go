@@ -80,7 +80,7 @@ func run(ctx context.Context, cliArgs *arguments.CLIArguments) error {
 
 	var pubSubConnManager *webrtc.ConnectionManager
 	if cliArgs.EnableHttpGatewayPubsub {
-		configProvider, err := webpubsub.NewConfigurationProvider(cliArgs.EnableTURNAuthServers, cliArgs.CloudProjectID)
+		configProvider, err := webpubsub.NewConfigurationProvider(cliArgs.EnableTURNAuthServers, cliArgs.PortalDomain)
 		if err != nil {
 			return err
 		}

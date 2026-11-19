@@ -105,7 +105,6 @@ go_library(
     visibility = ["//visibility:public"],
     deps = [
         "//intrinsic_runtime/httpjson/webrtc",
-        "//intrinsic_sdk/intrinsic/config:environments",
         "@com_github_grpc_ecosystem_grpc_gateway_v2//runtime",
         "@intrinsic_apis//intrinsic/httpjson/proto/v1alpha:controlplane_go_proto",
         "@intrinsic_apis//intrinsic/httpjson/proto/v1alpha:dataplane_go_proto",

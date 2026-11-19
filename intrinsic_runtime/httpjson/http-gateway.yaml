@@ -40,6 +40,9 @@ spec:
             {{- if .Values.feature_options.enable_webrtc_turn_auth_servers }}
             - --enable_webrtc_turn_auth_servers
             {{- end }}
+            {{- with (.Values.portal).domain }}
+            - --portal_domain={{ . }}
+            {{- end }}
           {{- if .Values.feature_options.enable_http_gateway_pubsub }}
           env:
             - name: POD_IPS

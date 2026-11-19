@@ -27,7 +27,6 @@ import (
 	"google.golang.org/grpc"
 	"google.golang.org/protobuf/types/known/emptypb"
 
-	"intrinsic/config/environments"
 	pb "intrinsic/httpjson/proto/v1alpha/webpubsub_go_proto"
 
 	"intrinsic_runtime/httpjson/webrtc"
@@ -97,14 +96,13 @@ func (p turnAuthConfigurationProvider) PortalDomain() string {
 	return p.portalDomain
 }
 
-func NewConfigurationProvider(enableTURNAuthServers bool, computeProjectID string) (webrtc.ConfigurationProvider, error) {
+func NewConfigurationProvider(enableTURNAuthServers bool, portalDomain string) (webrtc.ConfigurationProvider, error) {
 	if !enableTURNAuthServers {
 		return legacyConfigurationProvider{}, nil
 	}
 
-	portalDomain := environments.PortalDomain(environments.FromComputeProject(computeProjectID))
 	if portalDomain == "" {
-		return nil, fmt.Errorf("no portal domain for compute project %q", computeProjectID)
+		return nil, errors.New("portal domain must be specified when TURN auth servers are enabled")
 	}
 
 	tokenSource, err := defaultTokenSource(context.Background())
