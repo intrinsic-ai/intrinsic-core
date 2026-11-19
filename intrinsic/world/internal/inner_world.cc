@@ -35,6 +35,7 @@
 #include "intrinsic/world/collision/collision_checker_utils.h"
 #include "intrinsic/world/collision/collision_checker_world.h"
 #include "intrinsic/world/collision/collision_context.pb.h"
+#include "intrinsic/world/collision/util/rule_set_util.h"
 #include "intrinsic/world/entity.h"
 #include "intrinsic/world/entity_id.h"
 #include "intrinsic/world/hashing/hashing.h"
@@ -329,6 +330,7 @@ intrinsic_proto::RuleSet InnerWorld::GetDefaultRuleSet() const {
 absl::Status InnerWorld::SetDefaultRuleSet(
     const intrinsic_proto::RuleSet& rule_set) {
   default_rule_set_ = rule_set;
+  RemoveRepeatedRules(default_rule_set_);
   return absl::OkStatus();
 }
 

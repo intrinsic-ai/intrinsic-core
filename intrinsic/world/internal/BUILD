@@ -33,6 +33,7 @@ cc_library(
         "//intrinsic/world/collision:collision_checker_utils",
         "//intrinsic/world/collision:collision_checker_world",
         "//intrinsic/world/collision:collision_context_cc_proto",
+        "//intrinsic/world/collision/util:rule_set_util",
         "//intrinsic_sdk/intrinsic/util:macros",
         "//intrinsic_sdk/intrinsic/util/status:ret_check",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",

@@ -15,12 +15,22 @@
 #ifndef INTRINSIC_WORLD_UTIL_RULE_SET_UTIL_H_
 #define INTRINSIC_WORLD_UTIL_RULE_SET_UTIL_H_
 
+#include "intrinsic/world/collision/collision_context.pb.h"
 #include "intrinsic/world/proto/collision_action.pb.h"
 
 namespace intrinsic {
 
 // Gets the default action that imposes a hard and soft margin of 0.
 const intrinsic_proto::world::CollisionAction& GetDefaultAction();
+
+// Removes the rules from `rule_set` that repeat an earlier rule, which leaves
+// the order of the remaining rules unchanged. A rule repeats an earlier one if
+// it has the same action and the same entities on each of its two sides.
+//
+// A rule between A and B is not treated as a repetition of the same rule
+// between B and A, although both have the same effect on collision checking
+// (rules are matched in both directions).
+void RemoveRepeatedRules(intrinsic_proto::RuleSet& rule_set);
 
 }  // namespace intrinsic
 

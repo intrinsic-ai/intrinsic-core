@@ -112,6 +112,11 @@ cc_library(
     srcs = ["rule_set_util.cc"],
     hdrs = ["rule_set_util.h"],
     deps = [
+        "//intrinsic/world/collision:collision_context_cc_proto",
+        "@abseil-cpp//absl/algorithm:container",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/container:inlined_vector",
+        "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/world/proto:collision_action_cc_proto",
     ],
 )
