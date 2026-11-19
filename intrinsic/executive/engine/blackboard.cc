@@ -478,8 +478,10 @@ absl::StatusOr<clips::DescriptorPoolId> Blackboard::LoadSkillPool(
       absl::StrFormat(
           "No skill pool available in operation '%s' for restoring "
           "protos from asset id '%s'. Protos will not be migrated but "
-          "re-created from descriptor information in the snapshot.",
-          target_operation_name, skill_id),
+          "re-created from descriptor information in the snapshot. This "
+          "warning can be safely ignored if '%s' refers to an asset that is "
+          "not a skill (e.g., a process).",
+          target_operation_name, skill_id, skill_id),
       {.severity = intrinsic_proto::status::ExtendedStatus::WARNING});
   load_diagnostics.push_back(std::move(es));
   INTR_ASSIGN_OR_RETURN(
