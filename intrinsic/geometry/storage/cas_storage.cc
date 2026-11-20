@@ -122,37 +122,6 @@ class CasGeometryLibrary : public GeometryLibrary,
   GeometrySerializer& Serializer() override { return *this; }
 
   absl::StatusOr<Geometry> GetGeometry(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override {
-    if (std::optional<Geometry> geo = cache_->GetGeometry(geo_storage_refs);
-        geo.has_value()) {
-      return geo.value();
-    }
-
-    if (geo_storage_refs.geometry_ref().empty()) {
-      return absl::InvalidArgumentError(
-          "Geometry storage ref must have a `geometry_ref`");
-    }
-
-    auto context = make_client_context_();
-    INTR_ASSIGN_OR_RETURN(
-        auto geo_bytes,
-        ContentAddressableStorageGet(context.get(), cas_stub_.get(),
-                                     geo_storage_refs.geometry_ref()),
-        _ << "Failed to get geometry from CAS");
-    intrinsic_proto::geometry::Geometry geo_proto;
-    if (!geo_proto.ParseFromString(geo_bytes)) {
-      return absl::InternalError("Failed to parse Geometry proto");
-    }
-    INTR_ASSIGN_OR_RETURN(Geometry geo,
-                          geometry_compatibility::ToGeometry(geo_proto, options,
-                                                             geo_storage_refs));
-
-    cache_->InsertGeometry(geo_storage_refs, geo);
-    return geo;
-  }
-
-  absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
           geo_storage_refs,
       std::optional<intrinsic_proto::geometry::v1::MaterialProperties>
@@ -234,6 +203,37 @@ class CasGeometryLibrary : public GeometryLibrary,
   }
 
  private:
+  absl::StatusOr<Geometry> DoGetGeometryV0(
+      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
+      const GeometryOptions& options) const override {
+    if (std::optional<Geometry> geo = cache_->GetGeometry(geo_storage_refs);
+        geo.has_value()) {
+      return geo.value();
+    }
+
+    if (geo_storage_refs.geometry_ref().empty()) {
+      return absl::InvalidArgumentError(
+          "Geometry storage ref must have a `geometry_ref`");
+    }
+
+    auto context = make_client_context_();
+    INTR_ASSIGN_OR_RETURN(
+        auto geo_bytes,
+        ContentAddressableStorageGet(context.get(), cas_stub_.get(),
+                                     geo_storage_refs.geometry_ref()),
+        _ << "Failed to get geometry from CAS");
+    intrinsic_proto::geometry::Geometry geo_proto;
+    if (!geo_proto.ParseFromString(geo_bytes)) {
+      return absl::InternalError("Failed to parse Geometry proto");
+    }
+    INTR_ASSIGN_OR_RETURN(Geometry geo,
+                          geometry_compatibility::ToGeometry(geo_proto, options,
+                                                             geo_storage_refs));
+
+    cache_->InsertGeometry(geo_storage_refs, geo);
+    return geo;
+  }
+
   GeometryFingerprintCacheInterface* cache_;
   std::shared_ptr<ContentAddressableStorageService::StubInterface> cas_stub_;
   std::function<std::unique_ptr<grpc::ClientContext>()> make_client_context_;

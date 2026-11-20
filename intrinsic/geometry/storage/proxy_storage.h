@@ -38,11 +38,6 @@ class ProxyStorageLibrary : public GeometryLibrary,
   const GeometryDeserializer& Deserializer() const override;
   GeometrySerializer& Serializer() override;
 
-  // TODO(b/442842561): Remove this method once all users are migrated to v1.
-  absl::StatusOr<Geometry> GetGeometry(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override;
-
   absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
           geo_storage_refs,
@@ -54,6 +49,11 @@ class ProxyStorageLibrary : public GeometryLibrary,
                const SaveGeometryOptions& options) override;
 
  private:
+  // TODO(b/442842561): Remove this method once all users are migrated to v1.
+  absl::StatusOr<Geometry> DoGetGeometryV0(
+      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
+      const GeometryOptions& options) const override;
+
   GeometryLibrary* storage_;
 };
 

@@ -32,8 +32,6 @@
 #include "intrinsic/geometry/api/axis_aligned_bounding_box_3d.h"
 #include "intrinsic/geometry/api/compute_axis_aligned_bounding_box_3d.h"
 #include "intrinsic/geometry/api/geometry.h"
-#include "intrinsic/geometry/api/geometry_options.h"
-#include "intrinsic/geometry/proto/geometry_storage_refs.pb.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
@@ -112,14 +110,6 @@ class WriteOnlyMapAndOtherGeometryLibrary : public GeometryLibrary,
 
   GeometrySerializer& Serializer() override { return *this; }
   const GeometryDeserializer& Deserializer() const override { return *this; }
-
-
-  absl::StatusOr<Geometry> GetGeometry(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override {
-    return map_library_->Deserializer().GetGeometry(geo_storage_refs, options);
-  }
-
 
   absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&

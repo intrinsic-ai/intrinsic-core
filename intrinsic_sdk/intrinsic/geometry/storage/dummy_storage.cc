@@ -42,7 +42,7 @@ class DummyGeometryLibrary : public GeometryLibrary,
   const GeometryDeserializer& Deserializer() const override { return *this; }
 
 
-  absl::StatusOr<Geometry> GetGeometry(
+  absl::StatusOr<Geometry> DoGetGeometryV0(
       const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
       const GeometryOptions& options) const override {
     return Geometry(ExactGeometry(result_.GetExactGeometry(), options),

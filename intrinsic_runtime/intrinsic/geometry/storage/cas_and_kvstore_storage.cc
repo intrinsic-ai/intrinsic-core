@@ -66,11 +66,6 @@ class CasAndKvStoreGeometryStorage final : public GeometryLibrary,
   GeometrySerializer& Serializer() override { return *this; }
 
   absl::StatusOr<Geometry> GetGeometry(
-      const RefsV0& refs, const GeometryOptions& options) const override {
-    return cas_library_->Deserializer().GetGeometry(refs, options);
-  }
-
-  absl::StatusOr<Geometry> GetGeometry(
       const RefsV1& refs,
       std::optional<MaterialProperties> material_properties) const override {
     INTR_ASSIGN_OR_RETURN(const GeometryDeserializer& deserializer,
@@ -84,6 +79,11 @@ class CasAndKvStoreGeometryStorage final : public GeometryLibrary,
   }
 
  private:
+  absl::StatusOr<Geometry> DoGetGeometryV0(
+      const RefsV0& refs, const GeometryOptions& options) const override {
+    return cas_library_->Deserializer().GetGeometry(refs, options);
+  }
+
   // Returns the deserializer of the backend whose URI scheme matches
   // `refs.exact_geometry_ref()` (and non-empty `refs.renderable_ref()`).
   absl::StatusOr<const GeometryDeserializer&> ResolveDeserializer(

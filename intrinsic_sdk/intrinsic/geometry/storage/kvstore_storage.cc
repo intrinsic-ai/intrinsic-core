@@ -45,13 +45,6 @@ constexpr absl::string_view kExactKeyPrefix = "geo_v1_exact_";
 constexpr absl::string_view kRenderableKeyPrefix = "geo_glb_";
 constexpr absl::string_view kForbiddenKvStoreKeyChars{"/*?#[]$\0", 8};
 
-
-using GeometryStorageRefsV0 = ::intrinsic_proto::geometry::GeometryStorageRefs;
-
-constexpr absl::string_view kV0UnsupportedMessage =
-    "KVStore GeometryLibrary only supports V1 GeometryStorageRefs.";
-
-
 // Returns true if `segment` is non-empty and contains no Zenoh-forbidden
 // characters (`/*?#[]$` or NUL).
 constexpr bool IsValidKvStoreSegment(absl::string_view segment) {
@@ -157,13 +150,6 @@ class KvStoreGeometryLibrary : public GeometryLibrary,
 
   const GeometryDeserializer& Deserializer() const override { return *this; }
   GeometrySerializer& Serializer() override { return *this; }
-
-
-  absl::StatusOr<Geometry> GetGeometry(const GeometryStorageRefsV0&,
-                                       const GeometryOptions&) const override {
-    return absl::UnimplementedError(kV0UnsupportedMessage);
-  }
-
 
   absl::StatusOr<Geometry> GetGeometry(
       const GeometryStorageRefs& refs,

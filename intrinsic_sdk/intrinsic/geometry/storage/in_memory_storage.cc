@@ -47,7 +47,7 @@ MapGeometryLibrary::MapGeometryLibrary(RawMaps initial_geometry_maps) {
 }
 
 
-absl::StatusOr<Geometry> MapGeometryLibrary::GetGeometry(
+absl::StatusOr<Geometry> MapGeometryLibrary::DoGetGeometryV0(
     const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
     const GeometryOptions& options) const {
   // TODO(b/321989362): Don't use the fingerprint as the identifier.

@@ -45,6 +45,7 @@ cc_library(
     deps = [
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry_options",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_storage_refs_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_storage_refs_cc_proto",

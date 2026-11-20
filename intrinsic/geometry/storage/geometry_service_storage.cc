@@ -125,51 +125,6 @@ class GeometryServiceGeometryLibrary : public GeometryLibrary,
   const GeometryDeserializer& Deserializer() const override { return *this; }
 
   absl::StatusOr<Geometry> GetGeometry(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override {
-    if (std::optional<Geometry> geo = cache_->GetGeometry(geo_storage_refs);
-        geo.has_value()) {
-      return Geometry(ExactGeometry(geo->GetExactGeometry(), options),
-                      geo->GetRenderable(),
-                      geo->KeepRenderableForSerialization(),
-                      geo->material_properties(), /*provenance=*/std::nullopt);
-    }
-
-    intrinsic_proto::geometry::GetGeometryRequest request;
-    *request.mutable_geometry_storage_refs_v0() = geo_storage_refs;
-
-    auto client_context = make_client_context_();
-    ConfigureClientContextForGeo(client_context.get());
-
-    intrinsic_proto::geometry::GeometryWithMetadata response;
-    INTR_RETURN_IF_ERROR(ToAbslStatus(
-        stub_->GetGeometry(client_context.get(), request, &response)));
-
-    Geometry geo;
-    if (response.has_inline_geometry()) {
-      INTR_ASSIGN_OR_RETURN(geo, ToGeometry(response.inline_geometry()));
-    } else if (response.has_geometry_v0()) {
-      INTR_ASSIGN_OR_RETURN(
-          geo, geometry_compatibility::ToGeometry(response.geometry_v0(),
-                                                  options, geo_storage_refs));
-    } else {
-      return absl::InternalError("GeometryService returned empty geometry.");
-    }
-
-    Geometry geo_with_options = Geometry(
-        ExactGeometry(geo.GetExactGeometry(), options), geo.GetRenderable(),
-        geo.KeepRenderableForSerialization(), geo.material_properties(),
-        /*provenance=*/std::nullopt);
-
-    // Cache under the v1 storage refs returned by GeometryService.
-    cache_->InsertGeometry(response.geometry_storage_refs(), geo_with_options);
-    // Also cache under the caller's v0 storage refs so subsequent lookups hit
-    // the cache.
-    cache_->InsertGeometry(geo_storage_refs, geo_with_options);
-    return geo_with_options;
-  }
-
-  absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
           geo_storage_refs,
       std::optional<intrinsic_proto::geometry::v1::MaterialProperties>
@@ -248,6 +203,51 @@ class GeometryServiceGeometryLibrary : public GeometryLibrary,
   }
 
  private:
+  absl::StatusOr<Geometry> DoGetGeometryV0(
+      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
+      const GeometryOptions& options) const override {
+    if (std::optional<Geometry> geo = cache_->GetGeometry(geo_storage_refs);
+        geo.has_value()) {
+      return Geometry(ExactGeometry(geo->GetExactGeometry(), options),
+                      geo->GetRenderable(),
+                      geo->KeepRenderableForSerialization(),
+                      geo->material_properties(), /*provenance=*/std::nullopt);
+    }
+
+    intrinsic_proto::geometry::GetGeometryRequest request;
+    *request.mutable_geometry_storage_refs_v0() = geo_storage_refs;
+
+    auto client_context = make_client_context_();
+    ConfigureClientContextForGeo(client_context.get());
+
+    intrinsic_proto::geometry::GeometryWithMetadata response;
+    INTR_RETURN_IF_ERROR(ToAbslStatus(
+        stub_->GetGeometry(client_context.get(), request, &response)));
+
+    Geometry geo;
+    if (response.has_inline_geometry()) {
+      INTR_ASSIGN_OR_RETURN(geo, ToGeometry(response.inline_geometry()));
+    } else if (response.has_geometry_v0()) {
+      INTR_ASSIGN_OR_RETURN(
+          geo, geometry_compatibility::ToGeometry(response.geometry_v0(),
+                                                  options, geo_storage_refs));
+    } else {
+      return absl::InternalError("GeometryService returned empty geometry.");
+    }
+
+    Geometry geo_with_options = Geometry(
+        ExactGeometry(geo.GetExactGeometry(), options), geo.GetRenderable(),
+        geo.KeepRenderableForSerialization(), geo.material_properties(),
+        /*provenance=*/std::nullopt);
+
+    // Cache under the v1 storage refs returned by GeometryService.
+    cache_->InsertGeometry(response.geometry_storage_refs(), geo_with_options);
+    // Also cache under the caller's v0 storage refs so subsequent lookups hit
+    // the cache.
+    cache_->InsertGeometry(geo_storage_refs, geo_with_options);
+    return geo_with_options;
+  }
+
   std::unique_ptr<GeometryFingerprintCacheInterface> owned_cache_;
   GeometryFingerprintCacheInterface* cache_;
 

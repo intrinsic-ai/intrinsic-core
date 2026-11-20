@@ -17,6 +17,9 @@
 
 #include <optional>
 
+
+#include "absl/status/status.h"
+
 #include "absl/status/statusor.h"
 #include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/api/geometry_options.h"
@@ -42,9 +45,12 @@ class GeometryDeserializer {
   //
   // TODO(b/442842561): Remove this method once all users are migrated to v1.
   // Retrieves a shape and renderable for the given `geo_storage_refs`.
-  virtual absl::StatusOr<Geometry> GetGeometry(
+  absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const = 0;
+      const GeometryOptions& options) const {
+    return DoGetGeometryV0(geo_storage_refs, options);
+  }
+
 
 
   // Retrieves a shape and renderable for the given `geo_storage_refs`. One way
@@ -55,6 +61,18 @@ class GeometryDeserializer {
           geo_storage_refs,
       std::optional<intrinsic_proto::geometry::v1::MaterialProperties>
           material_properties) const = 0;
+
+
+ private:
+  virtual absl::StatusOr<Geometry> DoGetGeometryV0(
+      const intrinsic_proto::geometry::GeometryStorageRefs&
+      /*geo_storage_refs*/,
+      const GeometryOptions& /*options*/) const {
+    return absl::UnimplementedError(
+        "Deserializing V0 GeometryStorageRefs is not supported.");
+  }
+
+
 };
 
 }  // namespace intrinsic::geo

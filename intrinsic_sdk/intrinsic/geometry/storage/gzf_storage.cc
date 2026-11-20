@@ -190,16 +190,6 @@ class GzfGeometryLibrary : public GeometryLibrary,
   GeometrySerializer& Serializer() override { return *this; }
   const GeometryDeserializer& Deserializer() const override { return *this; }
 
-
-  // TODO(b/442842561): Remove this method once all users are migrated to v1
-  // geometry protos.
-  absl::StatusOr<Geometry> GetGeometry(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override {
-    return ReadGeometryFromGzfV0(gzfile_, options, geo_storage_refs);
-  }
-
-
   absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
           geo_storage_refs,
@@ -256,6 +246,17 @@ class GzfGeometryLibrary : public GeometryLibrary,
   }
 
  private:
+
+  // TODO(b/442842561): Remove this method once all users are migrated to v1
+  // geometry protos.
+  absl::StatusOr<Geometry> DoGetGeometryV0(
+      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
+      const GeometryOptions& options) const override {
+    return ReadGeometryFromGzfV0(gzfile_, options, geo_storage_refs);
+  }
+
+
+
   GZFile& gzfile_;
 };
 
@@ -267,16 +268,6 @@ class ReadOnlyGzfGeometryLibrary : public GeometryLibrary,
 
   GeometrySerializer& Serializer() override { return *this; }
   const GeometryDeserializer& Deserializer() const override { return *this; }
-
-
-  // TODO(b/442842561): Remove this method once all users are migrated to v1
-  // geometry protos.
-  absl::StatusOr<Geometry> GetGeometry(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override {
-    return ReadGeometryFromGzfV0(gzfile_, options, geo_storage_refs);
-  }
-
 
   absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
@@ -295,6 +286,17 @@ class ReadOnlyGzfGeometryLibrary : public GeometryLibrary,
   }
 
  private:
+
+  // TODO(b/442842561): Remove this method once all users are migrated to v1
+  // geometry protos.
+  absl::StatusOr<Geometry> DoGetGeometryV0(
+      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
+      const GeometryOptions& options) const override {
+    return ReadGeometryFromGzfV0(gzfile_, options, geo_storage_refs);
+  }
+
+
+
   const GZFile& gzfile_;
 };
 

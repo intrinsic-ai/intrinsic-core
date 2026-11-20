@@ -56,12 +56,6 @@ class MapGeometryLibrary : public GeometryLibrary,
   // introspection.
   RawMaps GetMaps() const;
 
-
-  absl::StatusOr<Geometry> GetGeometry(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override;
-
-
   absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
           geo_storage_refs,
@@ -73,6 +67,12 @@ class MapGeometryLibrary : public GeometryLibrary,
                const SaveGeometryOptions& options) override;
 
  private:
+
+  absl::StatusOr<Geometry> DoGetGeometryV0(
+      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
+      const GeometryOptions& options) const override;
+
+
   mutable absl::Mutex geometry_mutex_;
   // TODO(442842561): Remove this map once all users are migrated to v1 geometry
   // protos.

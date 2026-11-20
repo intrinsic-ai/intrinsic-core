@@ -36,7 +36,7 @@ const GeometryDeserializer& ProxyStorageLibrary::Deserializer() const {
 
 GeometrySerializer& ProxyStorageLibrary::Serializer() { return *this; }
 
-absl::StatusOr<Geometry> ProxyStorageLibrary::GetGeometry(
+absl::StatusOr<Geometry> ProxyStorageLibrary::DoGetGeometryV0(
     const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
     const GeometryOptions& options) const {
   return storage_->Deserializer().GetGeometry(geo_storage_refs, options);
