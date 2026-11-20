@@ -22,6 +22,7 @@ import (
 	"intrinsic_runtime/httpjson/openapihandler"
 	"intrinsic_runtime/httpjson/webpubsub"
 
+	iaggp "intrinsic/assets/proto/installed_assets_go_proto"
 	acsggp "intrinsic/assets/proto/v1/asset_configuration_go_proto"
 	sssggp "intrinsic/assets/services/proto/v1/system_service_state_go_proto"
 	bbggp "intrinsic/executive/proto/blackboard_service_go_proto"
@@ -108,6 +109,12 @@ func RegisterHandlers(
 
 	// Register handlers for the Asset configuration service
 	err = acsggp.RegisterAssetConfigurationServiceHandlerFromEndpoint(ctx, mux, cliArgs.AssetConfigurationServiceAddress, insecureOpts)
+	if err != nil {
+		return err
+	}
+
+	// Register handlers for the InstalledAssets service
+	err = iaggp.RegisterInstalledAssetsHandlerFromEndpoint(ctx, mux, cliArgs.InstalledAssetsAddress, insecureOpts)
 	if err != nil {
 		return err
 	}
