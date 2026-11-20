@@ -60,16 +60,6 @@ std::optional<Geometry> GeometryFingerprintCache::GetGeometry(
   return std::nullopt;
 }
 
-std::optional<intrinsic_proto::geometry::GeometryStorageRefs>
-GeometryFingerprintCache::GetGeometryStorageRefs(
-    absl::string_view fingerprint) const {
-  absl::MutexLock lock(fingerprint_to_geo_storage_refs_mutex_);
-  if (fingerprint_to_geo_storage_refs_.contains(fingerprint)) {
-    return fingerprint_to_geo_storage_refs_.at(fingerprint);
-  }
-  return std::nullopt;
-}
-
 std::optional<intrinsic_proto::geometry::v1::GeometryStorageRefs>
 GeometryFingerprintCache::GetGeometryStorageRefsV1(
     absl::string_view fingerprint) const {
@@ -83,16 +73,8 @@ GeometryFingerprintCache::GetGeometryStorageRefsV1(
 void GeometryFingerprintCache::InsertGeometry(
     const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
     const Geometry& geometry) {
-  {
-    absl::MutexLock lg(geometry_cache_mutex_);
-    geometry_cache_.insert(geo_storage_refs, new Geometry(geometry), 1);
-  }
-
-  {
-    absl::MutexLock lf(fingerprint_to_geo_storage_refs_mutex_);
-    fingerprint_to_geo_storage_refs_[GenerateFingerprintOrDie(geometry)] =
-        geo_storage_refs;
-  }
+  absl::MutexLock lock(geometry_cache_mutex_);
+  geometry_cache_.insert(geo_storage_refs, new Geometry(geometry), 1);
 }
 
 void GeometryFingerprintCache::InsertGeometry(

@@ -38,9 +38,6 @@ class GeometryFingerprintCacheInterface {
       const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs)
       const = 0;
 
-  virtual std::optional<intrinsic_proto::geometry::GeometryStorageRefs>
-  GetGeometryStorageRefs(absl::string_view fingerprint) const = 0;
-
   virtual void InsertGeometry(
       const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
       const Geometry& geometry) = 0;
@@ -70,9 +67,6 @@ class GeometryFingerprintCache : public GeometryFingerprintCacheInterface {
   std::optional<Geometry> GetGeometry(
       const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs)
       const override;
-
-  std::optional<intrinsic_proto::geometry::GeometryStorageRefs>
-  GetGeometryStorageRefs(absl::string_view fingerprint) const override;
 
   std::optional<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
@@ -108,12 +102,6 @@ class GeometryFingerprintCache : public GeometryFingerprintCacheInterface {
       geometry_cache_v1_ ABSL_GUARDED_BY(geometry_cache_mutex_);
 
   mutable absl::Mutex fingerprint_to_geo_storage_refs_mutex_;
-  // TODO(b/442842561): Remove v0 map once all usages are migrated to v1
-  // geometry protos.
-  absl::flat_hash_map<std::string,
-                      intrinsic_proto::geometry::GeometryStorageRefs>
-      fingerprint_to_geo_storage_refs_
-          ABSL_GUARDED_BY(fingerprint_to_geo_storage_refs_mutex_);
   absl::flat_hash_map<std::string,
                       intrinsic_proto::geometry::v1::GeometryStorageRefs>
       fingerprint_to_geo_storage_refs_v1_
