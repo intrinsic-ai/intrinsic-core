@@ -20,6 +20,7 @@
 #include "absl/base/const_init.h"
 #include "absl/base/no_destructor.h"
 #include "absl/base/thread_annotations.h"
+#include "absl/cleanup/cleanup.h"
 #include "absl/log/log.h"
 #include "absl/synchronization/mutex.h"
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
@@ -152,6 +153,13 @@ imw_ret_t DestroyEntity(Fn&& fn)
   return ret;
 }
 
+void InvokeQueryDeleterIfPresent(void* user_context,
+                                 const imw_query_options_t* options) {
+  if (options != nullptr && options->user_context_deleter != nullptr) {
+    options->user_context_deleter(user_context);
+  }
+}
+
 }  // namespace
 
 void IMWZenoh::static_data_callback(z_loaned_sample_t* sample,
@@ -218,21 +226,34 @@ void IMWZenoh::static_queryable_drop(void* untyped_context) {
 
 void IMWZenoh::static_query_callback(z_loaned_reply_t* reply,
                                      void* untyped_context) {
-  IMWZenohQueryContext* context =
-      static_cast<IMWZenohQueryContext*>(untyped_context);
-  context->imw_zenoh_instance_->query_callback(
-      context->keyexpr_.c_str(), context->callback_, context->message_callback_,
-      reply, context->user_context_, &context->options_);
+  auto* context = static_cast<IMWZenohQueryClosureContext*>(untyped_context);
+  if (context == nullptr) {
+    return;
+  }
+  std::shared_ptr<IMWZenohActiveQuery> query = context->query.lock();
+  if (query == nullptr || !query->TryBeginCallback()) {
+    return;
+  }
+  absl::Cleanup end_callback = [&query]() { query->EndCallback(); };
+  IMWZenoh::query_callback(query->keyexpr().c_str(), query->callback(),
+                           query->message_callback(), reply,
+                           query->user_context(), &query->options());
 }
 
 void IMWZenoh::static_query_drop(void* untyped_context) {
-  IMWZenohQueryContext* typed_context =
-      static_cast<IMWZenohQueryContext*>(untyped_context);
-  if (typed_context != nullptr && typed_context->on_done_ != nullptr) {
-    typed_context->on_done_(typed_context->keyexpr_.c_str(),
-                            typed_context->user_context_);
+  std::unique_ptr<IMWZenohQueryClosureContext> context(
+      static_cast<IMWZenohQueryClosureContext*>(untyped_context));
+  if (context == nullptr) {
+    return;
   }
-  delete typed_context;
+  std::shared_ptr<IMWZenohQueryTable> table = context->table.lock();
+  if (table == nullptr) {
+    return;
+  }
+  std::shared_ptr<IMWZenohActiveQuery> query = table->Take(context->query_id);
+  if (query != nullptr) {
+    query->CloseAndNotify();
+  }
 }
 
 void IMWZenoh::static_liveliness_get_callback(z_loaned_reply_t* reply,
@@ -418,7 +439,10 @@ imw_ret_t imw_query(const char* keyexpr, imw_query_callback_fn* callback,
                     const void* query_payload, const size_t query_payload_len,
                     void* user_context, imw_query_options_t* options) {
   const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
-  if (singleton == nullptr) return IMW_NOT_INITIALIZED;
+  if (singleton == nullptr) {
+    InvokeQueryDeleterIfPresent(user_context, options);
+    return IMW_NOT_INITIALIZED;
+  }
   return singleton->query(keyexpr, callback, on_done, query_payload,
                           query_payload_len, user_context, options);
 }
@@ -430,7 +454,10 @@ imw_ret_t imw_query_messages(const char* keyexpr,
                              const size_t query_payload_len, void* user_context,
                              imw_query_options_t* options) {
   const std::shared_ptr<IMWZenoh> singleton = GetSingleton();
-  if (singleton == nullptr) return IMW_NOT_INITIALIZED;
+  if (singleton == nullptr) {
+    InvokeQueryDeleterIfPresent(user_context, options);
+    return IMW_NOT_INITIALIZED;
+  }
   return singleton->query_messages(keyexpr, callback, on_done, query_payload,
                                    query_payload_len, user_context, options);
 }

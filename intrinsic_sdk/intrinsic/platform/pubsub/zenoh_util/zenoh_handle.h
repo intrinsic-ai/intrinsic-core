@@ -42,17 +42,13 @@ typedef std::function<void(const char*)> imw_on_done_functor_t;
 typedef void (*imw_on_done_callback_ptr_t)(const char*, void*);
 
 // Non-owning callback bundle passed as `user_context` to `imw_query` and
-// `imw_query_messages`. Pointed-to functors must outlive
-// `zenoh_query_static_on_done`, which runs `on_done` once (if non-null) and
-// then invokes `on_destroy` to release caller-owned or self-retained state.
-// When `imw_query` or `imw_query_messages` returns non-OK before Zenoh accepts
-// the query, `zenoh_query_static_on_done` does not run and callers must
-// release self-retained state directly (e.g., via `KVQuery::CancelSelfRetain`).
+// `imw_query_messages`. Pointed-to functors must outlive `on_done` (or be
+// owned alongside this struct and freed via
+// `imw_query_options_t::user_context_deleter`).
 struct QueryContext {
   imw_callback_functor_t* callback = nullptr;
   imw_on_done_functor_t* on_done = nullptr;
   imw_message_callback_functor_t* message_callback = nullptr;
-  std::function<void()> on_destroy;
 };
 
 void zenoh_static_callback(const char* keyexpr, const void* blob,

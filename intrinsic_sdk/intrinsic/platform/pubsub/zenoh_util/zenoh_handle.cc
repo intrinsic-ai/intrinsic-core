@@ -84,12 +84,8 @@ void zenoh_query_static_on_done(const char* keyexpr, void* fptr) {
   if (query_context == nullptr) {
     return;
   }
-  std::function<void()> cleanup = std::move(query_context->on_destroy);
   if (query_context->on_done != nullptr && *(query_context->on_done)) {
     (*(query_context->on_done))(keyexpr);
-  }
-  if (cleanup) {
-    cleanup();
   }
 }
 

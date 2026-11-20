@@ -28,6 +28,7 @@
 #include "absl/cleanup/cleanup.h"
 #include "absl/log/log.h"
 #include "absl/strings/escaping.h"
+#include "absl/strings/numbers.h"
 #include "absl/strings/str_format.h"
 #include "absl/time/time.h"
 #include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_data_callback_context.h"
@@ -218,9 +219,104 @@ imw_ret_t PutPayloadWithEncoding(const z_loaned_session_t* session,
   return result == 0 ? IMW_OK : IMW_ERROR;
 }
 
+// Caps finite query timeouts at ~34.8 years (1ULL << 40 ms) before converting
+// to signed int64_t / absl::Milliseconds so huge uint64_t values never wrap.
+constexpr uint64_t kMaxFiniteQueryTimeoutMs = 1ULL << 40;
+
+bool ValidateQueryArgs(const z_owned_session_t& session,
+                       const IMWZenohQueryParams& params,
+                       z_view_keyexpr_t* out_keyexpr) {
+  if (!z_internal_check(session)) {
+    LOG(ERROR) << "Invalid session in IMWZenoh::query";
+    return false;
+  }
+  if (params.keyexpr == nullptr ||
+      (params.callback == nullptr && params.message_callback == nullptr)) {
+    LOG(ERROR) << "Invalid arguments for query";
+    return false;
+  }
+  if (Z_OK != z_view_keyexpr_from_str(out_keyexpr, params.keyexpr)) {
+    LOG(ERROR) << "Invalid keyexpr for query: " << params.keyexpr;
+    return false;
+  }
+  return true;
+}
+
+absl::Duration ReadDefaultQueryTimeout(const z_loaned_config_t* zenoh_config) {
+  z_owned_string_t timeout_str;
+  if (zc_config_get_from_str(zenoh_config, "queries_default_timeout",
+                             &timeout_str) != Z_OK) {
+    return IMWZenoh::kDefaultQueryTimeout;
+  }
+  absl::Cleanup drop_timeout_str = [&]() { z_drop(z_move(timeout_str)); };
+  const absl::string_view raw(z_string_data(z_loan(timeout_str)),
+                              z_string_len(z_loan(timeout_str)));
+  uint64_t timeout_ms = 0;
+  if (!absl::SimpleAtoi(raw, &timeout_ms) || timeout_ms == 0) {
+    return IMWZenoh::kDefaultQueryTimeout;
+  }
+  if (timeout_ms > kMaxFiniteQueryTimeoutMs) {
+    return absl::InfiniteDuration();
+  }
+  return absl::Milliseconds(static_cast<int64_t>(timeout_ms));
+}
+
+// Computes the GC deadline on Abseil's wall clock to match
+// `absl::CondVar::WaitWithDeadline`. A large forward NTP jump (> kQueryGcGrace)
+// could reap a slow query early, which is bounded and safe under the contract.
+absl::Time ComputeQueryGcDeadline(absl::Time now,
+                                  const imw_query_options_t& options,
+                                  absl::Duration default_timeout,
+                                  absl::Duration gc_grace) {
+  if (options.timeout_ms > kMaxFiniteQueryTimeoutMs) {
+    return absl::InfiniteFuture();
+  }
+  const absl::Duration effective_timeout =
+      options.timeout_ms == 0
+          ? default_timeout
+          : absl::Milliseconds(static_cast<int64_t>(options.timeout_ms));
+  if (effective_timeout >= absl::InfiniteDuration()) {
+    return absl::InfiniteFuture();
+  }
+  return now + effective_timeout + gc_grace;
+}
+
+bool BuildQueryPayload(const void* query_payload, size_t query_payload_len,
+                       bool call_ros_service, z_owned_bytes_t* out_payload) {
+  const z_result_t result =
+      call_ros_service
+          ? z_bytes_copy_from_buf(out_payload,
+                                  static_cast<const uint8_t*>(query_payload),
+                                  query_payload_len)
+          : ze_serialize_buf(out_payload,
+                             static_cast<const uint8_t*>(query_payload),
+                             query_payload_len);
+  if (result != Z_OK) {
+    LOG(ERROR) << "Failed to build query payload: " << static_cast<int>(result);
+    return false;
+  }
+  return true;
+}
+
+void BuildRosServiceAttachment(const z_id_t& zenoh_id,
+                               z_owned_bytes_t* out_attachment) {
+  // Matches rmw_zenoh_cpp/detail/attachment_helpers.cpp
+  // AttachmentData::serialize_to_zbytes() layout for ROS 2 service calls.
+  ze_owned_serializer_t serializer;
+  ze_serializer_empty(&serializer);
+  ze_serializer_serialize_str(z_loan_mut(serializer), "sequence_number");
+  ze_serializer_serialize_int64(z_loan_mut(serializer), 0);  // placeholder
+  ze_serializer_serialize_str(z_loan_mut(serializer), "source_timestamp");
+  ze_serializer_serialize_int64(z_loan_mut(serializer), 0);  // placeholder
+  ze_serializer_serialize_str(z_loan_mut(serializer), "source_gid");
+  ze_serializer_serialize_buf(z_loan_mut(serializer), &zenoh_id.id[0],
+                              sizeof(zenoh_id));
+  ze_serializer_finish(z_move(serializer), out_attachment);
+}
+
 }  // namespace
 
-IMWZenoh::IMWZenoh() {
+IMWZenoh::IMWZenoh() : active_queries_(IMWZenohQueryTable::Create()) {
   z_internal_session_null(&session_);
   memset(&zenoh_id_, 0, sizeof(zenoh_id_));
 }
@@ -276,11 +372,15 @@ imw_ret_t IMWZenoh::create_session(const char* config) {
     return IMW_ERROR;
   }
 
+  default_query_timeout_ = ReadDefaultQueryTimeout(z_loan(zenoh_config));
+
   result = z_open(&session_, z_move(zenoh_config), nullptr);
   if (result < 0) {
     LOG(ERROR) << "Unable to open Zenoh session";
     return IMW_ERROR;
   }
+
+  active_queries_ = IMWZenohQueryTable::Create();
 
   if (introspection_enable_) {
     if (!introspection_init()) return IMW_ERROR;
@@ -465,7 +565,9 @@ imw_ret_t IMWZenoh::destroy_session() {
     liveliness_tokens_.clear();
   }
 
+  active_queries_->BeginShutdownAndJoinReaper();
   z_drop(z_move(session_));
+  active_queries_->DrainRemaining();
   return IMW_OK;
 }
 
@@ -1119,117 +1221,75 @@ void IMWZenoh::query_callback(const char* keyexpr,
   z_drop(z_move(slice));
 }
 
-imw_ret_t IMWZenoh::query_internal(
-    const char* keyexpr, imw_query_callback_fn* callback,
-    imw_query_message_callback_fn* message_callback,
-    imw_query_on_done_callback_fn* on_done, const void* query_payload,
-    const size_t query_payload_len, void* user_context,
-    imw_query_options_t* options) {
-  if (!z_internal_check(session_)) {
-    LOG(ERROR) << "Invalid session in IMWZenoh::query";
-    return IMW_ERROR;
-  }
-  if (keyexpr == nullptr ||
-      (callback == nullptr && message_callback == nullptr)) {
-    LOG(ERROR) << "Invalid arguments for query";
-    return IMW_ERROR;
-  }
+imw_ret_t IMWZenoh::query_internal(const IMWZenohQueryParams& params,
+                                   const void* query_payload,
+                                   const size_t query_payload_len) {
+  absl::Cleanup delete_user_context = [&params]() {
+    if (params.options.user_context_deleter != nullptr) {
+      params.options.user_context_deleter(params.user_context);
+    }
+  };
   z_view_keyexpr_t view_keyexpr;
-  if (Z_OK != z_view_keyexpr_from_str(&view_keyexpr, keyexpr)) {
-    LOG(ERROR) << "Invalid keyexpr for query: " << keyexpr;
+  if (!ValidateQueryArgs(session_, params, &view_keyexpr)) {
     return IMW_ERROR;
   }
 
-  z_owned_closure_reply_t reply_closure;
-  z_closure_reply(
-      &reply_closure, static_query_callback, static_query_drop,
-      new IMWZenohQueryContext(this, keyexpr, callback, message_callback,
-                               on_done, user_context, options));
+  // NOTE: `payload` and `attachment` must remain at the same scope as `opts`
+  // until `z_get()` consumes them, because `z_move()` passes ownership pointers
+  // rather than relocating storage.
+  z_owned_bytes_t payload;
+  bool has_payload = false;
+  if (query_payload != nullptr && query_payload_len > 0) {
+    if (!BuildQueryPayload(query_payload, query_payload_len,
+                           params.options.call_ros_service, &payload)) {
+      return IMW_ERROR;
+    }
+    has_payload = true;
+  }
+
+  const absl::Time gc_deadline = ComputeQueryGcDeadline(
+      absl::Now(), params.options, default_query_timeout_, query_gc_grace_);
+  std::shared_ptr<IMWZenohQueryTable> query_table = active_queries_;
+  std::shared_ptr<IMWZenohActiveQuery> active_query =
+      query_table->Insert(params, gc_deadline);
+  if (active_query == nullptr) {
+    if (has_payload) {
+      z_drop(z_move(payload));
+    }
+    LOG(ERROR) << "IMWZenoh query table is shutting down";
+    return IMW_ERROR;
+  }
+  std::move(delete_user_context).Cancel();
+
   z_get_options_t opts;
   z_get_options_default(&opts);
-
-  // NOTE: This payload structure _must_ be at the same scoping level as the
-  // z_get_options_t that it is "moved" into, because z_move() doesn't really
-  // move in the same way that std::move() does. It is more of an indication
-  // that ownership will be taken by a function consuming it. So, an
-  // expression like opts.payload = z_move(payload) doesn't actually move the
-  // payload into the opts structure. The payload must stay in-scope until
-  // z_get() is called.
-  z_owned_bytes_t payload;
-
-  if (query_payload && query_payload_len) {
-    if ((options != nullptr) && options->call_ros_service) {
-      z_bytes_copy_from_buf(&payload,
-                            static_cast<const uint8_t*>(query_payload),
-                            query_payload_len);
-    } else {
-      ze_serialize_buf(&payload, static_cast<const uint8_t*>(query_payload),
-                       query_payload_len);
-    }
+  if (has_payload) {
     opts.payload = z_move(payload);
   }
-
-  opts.timeout_ms = 0;
+  opts.timeout_ms = params.options.timeout_ms;
   opts.target = Z_QUERY_TARGET_ALL;
   opts.consolidation = z_query_consolidation_none();
 
-  // NOTE: The attachment structure _must_ be at the same scoping level as the
-  // z_get_options_t instance `opts` that it is "moved" into, because z_move()
-  // doesn't really move in the same way that std::move() does. It is more of
-  // an indication that ownership will be taken by a function consuming it. So,
-  // an expression like "opts.attachment = z_move(attachment)" doesn't actually
-  // move the attachment into the opts structure. The payload must stay
-  // in-scope until z_get() is called. This attachment is only used when
-  // calling ROS services, but we must always leave it at this scoping level
-  // for when the options->call_ros_service branch is taken.
   z_owned_bytes_t attachment;
-
-  if (options != nullptr) {
-    opts.timeout_ms = options->timeout_ms;
-    if (options->call_ros_service) {
-      // When calling a ROS service that is running rmw_zenoh, the incoming
-      // requests are expected to have an attachment that provides various
-      // metadata. These are used by ROS rmw_zenoh services to disambiguate
-      // between multiple pending clients when the service is very busy, and
-      // to collect statistics.
-      //
-      // At time of writing, the authoritative source for the structure of
-      // the attachment is the source code of rmw_zenoh. Specifically,
-      // rmw_zenoh_cpp/detail/attachment_helpers.cpp which can be viewed at
-      // https://github.com/ros2/rmw_zenoh/blob/rolling/rmw_zenoh_cpp/src/detail/attachment_helpers.cpp
-      // The serialization in this function must match the layout provided by
-      // that class, as shown in AttachmentData::serialize_to_zbytes()
-
-      ze_owned_serializer_t serializer;
-      ze_serializer_empty(&serializer);
-
-      // Although not strictly necessary for current usage, we should
-      // eventually create a sequence_number counter which increments every
-      // time a call is made to a specific key.
-      ze_serializer_serialize_str(z_loan_mut(serializer), "sequence_number");
-      ze_serializer_serialize_int64(z_loan_mut(serializer), 0);  // placeholder
-
-      // Althought not strictly necessary for current usage, we should
-      // eventually poll the system time here, and provide it in the correct
-      // format.
-      ze_serializer_serialize_str(z_loan_mut(serializer), "source_timestamp");
-      ze_serializer_serialize_int64(z_loan_mut(serializer), 0);  // placeholder
-
-      ze_serializer_serialize_str(z_loan_mut(serializer), "source_gid");
-      ze_serializer_serialize_buf(z_loan_mut(serializer), &zenoh_id_.id[0],
-                                  sizeof(zenoh_id_));
-
-      ze_serializer_finish(z_move(serializer), &attachment);
-      opts.attachment = z_move(attachment);
-    }
+  if (params.options.call_ros_service) {
+    BuildRosServiceAttachment(zenoh_id_, &attachment);
+    opts.attachment = z_move(attachment);
   }
+
+  z_owned_closure_reply_t reply_closure;
+  z_closure_reply(&reply_closure, static_query_callback, static_query_drop,
+                  new IMWZenohQueryClosureContext{active_query, query_table,
+                                                  active_query->id()});
 
   const z_result_t result = z_get(z_loan(session_), z_loan(view_keyexpr), "",
                                   z_move(reply_closure), &opts);
   if (result < 0) {
     LOG(ERROR) << "z_get() returned an error";
+    query_table->Take(active_query->id());
+    active_query->FinishZGet(/*z_get_ok=*/false);
     return IMW_ERROR;
   }
+  active_query->FinishZGet(/*z_get_ok=*/true);
   return IMW_OK;
 }
 
@@ -1238,9 +1298,16 @@ imw_ret_t IMWZenoh::query(const char* keyexpr, imw_query_callback_fn* callback,
                           const void* query_payload,
                           const size_t query_payload_len, void* user_context,
                           imw_query_options_t* options) {
-  return query_internal(keyexpr, callback, /*message_callback=*/nullptr,
-                        on_done, query_payload, query_payload_len, user_context,
-                        options);
+  return query_internal(
+      IMWZenohQueryParams{
+          .keyexpr = keyexpr,
+          .callback = callback,
+          .message_callback = nullptr,
+          .on_done = on_done,
+          .user_context = user_context,
+          .options = options != nullptr ? *options : imw_query_options_t{},
+      },
+      query_payload, query_payload_len);
 }
 
 imw_ret_t IMWZenoh::query_messages(const char* keyexpr,
@@ -1250,9 +1317,16 @@ imw_ret_t IMWZenoh::query_messages(const char* keyexpr,
                                    const size_t query_payload_len,
                                    void* user_context,
                                    imw_query_options_t* options) {
-  return query_internal(keyexpr, /*callback=*/nullptr, callback, on_done,
-                        query_payload, query_payload_len, user_context,
-                        options);
+  return query_internal(
+      IMWZenohQueryParams{
+          .keyexpr = keyexpr,
+          .callback = nullptr,
+          .message_callback = callback,
+          .on_done = on_done,
+          .user_context = user_context,
+          .options = options != nullptr ? *options : imw_query_options_t{},
+      },
+      query_payload, query_payload_len);
 }
 
 imw_ret_t IMWZenoh::set(const char* keyexpr, const void* bytes,

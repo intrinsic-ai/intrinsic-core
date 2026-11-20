@@ -32,35 +32,6 @@
 
 namespace intrinsic {
 
-class IMWZenoh;
-
-class IMWZenohQueryContext {
- public:
-  IMWZenohQueryContext(IMWZenoh* imw_zenoh_instance, const char* keyexpr,
-                       imw_query_callback_fn* callback,
-                       imw_query_message_callback_fn* message_callback,
-                       imw_query_on_done_callback_fn* on_done,
-                       void* user_context, imw_query_options_t* options)
-      : imw_zenoh_instance_(imw_zenoh_instance),
-        keyexpr_(keyexpr != nullptr ? keyexpr : ""),
-        callback_(callback),
-        message_callback_(message_callback),
-        on_done_(on_done),
-        user_context_(user_context) {
-    if (options != nullptr) {
-      options_ = *options;
-    }
-  }
-
-  IMWZenoh* imw_zenoh_instance_;
-  std::string keyexpr_;
-  imw_query_callback_fn* callback_;
-  imw_query_message_callback_fn* message_callback_;
-  imw_query_on_done_callback_fn* on_done_;
-  void* user_context_;
-  imw_query_options_t options_;
-};
-
 struct IMWZenohQueryParams {
   const char* keyexpr = nullptr;
   imw_query_callback_fn* callback = nullptr;

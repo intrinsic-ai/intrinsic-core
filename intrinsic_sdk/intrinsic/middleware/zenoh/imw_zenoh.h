@@ -25,10 +25,12 @@
 #include "absl/base/internal/sysinfo.h"
 #include "absl/synchronization/mutex.h"
 #include "absl/synchronization/notification.h"
+#include "absl/time/time.h"
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_liveliness_subscription.h"
 #include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_liveliness_token.h"
 #include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_publisher.h"
+#include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_query_context.h"
 #include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_queryable.h"
 #include "intrinsic_sdk/intrinsic/middleware/zenoh/imw_zenoh_subscription.h"
 #include "nlohmann/json.hpp"
@@ -41,6 +43,8 @@ class IMWZenoh {
 
  public:
   static absl::Mutex init_fini_mutex_;
+  static constexpr absl::Duration kDefaultQueryTimeout = absl::Seconds(10);
+  static constexpr absl::Duration kQueryGcGrace = absl::Seconds(30);
 
   IMWZenoh();
 
@@ -158,21 +162,19 @@ class IMWZenoh {
       const char* keyexpr, imw_subscription_callback_fn* legacy_callback,
       imw_subscription_message_callback_fn* message_callback,
       const void* user_context);
-  imw_ret_t query_internal(const char* keyexpr, imw_query_callback_fn* callback,
-                           imw_query_message_callback_fn* message_callback,
-                           imw_query_on_done_callback_fn* on_done,
+  imw_ret_t query_internal(const IMWZenohQueryParams& params,
                            const void* query_payload,
-                           const size_t query_payload_len, void* user_context,
-                           imw_query_options_t* options);
+                           const size_t query_payload_len);
 
   static void data_callback(IMWZenohSubscription& sub,
                             const z_loaned_sample_t* sample);
   void queryable_callback(const std::string& queryable_keyexpr,
                           const z_loaned_query_t* sample);
-  void query_callback(const char* keyexpr, imw_query_callback_fn* user_callback,
-                      imw_query_message_callback_fn* message_callback,
-                      z_loaned_reply_t* reply, void* user_context,
-                      const imw_query_options_t* options);
+  static void query_callback(const char* keyexpr,
+                             imw_query_callback_fn* user_callback,
+                             imw_query_message_callback_fn* message_callback,
+                             z_loaned_reply_t* reply, void* user_context,
+                             const imw_query_options_t* options);
   void liveliness_get_callback(z_loaned_reply_t* reply,
                                imw_liveliness_get_callback_fn* callback,
                                void* untyped_context);
@@ -233,6 +235,10 @@ class IMWZenoh {
   std::unordered_map<std::string, std::unique_ptr<IMWZenohLivelinessToken>>
       liveliness_tokens_;
   absl::Mutex liveliness_tokens_mutex_;
+
+  std::shared_ptr<IMWZenohQueryTable> active_queries_;
+  absl::Duration default_query_timeout_ = kDefaultQueryTimeout;
+  absl::Duration query_gc_grace_ = kQueryGcGrace;
 
   std::string introspection_keyexpr_;
   std::thread introspection_thread_;
