@@ -229,6 +229,7 @@ cc_library(
         "//intrinsic_perception/intrinsic/perception/proto_conversion/v1:camera_config",
         "//intrinsic_perception/intrinsic/perception/proto_conversion/v1:camera_identifier",
         "//intrinsic_perception/intrinsic/perception/proto_conversion/v1:camera_settings",
+        "//intrinsic_sdk/intrinsic/assets:id_utils",
         "//intrinsic_sdk/intrinsic/platform/pubsub",
         "//intrinsic_sdk/intrinsic/util/status:ret_check",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",

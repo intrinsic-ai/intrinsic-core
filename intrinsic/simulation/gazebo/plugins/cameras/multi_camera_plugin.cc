@@ -421,7 +421,7 @@ void MultiCameraPlugin::InitCameraConnection() {
   };
 
   connection_ = std::make_unique<GazeboCameraConnection>(
-      camera_description, camera_config, set_active);
+      camera_description, camera_config, set_active, model_name_);
 
   // Register camera to service. If necessary, starts the gRPC service.
   auto& services =

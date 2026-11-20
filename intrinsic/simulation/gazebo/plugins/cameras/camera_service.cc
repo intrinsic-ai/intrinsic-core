@@ -43,6 +43,7 @@
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
 #include "grpcpp/support/sync_stream.h"
+#include "intrinsic/assets/id_utils.h"
 #include "intrinsic/perception/cameras/camera_config.h"
 #include "intrinsic/perception/cameras/camera_identifier.h"
 #include "intrinsic/perception/cameras/camera_setting.h"
@@ -184,10 +185,12 @@ GazeboCameraConnection::GazeboCameraConnection(
     const intrinsic_proto::perception::v1::DescribeCameraResponse&
         camera_description,
     const intrinsic_proto::perception::v1::CameraConfig& camera_config,
-    const SetActiveFunction& set_active_function)
+    const SetActiveFunction& set_active_function,
+    absl::string_view instance_name)
     : camera_description_(camera_description),
       camera_config_(camera_config),
-      set_active_function_(set_active_function) {
+      set_active_function_(set_active_function),
+      instance_name_(instance_name) {
   set_active_function(false, {});
 
   camera_handle_ = CanonicalString(
@@ -352,6 +355,10 @@ GazeboCameraConnection::camera_config() const {
 
 const std::string& GazeboCameraConnection::camera_handle() const {
   return camera_handle_;
+}
+
+const std::string& GazeboCameraConnection::instance_name() const {
+  return instance_name_;
 }
 
 absl::StatusOr<CameraSettingProperties>
@@ -644,6 +651,7 @@ absl::Status GazeboCameraGrpcService::RegisterCamera(
     return absl::InvalidArgumentError(
         "Cannot register camera on Gazebo server without a camera identifier.");
   }
+  INTR_RETURN_IF_ERROR(assets::ValidateName(camera->instance_name()));
   const auto& camera_handle = camera->camera_handle();
   if (cameras_.contains(camera_handle)) {
     return absl::InvalidArgumentError(

@@ -102,7 +102,8 @@ class GazeboCameraConnection : public ImageSource {
       const intrinsic_proto::perception::v1::DescribeCameraResponse&
           camera_description,
       const intrinsic_proto::perception::v1::CameraConfig& camera_config,
-      const SetActiveFunction& set_active_function);
+      const SetActiveFunction& set_active_function,
+      absl::string_view instance_name);
 
   ~GazeboCameraConnection() override;
 
@@ -132,6 +133,10 @@ class GazeboCameraConnection : public ImageSource {
 
   // Returns a hardware unique identifier for a specific camera.
   const std::string& camera_handle() const;
+
+  // Returns the resource instance name used for `/assets/<instance_name>/...`
+  // PubSub topics.
+  const std::string& instance_name() const;
 
  protected:
   absl::StatusOr<CaptureResult> CaptureImpl(
@@ -172,6 +177,7 @@ class GazeboCameraConnection : public ImageSource {
   SetActiveFunction set_active_function_;
 
   std::string camera_handle_;
+  std::string instance_name_;
 };
 
 // gRpc service emulating a CameraService to send out the image data.
