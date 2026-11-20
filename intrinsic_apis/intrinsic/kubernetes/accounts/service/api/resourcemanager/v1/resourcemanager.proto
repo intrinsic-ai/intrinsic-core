@@ -163,8 +163,8 @@ message ServiceAccount {
   string name = 1 [(google.api.field_behavior) = OUTPUT_ONLY];
 
   // The email address of the service account, which is the subject of its
-  // tokens and of role bindings that grant it access.
-  // Format: {service_account}@serviceaccounts.intrinsic.equipment
+  // tokens and of role bindings that grant it access. It is assigned by the
+  // server: read it from this field rather than deriving it from the ID.
   string email = 2 [(google.api.field_behavior) = OUTPUT_ONLY];
 
   // The human-readable display name of the service account. It must be 1 to
