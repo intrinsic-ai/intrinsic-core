@@ -82,6 +82,12 @@ constexpr int64_t kMinZenohQueryTimeoutMs = 250;
 using VerificationMode =
     KeyValueStore::SetWithVerificationOptions::VerificationMode;
 
+enum class ConsistencyPollOutcome {
+  kStillInitial,
+  kCommitted,
+  kConflict,
+};
+
 bool IsProtobufEncoding(imw_encoding_t encoding) {
   switch (encoding) {
     case IMW_ENCODING_VARINT_PREFIXED_BYTES:
@@ -106,6 +112,13 @@ bool IsRawEncoding(imw_encoding_t encoding) {
   return false;
 }
 
+bool MatchesExpectedEncoding(imw_encoding_t actual, imw_encoding_t expected) {
+  if (IsProtobufEncoding(expected)) {
+    return IsProtobufEncoding(actual);
+  }
+  return actual == expected;
+}
+
 // Renders a verification mode for logs, traces and error messages. The switch
 // deliberately has no `default:` case, so adding a mode raises -Wswitch here
 // instead of silently reporting the wrong one.
@@ -126,6 +139,72 @@ absl::Status VerificationTimeoutError(VerificationMode mode,
       ToString(mode), key));
 }
 
+struct ConsistencyExpectedState {
+  imw_encoding_t encoding = IMW_ENCODING_VARINT_PREFIXED_BYTES;
+  absl::string_view bytes;
+  std::optional<imw_encoding_t> initial_encoding;
+  absl::string_view initial_bytes;
+};
+
+absl::Status ClassifyConsistencyMessage(
+    const void* response_bytes, size_t response_bytes_len,
+    imw_encoding_t encoding, const ConsistencyExpectedState& expected,
+    ConsistencyPollOutcome& out) {
+  const absl::string_view actual_bytes =
+      (response_bytes != nullptr && response_bytes_len > 0)
+          ? absl::string_view(static_cast<const char*>(response_bytes),
+                              response_bytes_len)
+          : absl::string_view();
+  if (MatchesExpectedEncoding(encoding, expected.encoding) &&
+      actual_bytes == expected.bytes) {
+    out = ConsistencyPollOutcome::kCommitted;
+    return absl::OkStatus();
+  }
+  if (expected.initial_encoding.has_value() &&
+      encoding == *expected.initial_encoding &&
+      actual_bytes == expected.initial_bytes) {
+    out = ConsistencyPollOutcome::kStillInitial;
+    return absl::FailedPreconditionError("Value matches initial state");
+  }
+  out = ConsistencyPollOutcome::kConflict;
+  return absl::OkStatus();
+}
+
+std::optional<absl::Status> EvaluateConsistencyPoll(
+    absl::string_view key, const absl::StatusOr<ConsistencyPollOutcome>& poll,
+    bool had_initial_state) {
+  if (poll.ok()) {
+    if (*poll == ConsistencyPollOutcome::kCommitted) {
+      return absl::OkStatus();
+    }
+    if (*poll == ConsistencyPollOutcome::kConflict) {
+      return absl::AbortedError(absl::StrFormat(
+          "Value for key '%s' was modified by another process while "
+          "waiting for verification (mode: %s)",
+          key, ToString(VerificationMode::kHighConsistency)));
+    }
+    return std::nullopt;
+  }
+  if (absl::IsNotFound(poll.status())) {
+    if (had_initial_state) {
+      return absl::AbortedError(absl::StrFormat(
+          "Value for key '%s' was modified by another process while "
+          "waiting for verification (mode: %s)",
+          key, ToString(VerificationMode::kHighConsistency)));
+    }
+    return std::nullopt;
+  }
+  if (absl::IsDeadlineExceeded(poll.status()) ||
+      absl::IsFailedPrecondition(poll.status())) {
+    return std::nullopt;
+  }
+  return absl::InternalError(absl::StrFormat(
+      "Unexpected error while waiting for verification (mode: %s) when "
+      "setting key '%s': %s",
+      ToString(VerificationMode::kHighConsistency), key,
+      poll.status().ToString()));
+}
+
 // Waits out the retry backoff, but never past the point where one more poll
 // still fits in the budget. Sleeping through the tail of the budget would
 // spend it without ever looking for the value again.
@@ -138,25 +217,26 @@ void SleepForBackoff(absl::Duration delay, absl::Time deadline) {
   absl::SleepFor(std::min(delay, sleepable));
 }
 
-absl::StatusOr<std::optional<std::string>> FetchCurrentRawState(
-    absl::StatusOr<std::string> get_result, absl::string_view key) {
-  switch (get_result.status().code()) {
-    case absl::StatusCode::kOk:
-      // Value exists.
-      return std::move(get_result.value());
-    case absl::StatusCode::kNotFound:
-      // Value does not exist (unset).
-      return std::nullopt;
-    case absl::StatusCode::kDeadlineExceeded:
-      // Transient network timeout reading value. Propagate to retry.
-      return get_result.status();
-    default:
-      return absl::InternalError(
-          absl::StrFormat("Unexpected error while waiting for verification "
-                          "(mode: %s) when setting key '%s': %s",
-                          ToString(VerificationMode::kHighConsistency), key,
-                          get_result.status().ToString()));
+absl::Status CheckImwSetResult(imw_ret_t ret) {
+  if (ret != IMW_OK) {
+    return absl::InternalError(
+        absl::StrFormat("Error setting a key, return code: %d", ret));
   }
+  return absl::OkStatus();
+}
+
+absl::Status DispatchAndCheckImwSet(const std::string& prefixed_name,
+                                    const void* data, size_t size,
+                                    imw_encoding_t encoding) {
+
+  const stats::ScopedSpan net_span("KVStoreClient::ZenohTransportSet");
+
+  const imw_ret_t ret = Zenoh().imw_set_with_encoding(prefixed_name.c_str(),
+                                                      data, size, encoding);
+
+  net_span.AddAttribute("zenoh.ret_code", static_cast<int64_t>(ret));
+
+  return CheckImwSetResult(ret);
 }
 
 template <typename ResultT, typename OnMessageFn>
@@ -404,99 +484,122 @@ absl::Status KeyValueStore::Set(absl::string_view key,
   return Set(key, value);
 }
 
-absl::Status KeyValueStore::SetWithVerification(
-    absl::string_view key, const google::protobuf::Any& value,
-    const SetWithVerificationOptions& options) {
-
-  const stats::ScopedSpan set_span("KVStoreClient::SetWithVerification");
-  set_span.AddAttribute("kv.key", std::string(key));
-  set_span.AddAttribute("kv.verification_mode",
-                        std::string(ToString(options.mode)));
-
-
-  if (options.timeout <= absl::ZeroDuration()) {
-    return absl::InvalidArgumentError(
-        "SetWithVerificationOptions::timeout must be positive");
-  }
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(key));
+absl::StatusOr<std::string> KeyValueStore::PrepareSetKey(
+    absl::string_view key, size_t size, absl::string_view op_name) const {
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(key));
   INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
                         ZenohHandle::add_key_prefix(key, key_prefix_));
-  LOG(INFO) << "KVStore SetWithVerification for key: " << prefixed_name;
+  LOG(INFO) << "KVStore " << op_name << " for key: " << prefixed_name;
 
-  // Get the initial value if high consistency is requested.
-  std::optional<std::string> initial_state;
-  if (options.mode ==
-      SetWithVerificationOptions::VerificationMode::kHighConsistency) {
-    // This read precedes the write, so it is not part of the verification
-    // budget. It is still clamped to the caller's timeout so that a caller
-    // asking for a short verification cannot be blocked here for ten seconds.
-    absl::StatusOr<std::string> initial_result = GetRawWithRawKey(
-        prefixed_name,
-        std::min(kHighConsistencyInitialGetTimeout, options.timeout));
-    if (initial_result.ok()) {
-      initial_state = std::move(initial_result.value());
-    } else if (!absl::IsNotFound(initial_result.status())) {
-      // If the initial read fails due to a transient error (e.g. deadline
-      // exceeded), we intentionally leave initial_state empty (nullopt). This
-      // ensures that if the key was already populated, our conflict check later
-      // will see the pre-existing value and abort the operation. The exception
-      // is a pre-existing value that already matches the bytes we wrote: the
-      // write is then a no-op and returning OK is correct. The caller can
-      // retry the set idempotently. This is preferred over skipping the
-      // conflict check.
-      LOG_EVERY_N_SEC(WARNING, 1)
-          << "Initial read failed during high consistency check for key '"
-          << key << "': " << initial_result.status();
-    }
-  }
-
-  std::string value_serialized;
-  {
-
-    const stats::ScopedSpan serialize_span("KVStoreClient::ProtoSerializeAny",
-                                           set_span.span());
-
-    value_serialized = value.SerializeAsString();
-
-    serialize_span.AddAttribute("payload.bytes",
-                                static_cast<int64_t>(value_serialized.size()));
-
-  }
-  const size_t payload_size = value_serialized.size();
-  if (payload_size > kPayloadByteSizeWarningThreshold) {
+  if (size > kPayloadByteSizeWarningThreshold) {
     LOG(WARNING) << "Large KVStore SetRequest payload detected. Key: " << key
-                 << ", Size: " << payload_size << " bytes.";
+                 << ", Size: " << size << " bytes.";
   }
+  return prefixed_name;
+}
 
-  imw_ret_t ret;
-  {
-
-    const stats::ScopedSpan net_span("KVStoreClient::ZenohTransportSet",
-                                     set_span.span());
-
-    ret = Zenoh().imw_set(prefixed_name.c_str(), value_serialized.data(),
-                          payload_size);
-
-    net_span.AddAttribute("zenoh.ret_code", static_cast<int64_t>(ret));
-
+std::optional<KeyValueStore::EncodedValue>
+KeyValueStore::ReadInitialHighConsistencyState(const std::string& prefixed_name,
+                                               absl::string_view key,
+                                               absl::Duration timeout) {
+  // This read precedes the write, so it is not part of the verification
+  // budget. It is still clamped to the caller's timeout so that a caller
+  // asking for a short verification cannot be blocked here for ten seconds.
+  absl::StatusOr<EncodedValue> initial_result = GetEncodedWithRawKey(
+      prefixed_name, std::min(kHighConsistencyInitialGetTimeout, timeout));
+  if (initial_result.ok()) {
+    return std::move(initial_result.value());
   }
-  if (ret != IMW_OK) {
-    return absl::InternalError(
-        absl::StrFormat("Error setting a key, return code: %d", ret));
+  if (!absl::IsNotFound(initial_result.status())) {
+    LOG_EVERY_N_SEC(WARNING, 1)
+        << "Initial read failed during high consistency check for key '" << key
+        << "': " << initial_result.status();
   }
+  return std::nullopt;
+}
 
+absl::Status KeyValueStore::VerifyAfterSet(
+    const std::string& prefixed_name, absl::string_view key,
+    imw_encoding_t expected_encoding, absl::string_view expected_bytes,
+    const std::optional<EncodedValue>& initial_state,
+    const SetWithVerificationOptions& options) {
   switch (options.mode) {
-    case SetWithVerificationOptions::VerificationMode::kFirstReply:
-      return VerifyFirstReply(prefixed_name, key, options.timeout);
-    case SetWithVerificationOptions::VerificationMode::kHighConsistency:
-      return VerifyHighConsistency(prefixed_name, key, value_serialized,
-                                   initial_state, options.timeout);
+    case VerificationMode::kFirstReply:
+      return VerifyFirstReply(prefixed_name, key, expected_encoding,
+                              options.timeout);
+    case VerificationMode::kHighConsistency:
+      return VerifyHighConsistency(prefixed_name, key, expected_encoding,
+                                   expected_bytes, initial_state,
+                                   options.timeout);
   }
   return absl::InvalidArgumentError("Unknown verification mode");
 }
 
+absl::Status KeyValueStore::ExecuteSet(
+    absl::string_view key, const void* data, size_t size,
+    imw_encoding_t encoding, absl::string_view op_name,
+    const SetWithVerificationOptions* verification) {
+
+  const stats::ScopedSpan set_span(absl::StrCat("KVStoreClient::", op_name));
+  set_span.AddAttribute("kv.key", std::string(key));
+  if (verification != nullptr) {
+    set_span.AddAttribute("kv.verification_mode",
+                          std::string(ToString(verification->mode)));
+  } else {
+    set_span.AddAttribute("kv.high_consistency", false);
+  }
+
+
+  INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
+                        PrepareSetKey(key, size, op_name));
+
+  if (verification == nullptr) {
+    return DispatchAndCheckImwSet(prefixed_name, data, size, encoding);
+  }
+
+  std::optional<EncodedValue> initial_state;
+  absl::string_view expected_bytes;
+  if (verification->mode == VerificationMode::kHighConsistency) {
+    initial_state = ReadInitialHighConsistencyState(prefixed_name, key,
+                                                    verification->timeout);
+    if (data != nullptr && size > 0) {
+      expected_bytes = absl::string_view(static_cast<const char*>(data), size);
+    }
+  }
+
+  INTR_RETURN_IF_ERROR(
+      DispatchAndCheckImwSet(prefixed_name, data, size, encoding));
+
+  return VerifyAfterSet(prefixed_name, key, encoding, expected_bytes,
+                        initial_state, *verification);
+}
+
+absl::Status KeyValueStore::SetWithVerification(
+    absl::string_view key, const google::protobuf::Any& value,
+    const SetWithVerificationOptions& options) {
+  if (options.timeout <= absl::ZeroDuration()) {
+    return absl::InvalidArgumentError(
+        "SetWithVerificationOptions::timeout must be positive");
+  }
+
+  const stats::ScopedSpan serialize_span("KVStoreClient::ProtoSerializeAny");
+
+  std::string value_serialized = value.SerializeAsString();
+
+  serialize_span.AddAttribute("payload.bytes",
+                              static_cast<int64_t>(value_serialized.size()));
+
+
+  // TODO(b/585031754): Switch protobuf writes to
+  // IMW_ENCODING_APPLICATION_PROTOBUF after reader rollout.
+  return ExecuteSet(key, value_serialized.data(), value_serialized.size(),
+                    IMW_ENCODING_VARINT_PREFIXED_BYTES, "SetWithVerification",
+                    &options);
+}
+
 absl::Status KeyValueStore::VerifyFirstReply(const std::string& prefixed_name,
                                              absl::string_view key,
+                                             imw_encoding_t expected_encoding,
                                              absl::Duration timeout) {
 
   const stats::ScopedSpan wait_span("KVStoreClient::VerifyFirstReply");
@@ -510,14 +613,29 @@ absl::Status KeyValueStore::VerifyFirstReply(const std::string& prefixed_name,
     if (remaining <= absl::ZeroDuration()) {
       return VerificationTimeoutError(VerificationMode::kFirstReply, key);
     }
-    absl::StatusOr<std::string> raw_result = GetRawWithRawKey(
-        prefixed_name, std::min(kVerificationRetryInterval, remaining));
-    if (raw_result.ok()) {
+    const absl::Duration poll_timeout =
+        std::max(kVerificationGetTimeout,
+                 std::min(kVerificationRetryInterval, remaining));
+    const absl::Status reply_status =
+        QuerySingleMessage<int>(
+            prefixed_name, poll_timeout,
+            [expected_encoding](const void* /*response_bytes*/,
+                                const size_t /*response_bytes_len*/,
+                                const imw_encoding_t encoding,
+                                int& /*out*/) -> absl::Status {
+              if (!MatchesExpectedEncoding(encoding, expected_encoding)) {
+                return absl::FailedPreconditionError("Reply encoding mismatch");
+              }
+              return absl::OkStatus();
+            })
+            .status();
+    if (reply_status.ok()) {
       return absl::OkStatus();
     }
-    if (!absl::IsNotFound(raw_result.status()) &&
-        !absl::IsDeadlineExceeded(raw_result.status())) {
-      return raw_result.status();
+    if (!absl::IsNotFound(reply_status) &&
+        !absl::IsDeadlineExceeded(reply_status) &&
+        !absl::IsFailedPrecondition(reply_status)) {
+      return reply_status;
     }
     SleepForBackoff(current_delay, deadline);
     current_delay = std::min(current_delay * kVerificationRetryDelayFactor,
@@ -527,13 +645,24 @@ absl::Status KeyValueStore::VerifyFirstReply(const std::string& prefixed_name,
 
 absl::Status KeyValueStore::VerifyHighConsistency(
     const std::string& prefixed_name, absl::string_view key,
-    absl::string_view serialized_value,
-    std::optional<absl::string_view> initial_state, absl::Duration timeout) {
+    imw_encoding_t expected_encoding, absl::string_view expected_bytes,
+    const std::optional<EncodedValue>& initial_state, absl::Duration timeout) {
 
   const stats::ScopedSpan wait_span("KVStoreClient::VerifyHighConsistency");
 
   const absl::Time deadline = ToDeadline(timeout);
   absl::Duration current_delay = kVerificationRetryDelayMin;
+  const ConsistencyExpectedState expected_state{
+      .encoding = expected_encoding,
+      .bytes = expected_bytes,
+      .initial_encoding =
+          initial_state.has_value()
+              ? std::optional<imw_encoding_t>(initial_state->encoding)
+              : std::nullopt,
+      .initial_bytes = initial_state.has_value()
+                           ? absl::string_view(initial_state->bytes)
+                           : absl::string_view(),
+  };
   while (true) {
     // Checked before polling rather than after, so that an exhausted budget
     // never spends another (zero-timeout) round trip before reporting.
@@ -541,32 +670,25 @@ absl::Status KeyValueStore::VerifyHighConsistency(
     if (remaining <= absl::ZeroDuration()) {
       return VerificationTimeoutError(VerificationMode::kHighConsistency, key);
     }
-    absl::StatusOr<std::optional<std::string>> current_state =
-        FetchCurrentRawState(
-            GetRawWithRawKey(prefixed_name,
-                             std::min(kVerificationRetryInterval, remaining)),
-            key);
+    const absl::Duration poll_timeout =
+        std::max(kVerificationGetTimeout,
+                 std::min(kVerificationRetryInterval, remaining));
+    absl::StatusOr<ConsistencyPollOutcome> poll =
+        QuerySingleMessage<ConsistencyPollOutcome>(
+            prefixed_name, poll_timeout,
+            [&expected_state](const void* response_bytes,
+                              const size_t response_bytes_len,
+                              const imw_encoding_t encoding,
+                              ConsistencyPollOutcome& out) -> absl::Status {
+              return ClassifyConsistencyMessage(response_bytes,
+                                                response_bytes_len, encoding,
+                                                expected_state, out);
+            });
 
-    if (!absl::IsDeadlineExceeded(current_state.status())) {
-      INTR_RETURN_IF_ERROR(current_state.status());
-
-      if (current_state->has_value() &&
-          current_state->value() == serialized_value) {
-        // Key value is committed.
-        return absl::OkStatus();
-      }
-
-      std::optional<absl::string_view> current_bytes;
-      if (current_state->has_value()) {
-        current_bytes = current_state->value();
-      }
-
-      if (current_bytes != initial_state) {
-        return absl::AbortedError(absl::StrFormat(
-            "Value for key '%s' was modified by another process while "
-            "waiting for verification (mode: %s)",
-            key, ToString(VerificationMode::kHighConsistency)));
-      }
+    if (std::optional<absl::Status> done =
+            EvaluateConsistencyPoll(key, poll, initial_state.has_value());
+        done.has_value()) {
+      return *done;
     }
 
     SleepForBackoff(current_delay, deadline);
@@ -624,13 +746,6 @@ absl::StatusOr<KeyValueStore::EncodedValue> KeyValueStore::GetEncodedWithRawKey(
         }
         return absl::OkStatus();
       });
-}
-
-absl::StatusOr<std::string> KeyValueStore::GetRawWithRawKey(
-    const std::string& raw_key, absl::Duration timeout) {
-  INTR_ASSIGN_OR_RETURN(EncodedValue message,
-                        GetEncodedWithRawKey(raw_key, timeout));
-  return std::move(message.bytes);
 }
 
 absl::StatusOr<google::protobuf::Any> KeyValueStore::GetAnyWithRawKey(

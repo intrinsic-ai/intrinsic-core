@@ -437,44 +437,55 @@ class KeyValueStore {
     bool operator==(const EncodedValue&) const = default;
   };
 
+  // Validates `key`, resolves the prefixed Zenoh key, logs the operation, and
+  // warns if `size` exceeds the large-payload threshold.
+  absl::StatusOr<std::string> PrepareSetKey(absl::string_view key, size_t size,
+                                            absl::string_view op_name) const;
+
+  // Reads the existing value (if any) before a `kHighConsistency` write so
+  // concurrent modifications can be detected during verification.
+  std::optional<EncodedValue> ReadInitialHighConsistencyState(
+      const std::string& prefixed_name, absl::string_view key,
+      absl::Duration timeout);
+
+  // Dispatches post-write verification according to `options.mode`.
+  absl::Status VerifyAfterSet(const std::string& prefixed_name,
+                              absl::string_view key,
+                              imw_encoding_t expected_encoding,
+                              absl::string_view expected_bytes,
+                              const std::optional<EncodedValue>& initial_state,
+                              const SetWithVerificationOptions& options);
+
   // Queries raw serialized bytes and encoding for the given raw key.
   absl::StatusOr<EncodedValue> GetEncodedWithRawKey(const std::string& raw_key,
                                                     absl::Duration timeout);
 
-  // Returns the raw serialized bytes for the given key.
-  // The key is processed as is, i.e. no prefixes are added to it.
-  //
-  // This method is private because the raw keys contain prefixes not known
-  // to the client code, such as `kv_store` or `kv_store_repl`.
-  absl::StatusOr<std::string> GetRawWithRawKey(const std::string& raw_key,
-                                               absl::Duration timeout);
-
   // Returns the value for the given key, wrapped into a google::protobuf::Any.
   // The key is processed as is, i.e. no prefixes are added to it.
-  //
-  // This method is private because the raw keys contain prefixes not known
-  // to the client code, such as `kv_store` or `kv_store_repl`.
   absl::StatusOr<google::protobuf::Any> GetAnyWithRawKey(
       const std::string& raw_key, absl::Duration timeout);
 
-  // Polls the KVStore until the first non-empty query reply is received for
-  // `key`, skipping content verification. Wait loops use exponential backoff,
-  // failing if the operation takes longer than `timeout`.
+  // Dispatches a payload write with tracing spans, key validation, and optional
+  // post-write verification.
+  absl::Status ExecuteSet(
+      absl::string_view key, const void* data, size_t size,
+      imw_encoding_t encoding, absl::string_view op_name,
+      const SetWithVerificationOptions* verification = nullptr);
+
+  // Polls the KVStore until the first reply matching `expected_encoding` is
+  // received for `key`, skipping content verification.
   absl::Status VerifyFirstReply(const std::string& prefixed_name,
-                                absl::string_view key, absl::Duration timeout);
+                                absl::string_view key,
+                                imw_encoding_t expected_encoding,
+                                absl::Duration timeout);
 
   // Polls the KVStore until the specified `key` converges to the given
-  // `serialized_value` using size and raw-byte comparison.
-  // Wait loops use exponential backoff, failing if the operation takes longer
-  // than `timeout`.
-  //
-  // Aborts if the value changes to a value other than the newly-written
-  // `serialized_value`, detecting race conditions with other writers (using
-  // `initial_state` to know what value the key started with).
+  // `expected_encoding` and `expected_bytes` using size and raw-byte
+  // comparison.
   absl::Status VerifyHighConsistency(
       const std::string& prefixed_name, absl::string_view key,
-      absl::string_view serialized_value,
-      std::optional<absl::string_view> initial_state, absl::Duration timeout);
+      imw_encoding_t expected_encoding, absl::string_view expected_bytes,
+      const std::optional<EncodedValue>& initial_state, absl::Duration timeout);
 
   template <typename T>
   absl::StatusOr<T> ExtractFromAny(absl::string_view key,
