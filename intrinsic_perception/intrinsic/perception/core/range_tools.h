@@ -15,6 +15,9 @@
 #ifndef INTRINSIC_PERCEPTION_CORE_RANGE_TOOLS_H_
 #define INTRINSIC_PERCEPTION_CORE_RANGE_TOOLS_H_
 
+#include <algorithm>
+#include <functional>
+#include <iterator>
 #include <optional>
 #include <type_traits>
 #include <vector>
@@ -66,17 +69,23 @@ std::optional<typename MapType::mapped_type> OptionalCopyAt(
   }
 }
 
-// Checks whether all elements in a range are unique.
-template <typename Range>
-bool IsUnique(const Range& range) {
-  using T = typename Range::value_type;
-
+// Checks whether all elements (or their projected keys) in a range are unique.
+template <typename Range, typename Proj = std::identity>
+bool IsUnique(const Range& range, Proj proj = {}) {
   if (range.size() <= 1) {
     return true;
   }
 
-  return (absl::flat_hash_set<T>(range.begin(), range.end()).size() ==
-          range.size());
+  using Value = std::iter_value_t<decltype(std::begin(range))>;
+  using Key = std::decay_t<std::invoke_result_t<Proj&, const Value&>>;
+  absl::flat_hash_set<Key> seen;
+  seen.reserve(range.size());
+  for (const Value& element : range) {
+    if (!seen.insert(std::invoke(proj, element)).second) {
+      return false;
+    }
+  }
+  return true;
 }
 
 // Checks whether all elements in a range are contained in a container.
