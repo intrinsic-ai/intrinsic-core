@@ -236,6 +236,7 @@ class RtXmlElement {
   // Appends a new child element at the end of this element's contents and also
   // sets the text value of this new child.
   //
+  // Returns a non-null pointer to the newly added child element on success.
   // Returns an InvalidArgumentError if `name` is not a valid XML element name.
   // Returns ResourceExhaustedError if the memory allocated in the generator is
   // exhausted.
@@ -248,7 +249,7 @@ class RtXmlElement {
       absl::string_view name, const T& value) INTRINSIC_CHECK_REALTIME_SAFE {
     INTRINSIC_RT_ASSIGN_OR_RETURN(RtXmlElement * element, AddElement(name));
     element->SetText(value);
-    return icon::OkStatus();
+    return element;
   }
 
   // Adds an attribute to this XML element named `name` and sets its value to
