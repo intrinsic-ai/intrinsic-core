@@ -588,7 +588,7 @@ bazel_dep(name = "gz-plugin", version = "4.0.0.bcr.1")
 bazel_dep(name = "gz-rendering", version = "10.1.0")  
 bazel_dep(name = "gz-sim", version = "10.7.0")  
 bazel_dep(name = "gz-transport", version = "15.1.0")
-bazel_dep(name = "highwayhash", version = "0.0.0-20240305-5ad3bf8.bcr.1") # Remove when reigeli updates to a version that supports ARM64
+bazel_dep(name = "highwayhash", version = "0.0.0-20240305-5ad3bf8.bcr.1")  # Remove when reigeli updates to a version that supports ARM64
 bazel_dep(name = "intrinsic-clips", version = "0.1.0")  
 bazel_dep(name = "jq.bzl", version = "0.8.0")  
 bazel_dep(name = "jwt-cpp", version = "0.7.0.bcr.1", repo_name = "jwt-cpp")  
@@ -1013,12 +1013,40 @@ host_stubs_apt.debian(
     resolve_transitive = False,
     suites = ["bullseye"],
 )
+
+# LINT.IfChange(weston_debian_snapshot)
+host_stubs_apt.index_integrity(
+    integrities = {
+        "https://snapshot.debian.org/archive/debian/20260202T081703Z/dists/trixie/main/binary-amd64/Packages.xz": "sha256-0QPw/UYDhpOEp0hr42gt0A3grGZbhqRMO1UK0hMG0j0=",
+    },
+)
+host_stubs_apt.debian(
+    name = "weston_dev",
+    architectures = ["amd64"],
+    build_file = "//third_party/chromium/overlay:weston_dev.BUILD.bazel",
+    lockfile = "//third_party/chromium/overlay:weston_dev.lock.json",
+    packages = [
+        "libpixman-1-0",
+        "libpixman-1-dev",
+        "libwayland-dev",
+        "libwayland-server0",
+        "libweston-14-0",
+        "libweston-14-dev",
+        "libxkbcommon-dev",
+    ],
+    resolve_transitive = False,
+    suites = ["trixie"],
+    uri = "https://snapshot.debian.org/archive/debian/20260202T081703Z",
+)
+
+# LINT.ThenChange(//third_party/chromium/chromium.yaml:weston_debian_snapshot)
 use_repo(
     host_stubs_apt,
     "glvnd_stubs_amd64",
     "glvnd_stubs_arm64",
     "host_glib_amd64",
     "host_glib_arm64",
+    "weston_dev",
 )
 
 bazel_dep(name = "rules_distroless", version = "0.8.0")
@@ -1108,7 +1136,6 @@ single_version_override(
         "sed -i 's|@system_python//:python_headers|@rules_python//python/cc:current_py_cc_headers|g' python/build_targets.bzl python/py_extension.bzl",
     ],
 )
-
 
 # Patch zenoh-c's zenoh-shm crate on Linux to allow overriding the shared
 # memory directory via the ZENOH_SHM_PATH environment variable (defaulting to
