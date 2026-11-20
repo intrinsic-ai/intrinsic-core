@@ -22,6 +22,7 @@ Current implementation constraints
    the same resolution.
 """
 
+from collections.abc import Sequence
 import time
 from typing import List
 
@@ -29,11 +30,14 @@ from absl import logging
 import grpc
 import numpy as np
 
-from incode.ml.services.utils import otel_tracing
+from intrinsic.assets.proto import id_pb2
 from intrinsic.geometry.proto import oriented_bounding_box_pb2
+from intrinsic.logging.proto import context_pb2
 from intrinsic.math.python import proto_conversion
+from intrinsic.perception.proto.v1 import capture_data_pb2
 from intrinsic.perception.proto.v1 import pose_estimate_in_root_pb2
 from intrinsic.perception.proto.v1 import pose_estimate_pb2
+from intrinsic.perception.proto.v1 import pose_estimation_service_pb2
 from intrinsic.perception.service.python import pose_estimation_client_utils
 from intrinsic.perception.service.python import pose_estimation_service_client
 from intrinsic.perception.skills.multi_view import estimate_pose_multi_view_pb2
@@ -125,6 +129,27 @@ def _update_object_pose(
   )
 
 
+def _run_pose_estimation_request(
+    asset_id: id_pb2.Id,
+    capture_data: Sequence[capture_data_pb2.CaptureData],
+    roi: oriented_bounding_box_pb2.OrientedBoundingBox3 | None = None,
+    inference_timeout_secs: int | None = None,
+    publish_annotated_image: bool = False,
+    data_logger_context: context_pb2.Context | None = None,
+    log_full_request: bool = False,
+) -> pose_estimation_service_pb2.RunPoseEstimationRequest:
+  """Builds the RunPoseEstimationRequest from capture data."""
+  return pose_estimation_client_utils.run_pose_estimation_request_from_capture_data(
+      asset_id=asset_id,
+      capture_data=list(capture_data),
+      roi=roi,
+      inference_timeout_secs=inference_timeout_secs,
+      publish_annotated_image=publish_annotated_image,
+      data_logger_context=data_logger_context,
+      log_full_request=log_full_request,
+  )
+
+
 class EstimatePoseMultiView(skl.Skill):
   """Estimates poses of all instances of a given part using multiple cameras."""
 
@@ -179,18 +204,15 @@ class EstimatePoseMultiView(skl.Skill):
           roi_proto = request.params.region_of_interest.roi_params
 
       # Build request and run pose estimation
-      with otel_tracing.tracer.start_as_current_span(
-          "EstimatePoseMultiView.run_pose_estimation"
-      ) as span:
-        run_request = pose_estimation_client_utils.run_pose_estimation_request_from_capture_data(
-            asset_id=asset_id,
-            capture_data=request.params.capture_data,
-            roi=roi_proto,
-            inference_timeout_secs=inference_timeout_secs,
-            publish_annotated_image=publish_annotated_image,
-            data_logger_context=context.logging_context.data_logger_context,
-            log_full_request=request.params.log_debug_data,
-        )
+      run_request = _run_pose_estimation_request(
+          asset_id=asset_id,
+          capture_data=request.params.capture_data,
+          roi=roi_proto,
+          inference_timeout_secs=inference_timeout_secs,
+          publish_annotated_image=publish_annotated_image,
+          data_logger_context=context.logging_context.data_logger_context,
+          log_full_request=request.params.log_debug_data,
+      )
 
       try:
         response = client.run_pose_estimation(run_request)
@@ -290,12 +312,4 @@ class EstimatePoseMultiView(skl.Skill):
 
 def create_skill() -> EstimatePoseMultiView:
   """Creates an EstimatePoseMultiView skill instance for the skill service."""
-  # `otel_tracing.setup_tracing` already guards against duplicate initialization
-  # within a process; keeping it in `create_skill` rather than `__init__` avoids
-  # global OTel/gRPC instrumentation side effects when tests instantiate
-  # `EstimatePoseMultiView` directly.
-  otel_tracing.setup_tracing(
-      service_name="estimate_pose_multi_view",
-      service_namespace="ai.intrinsic.ml_onprem_skills",
-  )
   return EstimatePoseMultiView()
