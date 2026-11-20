@@ -109,8 +109,8 @@
 
 (defrule footprint-conflict-detection-conflicts-found-wait
   "Footprint conflict detection found conflicts in WAIT or REPROJECT-ON-VOLUME
-  mode. Transition action to FOOTPRINT-CONFLICT-WAITING, assert blocker
-  dependency facts, and set trace event."
+  mode. Transition action to CONFLICT-WAITING, assert blocker dependency facts,
+  and set trace event."
   ?af <- (plan-action (uid ?uid) (state FOOTPRINT-CHECKING)
                       (conflict-handling-mode ?ch-mode)
                       (span-reference-id ?span-id))
@@ -121,19 +121,21 @@
   ; Footprint waiting doesn't do anything with the conflict, but just inserts
   ; the dependency fact to be resolved by other rules and then goes into waiting.
   (foreach ?blocker ?blockers
-    (assert (action-footprint-dependency (waiting-action-uid ?uid)
-                                         (blocker-action-uid ?blocker)))
+    (assert (action-conflict-dependency (waiting-action-uid ?uid)
+                                        (blocker-action-uid ?blocker)))
   )
   (if (<> ?span-id ?*TRACING-INVALID-SPAN-ID*) then
     (span-add-event-annotation ?span-id "footprint_conflict_waiting")
   )
-  (modify ?af (state FOOTPRINT-CONFLICT-WAITING))
+  (modify ?af (state CONFLICT-WAITING))
   (retract ?wu)
 )
 
-(defrule footprint-dependency-cleanup-inactive-blocker
+; TODO(b/586839100): Move this out of this file as thr rule will not just be
+; used by footprint conflicts
+(defrule conflict-dependency-cleanup-inactive-blocker
   "Retract dependency when blocker action is no longer active."
-  ?dep <- (action-footprint-dependency (blocker-action-uid ?blocker-uid))
+  ?dep <- (action-conflict-dependency (blocker-action-uid ?blocker-uid))
   ; Note that this *must not* capture positive facts, e.g., a blocker
   ; plan-action being SUCCEEDED or FAILED. If the same CLIPS run would reset
   ; these other actions, e.g., as part of a loop node, then the SUCCEEDED facts
@@ -150,24 +152,28 @@
   (retract ?dep)
 )
 
-(defrule footprint-waiting-auto-resume
+; TODO(b/586839100): Move this out of this file as thr rule will not just be
+; used by footprint conflicts
+(defrule conflict-waiting-auto-resume
   "Auto-resume waiting action when all blocker dependencies have cleared."
-  ?af <- (plan-action (uid ?waiting-uid) (state FOOTPRINT-CONFLICT-WAITING))
-  (not (action-footprint-dependency (waiting-action-uid ?waiting-uid)))
+  ?af <- (plan-action (uid ?waiting-uid) (state CONFLICT-WAITING))
+  (not (action-conflict-dependency (waiting-action-uid ?waiting-uid)))
  =>
   (plan-action-reset-for-reprojection ?af)
 )
 
-(defrule footprint-reproject-on-volume
+; TODO(b/586839100): Move this out of this file as it won't not only fire for
+; footprint conflicts
+(defrule conflict-reproject-on-volume
   "REPROJECT-ON-VOLUME: A blocker of a waiting action is running and has added
   footprint volumes to the world which were not visible to the waiting action's
   last projection. Re-project right away so it can try to plan around them."
-  ?af <- (plan-action (uid ?waiting-uid) (state FOOTPRINT-CONFLICT-WAITING)
+  ?af <- (plan-action (uid ?waiting-uid) (state CONFLICT-WAITING)
                       (conflict-handling-mode REPROJECT-ON-VOLUME)
                       (action-uids-running-at-projection $?running-at-projection)
                       (span-reference-id ?span-id))
-  (action-footprint-dependency (waiting-action-uid ?waiting-uid)
-                               (blocker-action-uid ?blocker-uid))
+  (action-conflict-dependency (waiting-action-uid ?waiting-uid)
+                              (blocker-action-uid ?blocker-uid))
   ; ?blocker-uid was not running when ?waiting-uid started projecting, so its
   ; footprint volumes were likely not in the world snapshot used by that
   ; projection.
@@ -181,17 +187,19 @@
   (test (> (pb-get-repeated-length ?blocker-footprint "volume") 0))
  =>
   (if (<> ?span-id ?*TRACING-INVALID-SPAN-ID*) then
-    (span-add-event-annotation ?span-id "footprint_conflict_reprojecting")
+    (span-add-event-annotation ?span-id "conflict_reprojecting")
   )
   (plan-action-reset-for-reprojection ?af)
 )
 
-(defrule footprint-dependency-cleanup-orphan-waiting-action
-  "Retract dependency if waiting action is no longer in FOOTPRINT-CONFLICT-WAITING state."
-  ?dep <- (action-footprint-dependency (waiting-action-uid ?waiting-uid))
-  (not (plan-action (uid ?waiting-uid) (state FOOTPRINT-CONFLICT-WAITING)))
+; TODO(b/586839100): Move this out of this file as thr rule will not just be
+; used by footprint conflicts
+(defrule conflict-dependency-cleanup-orphan-waiting-action
+  "Retract dependency if waiting action is no longer in CONFLICT-WAITING state."
+  ?dep <- (action-conflict-dependency (waiting-action-uid ?waiting-uid))
+  (not (plan-action (uid ?waiting-uid) (state CONFLICT-WAITING)))
  =>
-  (printout warning "Orphaned action-footprint-dependency found for action " ?waiting-uid ". Cleaning up." crlf)
+  (printout warning "Orphaned action-conflict-dependency found for action " ?waiting-uid ". Cleaning up." crlf)
   (retract ?dep)
 )
 

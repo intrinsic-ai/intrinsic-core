@@ -43,7 +43,7 @@
   ; actions matters.
   (do-for-all-facts ((?action plan-action))
     (isoneof ?action:state PROJECTING PENDING RUNNING
-                           FOOTPRINT-CHECKING FOOTPRINT-CONFLICT-WAITING
+                           FOOTPRINT-CHECKING CONFLICT-WAITING
                            CANCELLATION-REQUESTED CANCELLATION-PENDING
                            CANCELING CANCELING-EXECUTION-TIMEOUT)
     (bind ?action-uid ?action:uid)
@@ -717,11 +717,11 @@
                                (state ?state&RUNNING)
                                (task-action-uid ?action-uid))
   ?action <- (plan-action (uid ?action-uid) (plan-id ?plan-id)
-                          (state ?action-state&ACCEPTED|SELECTED|PROJECTED|READY|FOOTPRINT-CONFLICT-WAITING))
+                          (state ?action-state&ACCEPTED|SELECTED|PROJECTED|READY|CONFLICT-WAITING))
  =>
-  ; Suspend/resume of a node in FOOTPRINT-CONFLICT-WAITING resets the action. On
-  ; resume everything will be re-run and re-checked.
-  (if (eq ?action-state FOOTPRINT-CONFLICT-WAITING) then
+  ; Suspend/resume of a node in CONFLICT-WAITING resets the action. On resume
+  ; everything will be re-run and re-checked.
+  (if (eq ?action-state CONFLICT-WAITING) then
     (plan-action-reset-for-reprojection ?action)
   )
   (modify ?node (state SUSPENDED) (suspended-from-state ?state)
@@ -830,9 +830,9 @@
                                (task-action-uid ?action-uid)
                                (state CANCELING))
   ?action <- (plan-action (uid ?action-uid)
-                          (state ACCEPTED|SELECTED|PROJECTED|READY|FOOTPRINT-CONFLICT-WAITING|CANCELED))
+                          (state ACCEPTED|SELECTED|PROJECTED|READY|CONFLICT-WAITING|CANCELED))
  =>
-  (delayed-do-for-all-facts ((?dep action-footprint-dependency))
+  (delayed-do-for-all-facts ((?dep action-conflict-dependency))
       (eq ?dep:waiting-action-uid ?action-uid)
     (retract ?dep)
   )

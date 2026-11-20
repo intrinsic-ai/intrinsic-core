@@ -192,7 +192,6 @@
 (deffunction task-node-proto-state-from-plan-action-state (?state)
   (switch ?state
     (case FOOTPRINT-CHECKING then (return CHECKING_FOOTPRINT))
-    (case FOOTPRINT-CONFLICT-WAITING then (return FOOTPRINT_CONFLICT_WAITING))
     (case CANCELLATION-REQUESTED then (return CANCELING))
     (case CANCELLATION-PENDING then (return CANCELING))
     (case EXECUTION-SUCCEEDED then (return RUNNING))

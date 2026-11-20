@@ -102,13 +102,14 @@
   ; FOOTPRINT-CHECKING: for selected action that finished projection the
   ;                     footprint is currently being checked against all other
   ;                     running/ready actions for conflicts
-  ; FOOTPRINT-CONFLICT-WAITING: footprint conflict checking detected a conflict
-  ;                             with a currently running action and the action's
-  ;                             conflict handling mode is set to WAIT or
-  ;                             REPROJECT-ON-VOLUME. The action waits until all
-  ;                             conflicting blocking actions finish (or, for
-  ;                             REPROJECT-ON-VOLUME, until a blocker has added
-  ;                             new footprint volumes to the world).
+  ; TODO(b/b/586839100): Update comment below as soon as this state is not
+  ; just used by footprint conflicts
+  ; CONFLICT-WAITING: footprint conflict checking detected a conflict with a
+  ;                   currently running action and the action's conflict
+  ;                   handling mode is set to WAIT or REPROJECT-ON-VOLUME. The
+  ;                   action waits until all conflicting blocking actions finish
+  ;                   (or, for REPROJECT-ON-VOLUME, until a blocker has added
+  ;                   new footprint volumes to the world).
   ; READY: conflict checking has been completed and no conflicts have been
   ;        found. The action is now ready for execution. Actions in this state
   ;        can be suspended.
@@ -146,7 +147,7 @@
   ; FAILED: execution has completed with failure
   (slot state (type SYMBOL)
         (allowed-values ACCEPTED SELECTED PROJECTING PROJECTED
-                        FOOTPRINT-CHECKING FOOTPRINT-CONFLICT-WAITING READY
+                        FOOTPRINT-CHECKING CONFLICT-WAITING READY
                         PENDING RUNNING
                         CANCELLATION-REQUESTED CANCELLATION-PENDING
                         CANCELING CANCELING-EXECUTION-TIMEOUT
@@ -159,8 +160,8 @@
   ; handled.
   ; UNSPECIFIED / FAIL: default behavior; report footprint conflict error and
   ; fail action execution.
-  ; WAIT: enter FOOTPRINT-CONFLICT-WAITING state and pause action execution
-  ; until all conflicting running actions finish.
+  ; WAIT: enter CONFLICT-WAITING state and pause action execution until all
+  ; conflicting running actions finish.
   ; REPROJECT-ON-VOLUME: like WAIT, but additionally re-project as soon as a
   ; conflicting action added footprint volumes to the world which were not
   ; visible to this action's last projection.
@@ -209,7 +210,7 @@
   (slot extended-status-proto-id (type INTEGER))
 )
 
-(deftemplate action-footprint-dependency
+(deftemplate action-conflict-dependency
   ; uid of the action being blocked by other actions.
   (slot waiting-action-uid (type SYMBOL))
   ; uid of an action that was a conflict when trying to start waiting-action-uid
@@ -262,7 +263,7 @@
 ;   The fact-address of the modified plan-action.
 (deffunction plan-action-reset-for-reprojection (?af)
   (bind ?uid (fact-slot-value ?af uid))
-  (delayed-do-for-all-facts ((?dep action-footprint-dependency))
+  (delayed-do-for-all-facts ((?dep action-conflict-dependency))
       (eq ?dep:waiting-action-uid ?uid)
     (retract ?dep)
   )
@@ -288,7 +289,7 @@
 )
 
 (deffunction plan-action-remove (?uid)
-  (delayed-do-for-all-facts ((?dep action-footprint-dependency))
+  (delayed-do-for-all-facts ((?dep action-conflict-dependency))
       (or (eq ?dep:waiting-action-uid ?uid)
           (eq ?dep:blocker-action-uid ?uid))
     (retract ?dep)

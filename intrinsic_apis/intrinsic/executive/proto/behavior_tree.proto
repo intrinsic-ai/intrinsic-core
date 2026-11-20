@@ -380,7 +380,7 @@ message BehaviorTree {
       SUCCEEDED = 8;
       FAILED = 9;
 
-      FOOTPRINT_CONFLICT_WAITING = 14;
+      CONFLICT_WAITING = 14;
 
     }
 
