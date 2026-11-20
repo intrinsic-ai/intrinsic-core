@@ -209,11 +209,9 @@ class GzfGeometryLibrary : public GeometryLibrary,
                                  geo_storage_refs);
   }
 
-  // TODO(b/442842561): Rename this method once all users are migrated to v1
-  // geometry protos.
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry,
-                 const SaveGeometryOptions& options) override {
+  SaveGeometry(const Geometry& geometry,
+               const SaveGeometryOptions& options) override {
     if (options.HasCustomKeys()) {
       return absl::InvalidArgumentError(
           "GzfGeometryLibrary requires 64-bit hex chunk keys and does not "
@@ -289,11 +287,9 @@ class ReadOnlyGzfGeometryLibrary : public GeometryLibrary,
                                  geo_storage_refs);
   }
 
-  // TODO(b/442842561): Rename this method once all users are migrated to v1
-  // geometry protos.
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& /*geometry*/,
-                 const SaveGeometryOptions& /*options*/) override {
+  SaveGeometry(const Geometry& /*geometry*/,
+               const SaveGeometryOptions& /*options*/) override {
     return absl::UnimplementedError(
         "ReadOnlyGzfGeometryLibrary does not support writing geometry");
   }

@@ -123,8 +123,8 @@ class FakeWorldService {
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
   CreateSphereGeometry(float radius) {
-    return GetGeometryLibrary()->Serializer().SaveGeometryV1(MakeSphere(radius),
-                                                             {});
+    return GetGeometryLibrary()->Serializer().SaveGeometry(MakeSphere(radius),
+                                                           {});
   }
 
  private:

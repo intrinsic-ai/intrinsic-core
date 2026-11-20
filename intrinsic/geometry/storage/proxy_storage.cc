@@ -51,9 +51,9 @@ absl::StatusOr<Geometry> ProxyStorageLibrary::GetGeometry(
 }
 
 absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-ProxyStorageLibrary::SaveGeometryV1(const Geometry& geometry,
-                                    const SaveGeometryOptions& options) {
-  return storage_->Serializer().SaveGeometryV1(geometry, options);
+ProxyStorageLibrary::SaveGeometry(const Geometry& geometry,
+                                  const SaveGeometryOptions& options) {
+  return storage_->Serializer().SaveGeometry(geometry, options);
 }
 
 }  // namespace intrinsic::geo

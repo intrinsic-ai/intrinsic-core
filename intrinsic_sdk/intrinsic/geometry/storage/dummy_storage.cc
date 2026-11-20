@@ -63,8 +63,8 @@ class DummyGeometryLibrary : public GeometryLibrary,
   }
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry,
-                 const SaveGeometryOptions& options) override {
+  SaveGeometry(const Geometry& geometry,
+               const SaveGeometryOptions& options) override {
     if (options.HasCustomKeys()) {
       return absl::InvalidArgumentError(
           "DummyGeometryLibrary is a stateless stub and does not accept custom "

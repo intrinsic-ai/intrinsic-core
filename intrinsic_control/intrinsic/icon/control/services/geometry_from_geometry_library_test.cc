@@ -49,7 +49,7 @@ TEST(GeometryFromGeometryLibraryTest, ValidStub) {
   Geometry sphere = MakeSphere(1.0);
 
   ASSERT_OK_AND_ASSIGN(const GeometryStorageRefs geo_refs,
-                       geo_lib->Serializer().SaveGeometryV1(sphere, {}));
+                       geo_lib->Serializer().SaveGeometry(sphere, {}));
 
   auto stub = intrinsic_proto::geometry::GeometryService::NewStub(
       geo_server->InProcessChannel(grpc::ChannelArguments()));

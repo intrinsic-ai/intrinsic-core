@@ -205,8 +205,8 @@ class CasGeometryLibrary : public GeometryLibrary,
   }
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry,
-                 const SaveGeometryOptions& options) override {
+  SaveGeometry(const Geometry& geometry,
+               const SaveGeometryOptions& options) override {
     if (options.HasCustomKeys()) {
       return absl::InvalidArgumentError(
           "CasGeometryLibrary is content-addressed and does not accept custom "

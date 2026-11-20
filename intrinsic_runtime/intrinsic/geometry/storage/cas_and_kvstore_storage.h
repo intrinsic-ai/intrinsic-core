@@ -37,7 +37,7 @@ namespace intrinsic::geo {
 // callers that write "intkv://" geometries use `GetKvStoreGeometryLibrary`
 // directly.
 //
-// `Serializer().SaveGeometryV1()` writes and V0 `Deserializer()` reads delegate
+// `Serializer().SaveGeometry()` writes and V0 `Deserializer()` reads delegate
 // to CAS; V1 `Deserializer()` reads dispatch by URI scheme across CAS and
 // KeyValueStore.
 //

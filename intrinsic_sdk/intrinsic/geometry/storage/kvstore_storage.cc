@@ -206,7 +206,7 @@ class KvStoreGeometryLibrary : public GeometryLibrary,
         std::move(material));
   }
 
-  absl::StatusOr<GeometryStorageRefs> SaveGeometryV1(
+  absl::StatusOr<GeometryStorageRefs> SaveGeometry(
       const Geometry& geometry, const SaveGeometryOptions& options) override {
     const bool keep_renderable = geometry.KeepRenderableForSerialization();
     if (options.exact_key.has_value()) {

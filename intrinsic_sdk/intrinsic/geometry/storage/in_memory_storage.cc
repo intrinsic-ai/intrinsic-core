@@ -98,8 +98,8 @@ absl::StatusOr<Geometry> MapGeometryLibrary::GetGeometry(
 }
 
 absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-MapGeometryLibrary::SaveGeometryV1(const Geometry& geometry,
-                                   const SaveGeometryOptions& options) {
+MapGeometryLibrary::SaveGeometry(const Geometry& geometry,
+                                 const SaveGeometryOptions& options) {
   if (options.HasCustomKeys()) {
     return absl::UnimplementedError(
         "Custom storage keys are not yet implemented in MapGeometryLibrary.");

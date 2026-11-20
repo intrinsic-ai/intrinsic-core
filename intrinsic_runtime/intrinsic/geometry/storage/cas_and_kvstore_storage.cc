@@ -78,9 +78,9 @@ class CasAndKvStoreGeometryStorage final : public GeometryLibrary,
     return deserializer.GetGeometry(refs, std::move(material_properties));
   }
 
-  absl::StatusOr<RefsV1> SaveGeometryV1(
+  absl::StatusOr<RefsV1> SaveGeometry(
       const Geometry& geometry, const SaveGeometryOptions& options) override {
-    return cas_library_->Serializer().SaveGeometryV1(geometry, options);
+    return cas_library_->Serializer().SaveGeometry(geometry, options);
   }
 
  private:

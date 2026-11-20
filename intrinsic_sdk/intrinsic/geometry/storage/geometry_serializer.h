@@ -24,7 +24,7 @@
 
 namespace intrinsic::geo {
 
-// Options for GeometrySerializer::SaveGeometryV1.
+// Options for GeometrySerializer::SaveGeometry.
 struct SaveGeometryOptions {
   // Caller-specified storage key for the exact geometry. Must not be empty if
   // set. Backends that cannot store under caller-specified keys reject it.
@@ -54,10 +54,9 @@ class GeometrySerializer {
   // refs. The storage refs can be used with a GeometryDeserializer configured
   // to the same store to fetch the geometry later. Pass `{}` for default
   // options.
-  // TODO(b/442842561): Rename to `SaveGeometry`.
   virtual absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
-  SaveGeometryV1(const Geometry& geometry,
-                 const SaveGeometryOptions& options) = 0;
+  SaveGeometry(const Geometry& geometry,
+               const SaveGeometryOptions& options) = 0;
 };
 
 }  // namespace intrinsic::geo

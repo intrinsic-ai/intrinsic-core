@@ -49,7 +49,7 @@ class GeometryDeserializer {
 
   // Retrieves a shape and renderable for the given `geo_storage_refs`. One way
   // to get a valid `GeometryStorageRef` is to save the return value of
-  // `GeometrySerializer::SaveGeometryV1()` when saving a piece of geometry.
+  // `GeometrySerializer::SaveGeometry()` when saving a piece of geometry.
   virtual absl::StatusOr<Geometry> GetGeometry(
       const intrinsic_proto::geometry::v1::GeometryStorageRefs&
           geo_storage_refs,
