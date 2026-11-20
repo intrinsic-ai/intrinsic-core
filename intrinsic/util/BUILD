@@ -48,17 +48,6 @@ cc_library(
 )
 
 cc_library(
-    name = "unique_id",
-    srcs = ["unique_id.cc"],
-    hdrs = ["unique_id.h"],
-    deps = [
-        "@abseil-cpp//absl/random",
-        "@abseil-cpp//absl/strings:str_format",
-        "@abseil-cpp//absl/strings:string_view",
-    ],
-)
-
-cc_library(
     name = "functional",
     hdrs = [
         "functional.h",

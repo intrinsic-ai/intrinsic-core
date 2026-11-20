@@ -393,7 +393,6 @@ cc_library(
     hdrs = ["path_segment.h"],
     deps = [
         ":path_segment_cc_proto",
-        "//intrinsic/util:unique_id",
         "//intrinsic/world/collision:collision_context_cc_proto",
         "//intrinsic/world/collision:rule_matching",
         "//intrinsic_control/intrinsic/icon/proto:cart_space_conversion",
@@ -406,6 +405,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/util:eigen",
+        "//intrinsic_sdk/intrinsic/util:unique_id",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:string_view",

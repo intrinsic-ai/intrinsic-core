@@ -99,7 +99,7 @@ cc_library(
         "//intrinsic/executive/cc:behavior_tree_visitor",
         "//intrinsic/executive/clips_cpp",
         "//intrinsic/executive/clips_cpp:clips_protobuf",
-        "//intrinsic/util:unique_id",
+        "//intrinsic_sdk/intrinsic/util:unique_id",
         "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/status:status_specs",

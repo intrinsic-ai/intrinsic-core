@@ -41,11 +41,11 @@ cc_library(
     deps = [
         "//intrinsic/stats:scoped_span",
         "//intrinsic/stats:tracing_utils",
-        "//intrinsic/util:unique_id",
         "//intrinsic/util/proto:pb_hash",
         "//intrinsic_sdk/intrinsic/scene/util:scene_object_updates",
         "//intrinsic_sdk/intrinsic/scene/validate:scene_object_validation",
         "//intrinsic_sdk/intrinsic/util:proto_time",
+        "//intrinsic_sdk/intrinsic/util:unique_id",
         "//intrinsic_sdk/intrinsic/util/status:status_builder_grpc",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",

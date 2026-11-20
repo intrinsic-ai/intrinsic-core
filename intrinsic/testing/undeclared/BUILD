@@ -43,7 +43,7 @@ cc_library(
     ],
     deps = [
         ":undeclared_output_annotation_cc_proto",
-        "//intrinsic/util:unique_id",
+        "//intrinsic_sdk/intrinsic/util:unique_id",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:no_destructor",
         "@abseil-cpp//absl/log",

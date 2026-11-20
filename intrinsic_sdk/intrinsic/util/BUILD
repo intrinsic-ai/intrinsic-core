@@ -199,3 +199,14 @@ cc_library(
         "@com_googlesource_code_re2//:re2",
     ],
 )
+
+cc_library(
+    name = "unique_id",
+    srcs = ["unique_id.cc"],
+    hdrs = ["unique_id.h"],
+    deps = [
+        "@abseil-cpp//absl/random",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/strings:string_view",
+    ],
+)
