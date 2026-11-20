@@ -61,7 +61,7 @@ Use the `/usr/local/bin/inctl` binary.
   - `inctl asset instance list --address=localhost:17080` maps instantiated solution resource names (`icon`, `ur_module`, `gazebo_simulator`) to backing asset package IDs.
   - `inctl asset list --address=localhost:17080` lists installed catalog asset definitions (`--asset_types=service` filters by service assets).
 - **Verified local inspection sequence replacing `inctl doctor`**:
-  On external virtual machine builds, `platformlevelswitch.WrapCmdOptional` is a no-op that disables cloud organization switchers. Consequently, `inctl doctor check` rejects `--org` and `--project` flags, ignores environment variables (`INTRINSIC_ORG`, `INTRINSIC_PROJECT`), drops `--address` on child subcommands, and unconditionally reports `"no org name provided, solution details can not be retrieved"`. Use the verified 4-step local inspection sequence instead:
+  `inctl doctor check` only inspects cloud authentication and cloud control-plane cluster/solution discovery (`inctl auth list`, `inctl cluster list`, `inctl solution get`), rather than local `--address=localhost:17080` workcell services. On standalone local workcells, use the verified 4-step local inspection sequence instead:
   ```bash
   # Step 1: Check service health and raw gRPC state codes
   inctl service state list --address=localhost:17080 --output=json

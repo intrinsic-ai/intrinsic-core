@@ -270,10 +270,10 @@ message SkillOrServiceConfig {
 
 ### Decision tree 2: `CLI` command addressing and flag selection
 
-- **Subcommands `asset`, `service`, `skill`, `icon`, `solution start/stop`, `world`**: Use `--address=localhost:17080`. For `icon` (status, enable, disable, clear-faults), always append `--instance_name=icon`. For `service add`, ensure `--config` points to a binary `.binpb` file (`google.protobuf.Any`).
+- **Subcommands `asset`, `service`, `skill`, `icon`, `solution start/status/stop`, `world`**: Use `--address=localhost:17080`. For `icon` (status, enable, disable, clear-faults), always append `--instance_name=icon`. For `service add`, ensure `--config` points to a binary `.binpb` file (`google.protobuf.Any`).
 - **Subcommands `process` (`get`, `set`)**: Use `--server=localhost:17080` (credentials auto-select insecure transport).
 - **Subcommands `executive` (`run`, `state`)**: Use `--server=localhost:17080`. For executive commands, append `--insecure_grpc` to prevent TLS handshake errors.
-- **Subcommand `doctor` (`check`)**: Execute the 4-step local inspection sequence on standalone workcells (`service state list`, `asset instance list`, `icon status`, `world reset`) rather than `inctl doctor`, whose cloud checks fail due to `platformlevelswitch` no-op.
+- **Subcommand `doctor` (`check`)**: Execute the 4-step local inspection sequence on standalone workcells (`service state list`, `asset instance list`, `icon status`, `world reset`) rather than `inctl doctor`, which only checks cloud authentication and cloud control-plane cluster/solution state (`inctl auth list`, `inctl cluster list`, `inctl solution get`).
 
 ### Decision tree 3: `OCI` direct upload and container image scheduling
 
