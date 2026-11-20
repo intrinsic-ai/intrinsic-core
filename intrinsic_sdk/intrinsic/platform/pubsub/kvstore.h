@@ -37,6 +37,7 @@
 #include "google/protobuf/any.pb.h"
 #include "google/protobuf/message.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/mutable_buffer.h"
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "intrinsic/platform/pubsub/pubsub_callbacks.h"
 #include "intrinsic/platform/pubsub/subscription.h"
@@ -211,6 +212,56 @@ class KeyValueStore {
                           PackToAny(key, std::forward<T>(value)));
     return SetWithVerification(key, any, options);
   }
+
+  // Sets a raw byte payload without Protobuf framing or serialization.
+  //
+  // Zero-copy write guide:
+  // - Single-use write: allocate a 256-byte aligned `MutableBuffer` with
+  //   `AllocateMutableBuffer`, populate it in place, and pass `std::move(buf)`.
+  //   It freezes in O(1) without copying and transfers ownership to Zenoh.
+  // - Reuse, slicing, or forwarding: pass an `ImmutableBuffer` directly when
+  //   writing the same payload to multiple keys, sending a written prefix via
+  //   `Slice(offset, length)`, or forwarding buffers from `GetRaw` or
+  //   `CreateRawSubscription`. Passing an `ImmutableBuffer` shares ownership
+  //   via an atomic reference count without copying payload bytes (move it if
+  //   the caller no longer needs a handle).
+  // - External data: avoid `CopyToImmutableBuffer` on hot paths when you can
+  //   write directly into a `MutableBuffer`.
+  //
+  // Returns `absl::StatusCode::kInvalidArgument` if `value.valid()` is false or
+  // `key` fails pre-transport key validation (empty or invalid `/` segments),
+  // or `absl::StatusCode::kInternal` on transport dispatch failure (including
+  // Zenoh-rejected key characters such as `?`).
+  virtual absl::Status SetRaw(absl::string_view key, ImmutableBuffer value);
+  // Validates `value.valid()` and pre-transport `key` (`ValidZenohKey` and
+  // prefixing) before freezing `value` and delegating to
+  // `SetRaw(key, ImmutableBuffer)`. Leaves `value` valid and untouched if
+  // validation fails; once frozen, `value` remains invalid even if transport
+  // dispatch fails.
+  absl::Status SetRaw(absl::string_view key, MutableBuffer&& value);
+  absl::Status SetRaw(absl::string_view key, const MutableBuffer&) = delete;
+
+  // Sets a raw byte payload and blocks until verification completes according
+  // to `options`. Returns `absl::StatusCode::kInvalidArgument` for non-positive
+  // timeout, invalid `value`, or pre-transport key validation failure,
+  // `absl::StatusCode::kAborted` on concurrent modification in
+  // `kHighConsistency` mode, `absl::StatusCode::kDeadlineExceeded` if
+  // verification times out, or `absl::StatusCode::kInternal` on transport
+  // failure.
+  virtual absl::Status SetRawWithVerification(
+      absl::string_view key, ImmutableBuffer value,
+      const SetWithVerificationOptions& options);
+  // Validates `options.timeout`, `value.valid()`, and pre-transport `key`
+  // before freezing `value` and delegating to
+  // `SetRawWithVerification(key, ImmutableBuffer, options)`. Leaves `value`
+  // valid and untouched if pre-validation fails; once frozen, `value` remains
+  // invalid even if transport dispatch or verification fails.
+  absl::Status SetRawWithVerification(
+      absl::string_view key, MutableBuffer&& value,
+      const SetWithVerificationOptions& options);
+  absl::Status SetRawWithVerification(
+      absl::string_view key, const MutableBuffer&,
+      const SetWithVerificationOptions&) = delete;
 
   // Retrieves and unpacks the Protobuf value stored at `key`. Returns
   // `absl::StatusCode::kNotFound` if `key` has no value,
@@ -466,9 +517,10 @@ class KeyValueStore {
       DeletionCallback deletion_callback,
       imw_message_callback_functor_t put_message_callback) const;
 
-  // Validates `key`, resolves the prefixed Zenoh key, logs the operation, and
-  // warns if `size` exceeds the large-payload threshold.
+  // Validates `key`, resolves the prefixed Zenoh key, logs the operation
+  // (rate-limited for raw writes), and warns on large Protobuf payloads.
   absl::StatusOr<std::string> PrepareSetKey(absl::string_view key, size_t size,
+                                            imw_encoding_t encoding,
                                             absl::string_view op_name) const;
 
   // Reads the existing value (if any) before a `kHighConsistency` write so
@@ -495,10 +547,12 @@ class KeyValueStore {
       const std::string& raw_key, absl::Duration timeout);
 
   // Dispatches a payload write with tracing spans, key validation, and optional
-  // post-write verification.
+  // post-write verification. Transfers ownership via zero-copy deleter when
+  // `owned_buffer` is valid, or copies `[data, data + size)` otherwise.
   absl::Status ExecuteSet(
       absl::string_view key, const void* data, size_t size,
       imw_encoding_t encoding, absl::string_view op_name,
+      ImmutableBuffer owned_buffer,
       const SetWithVerificationOptions* verification = nullptr);
 
   // Polls the KVStore until the first reply matching `expected_encoding` is

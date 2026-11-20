@@ -43,6 +43,7 @@
 #include "grpcpp/support/channel_arguments.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/buffer_factory.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/mutable_buffer.h"
 #include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "intrinsic/platform/common/proto/workcell_info.pb.h"
 #include "intrinsic/platform/pubsub/admin_set_grpc/v1/admin_set.grpc.pb.h"
@@ -217,6 +218,11 @@ void SleepForBackoff(absl::Duration delay, absl::Time deadline) {
   absl::SleepFor(std::min(delay, sleepable));
 }
 
+void ReleaseImmutableBufferDeleter(void* /*data*/, void* context) {
+  std::unique_ptr<ImmutableBuffer> owner(
+      static_cast<ImmutableBuffer*>(context));
+}
+
 absl::Status CheckImwSetResult(imw_ret_t ret) {
   if (ret != IMW_OK) {
     return absl::InternalError(
@@ -225,14 +231,30 @@ absl::Status CheckImwSetResult(imw_ret_t ret) {
   return absl::OkStatus();
 }
 
+imw_ret_t DispatchImwSet(const std::string& prefixed_name, const void* data,
+                         size_t size, imw_encoding_t encoding,
+                         ImmutableBuffer owned_buffer) {
+  if (owned_buffer.valid()) {
+    auto heap_owner =
+        std::make_unique<ImmutableBuffer>(std::move(owned_buffer));
+    const void* owned_data = heap_owner->data();
+    return Zenoh().imw_set_with_encoding_and_deleter(
+        prefixed_name.c_str(), owned_data, size, encoding,
+        &ReleaseImmutableBufferDeleter, heap_owner.release());
+  }
+  return Zenoh().imw_set_with_encoding(prefixed_name.c_str(), data, size,
+                                       encoding);
+}
+
 absl::Status DispatchAndCheckImwSet(const std::string& prefixed_name,
                                     const void* data, size_t size,
-                                    imw_encoding_t encoding) {
+                                    imw_encoding_t encoding,
+                                    ImmutableBuffer owned_buffer) {
 
   const stats::ScopedSpan net_span("KVStoreClient::ZenohTransportSet");
 
-  const imw_ret_t ret = Zenoh().imw_set_with_encoding(prefixed_name.c_str(),
-                                                      data, size, encoding);
+  const imw_ret_t ret = DispatchImwSet(prefixed_name, data, size, encoding,
+                                       std::move(owned_buffer));
 
   net_span.AddAttribute("zenoh.ret_code", static_cast<int64_t>(ret));
 
@@ -428,7 +450,8 @@ absl::Status KeyValueStore::Set(absl::string_view key,
   // TODO(b/585031754): Switch protobuf writes to
   // IMW_ENCODING_APPLICATION_PROTOBUF after reader rollout.
   return ExecuteSet(key, value_serialized.data(), value_serialized.size(),
-                    IMW_ENCODING_VARINT_PREFIXED_BYTES, "Set");
+                    IMW_ENCODING_VARINT_PREFIXED_BYTES, "Set",
+                    ImmutableBuffer());
 }
 
 absl::Status KeyValueStore::Set(absl::string_view key,
@@ -451,15 +474,20 @@ absl::Status KeyValueStore::Set(absl::string_view key,
 }
 
 absl::StatusOr<std::string> KeyValueStore::PrepareSetKey(
-    absl::string_view key, size_t size, absl::string_view op_name) const {
+    absl::string_view key, size_t size, imw_encoding_t encoding,
+    absl::string_view op_name) const {
   INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(key));
   INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
                         ZenohHandle::add_key_prefix(key, key_prefix_));
-  LOG(INFO) << "KVStore " << op_name << " for key: " << prefixed_name;
-
-  if (size > kPayloadByteSizeWarningThreshold) {
-    LOG(WARNING) << "Large KVStore SetRequest payload detected. Key: " << key
-                 << ", Size: " << size << " bytes.";
+  if (IsRawEncoding(encoding)) {
+    LOG_EVERY_N_SEC(INFO, 10)
+        << "KVStore " << op_name << " for key: " << prefixed_name;
+  } else {
+    LOG(INFO) << "KVStore " << op_name << " for key: " << prefixed_name;
+    if (size > kPayloadByteSizeWarningThreshold) {
+      LOG(WARNING) << "Large KVStore SetRequest payload detected. Key: " << key
+                   << ", Size: " << size << " bytes.";
+    }
   }
   return prefixed_name;
 }
@@ -504,6 +532,7 @@ absl::Status KeyValueStore::VerifyAfterSet(
 absl::Status KeyValueStore::ExecuteSet(
     absl::string_view key, const void* data, size_t size,
     imw_encoding_t encoding, absl::string_view op_name,
+    ImmutableBuffer owned_buffer,
     const SetWithVerificationOptions* verification) {
 
   const stats::ScopedSpan set_span(absl::StrCat("KVStoreClient::", op_name));
@@ -517,24 +546,32 @@ absl::Status KeyValueStore::ExecuteSet(
 
 
   INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
-                        PrepareSetKey(key, size, op_name));
+                        PrepareSetKey(key, size, encoding, op_name));
 
   if (verification == nullptr) {
-    return DispatchAndCheckImwSet(prefixed_name, data, size, encoding);
+    return DispatchAndCheckImwSet(prefixed_name, data, size, encoding,
+                                  std::move(owned_buffer));
   }
 
   std::optional<EncodedValue> initial_state;
+  ImmutableBuffer expected_owner;
   absl::string_view expected_bytes;
   if (verification->mode == VerificationMode::kHighConsistency) {
     initial_state = ReadInitialHighConsistencyState(prefixed_name, key,
                                                     verification->timeout);
-    if (data != nullptr && size > 0) {
-      expected_bytes = absl::string_view(static_cast<const char*>(data), size);
+    expected_owner = owned_buffer;
+    const void* expected_ptr =
+        expected_owner.valid() ? expected_owner.data() : data;
+    const size_t expected_size =
+        expected_owner.valid() ? expected_owner.size() : size;
+    if (expected_ptr != nullptr && expected_size > 0) {
+      expected_bytes = absl::string_view(static_cast<const char*>(expected_ptr),
+                                         expected_size);
     }
   }
 
-  INTR_RETURN_IF_ERROR(
-      DispatchAndCheckImwSet(prefixed_name, data, size, encoding));
+  INTR_RETURN_IF_ERROR(DispatchAndCheckImwSet(
+      prefixed_name, data, size, encoding, std::move(owned_buffer)));
 
   return VerifyAfterSet(prefixed_name, key, encoding, expected_bytes,
                         initial_state, *verification);
@@ -560,7 +597,63 @@ absl::Status KeyValueStore::SetWithVerification(
   // IMW_ENCODING_APPLICATION_PROTOBUF after reader rollout.
   return ExecuteSet(key, value_serialized.data(), value_serialized.size(),
                     IMW_ENCODING_VARINT_PREFIXED_BYTES, "SetWithVerification",
-                    &options);
+                    ImmutableBuffer(), &options);
+}
+
+absl::Status KeyValueStore::SetRaw(absl::string_view key,
+                                   ImmutableBuffer value) {
+  if (!value.valid()) {
+    return absl::InvalidArgumentError("Cannot set an invalid ImmutableBuffer");
+  }
+  const void* data = value.data();
+  const size_t size = value.size();
+  return ExecuteSet(key, data, size, IMW_ENCODING_APPLICATION_OCTET_STREAM,
+                    "SetRaw", std::move(value));
+}
+
+absl::Status KeyValueStore::SetRaw(absl::string_view key,
+                                   MutableBuffer&& value) {
+  if (!value.valid()) {
+    return absl::InvalidArgumentError("Cannot set an invalid MutableBuffer");
+  }
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(key));
+  INTR_RETURN_IF_ERROR(ZenohHandle::add_key_prefix(key, key_prefix_).status());
+  INTR_ASSIGN_OR_RETURN(ImmutableBuffer frozen,
+                        FreezeMutableBuffer(std::move(value)));
+  return SetRaw(key, std::move(frozen));
+}
+
+absl::Status KeyValueStore::SetRawWithVerification(
+    absl::string_view key, ImmutableBuffer value,
+    const SetWithVerificationOptions& options) {
+  if (options.timeout <= absl::ZeroDuration()) {
+    return absl::InvalidArgumentError(
+        "SetWithVerificationOptions::timeout must be positive");
+  }
+  if (!value.valid()) {
+    return absl::InvalidArgumentError("Cannot set an invalid ImmutableBuffer");
+  }
+  const void* data = value.data();
+  const size_t size = value.size();
+  return ExecuteSet(key, data, size, IMW_ENCODING_APPLICATION_OCTET_STREAM,
+                    "SetRawWithVerification", std::move(value), &options);
+}
+
+absl::Status KeyValueStore::SetRawWithVerification(
+    absl::string_view key, MutableBuffer&& value,
+    const SetWithVerificationOptions& options) {
+  if (options.timeout <= absl::ZeroDuration()) {
+    return absl::InvalidArgumentError(
+        "SetWithVerificationOptions::timeout must be positive");
+  }
+  if (!value.valid()) {
+    return absl::InvalidArgumentError("Cannot set an invalid MutableBuffer");
+  }
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(key));
+  INTR_RETURN_IF_ERROR(ZenohHandle::add_key_prefix(key, key_prefix_).status());
+  INTR_ASSIGN_OR_RETURN(ImmutableBuffer frozen,
+                        FreezeMutableBuffer(std::move(value)));
+  return SetRawWithVerification(key, std::move(frozen), options);
 }
 
 absl::Status KeyValueStore::VerifyFirstReply(const std::string& prefixed_name,
