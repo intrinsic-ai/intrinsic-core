@@ -66,6 +66,7 @@ namespace executive {
 namespace {
 
 const auto kGetSkillsTimeout = absl::Seconds(30);
+constexpr absl::Duration kCachedChannelReadyTimeout = absl::Seconds(1);
 constexpr int kInstalledAssetsServiceMaxPageSize = 50;
 
 inline constexpr absl::string_view kIngressAddress =
@@ -474,6 +475,7 @@ absl::Status SkillClientGenerator::GetAndCacheSkills() {
   // Combine all skill registrations into the 'skills_' cache. We expect all IDs
   // to be unique and, thus, the insertion order should not matter.
   skills_.clear();
+  skill_channels_by_target_.clear();
   for (const SkillClientGenerator::SkillRegistrationInternal& process_asset :
        process_assets) {
     skills_[process_asset.id] = std::move(process_asset);
@@ -624,11 +626,37 @@ absl::Status SkillClientGenerator::ResolveSkillParameters(
 absl::StatusOr<std::shared_ptr<grpc::Channel>>
 SkillClientGenerator::GetSkillServiceChannel(absl::string_view grpc_target,
                                              absl::Time deadline) {
-  if (skill_service_channel_creator_for_test_) {
-    return skill_service_channel_creator_for_test_(grpc_target, deadline);
+  auto it = skill_channels_by_target_.find(grpc_target);
+  if (it != skill_channels_by_target_.end()) {
+    if (absl::Status status = connect::WaitForChannelReady(
+            it->second, kCachedChannelReadyTimeout);
+        status.ok()) {
+      return it->second;
+    } else {
+      LOG(WARNING) << "Evicting unhealthy cached skill service channel for '"
+                   << grpc_target << "': " << status;
+      skill_channels_by_target_.erase(it);
+    }
   }
-  return connect::CreateClientChannel(
-      grpc_target, deadline, connect::UnlimitedMessageSizeGrpcChannelArgs());
+
+  std::shared_ptr<grpc::Channel> channel;
+  if (skill_service_channel_creator_for_test_) {
+    INTR_ASSIGN_OR_RETURN(channel, skill_service_channel_creator_for_test_(
+                                       grpc_target, deadline));
+  } else {
+    INTR_ASSIGN_OR_RETURN(
+        channel,
+        connect::GrpcChannel(grpc_target)
+            .WithDeadline(deadline)
+            .WithCustomChannelArgs(
+                connect::UnlimitedMessageSizeGrpcChannelArgs())
+            .WithChannelCredentials(
+                grpc::InsecureChannelCredentials())  // NOLINT
+            .WithCheckChannelHealth(std::nullopt)
+            .Connect());
+  }
+  skill_channels_by_target_.emplace(grpc_target, channel);
+  return channel;
 }
 
 absl::StatusOr<SkillInstance> SkillClientGenerator::CreateSkillInstance(

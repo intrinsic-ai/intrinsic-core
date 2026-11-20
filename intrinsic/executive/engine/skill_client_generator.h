@@ -238,6 +238,8 @@ class SkillClientGenerator {
   mutable absl::Mutex skills_mutex_;
   absl::flat_hash_map<std::string, SkillRegistrationInternal> skills_
       ABSL_GUARDED_BY(skills_mutex_);
+  absl::flat_hash_map<std::string, std::shared_ptr<grpc::Channel>>
+      skill_channels_by_target_ ABSL_GUARDED_BY(skills_mutex_);
   absl::flat_hash_map<std::string, intrinsic_proto::resources::ResourceHandle>
       resource_handles_;
 

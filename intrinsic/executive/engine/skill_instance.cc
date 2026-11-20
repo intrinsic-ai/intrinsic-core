@@ -58,10 +58,16 @@ CreateSkillServiceClient(
         std::shared_ptr<grpc::Channel> project_channel,
         create_skill_service_channel(
             instance_proto.project_handle().grpc_target(), deadline));
-    INTR_ASSIGN_OR_RETURN(
-        std::shared_ptr<grpc::Channel> execute_channel,
-        create_skill_service_channel(
-            instance_proto.execute_handle().grpc_target(), deadline));
+    std::shared_ptr<grpc::Channel> execute_channel;
+    if (instance_proto.execute_handle().grpc_target() ==
+        instance_proto.project_handle().grpc_target()) {
+      execute_channel = project_channel;
+    } else {
+      INTR_ASSIGN_OR_RETURN(
+          execute_channel,
+          create_skill_service_channel(
+              instance_proto.execute_handle().grpc_target(), deadline));
+    }
     client = std::make_unique<skills::SkillServiceClient>(
         instance_proto,
         intrinsic_proto::skills::Projector::NewStub(project_channel),
