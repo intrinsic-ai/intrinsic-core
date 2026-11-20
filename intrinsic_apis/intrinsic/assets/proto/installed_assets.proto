@@ -51,14 +51,14 @@ service InstalledAssets {
   rpc ListInstalledAssets(ListInstalledAssetsRequest)
       returns (ListInstalledAssetsResponse) {
     option (google.api.http) = {
-      get: "/v1/installedAssets"
+      get: "/installedAssets/v1/installedAssets"
     };
   }
 
   // Gets a specific installed asset.
   rpc GetInstalledAsset(GetInstalledAssetRequest) returns (InstalledAsset) {
     option (google.api.http) = {
-      get: "/v1/installedAssets/{id.package}/{id.name}"
+      get: "/installedAssets/v1/installedAssets/{id.package}/{id.name}"
     };
   }
 
@@ -66,7 +66,7 @@ service InstalledAssets {
   rpc BatchGetInstalledAssets(BatchGetInstalledAssetsRequest)
       returns (BatchGetInstalledAssetsResponse) {
     option (google.api.http) = {
-      get: "/v1/installedAssets:batchGet"
+      post: "/installedAssets/v1/installedAssets:batchGet"
       body: "*"
     };
   }
@@ -79,7 +79,7 @@ service InstalledAssets {
       response_type: "InstalledAsset"
     };
     option (google.api.http) = {
-      post: "/v1/installedAssets"
+      post: "/installedAssets/v1/installedAssets"
       body: "asset"
     };
   }
@@ -102,7 +102,7 @@ service InstalledAssets {
       response_type: "BatchCreateInstalledAssetsResponse"
     };
     option (google.api.http) = {
-      post: "/v1/installedAssets:batchCreate"
+      post: "/installedAssets/v1/installedAssets:batchCreate"
       body: "*"
     };
   }
@@ -115,7 +115,7 @@ service InstalledAssets {
       response_type: "InstalledAsset"
     };
     option (google.api.http) = {
-      patch: "/v1/installedAssets/{installed_asset.name}"
+      patch: "/installedAssets/v1/installedAssets/{installed_asset.name}"
       body: "installed_asset"
     };
   }
@@ -128,7 +128,7 @@ service InstalledAssets {
       response_type: "BatchUpdateInstalledAssetsResponse"
     };
     option (google.api.http) = {
-      post: "/v1/installedAssets:batchUpdate"
+      post: "/installedAssets/v1/installedAssets:batchUpdate"
       body: "*"
     };
   }
@@ -141,7 +141,7 @@ service InstalledAssets {
       response_type: "google.protobuf.Empty"
     };
     option (google.api.http) = {
-      delete: "/v1/installedAssets/{id.package}/{id.name}"
+      delete: "/installedAssets/v1/installedAssets/{asset.package}/{asset.name}"
     };
   }
 
@@ -153,7 +153,7 @@ service InstalledAssets {
       response_type: "google.protobuf.Empty"
     };
     option (google.api.http) = {
-      delete: "/v1/installedAssets:batchDelete"
+      post: "/installedAssets/v1/installedAssets:batchDelete"
       body: "*"
     };
   }
