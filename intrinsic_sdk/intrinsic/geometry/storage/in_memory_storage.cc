@@ -97,22 +97,6 @@ absl::StatusOr<Geometry> MapGeometryLibrary::GetGeometry(
                   material_properties);
 }
 
-
-absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs>
-MapGeometryLibrary::SaveGeometry(const Geometry& geometry) {
-  INTR_ASSIGN_OR_RETURN(std::string geo_hash_id, GenerateFingerprint(geometry));
-
-  {
-    absl::MutexLock l(geometry_mutex_);
-    geometry_map_.try_emplace(geo_hash_id, geometry);
-  }
-
-  intrinsic_proto::geometry::GeometryStorageRefs storage_refs;
-  storage_refs.set_fingerprint(geo_hash_id);
-  return storage_refs;
-}
-
-
 absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
 MapGeometryLibrary::SaveGeometryV1(const Geometry& geometry,
                                    const SaveGeometryOptions& options) {

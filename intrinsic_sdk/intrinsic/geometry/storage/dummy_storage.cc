@@ -62,17 +62,6 @@ class DummyGeometryLibrary : public GeometryLibrary,
         result_.KeepRenderableForSerialization(), material_properties);
   }
 
-
-  absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs> SaveGeometry(
-      const Geometry& geometry) override {
-    intrinsic_proto::geometry::GeometryStorageRefs geo_storage_refs;
-    INTR_ASSIGN_OR_RETURN(std::string fingerprint,
-                          GenerateFingerprint(geometry));
-    geo_storage_refs.set_fingerprint(fingerprint);
-    return geo_storage_refs;
-  }
-
-
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
   SaveGeometryV1(const Geometry& geometry,
                  const SaveGeometryOptions& options) override {

@@ -19,7 +19,6 @@
 #include <memory>
 #include <optional>
 #include <string>
-#include <tuple>
 #include <utility>
 
 #include "absl/log/log.h"
@@ -57,43 +56,6 @@ namespace intrinsic::geo {
 namespace {
 
 constexpr absl::Time kCasDeadline = absl::InfiniteFuture();
-
-absl::StatusOr<std::tuple<std::string, std::string>> UploadToCASV0(
-    std::function<std::unique_ptr<grpc::ClientContext>()>& make_client_context,
-    const Geometry& geometry,
-    intrinsic_proto::content_addressable_storage::v1::
-        ContentAddressableStorageService::StubInterface* cas_stub) {
-  INTR_ASSIGN_OR_RETURN(intrinsic_proto::geometry::Geometry geo_proto,
-                        geometry_compatibility::ToProto(geometry));
-
-  std::string geometry_uri;
-  std::string renderable_uri;
-  {
-    std::string geo_proto_contents;
-    if (!geo_proto.SerializeToString(&geo_proto_contents)) {
-      return absl::InternalError("Failed to serialize Geometry proto");
-    }
-    auto cli_context = make_client_context();
-    INTR_ASSIGN_OR_RETURN(geometry_uri,
-                          ContentAddressableStorageCreate(
-                              cli_context.get(), cas_stub, geo_proto_contents),
-                          _ << "UploadToCAS failed to "
-                               "ContentAddressableStorageCreate() geometry");
-  }
-  {
-    INTR_ASSIGN_OR_RETURN(auto renderable, GetOrGenerateRenderable(geometry));
-    const auto glb_contents = renderable->GetGLBString();
-    auto cli_context = make_client_context();
-    INTR_ASSIGN_OR_RETURN(
-        renderable_uri,
-        ContentAddressableStorageCreate(cli_context.get(), cas_stub,
-                                        glb_contents),
-        _ << "UploadToCAS failed to ContentAddressableStorageCreate() "
-             "glb_contents");
-  }
-
-  return std::make_tuple(geometry_uri, renderable_uri);
-}
 
 struct CasRefsV1 {
   std::string exact_geo_uri;
@@ -240,33 +202,6 @@ class CasGeometryLibrary : public GeometryLibrary,
                  geo_storage_refs.keep_renderable(), material_properties);
     cache_->InsertGeometry(geo_storage_refs, geo);
     return std::move(geo);
-  }
-
-  absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs> SaveGeometry(
-      const Geometry& geometry) override {
-    INTR_ASSIGN_OR_RETURN(const std::string fingerprint,
-                          GenerateFingerprint(geometry));
-    if (std::optional<intrinsic_proto::geometry::GeometryStorageRefs> refs =
-            cache_->GetGeometryStorageRefs(fingerprint);
-        refs.has_value()) {
-      return refs.value();
-    }
-
-    // Write to CAS, and optionally cache the actual geometry.
-    std::string geometry_uri;
-    std::string renderable_uri;
-    INTR_ASSIGN_OR_RETURN(
-        const auto refs_tuple,
-        UploadToCASV0(make_client_context_, geometry, cas_stub_.get()));
-    std::tie(geometry_uri, renderable_uri) = refs_tuple;
-    intrinsic_proto::geometry::GeometryStorageRefs storage_refs;
-    storage_refs.set_fingerprint(fingerprint);
-    storage_refs.set_geometry_ref(geometry_uri);
-    storage_refs.set_renderable_ref(renderable_uri);
-
-    cache_->InsertGeometry(storage_refs, geometry);
-
-    return storage_refs;
   }
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>

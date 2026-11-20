@@ -38,8 +38,8 @@ namespace intrinsic::geo {
 // directly.
 //
 // `Serializer().SaveGeometryV1()` writes and V0 `Deserializer()` reads delegate
-// to CAS; V0 `Serializer().SaveGeometry()` returns `UNIMPLEMENTED`; V1
-// `Deserializer()` reads dispatch by URI scheme across CAS and KeyValueStore.
+// to CAS; V1 `Deserializer()` reads dispatch by URI scheme across CAS and
+// KeyValueStore.
 //
 // `geometry_cache` must outlive the returned `GeometryLibrary`. When `context`
 // is non-null, it configures downstream CAS calls and must outlive the returned

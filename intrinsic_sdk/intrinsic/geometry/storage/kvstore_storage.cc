@@ -164,10 +164,6 @@ class KvStoreGeometryLibrary : public GeometryLibrary,
     return absl::UnimplementedError(kV0UnsupportedMessage);
   }
 
-  absl::StatusOr<GeometryStorageRefsV0> SaveGeometry(const Geometry&) override {
-    return absl::UnimplementedError(kV0UnsupportedMessage);
-  }
-
 
   absl::StatusOr<Geometry> GetGeometry(
       const GeometryStorageRefs& refs,

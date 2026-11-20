@@ -130,17 +130,6 @@ class WriteOnlyMapAndOtherGeometryLibrary : public GeometryLibrary,
                                                     material_properties);
   }
 
-
-  absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs> SaveGeometry(
-      const Geometry& geometry) override {
-    if (other_library_) {
-      INTR_RETURN_IF_ERROR(
-          other_library_->Serializer().SaveGeometry(geometry).status());
-    }
-    return map_library_->Serializer().SaveGeometry(geometry);
-  }
-
-
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
   SaveGeometryV1(const Geometry& geometry,
                  const SaveGeometryOptions& options) override {

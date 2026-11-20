@@ -57,7 +57,6 @@ cc_library(
     deps = [
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "@abseil-cpp//absl/status:statusor",
-        "@intrinsic_apis//intrinsic/geometry/proto:geometry_storage_refs_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_storage_refs_cc_proto",
     ],
 )
@@ -89,8 +88,8 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
-        "@intrinsic_apis//intrinsic/geometry/proto:geometry_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_storage_refs_cc_proto",
+        "@intrinsic_apis//intrinsic/geometry/proto:lazy_exact_geometry_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_storage_refs_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:material_cc_proto",
     ],

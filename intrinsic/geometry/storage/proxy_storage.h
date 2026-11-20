@@ -49,10 +49,6 @@ class ProxyStorageLibrary : public GeometryLibrary,
       std::optional<intrinsic_proto::geometry::v1::MaterialProperties>
           material_properties) const override;
 
-  // TODO(442842561): Remove this method once all users are migrated to v1.
-  absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs> SaveGeometry(
-      const Geometry& geometry) override;
-
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
   SaveGeometryV1(const Geometry& geometry,
                  const SaveGeometryOptions& options) override;

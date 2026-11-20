@@ -36,8 +36,8 @@
 
 #include "intrinsic/geometry/compatibility/io.h"
 
-#include "intrinsic/geometry/proto/geometry.pb.h"
 #include "intrinsic/geometry/proto/geometry_storage_refs.pb.h"
+#include "intrinsic/geometry/proto/lazy_exact_geometry.pb.h"
 #include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
 #include "intrinsic/geometry/proto/v1/material.pb.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
@@ -52,14 +52,6 @@ namespace {
 
 const ChunkId::ValueType kGeometryChunkId = 'GEOM';
 const ChunkId::ValueType kGLBChunkId = 'GLTF';
-// This chunk will carry all the geometry files (both visual and collision) in
-// the right format for exporting to the GCS/CAS.
-//
-// Since this is just meant for export, these files are not read back in.
-// TODO(stoyang): See if we actually need this still
-
-const ChunkId::ValueType kExportChunkId = 'EXPO';
-
 
 // Version 0 == binary glb string for Renderable..
 const uint32_t kRenderableVersionNumber = 0;
@@ -70,11 +62,6 @@ const uint32_t kRenderableVersionNumber = 0;
 const uint32_t kGeometryVersionNumber = 0;
 
 const uint32_t kGeometryVersionNumberV1 = 1;
-// Version 0 == The geometry saved as a intrinsic_proto::geometry::Geometry for
-// collision geometry, or a raw string for the gltf renderable.
-
-const uint32_t kExportVersionNumber = 0;
-
 
 absl::StatusOr<ChunkKey> ObjectIdToKeyOld(absl::string_view id) {
   uint64_t chunk_key;
@@ -222,61 +209,6 @@ class GzfGeometryLibrary : public GeometryLibrary,
                                  geo_storage_refs);
   }
 
-
-  // TODO(b/442842561): Remove this method once all users are migrated to v1
-  // geometry protos.
-  absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs> SaveGeometry(
-      const Geometry& geometry) override {
-    INTR_ASSIGN_OR_RETURN(const std::string id, GenerateFingerprint(geometry));
-    INTR_ASSIGN_OR_RETURN(ChunkKey chunk_key, ObjectIdToKeyOld(id));
-
-    INTR_ASSIGN_OR_RETURN(
-        const intrinsic_proto::geometry::LazyExactGeometry proto,
-        geometry_compatibility::ToProto(geometry.GetExactGeometry()));
-    ChunkEntry shape_chunk(kGeometryVersionNumber, proto.SerializeAsString());
-    INTR_RETURN_IF_ERROR(
-        gzfile_.SetChunk(ChunkId(kGeometryChunkId), chunk_key, shape_chunk));
-
-    auto maybe_renderable = geometry.GetRenderable();
-    if (geometry.KeepRenderableForSerialization() &&
-        maybe_renderable != nullptr) {
-      std::string glb_string = maybe_renderable->GetGLBString();
-
-      INTR_RETURN_IF_ERROR(gzfile_.SetChunk(
-          ChunkId(kGLBChunkId), chunk_key,
-          ChunkEntry(kRenderableVersionNumber, std::move(glb_string))));
-    }
-
-    // Write out the files for export.
-    // Geometry first.
-    {
-      INTR_ASSIGN_OR_RETURN(intrinsic_proto::geometry::Geometry geo_proto,
-                            geometry_compatibility::ToProto(geometry));
-      ChunkEntry export_geometry_chunk(kExportVersionNumber,
-                                       geo_proto.SerializeAsString());
-      INTR_RETURN_IF_ERROR(
-          gzfile_.SetChunk(ChunkId(kExportChunkId), id, export_geometry_chunk));
-    }
-
-    // Then renderable.
-    {
-      INTR_ASSIGN_OR_RETURN(auto renderable, GetOrGenerateRenderable(geometry));
-      if (renderable == nullptr) {
-        return absl::InternalError("Renderable is null!");
-      }
-      ChunkEntry export_renderable_chunk(kExportVersionNumber,
-                                         renderable->GetGLBString());
-      INTR_RETURN_IF_ERROR(gzfile_.SetChunk(ChunkId(kExportChunkId),
-                                            absl::StrCat(id, "-gltf"),
-                                            export_renderable_chunk));
-    }
-
-    intrinsic_proto::geometry::GeometryStorageRefs geo_storage_refs;
-    geo_storage_refs.set_fingerprint(id);
-    return geo_storage_refs;
-  }
-
-
   // TODO(b/442842561): Rename this method once all users are migrated to v1
   // geometry protos.
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
@@ -356,14 +288,6 @@ class ReadOnlyGzfGeometryLibrary : public GeometryLibrary,
     return ReadGeometryFromGzfV1(gzfile_, material_properties,
                                  geo_storage_refs);
   }
-
-
-  absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs> SaveGeometry(
-      const Geometry& geometry) override {
-    return absl::UnimplementedError(
-        "ReadOnlyGzfGeometryLibrary does not support writing geometry");
-  }
-
 
   // TODO(b/442842561): Rename this method once all users are migrated to v1
   // geometry protos.

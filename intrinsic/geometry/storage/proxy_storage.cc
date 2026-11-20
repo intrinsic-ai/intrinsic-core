@@ -50,11 +50,6 @@ absl::StatusOr<Geometry> ProxyStorageLibrary::GetGeometry(
                                               material_properties);
 }
 
-absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs>
-ProxyStorageLibrary::SaveGeometry(const Geometry& geometry) {
-  return storage_->Serializer().SaveGeometry(geometry);
-}
-
 absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
 ProxyStorageLibrary::SaveGeometryV1(const Geometry& geometry,
                                     const SaveGeometryOptions& options) {

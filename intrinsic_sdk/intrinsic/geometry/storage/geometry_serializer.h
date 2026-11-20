@@ -20,9 +20,6 @@
 
 #include "absl/status/statusor.h"
 #include "intrinsic/geometry/api/geometry.h"
-
-#include "intrinsic/geometry/proto/geometry_storage_refs.pb.h"
-
 #include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
 
 namespace intrinsic::geo {
@@ -53,24 +50,11 @@ class GeometrySerializer {
  public:
   virtual ~GeometrySerializer() = default;
 
-
-  // DEPRECATED: this interface exists only for backwards compatibility. Use
-  // `v1::GeometryStorageRefs` API below instead.
-  //
-  // TODO(b/442842561): Remove this method once all users are migrated to v1.
-  // Stores the given geometry object and returns its associated id. The id can
-  // be used with a GeometryDeserializer configured to the same store to fetch
-  // the geometry later.
-  virtual absl::StatusOr<intrinsic_proto::geometry::GeometryStorageRefs>
-  SaveGeometry(const Geometry& geometry) = 0;
-
-
   // Stores the given geometry object using `options` and returns its storage
   // refs. The storage refs can be used with a GeometryDeserializer configured
   // to the same store to fetch the geometry later. Pass `{}` for default
   // options.
-  // TODO(b/442842561): Rename to `SaveGeometry` once the above method is
-  // removed.
+  // TODO(b/442842561): Rename to `SaveGeometry`.
   virtual absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
   SaveGeometryV1(const Geometry& geometry,
                  const SaveGeometryOptions& options) = 0;

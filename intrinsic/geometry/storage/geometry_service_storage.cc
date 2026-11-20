@@ -56,8 +56,6 @@
 namespace intrinsic::geo {
 namespace {
 
-using ::intrinsic_proto::geometry::GeometryStorageRefs;
-
 absl::Time kGeometryServiceDeadline = absl::InfiniteFuture();
 
 // We don't use `ConfigureClientContext` from `intrinsic/util/grpc` here because
@@ -212,22 +210,6 @@ class GeometryServiceGeometryLibrary : public GeometryLibrary,
 
     cache_->InsertGeometry(geo_storage_refs, geo);
     return geo;
-  }
-
-  absl::StatusOr<GeometryStorageRefs> SaveGeometry(
-      const Geometry& geometry) override {
-    INTR_ASSIGN_OR_RETURN(std::string hash_id, GenerateFingerprint(geometry));
-    if (auto refs = cache_->GetGeometryStorageRefs(hash_id); refs.has_value()) {
-      return std::move(refs).value();
-    }
-
-    INTR_RETURN_IF_ERROR(SaveGeometryV1(geometry, {}).status());
-
-    GeometryStorageRefs v0_refs;
-    v0_refs.set_fingerprint(hash_id);
-
-    cache_->InsertGeometry(v0_refs, geometry);
-    return v0_refs;
   }
 
   absl::StatusOr<intrinsic_proto::geometry::v1::GeometryStorageRefs>
