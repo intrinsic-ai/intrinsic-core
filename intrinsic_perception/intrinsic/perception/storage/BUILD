@@ -17,22 +17,37 @@ load("//bazel:cc_macros.bzl", "cc_library")
 package(default_visibility = ["//visibility:public"])
 
 cc_library(
+    name = "kvstore_factory",
+    srcs = ["kvstore_factory.cc"],
+    hdrs = ["kvstore_factory.h"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/platform/pubsub",
+        "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/base:no_destructor",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/functional:any_invocable",
+        "@abseil-cpp//absl/functional:function_ref",
+        "@abseil-cpp//absl/log:die_if_null",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:string_view",
+    ],
+)
+
+cc_library(
     name = "capture_result_storage",
     srcs = ["capture_result_storage.cc"],
     hdrs = ["capture_result_storage.h"],
     deps = [
+        ":kvstore_factory",
         "//intrinsic_perception/intrinsic/perception/cameras:capture_result",
         "//intrinsic_perception/intrinsic/perception/proto_conversion/v1:capture_result",
-        "//intrinsic_sdk/intrinsic/platform/pubsub",
         "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/time:deadline_timeout",
-        "@abseil-cpp//absl/base:no_destructor",
-        "@abseil-cpp//absl/functional:any_invocable",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/time",
         "@intrinsic_apis//intrinsic/perception/proto/v1:capture_result_cc_proto",
         "@intrinsic_apis//intrinsic/platform/pubsub:storage_location_cc_proto",

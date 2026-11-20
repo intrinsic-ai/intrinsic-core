@@ -15,33 +15,18 @@
 #ifndef INTRINSIC_PERCEPTION_STORAGE_CAPTURE_RESULT_STORAGE_H_
 #define INTRINSIC_PERCEPTION_STORAGE_CAPTURE_RESULT_STORAGE_H_
 
-#include <memory>
-
-#include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "intrinsic/perception/cameras/capture_result.h"
-#include "intrinsic/platform/pubsub/kvstore.h"
+#include "intrinsic/perception/storage/kvstore_factory.h"
 #include "intrinsic/platform/pubsub/storage_location.pb.h"
 
 namespace intrinsic::perception {
 
-using KeyValueStoreFactory =
-    absl::AnyInvocable<absl::StatusOr<std::shared_ptr<KeyValueStore>>(
-        absl::string_view store) const>;
-
-// Production factory: creates a KeyValueStore for `store` via PubSub.
-KeyValueStoreFactory CreateKeyValueStoreFactory();
-
-// Test factory: always returns the given `kvstore` (e.g. FakeKeyValueStore).
-KeyValueStoreFactory CreateKeyValueStoreFactory(
-    std::shared_ptr<KeyValueStore> kvstore);
-
 // Retrieves a capture result from the given storage location.
 absl::StatusOr<perception::CaptureResult> GetCaptureResult(
     const intrinsic_proto::kvstore::StorageLocation& capture_result_location,
-    const KeyValueStoreFactory& kvstore_factory, absl::Duration timeout);
+    KeyValueStoreFactoryRef kvstore_factory, absl::Duration timeout);
 
 }  // namespace intrinsic::perception
 

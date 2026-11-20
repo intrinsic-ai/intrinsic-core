@@ -16,22 +16,18 @@
 
 #include <algorithm>
 #include <memory>
-#include <optional>
-#include <string>
 #include <utility>
 
-#include "absl/base/no_destructor.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/proto/v1/capture_result.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/capture_result.h"
+#include "intrinsic/perception/storage/kvstore_factory.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
-#include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/platform/pubsub/storage_location.pb.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/time/deadline_timeout.h"
@@ -50,28 +46,9 @@ constexpr double kNotFoundRetryDelayFactor = 2.0;
 
 }  // namespace
 
-KeyValueStoreFactory CreateKeyValueStoreFactory() {
-  static const absl::NoDestructor<PubSub> kPubSub;
-  const PubSub* pubsub = kPubSub.get();
-  return [pubsub](absl::string_view store)
-             -> absl::StatusOr<std::shared_ptr<KeyValueStore>> {
-    std::optional<std::string> prefix =
-        store.empty() ? std::nullopt : std::make_optional(std::string(store));
-    INTR_ASSIGN_OR_RETURN(KeyValueStore kvstore, pubsub->KeyValueStore(prefix));
-    return std::make_shared<KeyValueStore>(std::move(kvstore));
-  };
-}
-
-KeyValueStoreFactory CreateKeyValueStoreFactory(
-    std::shared_ptr<KeyValueStore> kvstore) {
-  return
-      [kvstore = std::move(kvstore)](absl::string_view /*store*/)
-          -> absl::StatusOr<std::shared_ptr<KeyValueStore>> { return kvstore; };
-}
-
 absl::StatusOr<perception::CaptureResult> GetCaptureResult(
     const intrinsic_proto::kvstore::StorageLocation& capture_result_location,
-    const KeyValueStoreFactory& kvstore_factory, absl::Duration timeout) {
+    KeyValueStoreFactoryRef kvstore_factory, absl::Duration timeout) {
   const absl::Time deadline = ToDeadline(timeout);
   const absl::Time retry_deadline =
       std::min(deadline, absl::Now() + kNotFoundRetryWindow);
