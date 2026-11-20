@@ -86,6 +86,27 @@ absl::StatusOr<Pose3d> ResolveJointEntityPose(const Entity& entity) {
     return absl::InvalidArgumentError(absl::StrCat(
         "Entity '", entity.name(), "' does not have a joint component."));
   }
+  const KinematicsComponent& kinematics = entity.joint().kinematics_component();
+  double joint_value = 0.0;
+  if (kinematics.has_raw_value()) {
+    joint_value = kinematics.raw_value();
+  } else if (kinematics.motion_type() !=
+             KinematicsComponent::MOTION_TYPE_FIXED) {
+    joint_value = DefaultJointValueFromLimits(kinematics);
+  }
+  return ResolveJointEntityPose(entity, joint_value);
+}
+
+absl::StatusOr<Pose3d> ResolveJointEntityPose(const Entity& entity,
+                                              double joint_value) {
+  if (!entity.has_joint()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Entity '", entity.name(), "' does not have a joint component."));
+  }
+  if (!std::isfinite(joint_value)) {
+    return absl::InvalidArgumentError(
+        "Joint has non-finite raw_value or override.");
+  }
 
   // `entity.parent_t_this()` is ignored for joints; the pose is computed
   // solely from `kinematics_component`.
@@ -103,22 +124,12 @@ absl::StatusOr<Pose3d> ResolveJointEntityPose(const Entity& entity) {
                           FromProtoNormalized(kinematics.outboard_t_child()));
   }
 
-  double joint_value = 0.0;
-  if (kinematics.has_raw_value()) {
-    joint_value = kinematics.raw_value();
-    if (!std::isfinite(joint_value)) {
-      return absl::InvalidArgumentError("Joint has non-finite raw_value.");
-    }
-  } else {
-    joint_value = DefaultJointValueFromLimits(kinematics);
-  }
-
   Pose3d inboard_t_outboard = Pose3d::Identity();
   switch (kinematics.motion_type()) {
     case KinematicsComponent::MOTION_TYPE_FIXED:
-      if (kinematics.has_raw_value() && kinematics.raw_value() != 0.0) {
+      if (joint_value != 0.0) {
         return absl::InvalidArgumentError(
-            "Fixed joint cannot have a non-zero raw_value.");
+            "Fixed joint cannot have a non-zero raw_value or override.");
       }
       break;
     case KinematicsComponent::MOTION_TYPE_REVOLUTE:

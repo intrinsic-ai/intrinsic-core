@@ -15,12 +15,16 @@
 #include "intrinsic/scene/scene_object/scene_object_view.h"
 
 #include <algorithm>
+#include <cmath>
 #include <functional>
 #include <memory>
 #include <utility>
 #include <vector>
 
+#include "absl/container/flat_hash_map.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "intrinsic/math/pose3.h"
@@ -34,7 +38,45 @@ namespace intrinsic {
 namespace scene_object {
 namespace {
 
+using ::intrinsic_proto::FromProtoNormalized;
 using ::intrinsic_proto::world::KinematicsComponent;
+
+// Returns true when `name` identifies an existing non-fixed joint entity in
+// `view`.
+bool IsMovableJoint(const SceneObjectView& view, absl::string_view name) {
+  const SceneObjectView::Entity* const entity = view.FindEntity(name);
+  return entity != nullptr && entity->has_joint() &&
+         entity->joint().kinematics_component().motion_type() !=
+             KinematicsComponent::MOTION_TYPE_FIXED;
+}
+
+// Computes `parent_t_entity` for a non-root `entity` under `joint_values`.
+absl::StatusOr<Pose3d> ResolveLocalEntityPose(
+    const SceneObjectView& view, const SceneObjectView::Entity& entity,
+    const absl::flat_hash_map<absl::string_view, double>& joint_values) {
+  if (IsMovableJoint(view, entity.name())) {
+    const auto it = joint_values.find(entity.name());
+    INTR_ASSIGN_OR_RETURN(
+        const Pose3d pose,
+        it != joint_values.end() ? ResolveJointEntityPose(entity, it->second)
+                                 : ResolveJointEntityPose(entity),
+        _ << "Cannot compute the pose of joint '" << entity.name() << "'");
+    return pose;
+  }
+
+  if (entity.has_parent_t_this()) {
+    return FromProtoNormalized(entity.parent_t_this());
+  }
+
+  if (entity.has_joint()) {
+    INTR_ASSIGN_OR_RETURN(
+        const Pose3d pose, ResolveJointEntityPose(entity),
+        _ << "Cannot compute the pose of joint '" << entity.name() << "'");
+    return pose;
+  }
+
+  return Pose3d::Identity();
+}
 
 }  // namespace
 
@@ -222,6 +264,19 @@ std::vector<const SceneObjectView::Entity*> SceneObjectView::GetPathFromRoot(
 
 absl::StatusOr<absl::flat_hash_map<absl::string_view, Pose3d>>
 SceneObjectView::GetRootPoses() const {
+  return GetRootPosesWithJointValues(/*joint_values=*/{});
+}
+
+absl::StatusOr<absl::flat_hash_map<absl::string_view, Pose3d>>
+SceneObjectView::GetRootPosesWithJointValues(
+    const absl::flat_hash_map<absl::string_view, double>& joint_values) const {
+  for (const auto& [joint_name, value] : joint_values) {
+    if (!IsMovableJoint(*this, joint_name) || !std::isfinite(value)) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Invalid joint value override for '", joint_name, "'."));
+    }
+  }
+
   // `tree_order_` visits every parent before its children, so the parent's pose
   // is always known when a child is reached.
   std::vector<Pose3d> root_t_node(nodes_.size(), Pose3d::Identity());
@@ -231,20 +286,9 @@ SceneObjectView::GetRootPoses() const {
     const int index = index_by_name_.at(entity->name());
     const int parent_index = nodes_[index].parent_index;
     if (parent_index >= 0) {
-      Pose3d parent_t_entity = Pose3d::Identity();
-      if (entity->has_joint() &&
-          entity->joint().kinematics_component().has_raw_value() &&
-          entity->joint().kinematics_component().motion_type() !=
-              KinematicsComponent::MOTION_TYPE_FIXED) {
-        // A revolute or prismatic joint with `raw_value` is posed by its
-        // `raw_value`.
-        INTR_ASSIGN_OR_RETURN(
-            parent_t_entity, ResolveJointEntityPose(*entity),
-            _ << "Cannot compute the pose of joint '" << entity->name() << "'");
-      } else if (entity->has_parent_t_this()) {
-        INTR_ASSIGN_OR_RETURN(parent_t_entity,
-                              FromProtoNormalized(entity->parent_t_this()));
-      }
+      INTR_ASSIGN_OR_RETURN(
+          const Pose3d parent_t_entity,
+          ResolveLocalEntityPose(*this, *entity, joint_values));
       root_t_node[index] = root_t_node[parent_index] * parent_t_entity;
     }
     root_poses.emplace(entity->name(), root_t_node[index]);

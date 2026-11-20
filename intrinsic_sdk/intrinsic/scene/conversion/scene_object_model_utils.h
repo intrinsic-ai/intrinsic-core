@@ -49,6 +49,13 @@ absl::flat_hash_set<std::string> GetNonFixedJointNames(
 absl::StatusOr<Pose3d> ResolveJointEntityPose(
     const intrinsic_proto::scene_object::v1::Entity& entity);
 
+// Computes a joint entity's local parent_t_this transform from its
+// KinematicsComponent at `joint_value` instead of `raw_value` or limits-based
+// defaults. For MOTION_TYPE_FIXED, rejects non-zero `joint_value`.
+absl::StatusOr<Pose3d> ResolveJointEntityPose(
+    const intrinsic_proto::scene_object::v1::Entity& entity,
+    double joint_value);
+
 }  // namespace scene_object
 }  // namespace intrinsic
 

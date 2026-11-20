@@ -133,6 +133,15 @@ class SceneObjectView {
   absl::StatusOr<absl::flat_hash_map<absl::string_view, Pose3d>> GetRootPoses()
       const;
 
+  // Returns the pose of every entity relative to the root entity under explicit
+  // movable-joint value overrides `joint_values`, keyed by entity name. Returns
+  // `INVALID_ARGUMENT` if any entry in `joint_values` does not name an existing
+  // non-fixed joint entity, has a non-finite value, or if a joint pose cannot
+  // be computed.
+  absl::StatusOr<absl::flat_hash_map<absl::string_view, Pose3d>>
+  GetRootPosesWithJointValues(
+      const absl::flat_hash_map<absl::string_view, double>& joint_values) const;
+
  private:
   struct Node {
     const Entity* entity = nullptr;
