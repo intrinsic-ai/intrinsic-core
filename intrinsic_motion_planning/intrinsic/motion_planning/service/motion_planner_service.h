@@ -236,6 +236,12 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
           response,
       std::optional<RunTimeMotionPlannerFlags> run_time_flags);
 
+  // Validates `request`, downloads the world, and computes collision-free IK
+  // solutions into `response`.
+  absl::Status ComputeIkInternal(
+      const intrinsic_proto::motion_planning::v1::IkRequest& request,
+      intrinsic_proto::motion_planning::v1::IkResponse& response);
+
   // Given `request`, `initial_world`, `cache_hit`, `enable_collision_stats`,
   // and `robot`, this function converts `plan_trajectory_result` into
   // `response`.

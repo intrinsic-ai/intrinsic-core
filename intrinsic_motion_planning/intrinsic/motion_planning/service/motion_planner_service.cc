@@ -1023,87 +1023,95 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     const intrinsic_proto::motion_planning::v1::IkRequest* request,
     intrinsic_proto::motion_planning::v1::IkResponse* response) {
   const stats::ScopedSpan span("MotionPlannerService/ComputeIk", context);
-  // Return error early for invalid max_num_solutions before doing any further
-  // computations.
-  if (request->max_num_solutions() < 0) {
-    return ToGrpcStatus(absl::InvalidArgumentError(
-        absl::StrCat("max_num_solutions must be non-negative. Got ",
-                     request->max_num_solutions())));
-  }
+  const absl::Status status = ComputeIkInternal(
+      *request,
+      *response);
+
+  return ToGrpcStatus(AddTypeUrlPrefixToPayload(status));
+}
+
+absl::Status MotionPlannerService::ComputeIkInternal(
+    const intrinsic_proto::motion_planning::v1::IkRequest& request,
+    intrinsic_proto::motion_planning::v1::IkResponse& response) {
+  // Download the world from the world service if `max_num_solutions` is valid.
+  absl::StatusOr<WorldAndProto> initial_world_and_proto =
+      (request.max_num_solutions() >= 0)
+          ? GetInitialWorldFromWorldService(request.world_id())
+          : absl::InvalidArgumentError(
+                absl::StrCat("max_num_solutions must be non-negative. Got ",
+                             request.max_num_solutions()));
+
+  INTR_RETURN_IF_ERROR(initial_world_and_proto.status());
+
   // Get maximum number of IK solutions that should be sampled for each pose
-  // from the request. Defaults to kDefaultMaxNumIkSolutions if not provided.
-  const int max_num_solutions = request->max_num_solutions() == 0
+  // from the request. Defaults to `kDefaultMaxNumIkSolutions` if not provided.
+  const int max_num_solutions = request.max_num_solutions() == 0
                                     ? kDefaultMaxNumIkSolutions
-                                    : request->max_num_solutions();
+                                    : request.max_num_solutions();
 
-  // Download the world from the world service.
-  INTR_ASSIGN_OR_RETURN_GRPC(
-      WorldAndProto initial_world_and_proto,
-      GetInitialWorldFromWorldService(request->world_id()));
-
-  INTR_ASSIGN_OR_RETURN_GRPC(
-      std::unique_ptr<object_world::ObjectWorld> object_world,
-      GetObjectWorldView(initial_world_and_proto.world));
+  INTR_ASSIGN_OR_RETURN(std::unique_ptr<object_world::ObjectWorld> object_world,
+                        GetObjectWorldView(initial_world_and_proto->world));
 
   // Unpack the robot information from the request.
-  INTR_ASSIGN_OR_RETURN_GRPC(
-      object_world::KinematicObject * robot,
-      GetRobot(request->robot_reference(), object_world.get()));
+  INTR_ASSIGN_OR_RETURN(
+      object_world::KinematicObject* const robot,
+      GetRobot(request.robot_reference(), object_world.get()));
 
   // Set dof values for the robot if provided.
-  if (request->has_starting_joints()) {
-    eigenmath::VectorXd starting_joints =
-        RepeatedDoubleToVectorXd(request->starting_joints().joints());
-    INTR_RETURN_IF_ERROR_GRPC(robot->SetJointPositions(starting_joints));
+  if (request.has_starting_joints()) {
+    const eigenmath::VectorXd starting_joints =
+        RepeatedDoubleToVectorXd(request.starting_joints().joints());
+    INTR_RETURN_IF_ERROR(robot->SetJointPositions(starting_joints));
   }
 
   // Keep proxy construction and usage within this block so that we don't
   // incur the cost of setting up the proxy if collision checking is not going
   // to be used.
   const bool collision_checking_enabled =
-      request->has_collision_settings()
-          ? !request->collision_settings().disable_collision_checking()
+      request.has_collision_settings()
+          ? !request.collision_settings().disable_collision_checking()
           : false;
 
   intrinsic_proto::RuleSet rule_set;
   if (collision_checking_enabled) {
-    INTR_ASSIGN_OR_RETURN_GRPC(
-        rule_set, MakeRuleSet(request->collision_settings(), *object_world));
+    INTR_ASSIGN_OR_RETURN(
+        rule_set, MakeRuleSet(request.collision_settings(), *object_world));
   }
   // TODO(b/338108549): We only use the proxy for validation, not FK/IK. It
   // should not be necessary to require non branching structures.
-  INTR_ASSIGN_OR_RETURN_GRPC(
+  INTR_ASSIGN_OR_RETURN(
       std::unique_ptr<KinematicsSystemProxy> proxy,
       GetProxyForPathPlanning(
-          *object_world, *robot, request->collision_checker_config(), rule_set,
+          *object_world, *robot, request.collision_checker_config(), rule_set,
           /*require_ik_and_fk=*/true, !collision_checking_enabled));
   if (!proxy) {
-    return ToGrpcStatus(absl::InternalError(
+    return absl::InternalError(
         "An unexpected error occurred during ComputeIk. No "
         "validation proxy available for inverse kinematic solution "
-        "validation."));
+        "validation.");
   }
   ComputeIkDebugInformation ik_debug_info;
-  auto request_result = GetCollisionFreeIkSolutions(
-      *object_world, *proxy, *robot, request->target(),
-      {
-          .max_num_solutions = max_num_solutions,
-          .ensure_same_branch = request->ensure_same_branch(),
-          .prefer_same_branch = request->prefer_same_branch(),
-          .disable_error_on_collisions = request->disable_error_on_collisions(),
-      },
-      &ik_debug_info);
+  const absl::StatusOr<std::vector<eigenmath::VectorXd>> request_result =
+      GetCollisionFreeIkSolutions(
+          *object_world, *proxy, *robot, request.target(),
+          {
+              .max_num_solutions = max_num_solutions,
+              .ensure_same_branch = request.ensure_same_branch(),
+              .prefer_same_branch = request.prefer_same_branch(),
+              .disable_error_on_collisions =
+                  request.disable_error_on_collisions(),
+          },
+          &ik_debug_info);
+  INTR_ASSIGN_OR_RETURN(const std::vector<eigenmath::VectorXd>& ik_solutions,
+                        request_result);
 
-  if (!request_result.ok()) {
-    return ToGrpcStatus(AddTypeUrlPrefixToPayload(request_result.status()));
-  }
-  std::vector<eigenmath::VectorXd> ik_solutions = request_result.value();
-
-  for (const auto& solution : ik_solutions) {
-    auto* solution_proto = response->add_solutions();
+  for (const eigenmath::VectorXd& solution : ik_solutions) {
+    intrinsic_proto::icon::JointVec* const solution_proto =
+        response.add_solutions();
     VectorXdToRepeatedDouble(solution, solution_proto->mutable_joints());
   }
-  return grpc::Status::OK;
+
+  return absl::OkStatus();
 }
 
 ::grpc::Status MotionPlannerService::ComputeFk(
