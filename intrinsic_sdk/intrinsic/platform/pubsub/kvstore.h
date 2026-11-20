@@ -157,11 +157,8 @@ class KeyValueStore {
   absl::Status Set(absl::string_view key, T&& value)
     requires kvstore_internal::NonAnyProtoMessage<T>
   {
-    google::protobuf::Any any;
-    if (!any.PackFrom(std::forward<T>(value))) {
-      return absl::InternalError(
-          absl::StrCat("Failed to pack value for the key: ", key));
-    }
+    INTR_ASSIGN_OR_RETURN(google::protobuf::Any any,
+                          PackToAny(key, std::forward<T>(value)));
     return Set(key, any);
   }
 
@@ -185,11 +182,8 @@ class KeyValueStore {
                    std::optional<bool> high_consistency)
     requires kvstore_internal::NonAnyProtoMessage<T>
   {
-    google::protobuf::Any any;
-    if (!any.PackFrom(std::forward<T>(value))) {
-      return absl::InternalError(
-          absl::StrCat("Failed to pack value for the key: ", key));
-    }
+    INTR_ASSIGN_OR_RETURN(google::protobuf::Any any,
+                          PackToAny(key, std::forward<T>(value)));
     return Set(key, any, high_consistency);
   }
 
@@ -213,11 +207,8 @@ class KeyValueStore {
                                    const SetWithVerificationOptions& options)
     requires kvstore_internal::NonAnyProtoMessage<T>
   {
-    google::protobuf::Any any;
-    if (!any.PackFrom(std::forward<T>(value))) {
-      return absl::InternalError(
-          absl::StrCat("Failed to pack value for the key: ", key));
-    }
+    INTR_ASSIGN_OR_RETURN(google::protobuf::Any any,
+                          PackToAny(key, std::forward<T>(value)));
     return SetWithVerification(key, any, options);
   }
 
@@ -324,10 +315,29 @@ class KeyValueStore {
   //   `google::protobuf::Any`. The callback code is responsible for extracting
   //   that value and checking its type.
   // - deletion_callback - callback that will be
-  //   invoked when a key matching `key_expression` is deleted.
-  absl::StatusOr<Subscription> CreateSubscription(
+  //   invoked when a key matching `key_expression` is deleted. Zenoh `DELETE`
+  //   tombstones carry no prior encoding, so `deletion_callback` fires across
+  //   encodings. Callbacks must not synchronously destroy or `Unsubscribe`
+  //   their own `Subscription`.
+  virtual absl::StatusOr<Subscription> CreateSubscription(
       absl::string_view key_expression, const TopicConfig& config,
       SubscriptionOkExpandedCallback<google::protobuf::Any> value_callback,
+      DeletionCallback deletion_callback) const;
+
+  // Creates a subscription to changes in raw byte payloads matching
+  // `key_expression`. `key_expression` must not include the KV store's key
+  // prefix. Zenoh `DELETE` tombstones carry no prior encoding, so
+  // `deletion_callback` fires across encodings. Callbacks must not
+  // synchronously destroy or `Unsubscribe` their own `Subscription`.
+  absl::StatusOr<Subscription> CreateRawSubscription(
+      absl::string_view key_expression, const TopicConfig& config,
+      SubscriptionOkExpandedCallback<ImmutableBuffer> value_callback) const {
+    return CreateRawSubscription(key_expression, config,
+                                 std::move(value_callback), {});
+  }
+  virtual absl::StatusOr<Subscription> CreateRawSubscription(
+      absl::string_view key_expression, const TopicConfig& config,
+      SubscriptionOkExpandedCallback<ImmutableBuffer> value_callback,
       DeletionCallback deletion_callback) const;
 
   // Creates a subscription to changes in value of the specified key expression.
@@ -374,10 +384,13 @@ class KeyValueStore {
       // modify in different threads.
       std::unique_ptr<T> payload(shared_payload->New());
       if (!wrapped_payload.UnpackTo(payload.get())) {
-        error_callback(keyexpr, absl::StrCat(wrapped_payload),
-                       absl::InvalidArgumentError(absl::StrCat(
-                           "Expected payload of type ", payload->GetTypeName(),
-                           ", but got ", wrapped_payload.type_url())));
+        if (error_callback != nullptr) {
+          error_callback(
+              keyexpr, absl::StrCat(wrapped_payload),
+              absl::InvalidArgumentError(absl::StrCat(
+                  "Expected payload of type ", payload->GetTypeName(),
+                  ", but got ", wrapped_payload.type_url())));
+        }
         return;
       }
       callback(keyexpr, *payload);
@@ -436,6 +449,22 @@ class KeyValueStore {
     std::string bytes;
     bool operator==(const EncodedValue&) const = default;
   };
+
+  template <typename T>
+  static absl::StatusOr<google::protobuf::Any> PackToAny(absl::string_view key,
+                                                         T&& value) {
+    google::protobuf::Any any;
+    if (!any.PackFrom(std::forward<T>(value))) {
+      return absl::InternalError(
+          absl::StrCat("Failed to pack value for the key: ", key));
+    }
+    return any;
+  }
+
+  absl::StatusOr<Subscription> CreateMessageSubscription(
+      absl::string_view key_expression, const TopicConfig& config,
+      DeletionCallback deletion_callback,
+      imw_message_callback_functor_t put_message_callback) const;
 
   // Validates `key`, resolves the prefixed Zenoh key, logs the operation, and
   // warns if `size` exceeds the large-payload threshold.

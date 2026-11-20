@@ -417,52 +417,18 @@ void KeyValueStore::StripSlashesAndAppend(std::string& result,
 absl::Status KeyValueStore::Set(absl::string_view key,
                                 const google::protobuf::Any& value) {
 
-  const stats::ScopedSpan set_span("KVStoreClient::Set");
-  set_span.AddAttribute("kv.key", std::string(key));
-  set_span.AddAttribute("kv.high_consistency", false);
+  const stats::ScopedSpan serialize_span("KVStoreClient::ProtoSerializeAny");
+
+  std::string value_serialized = value.SerializeAsString();
+
+  serialize_span.AddAttribute("payload.bytes",
+                              static_cast<int64_t>(value_serialized.size()));
 
 
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(key));
-  // Should not happen since ValidKeyexpr was called before this.
-  INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
-                        ZenohHandle::add_key_prefix(key, key_prefix_));
-  LOG(INFO) << "KVStore Set for key: " << prefixed_name;
-
-  std::string value_serialized;
-  {
-
-    const stats::ScopedSpan serialize_span("KVStoreClient::ProtoSerializeAny",
-                                           set_span.span());
-
-    value_serialized = value.SerializeAsString();
-
-    serialize_span.AddAttribute("payload.bytes",
-                                static_cast<int64_t>(value_serialized.size()));
-
-  }
-  const size_t payload_size = value_serialized.size();
-  if (payload_size > kPayloadByteSizeWarningThreshold) {
-    LOG(WARNING) << "Large KVStore SetRequest payload detected. Key: " << key
-                 << ", Size: " << payload_size << " bytes.";
-  }
-
-  imw_ret_t ret;
-  {
-
-    const stats::ScopedSpan net_span("KVStoreClient::ZenohTransportSet",
-                                     set_span.span());
-
-    ret = Zenoh().imw_set(prefixed_name.c_str(), value_serialized.data(),
-                          payload_size);
-
-    net_span.AddAttribute("zenoh.ret_code", static_cast<int64_t>(ret));
-
-  }
-  if (ret != IMW_OK) {
-    return absl::InternalError(
-        absl::StrFormat("Error setting a key, return code: %d", ret));
-  }
-  return absl::OkStatus();
+  // TODO(b/585031754): Switch protobuf writes to
+  // IMW_ENCODING_APPLICATION_PROTOBUF after reader rollout.
+  return ExecuteSet(key, value_serialized.data(), value_serialized.size(),
+                    IMW_ENCODING_VARINT_PREFIXED_BYTES, "Set");
 }
 
 absl::Status KeyValueStore::Set(absl::string_view key,
@@ -833,13 +799,12 @@ absl::StatusOr<std::vector<std::string>> KeyValueStore::ListAllKeys(
         "ListAllKeys is not supported for replicated KV store; use "
         "ListAllOnpremKeys or ListAllGlobalKeys instead.");
   }
-  std::vector<std::string> keys;
   absl::string_view query_keyexpr = "**";
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(query_keyexpr));
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(query_keyexpr));
   INTR_ASSIGN_OR_RETURN(
-      absl::StatusOr<std::string> prefixed_name,
+      std::string prefixed_name,
       ZenohHandle::add_key_prefix(query_keyexpr, key_prefix_));
-  return ExecuteList(prefixed_name.value(), timeout);
+  return ExecuteList(prefixed_name, timeout);
 }
 
 absl::StatusOr<std::vector<std::string>> KeyValueStore::ListAllGlobalKeys(
@@ -849,13 +814,12 @@ absl::StatusOr<std::vector<std::string>> KeyValueStore::ListAllGlobalKeys(
         "ListAllGlobalKeys is only supported for replicated KV store; use "
         "ListAllKeys instead.");
   }
-  std::vector<std::string> keys;
   absl::string_view query_keyexpr = "global/**";
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(query_keyexpr));
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(query_keyexpr));
   INTR_ASSIGN_OR_RETURN(
-      absl::StatusOr<std::string> prefixed_name,
+      std::string prefixed_name,
       ZenohHandle::add_key_prefix(query_keyexpr, key_prefix_));
-  return ExecuteList(prefixed_name.value(), timeout);
+  return ExecuteList(prefixed_name, timeout);
 }
 
 absl::StatusOr<std::vector<std::string>> KeyValueStore::ListAllOnpremKeys(
@@ -865,21 +829,20 @@ absl::StatusOr<std::vector<std::string>> KeyValueStore::ListAllOnpremKeys(
         "ListAllOnpremKeys is only supported for replicated KV store; use "
         "ListAllKeys instead.");
   }
-  std::vector<std::string> keys;
   std::string query_keyexpr = absl::StrFormat("%s/**", workcell_name);
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(query_keyexpr));
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(query_keyexpr));
   INTR_ASSIGN_OR_RETURN(
-      absl::StatusOr<std::string> prefixed_name,
+      std::string prefixed_name,
       ZenohHandle::add_key_prefix(query_keyexpr, key_prefix_));
-  return ExecuteList(prefixed_name.value(), timeout);
+  return ExecuteList(prefixed_name, timeout);
 }
 
 absl::Status KeyValueStore::Delete(absl::string_view key) {
   INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(key));
-  INTR_ASSIGN_OR_RETURN(absl::StatusOr<std::string> prefixed_name,
+  INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
                         ZenohHandle::add_key_prefix(key, key_prefix_));
-  LOG(INFO) << "KVStore Delete for key: " << *prefixed_name;
-  imw_ret_t ret = Zenoh().imw_delete_keyexpr(prefixed_name->c_str());
+  LOG(INFO) << "KVStore Delete for key: " << prefixed_name;
+  imw_ret_t ret = Zenoh().imw_delete_keyexpr(prefixed_name.c_str());
   if (ret != IMW_OK) {
     return absl::InternalError(
         absl::StrFormat("Error deleting a key, return code: %d", ret));
@@ -943,8 +906,8 @@ absl::Status KeyValueStore::AdminCloudCopy(absl::string_view source_key,
                                            absl::Duration timeout) {
   INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(source_key));
   INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(target_key));
-  INTR_ASSIGN_OR_RETURN(absl::StatusOr<std::string> source_prefixed_name,
-                        ZenohHandle::add_key_prefix(source_key, key_prefix_));
+  INTR_RETURN_IF_ERROR(
+      ZenohHandle::add_key_prefix(source_key, key_prefix_).status());
 
   INTR_ASSIGN_OR_RETURN(google::protobuf::Any value,
                         GetAny(source_key, timeout));
@@ -1022,44 +985,97 @@ KeyValueStore::GetAllSynchronous(absl::string_view keyexpr,
   return std::move(state->results);
 }
 
-absl::StatusOr<Subscription> KeyValueStore::CreateSubscription(
+absl::StatusOr<Subscription> KeyValueStore::CreateMessageSubscription(
     absl::string_view key_expression, const TopicConfig& config,
-    SubscriptionOkExpandedCallback<google::protobuf::Any> value_callback,
-    DeletionCallback deletion_callback) const {
+    DeletionCallback deletion_callback,
+    imw_message_callback_functor_t put_message_callback) const {
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(key_expression));
   INTR_ASSIGN_OR_RETURN(
       std::string prefixed_key_expression,
       ZenohHandle::add_key_prefix(key_expression, key_prefix_));
   LOG(INFO) << "KVStore Subscribe for key: " << prefixed_key_expression;
   auto subscription_data = std::make_unique<SubscriptionData>();
   subscription_data->prefixed_name = prefixed_key_expression;
-  auto callback = std::make_unique<imw_callback_functor_t>(
-      [value_callback, deletion_callback](const char* keyexpr, const void* blob,
-                                          const size_t blob_len) {
-        if (blob == nullptr || blob_len == 0) {
-          if (deletion_callback != nullptr) {
-            deletion_callback(keyexpr);
-          }
-          return;
-        }
-        google::protobuf::Any msg;
-        bool success = msg.ParseFromArray(blob, blob_len);
-        if (!success) {
-          LOG_EVERY_N(ERROR, 1)
-              << "Deserializing message failed. Key expression: " << keyexpr;
-          return;
-        }
-        value_callback(keyexpr, msg);
-      });
-  subscription_data->callback_functor = std::move(callback);
+  subscription_data->message_callback_functor =
+      std::make_unique<imw_message_callback_functor_t>(
+          [deletion_callback = std::move(deletion_callback),
+           put_message_callback = std::move(put_message_callback)](
+              const char* keyexpr, const void* blob, const size_t blob_len,
+              const imw_message_metadata_t* metadata) {
+            if (metadata != nullptr &&
+                metadata->kind == IMW_MESSAGE_KIND_DELETE) {
+              if (deletion_callback != nullptr) {
+                deletion_callback(keyexpr);
+              }
+              return;
+            }
+            if (put_message_callback != nullptr) {
+              put_message_callback(keyexpr, blob, blob_len, metadata);
+            }
+          });
 
-  imw_ret_t ret = Zenoh().imw_create_subscription(
-      prefixed_key_expression.c_str(), zenoh_static_callback,
+  imw_ret_t ret = Zenoh().imw_create_message_subscription(
+      prefixed_key_expression.c_str(), zenoh_static_message_callback,
       intrinsic::PubSubQoSToZenohQos(config.topic_qos).c_str(),
-      subscription_data->callback_functor.get());
+      subscription_data->message_callback_functor.get());
   if (ret != IMW_OK) {
     return absl::InternalError("Error creating a subscription");
   }
   return Subscription(prefixed_key_expression, std::move(subscription_data));
+}
+
+absl::StatusOr<Subscription> KeyValueStore::CreateSubscription(
+    absl::string_view key_expression, const TopicConfig& config,
+    SubscriptionOkExpandedCallback<google::protobuf::Any> value_callback,
+    DeletionCallback deletion_callback) const {
+  imw_message_callback_functor_t put_callback =
+      [value_callback = std::move(value_callback)](
+          const char* keyexpr, const void* blob, const size_t blob_len,
+          const imw_message_metadata_t* metadata) {
+        if (metadata != nullptr && !IsProtobufEncoding(metadata->encoding)) {
+          return;
+        }
+        google::protobuf::Any msg;
+        if (blob != nullptr && blob_len > 0 &&
+            !msg.ParseFromArray(blob, static_cast<int>(blob_len))) {
+          LOG_EVERY_N(ERROR, 1)
+              << "Deserializing message failed. Key expression: " << keyexpr;
+          return;
+        }
+        if (value_callback != nullptr) {
+          value_callback(keyexpr, msg);
+        }
+      };
+  return CreateMessageSubscription(key_expression, config,
+                                   std::move(deletion_callback),
+                                   std::move(put_callback));
+}
+
+absl::StatusOr<Subscription> KeyValueStore::CreateRawSubscription(
+    absl::string_view key_expression, const TopicConfig& config,
+    SubscriptionOkExpandedCallback<ImmutableBuffer> value_callback,
+    DeletionCallback deletion_callback) const {
+  imw_message_callback_functor_t put_callback =
+      [value_callback = std::move(value_callback)](
+          const char* keyexpr, const void* blob, const size_t blob_len,
+          const imw_message_metadata_t* metadata) {
+        if (metadata == nullptr || !IsRawEncoding(metadata->encoding) ||
+            value_callback == nullptr) {
+          return;
+        }
+        absl::StatusOr<ImmutableBuffer> buf =
+            CopyToImmutableBuffer(blob, blob_len);
+        if (!buf.ok()) {
+          LOG_EVERY_N(ERROR, 1)
+              << "Failed to allocate ImmutableBuffer for key '" << keyexpr
+              << "': " << buf.status();
+          return;
+        }
+        value_callback(keyexpr, std::move(*buf));
+      };
+  return CreateMessageSubscription(key_expression, config,
+                                   std::move(deletion_callback),
+                                   std::move(put_callback));
 }
 
 absl::StatusOr<std::string> KeyValueStore::GetWorkcellReplicationNamespace(
