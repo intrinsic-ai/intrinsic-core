@@ -117,7 +117,20 @@ func clearTree(
 	return fieldbehavior.ClearOutputOnly(m)
 }
 
+func validateTargetFlags(address string, clusterName string, solutionName string) error {
+	if address == "" && clusterName == "" && solutionName == "" {
+		return fmt.Errorf("target workcell not specified: provide `--server` for a local/direct workcell (e.g. `--server=localhost:17080`), or `--org` with `--cluster` or `--solution` for a cloud workcell")
+	}
+	if clusterName != "" && solutionName != "" {
+		return fmt.Errorf("both `--cluster=%q` and `--solution=%q` were provided, which could be ambiguous", clusterName, solutionName)
+	}
+	return nil
+}
+
 func connectToCluster(ctx context.Context, projectName string, orgName string, address string, solutionName string, clusterName string) (context.Context, *grpc.ClientConn, error) {
+	if err := validateTargetFlags(address, clusterName, solutionName); err != nil {
+		return nil, nil, err
+	}
 	if solutionName != "" {
 		// Look up solution name via cloud portal.
 		ctx, conn, err := dialerutil.DialConnectionCtx(ctx, dialerutil.DialInfoParams{
@@ -280,6 +293,7 @@ func addCommonGetSetFlags(cmd *cobra.Command) {
 	cmd.Flags().StringVar(&flagSolutionName, "solution", "", "Id of the solution to interact with. For example, use 'inctl solutions list --org my_org --output json [--filter running_in_sim]' to see the list of solutions.")
 	cmd.Flags().StringVar(&flagClusterName, "cluster", "", "Name of the cluster to interact with.")
 	cmd.Flags().StringVar(&flagServerAddress, "server", "", "Server address of the cluster. Format is {ADDRESS}:{PORT}, for example 'localhost:17080'")
+	cmd.MarkFlagsMutuallyExclusive("cluster", "solution")
 	cmd.Flags().BoolVar(&flagClearTreeID, "clear_tree_id", true, "Clear the tree_id fields of the tree and all of its sub-trees from the BT proto.")
 	cmd.Flags().BoolVar(&flagClearNodeIDs, "clear_node_ids", true, "Clear the nodes' id fields from the BT proto.")
 

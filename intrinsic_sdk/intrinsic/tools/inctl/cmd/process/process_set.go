@@ -189,7 +189,7 @@ func setProcess(ctx context.Context, params *setProcessParams) error {
 	return nil
 }
 
-var processSetCmd = orgutil.WrapCmd(
+var processSetCmd = orgutil.WrapCmdOptional(
 	&cobra.Command{
 		Use:   "set [legacy process name]",
 		Short: "Set a process in a solution.",

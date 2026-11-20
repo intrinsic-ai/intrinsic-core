@@ -21,7 +21,6 @@ import (
 	"strings"
 	"time"
 
-	"intrinsic/assets/platformlevelswitch"
 	"intrinsic/assets/typeutils"
 	"intrinsic/assets/viewutils"
 	"intrinsic/tools/inctl/util/orgutil"
@@ -271,7 +270,7 @@ func (cf *CmdFlags) GetFlagsAddressClusterSolution() (string, string, string, er
 	solution := cf.GetString(keySolution)
 
 	if address == "" && cluster == "" && solution == "" {
-		return "", "", "", fmt.Errorf("at least one of `--%s`, `--%s` or `--%s` must be set", keyAddress, keyCluster, keySolution)
+		return "", "", "", fmt.Errorf("target workcell not specified: provide `--%s` for a local/direct workcell (e.g. `--%s=localhost:17080`), or `--%s` with `--%s` or `--%s` for a cloud workcell", keyAddress, keyAddress, keyOrganization, keyCluster, keySolution)
 	}
 	// This matches these flags being marked as mutually exclusive above.  That
 	// does not prevent two environment variables being provided or a
@@ -367,15 +366,13 @@ func (cf *CmdFlags) GetFlagEnvironment() string {
 
 // AddFlagsProjectOrg adds both the project and org flag, including the necessary handling.
 func (cf *CmdFlags) AddFlagsProjectOrg() {
-	// While WrapCmd returns the pointer to make it inline, it's modifying, so we can use it here.
-	platformlevelswitch.WrapCmd(cf.cmd, cf.viperLocal)
-	cf.MarkHidden(orgutil.KeyProject)
+	cf.AddFlagsProjectOrgOptional()
 }
 
 // AddFlagsProjectOrgOptional adds both the project and org flag as optional, including the necessary handling.
 func (cf *CmdFlags) AddFlagsProjectOrgOptional() {
-	// While WrapCmd returns the pointer to make it inline, it's modifying, so we can use it here.
-	platformlevelswitch.WrapCmdOptional(cf.cmd, cf.viperLocal)
+	// While WrapCmdOptional returns the pointer to make it inline, it's modifying, so we can use it here.
+	orgutil.WrapCmdOptional(cf.cmd, cf.viperLocal)
 	cf.MarkHidden(orgutil.KeyProject)
 }
 

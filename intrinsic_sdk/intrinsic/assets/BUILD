@@ -87,7 +87,6 @@ go_library(
     deps = [
         ":typeutils",
         ":viewutils",
-        "//intrinsic_sdk/intrinsic/assets/platformlevelswitch",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:orgutil",
         "@com_github_pkg_errors//:go_default_library",
         "@com_github_spf13_cobra//:go_default_library",

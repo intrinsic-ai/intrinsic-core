@@ -20,7 +20,6 @@ import (
 	"os"
 
 	"intrinsic/assets/idutils"
-	"intrinsic/assets/platformlevelswitch"
 	"intrinsic/assets/processes/processbundle"
 	installedassetspb "intrinsic/assets/proto/installed_assets_go_proto"
 	viewpb "intrinsic/assets/proto/view_go_proto"
@@ -201,7 +200,7 @@ func getProcess(ctx context.Context, params *getProcessParams) ([]byte, error) {
 	return serializeMessage(ctx, params.protoRegistry, outputMsg, params.format)
 }
 
-var processGetCmd = platformlevelswitch.WrapCmd(
+var processGetCmd = orgutil.WrapCmdOptional(
 	&cobra.Command{
 		Use:   "get [asset_id]",
 		Short: "Get a process from a solution.",

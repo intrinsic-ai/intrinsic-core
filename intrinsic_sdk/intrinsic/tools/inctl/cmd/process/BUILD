@@ -30,7 +30,6 @@ go_library(
     importpath = "intrinsic/tools/inctl/cmd/process/process",
     deps = [
         "//intrinsic_sdk/intrinsic/assets:idutils",
-        "//intrinsic_sdk/intrinsic/assets/platformlevelswitch",
         "//intrinsic_sdk/intrinsic/assets/processes:processbundle",
         "//intrinsic_sdk/intrinsic/executive/go:behaviortree",
         "//intrinsic_sdk/intrinsic/executive/proto:executive_service_go_proto",
