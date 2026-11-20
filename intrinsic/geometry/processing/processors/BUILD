@@ -152,3 +152,21 @@ cc_library(
         "@abseil-cpp//absl/strings:str_format",
     ],
 )
+
+cc_library(
+    name = "visual_simplification_processor",
+    srcs = ["visual_simplification_processor.cc"],
+    hdrs = ["visual_simplification_processor.h"],
+    deps = [
+        "//intrinsic/geometry/api:simplify_preserving_appearance",
+        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
+        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
+        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/memory",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:str_format",
+    ],
+)

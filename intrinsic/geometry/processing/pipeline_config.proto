@@ -19,7 +19,7 @@ import "google/protobuf/duration.proto";
 option go_package = "intrinsic/geometry/processing/pipeline_config_go_proto";
 
 // Configuration for a single step
-// Next tag: 9
+// Next tag: 10
 message PipelineStep {
   // Field 5 was `IsotropicRemeshingProcessorConfig isotropic_remeshing`,
   // replaced by `voxel_remeshing`.
@@ -50,6 +50,9 @@ message PipelineStep {
     // Config for Voxel Remeshing (meshoptimizer)
     VoxelRemeshingProcessorConfig voxel_remeshing = 8;
 
+    // Config for appearance-preserving simplification of visual geometry.
+    VisualSimplificationProcessorConfig visual_simplification = 9;
+
     // TODO(stoyang): Add more processors, e.g. make primitive in b/210496736.
   }
 }
@@ -79,6 +82,18 @@ message MeshSimplificationProcessorConfig {
   // Optional timeout length for the process. We default to 2 minutes
   // internally if not specified
   optional google.protobuf.Duration timeout = 2;
+}
+
+// Configuration data for the VisualSimplificationGeometryProcessor, for visual
+// geometry. Simplifies the geometry once on its renderable GLB, preserving
+// textures, UVs, vertex colors and materials, and rebuilds the exact mesh from
+// the result. Use MeshSimplificationProcessorConfig for collision geometry.
+message VisualSimplificationProcessorConfig {
+  // Fraction of each mesh primitive's triangles to keep, in (0, 1] (e.g.
+  // 0.25 = a quarter of the triangles). Primitives can keep more: open edges
+  // and UV seams are kept, and every primitive keeps a few triangles. Must be
+  // set: 0 (unset) is rejected.
+  double target_triangle_ratio = 1;
 }
 
 // Configuration data for the ConvexHullGeometryProcessor

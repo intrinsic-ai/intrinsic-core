@@ -57,6 +57,7 @@ cc_library(
         "//intrinsic/geometry/processing/processors:mesh_simplification_processor",
         "//intrinsic/geometry/processing/processors:noop_processor",
         "//intrinsic/geometry/processing/processors:scale_processor",
+        "//intrinsic/geometry/processing/processors:visual_simplification_processor",
         "//intrinsic/geometry/processing/processors:voxel_remeshing_processor",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",

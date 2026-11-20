@@ -65,3 +65,78 @@ cc_library(
         "@tinygltf",
     ],
 )
+
+cc_library(
+    name = "gltf_constants",
+    hdrs = ["gltf_constants.h"],
+    deps = ["@abseil-cpp//absl/strings:string_view"],
+)
+
+cc_library(
+    name = "gltf_accessor",
+    srcs = ["gltf_accessor.cc"],
+    hdrs = ["gltf_accessor.h"],
+    deps = [
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@tinygltf",
+    ],
+)
+
+cc_library(
+    name = "gltf_validation",
+    srcs = ["gltf_validation.cc"],
+    hdrs = ["gltf_validation.h"],
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+    ],
+    deps = [
+        ":gltf_accessor",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@tinygltf",
+    ],
+)
+
+cc_library(
+    name = "gltf_buffer_reader",
+    srcs = ["gltf_buffer_reader.cc"],
+    hdrs = ["gltf_buffer_reader.h"],
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+    ],
+    deps = [
+        ":gltf_accessor",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:string_view",
+        "@tinygltf",
+    ],
+)
+
+cc_library(
+    name = "gltf_buffer_writer",
+    srcs = ["gltf_buffer_writer.cc"],
+    hdrs = ["gltf_buffer_writer.h"],
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
+        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+    ],
+    deps = [
+        ":gltf_accessor",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/types:span",
+        "@tinygltf",
+    ],
+)

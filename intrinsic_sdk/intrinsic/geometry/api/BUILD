@@ -348,3 +348,21 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:pose3",
     ],
 )
+
+cc_library(
+    name = "unpack_renderable",
+    srcs = ["unpack_renderable.cc"],
+    hdrs = ["unpack_renderable.h"],
+    visibility = ["//intrinsic:intrinsic_internal"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/container:flat_hash_map",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:str_format",
+        "@com_github_nlohmann_json//:json",
+        "@meshoptimizer",
+        "@or_tools//ortools/base:file",
+    ],
+)

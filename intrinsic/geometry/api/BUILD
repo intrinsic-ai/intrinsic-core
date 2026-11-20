@@ -186,6 +186,30 @@ cc_library(
 )
 
 cc_library(
+    name = "simplify_preserving_appearance",
+    srcs = ["simplify_preserving_appearance.cc"],
+    hdrs = ["simplify_preserving_appearance.h"],
+    deps = [
+        "//intrinsic/geometry/internal/mesh_simplification/appearance:glb_appearance_simplifier",
+        "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
+        "//intrinsic_sdk/intrinsic/geometry/api:geometry",
+        "//intrinsic_sdk/intrinsic/geometry/api:renderable",
+        "//intrinsic_sdk/intrinsic/geometry/api:renderable_generation",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:ai_scene_to_mesh",
+        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:load_ai_scene_from_buffer",
+        "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/thread:stop_token",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/strings:string_view",
+        "@assimp",
+    ],
+)
+
+cc_library(
     name = "simplify_mesh_strict_memoize",
     srcs = ["simplify_mesh_strict_memoize.cc"],
     hdrs = ["simplify_mesh_strict_memoize.h"],

@@ -29,6 +29,7 @@
 #include "intrinsic/geometry/processing/processors/mesh_simplification_processor.h"
 #include "intrinsic/geometry/processing/processors/noop_processor.h"
 #include "intrinsic/geometry/processing/processors/scale_processor.h"
+#include "intrinsic/geometry/processing/processors/visual_simplification_processor.h"
 #include "intrinsic/geometry/processing/processors/voxel_remeshing_processor.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -88,6 +89,13 @@ BuildGeometryPipeline(
         INTR_ASSIGN_OR_RETURN(auto processor,
                               VoxelRemeshingGeometryProcessor::Create(
                                   step_config.voxel_remeshing()));
+        processors.emplace_back(std::move(processor));
+        break;
+      }
+      case intrinsic_proto::geometry::PipelineStep::kVisualSimplification: {
+        INTR_ASSIGN_OR_RETURN(auto processor,
+                              VisualSimplificationGeometryProcessor::Create(
+                                  step_config.visual_simplification()));
         processors.emplace_back(std::move(processor));
         break;
       }
