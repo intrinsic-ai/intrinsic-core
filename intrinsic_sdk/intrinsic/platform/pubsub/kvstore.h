@@ -60,6 +60,14 @@ constexpr absl::string_view kGlobalReplicationNamespace = "global";
 using KeyValueCallback = std::function<void(
     absl::string_view key, std::unique_ptr<google::protobuf::Any> value)>;
 
+using RawKeyValueCallback =
+    std::function<void(absl::string_view key, ImmutableBuffer value)>;
+
+// Callback invoked when allocating or decoding a message fails during a raw
+// query (for example, `ImmutableBuffer` allocation failure).
+using RawQueryErrorCallback =
+    std::function<void(absl::string_view key, absl::Status error)>;
+
 // Callback invoked when the KeyValueCallback is called for all keys that match.
 // Make sure to keep this callback lightweight.
 using OnDoneCallback = std::function<void(absl::string_view key)>;
@@ -242,8 +250,11 @@ class KeyValueStore {
   absl::Status SetRaw(absl::string_view key, const MutableBuffer&) = delete;
 
   // Sets a raw byte payload and blocks until verification completes according
-  // to `options`. Returns `absl::StatusCode::kInvalidArgument` for non-positive
-  // timeout, invalid `value`, or pre-transport key validation failure,
+  // to `options`. `kHighConsistency` reads back payloads to verify byte
+  // equality; prefer `kFirstReply` or `SetRaw` for multi-MB blobs when
+  // conflict detection is unnecessary. Returns
+  // `absl::StatusCode::kInvalidArgument` for non-positive timeout, invalid
+  // `value`, or pre-transport key validation failure,
   // `absl::StatusCode::kAborted` on concurrent modification in
   // `kHighConsistency` mode, `absl::StatusCode::kDeadlineExceeded` if
   // verification times out, or `absl::StatusCode::kInternal` on transport
@@ -300,9 +311,37 @@ class KeyValueStore {
   // a move-only handle; callback state is owned centrally by `IMWZenoh` and
   // cleaned up automatically after `on_done`, on error, on timeout, or at
   // session shutdown, so callers do not need to keep the handle alive.
-  absl::StatusOr<KVQuery> GetAll(
-      absl::string_view key, KeyValueCallback callback,
-      OnDoneCallback on_done = [](absl::string_view key) {});
+  absl::StatusOr<KVQuery> GetAll(absl::string_view key,
+                                 KeyValueCallback callback) {
+    return GetAll(key, std::move(callback), {});
+  }
+  virtual absl::StatusOr<KVQuery> GetAll(absl::string_view key,
+                                         KeyValueCallback callback,
+                                         OnDoneCallback on_done);
+
+  // Asynchronously queries all keys storing raw bytes
+  // (`APPLICATION_OCTET_STREAM`) matching the unprefixed `keyexpr`. Invokes
+  // `callback` with prefixed keys
+  // (`kv_store/...` or `kv_store_repl/...`) and `on_error`
+  // (`kResourceExhausted` or allocation errors) until the transport signals
+  // completion via `on_done`. Callback state is owned centrally by `IMWZenoh`
+  // and cleaned up automatically after `on_done`, on error, on timeout, or at
+  // session shutdown, so callers do not need to keep the returned `KVQuery`
+  // alive. Returns `absl::StatusCode::kInvalidArgument` if `keyexpr` is
+  // invalid.
+  absl::StatusOr<KVQuery> GetAllRaw(absl::string_view keyexpr,
+                                    RawKeyValueCallback callback) {
+    return GetAllRaw(keyexpr, std::move(callback), {}, {});
+  }
+  absl::StatusOr<KVQuery> GetAllRaw(absl::string_view keyexpr,
+                                    RawKeyValueCallback callback,
+                                    OnDoneCallback on_done) {
+    return GetAllRaw(keyexpr, std::move(callback), std::move(on_done), {});
+  }
+  virtual absl::StatusOr<KVQuery> GetAllRaw(absl::string_view keyexpr,
+                                            RawKeyValueCallback callback,
+                                            OnDoneCallback on_done,
+                                            RawQueryErrorCallback on_error);
 
   // Deletes the key from the KVStore.
   virtual absl::Status Delete(absl::string_view key);
@@ -337,6 +376,16 @@ class KeyValueStore {
   // Same as GetAll, but does not need a callback. The tradeoff is less control.
   absl::StatusOr<absl::flat_hash_map<std::string, google::protobuf::Any>>
   GetAllSynchronous(absl::string_view keyexpr, absl::Duration timeout);
+
+  // Synchronously queries all keys storing raw bytes
+  // (`APPLICATION_OCTET_STREAM`) matching the unprefixed `keyexpr`, returning
+  // prefixed keys in the map. Fails with `kInvalidArgument` on invalid
+  // `keyexpr` or negative `timeout`, `kDeadlineExceeded` on timeout,
+  // `kInternal` on transport errors, or the first buffer allocation error
+  // (`kResourceExhausted`).
+  absl::StatusOr<absl::flat_hash_map<std::string, ImmutableBuffer>>
+  GetAllRawSynchronous(absl::string_view keyexpr,
+                       absl::Duration timeout = kDefaultGetTimeout);
 
   // Creates a key from an arbitrary number of strings, removing leading and
   // trailing slashes, and joining them with a slash delimiter.
@@ -473,15 +522,6 @@ class KeyValueStore {
     return key_prefix_;
   }
 
- private:
-  template <typename ResultT, typename OnMessageFn>
-  static absl::StatusOr<ResultT> QuerySingleMessage(const std::string& raw_key,
-                                                    absl::Duration timeout,
-                                                    OnMessageFn&& on_message);
-
-  static std::string MakeKeyImpl(
-      std::initializer_list<absl::string_view> parts);
-
  protected:
   explicit KeyValueStore(std::optional<std::string> prefix_override);
 
@@ -493,6 +533,19 @@ class KeyValueStore {
   // Lists live keys matching the already-prefixed `keyexpr`.
   virtual absl::StatusOr<std::vector<std::string>> ExecuteList(
       absl::string_view keyexpr, absl::Duration timeout);
+
+  // Executes a Protobuf wildcard query with an optional synchronous timeout
+  // forwarded to Zenoh (padded so client-side wait deadlines decide timeouts).
+  virtual absl::StatusOr<KVQuery> ExecuteGetAll(
+      absl::string_view keyexpr, KeyValueCallback callback,
+      OnDoneCallback on_done, std::optional<absl::Duration> timeout);
+
+  // Executes a raw-byte wildcard query with an optional synchronous timeout
+  // forwarded to Zenoh (padded so client-side wait deadlines decide timeouts).
+  virtual absl::StatusOr<KVQuery> ExecuteGetAllRaw(
+      absl::string_view keyexpr, RawKeyValueCallback callback,
+      OnDoneCallback on_done, RawQueryErrorCallback on_error,
+      std::optional<absl::Duration> timeout);
 
  private:
   struct EncodedValue {
@@ -511,6 +564,20 @@ class KeyValueStore {
     }
     return any;
   }
+
+  template <typename ResultT, typename OnMessageFn>
+  static absl::StatusOr<ResultT> QuerySingleMessage(const std::string& raw_key,
+                                                    absl::Duration timeout,
+                                                    OnMessageFn&& on_message);
+
+  static std::string MakeKeyImpl(
+      std::initializer_list<absl::string_view> parts);
+
+  absl::StatusOr<KVQuery> StartMessageQuery(
+      absl::string_view keyexpr,
+      std::unique_ptr<imw_message_callback_functor_t> message_callback,
+      OnDoneCallback on_done,
+      std::optional<absl::Duration> timeout = std::nullopt);
 
   absl::StatusOr<Subscription> CreateMessageSubscription(
       absl::string_view key_expression, const TopicConfig& config,

@@ -17,6 +17,7 @@
 #include <algorithm>
 #include <cstddef>
 #include <cstdint>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -24,6 +25,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/flag.h"
 #include "absl/log/log.h"
@@ -216,6 +218,68 @@ void SleepForBackoff(absl::Duration delay, absl::Time deadline) {
     return;
   }
   absl::SleepFor(std::min(delay, sleepable));
+}
+
+template <typename ValueT, typename CallbackArgT, typename StartFn>
+absl::StatusOr<absl::flat_hash_map<std::string, ValueT>> CollectAllSynchronous(
+    absl::string_view keyexpr, absl::Duration timeout,
+    absl::string_view method_name, StartFn&& start_query) {
+  if (timeout < absl::ZeroDuration()) {
+    return absl::InvalidArgumentError("Timeout must be zero or positive");
+  }
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(keyexpr));
+
+  struct SyncState {
+    absl::Mutex mutex;
+    absl::Notification done;
+    absl::flat_hash_map<std::string, ValueT> results ABSL_GUARDED_BY(mutex);
+    absl::Status first_error ABSL_GUARDED_BY(mutex);
+    bool finished ABSL_GUARDED_BY(mutex) = false;
+  };
+  auto state = std::make_shared<SyncState>();
+
+  auto callback = [state](absl::string_view key, CallbackArgT value) {
+    absl::MutexLock lock(&state->mutex);
+    if (state->finished) {
+      return;
+    }
+    if constexpr (std::is_same_v<CallbackArgT,
+                                 std::unique_ptr<google::protobuf::Any>>) {
+      if (value != nullptr) {
+        state->results.insert_or_assign(std::string(key), std::move(*value));
+      }
+    } else {
+      state->results.insert_or_assign(std::string(key), std::move(value));
+    }
+  };
+
+  auto on_done = [state](absl::string_view /*key*/) { state->done.Notify(); };
+
+  auto on_error = [state](absl::string_view /*key*/, absl::Status error) {
+    absl::MutexLock lock(&state->mutex);
+    if (state->finished) {
+      return;
+    }
+    if (state->first_error.ok()) {
+      state->first_error = std::move(error);
+    }
+  };
+
+  INTR_ASSIGN_OR_RETURN(KVQuery query,
+                        start_query(keyexpr, std::move(callback),
+                                    std::move(on_done), std::move(on_error)));
+
+  const bool notified = state->done.WaitForNotificationWithTimeout(timeout);
+  absl::MutexLock lock(&state->mutex);
+  state->finished = true;
+  if (!state->first_error.ok()) {
+    return state->first_error;
+  }
+  if (!notified) {
+    return absl::DeadlineExceededError(absl::StrFormat(
+        "Timeout waiting for %s on keyexpr: %s", method_name, keyexpr));
+  }
+  return std::move(state->results);
 }
 
 void ReleaseImmutableBufferDeleter(void* /*data*/, void* context) {
@@ -851,38 +915,121 @@ absl::StatusOr<google::protobuf::Any> KeyValueStore::GetAnyWithRawKey(
       });
 }
 
-absl::StatusOr<KVQuery> KeyValueStore::GetAll(absl::string_view keyexpr,
-                                              KeyValueCallback callback,
-                                              OnDoneCallback on_done) {
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(keyexpr));
-  INTR_ASSIGN_OR_RETURN(absl::StatusOr<std::string> prefixed_name,
+absl::StatusOr<KVQuery> KeyValueStore::StartMessageQuery(
+    absl::string_view keyexpr,
+    std::unique_ptr<imw_message_callback_functor_t> message_callback,
+    OnDoneCallback on_done, std::optional<absl::Duration> timeout) {
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(keyexpr));
+  INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
                         ZenohHandle::add_key_prefix(keyexpr, key_prefix_));
   auto owned_ctx = std::make_unique<OwnedQueryContext>(
-      imw_callback_functor_t([callback = std::move(callback)](
-                                 const char* key, const void* response_bytes,
-                                 const size_t response_bytes_len) {
-        auto value = std::make_unique<google::protobuf::Any>();
-        static_cast<void>(value->ParseFromString(absl::string_view(
-            static_cast<const char*>(response_bytes),
-            response_bytes_len)));  // TODO: Handle return value
-        callback(key, std::move(value));
-      }),
+      message_callback != nullptr ? std::move(*message_callback)
+                                  : imw_message_callback_functor_t{},
       imw_on_done_functor_t([on_done = std::move(on_done)](const char* key) {
-        on_done(absl::string_view(key));
+        if (on_done != nullptr) {
+          on_done(absl::string_view(key));
+        }
       }));
   imw_query_options_t query_options{
       .user_context_deleter = &DeleteOwnedQueryContext,
   };
-  imw_ret_t ret = Zenoh().imw_query(
-      prefixed_name->c_str(), zenoh_query_static_callback,
-      zenoh_query_static_on_done, nullptr, 0,
-      static_cast<QueryContext*>(owned_ctx.release()), &query_options);
+  if (timeout.has_value()) {
+    const int64_t base_ms =
+        std::max<int64_t>(0, absl::ToInt64Milliseconds(*timeout));
+    const uint64_t padded_ms =
+        (base_ms >
+         std::numeric_limits<int64_t>::max() - kMinZenohQueryTimeoutMs)
+            ? static_cast<uint64_t>(std::numeric_limits<int64_t>::max())
+            : static_cast<uint64_t>(base_ms + kMinZenohQueryTimeoutMs);
+    query_options.timeout_ms = padded_ms;
+  }
+  imw_ret_t ret = Zenoh().imw_query_messages(
+      prefixed_name.c_str(), zenoh_query_message_static_callback,
+      zenoh_query_static_on_done, /*query_payload=*/nullptr,
+      /*query_payload_len=*/0, static_cast<QueryContext*>(owned_ctx.release()),
+      &query_options);
   if (ret != IMW_OK) {
     return absl::InternalError(
         absl::StrFormat("Error getting a key, return code: %d", ret));
   }
 
   return KVQuery();
+}
+
+absl::StatusOr<KVQuery> KeyValueStore::GetAll(absl::string_view keyexpr,
+                                              KeyValueCallback callback,
+                                              OnDoneCallback on_done) {
+  return ExecuteGetAll(keyexpr, std::move(callback), std::move(on_done),
+                       std::nullopt);
+}
+
+absl::StatusOr<KVQuery> KeyValueStore::ExecuteGetAll(
+    absl::string_view keyexpr, KeyValueCallback callback,
+    OnDoneCallback on_done, std::optional<absl::Duration> timeout) {
+  auto message_callback = std::make_unique<imw_message_callback_functor_t>(
+      [callback = std::move(callback)](const char* key,
+                                       const void* response_bytes,
+                                       const size_t response_bytes_len,
+                                       const imw_message_metadata_t* metadata) {
+        if (metadata != nullptr && (metadata->kind == IMW_MESSAGE_KIND_DELETE ||
+                                    !IsProtobufEncoding(metadata->encoding))) {
+          return;
+        }
+        if (callback == nullptr) {
+          return;
+        }
+        auto value = std::make_unique<google::protobuf::Any>();
+        if (response_bytes != nullptr && response_bytes_len > 0 &&
+            !value->ParseFromArray(response_bytes,
+                                   static_cast<int>(response_bytes_len))) {
+          LOG_EVERY_N(ERROR, 10)
+              << "Failed to parse KVStore value for key '" << key << "'";
+          return;
+        }
+        callback(key, std::move(value));
+      });
+  return StartMessageQuery(keyexpr, std::move(message_callback),
+                           std::move(on_done), timeout);
+}
+
+absl::StatusOr<KVQuery> KeyValueStore::GetAllRaw(
+    absl::string_view keyexpr, RawKeyValueCallback callback,
+    OnDoneCallback on_done, RawQueryErrorCallback on_error) {
+  return ExecuteGetAllRaw(keyexpr, std::move(callback), std::move(on_done),
+                          std::move(on_error), std::nullopt);
+}
+
+absl::StatusOr<KVQuery> KeyValueStore::ExecuteGetAllRaw(
+    absl::string_view keyexpr, RawKeyValueCallback callback,
+    OnDoneCallback on_done, RawQueryErrorCallback on_error,
+    std::optional<absl::Duration> timeout) {
+  auto message_callback = std::make_unique<imw_message_callback_functor_t>(
+      [callback = std::move(callback), on_error = std::move(on_error)](
+          const char* key, const void* response_bytes,
+          const size_t response_bytes_len,
+          const imw_message_metadata_t* metadata) {
+        if (metadata == nullptr || metadata->kind == IMW_MESSAGE_KIND_DELETE ||
+            !IsRawEncoding(metadata->encoding)) {
+          return;
+        }
+        if (callback == nullptr) {
+          return;
+        }
+        absl::StatusOr<ImmutableBuffer> buf =
+            CopyToImmutableBuffer(response_bytes, response_bytes_len);
+        if (!buf.ok()) {
+          LOG_EVERY_N(ERROR, 1)
+              << "Failed to allocate ImmutableBuffer for key '" << key
+              << "': " << buf.status();
+          if (on_error != nullptr) {
+            on_error(key, buf.status());
+          }
+          return;
+        }
+        callback(key, std::move(*buf));
+      });
+  return StartMessageQuery(keyexpr, std::move(message_callback),
+                           std::move(on_done), timeout);
 }
 
 absl::StatusOr<std::vector<std::string>> KeyValueStore::ListAllKeys(
@@ -1041,41 +1188,25 @@ absl::Status KeyValueStore::AdminCloudCopy(absl::string_view source_key,
 absl::StatusOr<absl::flat_hash_map<std::string, google::protobuf::Any>>
 KeyValueStore::GetAllSynchronous(absl::string_view keyexpr,
                                  absl::Duration timeout) {
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(keyexpr));
+  return CollectAllSynchronous<google::protobuf::Any,
+                               std::unique_ptr<google::protobuf::Any>>(
+      keyexpr, timeout, "GetAll",
+      [this, timeout](absl::string_view expr, KeyValueCallback cb,
+                      OnDoneCallback done, RawQueryErrorCallback /*on_error*/) {
+        return ExecuteGetAll(expr, std::move(cb), std::move(done), timeout);
+      });
+}
 
-  struct SyncState {
-    absl::Mutex mutex;
-    absl::Notification done;
-    absl::flat_hash_map<std::string, google::protobuf::Any> results
-        ABSL_GUARDED_BY(mutex);
-    bool finished ABSL_GUARDED_BY(mutex) = false;
-  };
-  auto state = std::make_shared<SyncState>();
-
-  auto callback = [state](absl::string_view key,
-                          std::unique_ptr<google::protobuf::Any> value) {
-    absl::MutexLock lock(&state->mutex);
-    if (state->finished) {
-      return;
-    }
-    if (value != nullptr) {
-      state->results.insert_or_assign(std::string(key), std::move(*value));
-    }
-  };
-
-  auto on_done = [state](absl::string_view /*key*/) { state->done.Notify(); };
-
-  INTR_ASSIGN_OR_RETURN(
-      KVQuery query, GetAll(keyexpr, std::move(callback), std::move(on_done)));
-
-  const bool notified = state->done.WaitForNotificationWithTimeout(timeout);
-  absl::MutexLock lock(&state->mutex);
-  state->finished = true;
-  if (!notified) {
-    return absl::DeadlineExceededError(
-        absl::StrFormat("Timeout waiting for GetAll on keyexpr: %s", keyexpr));
-  }
-  return std::move(state->results);
+absl::StatusOr<absl::flat_hash_map<std::string, ImmutableBuffer>>
+KeyValueStore::GetAllRawSynchronous(absl::string_view keyexpr,
+                                    absl::Duration timeout) {
+  return CollectAllSynchronous<ImmutableBuffer, ImmutableBuffer>(
+      keyexpr, timeout, "GetAllRaw",
+      [this, timeout](absl::string_view expr, RawKeyValueCallback cb,
+                      OnDoneCallback done, RawQueryErrorCallback on_error) {
+        return ExecuteGetAllRaw(expr, std::move(cb), std::move(done),
+                                std::move(on_error), timeout);
+      });
 }
 
 absl::StatusOr<Subscription> KeyValueStore::CreateMessageSubscription(
