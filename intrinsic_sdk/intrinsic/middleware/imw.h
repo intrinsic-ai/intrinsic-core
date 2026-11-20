@@ -100,11 +100,19 @@ typedef void imw_query_message_callback_fn(
 typedef void imw_query_on_done_callback_fn(const char* keyexpr,
                                            void* user_context);
 
+typedef void imw_query_context_deleter_fn(void* user_context);
+
 // This struct must be assignable, as it will be copied by assignment by
 // imw_query() for later use.
 struct imw_query_options_t {
   uint64_t timeout_ms = 0;
   bool call_ros_service = false;
+  // Optional deleter invoked once after all reply callbacks and `on_done`
+  // return (when the query's final internal reference drops), or before
+  // returning on start failures (including IMW_NOT_INITIALIZED and invalid
+  // arguments). Must be thread-safe; never runs concurrently with reply
+  // callbacks or `on_done`.
+  imw_query_context_deleter_fn* user_context_deleter = nullptr;
 };
 
 imw_ret_t imw_init(const char* config);
@@ -112,6 +120,8 @@ imw_ret_t imw_fini();
 // Destroys the session immediately if no active init references or child
 // entities (publishers, subscriptions, queryables) remain, or arms a sticky
 // per-session latch to destroy the session as soon as both counts reach zero.
+// Do not invoke session teardown (imw_fini / imw_destroy_session_when_unused)
+// from inside an active Zenoh query reply callback.
 imw_ret_t imw_destroy_session_when_unused();
 bool imw_is_initialized();
 imw_ret_t imw_create_publisher(const char* keyexpr, const char* qos);
