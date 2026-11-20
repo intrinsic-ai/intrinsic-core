@@ -12,33 +12,17 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary", "go_library")
+load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 
 package(default_visibility = [
     "//visibility:public",
 ])
-
-go_library(
-    name = "cascopyprocessor",
-    srcs = ["cascopyprocessor.go"],
-    importpath = "intrinsic/assets/build_defs/cascopyprocessor",
-    deps = [
-        "//intrinsic/storage/content_addressable_storage/pkg/crossproject",
-        "//intrinsic/storage/content_addressable_storage/pkg/primordial",
-        "//intrinsic_sdk/intrinsic/assets:referenceddata",
-        "//intrinsic_sdk/intrinsic/tools/inctl/auth",
-        "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
-        "@org_golang_google_grpc//codes:go_default_library",
-        "@org_golang_google_grpc//status:go_default_library",
-    ],
-)
 
 go_binary(
     name = "solution_update",
     srcs = ["solution_update.go"] + [],
     importpath = "intrinsic/assets/build_defs/solution_update",
     deps = [
-        ":cascopyprocessor",
         "//intrinsic_sdk/intrinsic/assets:bundle",
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",

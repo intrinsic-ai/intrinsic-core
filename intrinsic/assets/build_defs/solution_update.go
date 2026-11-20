@@ -27,7 +27,6 @@ import (
 	"time"
 
 	"intrinsic/assets/build_defs/assetprocessor"
-	"intrinsic/assets/build_defs/cascopyprocessor"
 	"intrinsic/assets/bundle"
 	"intrinsic/assets/clientutils"
 	"intrinsic/assets/cmdutils"
@@ -329,16 +328,10 @@ $ bazel run //intrinsic/config:empty_application --\
 			// Process the application's assets as defined in the LocalSolution proto
 			// and populate the Assets and Instances maps in the Application proto.
 			startProcessAssets := time.Now()
-			baseRDProcessor := referenceddata.NewProcessor(
+			rdProcessor := referenceddata.NewProcessor(
 				assetartifactspb.NewAssetArtifactsClient(ingressConn),
 				lroClient,
 			)
-			rdProcessor := baseRDProcessor
-			if project != "" {
-				copyProc := cascopyprocessor.New(baseRDProcessor, project, casClient)
-				defer copyProc.Close()
-				rdProcessor = copyProc
-			}
 
 			processingLimiter := throttle.NewConcurrencyLimiter(flags.GetFlagProcessingConcurrency())
 			proc := &assetprocessor.Processor{
