@@ -62,6 +62,7 @@ cc_library(
     deps = [
         ":realtime_xml_parser_generator_util",
         "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
+        "//intrinsic_control/intrinsic/icon/utils:fixed_str_cat",
         "//intrinsic_control/intrinsic/icon/utils:fixed_string",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",

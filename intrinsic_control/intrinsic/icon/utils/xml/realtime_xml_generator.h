@@ -17,14 +17,18 @@
 
 #include <cstddef>
 #include <memory>
+#include <string>
 #include <type_traits>
+#include <utility>
 #include <variant>
 
 #include "absl/base/attributes.h"
 #include "absl/container/fixed_array.h"
+#include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "absl/types/span.h"
 #include "intrinsic/icon/testing/realtime_annotations.h"
+#include "intrinsic/icon/utils/fixed_str_cat.h"
 #include "intrinsic/icon/utils/fixed_string.h"
 #include "intrinsic/icon/utils/realtime_status.h"
 #include "intrinsic/icon/utils/realtime_status_macro.h"
@@ -38,6 +42,25 @@ class RtXmlAttribute;
 
 // String length reserved for all floating point numbers.
 constexpr size_t kFloatingPointNumberStringSize = 64;
+
+namespace internal {
+
+// True when `T` (as deduced from `T&&`) is a temporary `std::string` or
+// `icon::FixedString<N>` (including `const` rvalues), which would leave a
+// dangling `absl::string_view` if bound to the non-owning string overload.
+template <typename T>
+inline constexpr bool is_temporary_string_v =
+    !std::is_lvalue_reference_v<T> &&
+    (std::is_same_v<std::remove_cvref_t<T>, std::string> ||
+     icon::is_fixed_string_v<std::remove_cvref_t<T>>);
+
+// Matches arithmetic and enum types supported by `absl::AlphaNum` (without
+// matching string types, which `absl::AlphaNum` also accepts).
+template <typename T>
+concept NumericOrEnum = (std::is_arithmetic_v<T> || std::is_enum_v<T>) &&
+                        requires(T val) { absl::AlphaNum(val); };
+
+}  // namespace internal
 
 // XML generator that can be used in real-time code, i.e. this XML
 // generator implementation uses no mutexes, does no memory allocations, and has
@@ -180,10 +203,14 @@ class RtXmlAttribute {
   icon::RealtimeStatus SetValue(absl::string_view text)
       INTRINSIC_CHECK_REALTIME_SAFE;
 
-  // Stores a number as the value of an attribute. The precision for floating
-  // point values is the precision used by absl::AlphaNum, i.e. 6 digits.
-  template <typename NumType,
-            typename = typename std::is_integral<NumType>::type>
+  template <typename T>
+    requires(internal::is_temporary_string_v<T>)
+  icon::RealtimeStatus SetValue(T&& value) = delete;
+
+  // Stores a numeric or enum value as the value of an attribute. The precision
+  // for floating point values is the precision used by absl::AlphaNum, i.e. 6
+  // digits.
+  template <internal::NumericOrEnum NumType>
   icon::RealtimeStatus SetValue(NumType value) INTRINSIC_CHECK_REALTIME_SAFE {
     string_ = icon::FixedStrCat<kFloatingPointNumberStringSize>(value);
     return icon::OkStatus();
@@ -246,9 +273,9 @@ class RtXmlElement {
   // generated.
   template <typename T>
   icon::RealtimeStatusOr<RtXmlElement*> AddElementWithText(
-      absl::string_view name, const T& value) INTRINSIC_CHECK_REALTIME_SAFE {
+      absl::string_view name, T&& value) INTRINSIC_CHECK_REALTIME_SAFE {
     INTRINSIC_RT_ASSIGN_OR_RETURN(RtXmlElement * element, AddElement(name));
-    element->SetText(value);
+    element->SetText(std::forward<T>(value));
     return element;
   }
 
@@ -280,12 +307,12 @@ class RtXmlElement {
   // If `T` is a string type, the memory of `value` must exist until the XML is
   // generated.
   template <typename T>
-  icon::RealtimeStatus AddAttributeWithValue(
-      absl::string_view name, const T& value,
-      bool check_for_duplicate = true) INTRINSIC_CHECK_REALTIME_SAFE {
+  icon::RealtimeStatus AddAttributeWithValue(absl::string_view name, T&& value,
+                                             bool check_for_duplicate = true)
+      INTRINSIC_CHECK_REALTIME_SAFE {
     INTRINSIC_RT_ASSIGN_OR_RETURN(RtXmlAttribute * attr,
                                   AddAttribute(name, check_for_duplicate));
-    return attr->SetValue(value);
+    return attr->SetValue(std::forward<T>(value));
   }
 
   // Sets a string as the element's text. The `text` buffer must
@@ -294,11 +321,14 @@ class RtXmlElement {
     text_ = text;
   }
 
-  // Stores a string representation of the given `value` as the text value of
-  // this XML element. The type of `value` must be convertible with
-  // icon::FixedStrCat(). The precision for floating
-  // point values is the precision used by absl::AlphaNum, i.e. 6 digits.
-  template <typename NumType>
+  template <typename T>
+    requires(internal::is_temporary_string_v<T>)
+  void SetText(T&& value) = delete;
+
+  // Stores a string representation of the given numeric or enum `value` as the
+  // text value of this XML element. The precision for floating point values is
+  // the precision used by absl::AlphaNum, i.e. 6 digits.
+  template <internal::NumericOrEnum NumType>
   void SetText(NumType value) INTRINSIC_CHECK_REALTIME_SAFE {
     text_ = icon::FixedStrCat<kFloatingPointNumberStringSize>(value);
   }

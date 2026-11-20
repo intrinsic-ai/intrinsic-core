@@ -18,6 +18,7 @@
 #include <algorithm>
 #include <array>
 #include <cstddef>
+#include <type_traits>
 #include <utility>
 
 #include "absl/base/macros.h"
@@ -131,6 +132,16 @@ inline FixedString<1> SingleCharacterString(char ch) {
   str[0] = ch;
   return str;
 }
+
+// Trait to check whether `T` is a `FixedString<N>`.
+template <typename T>
+struct is_fixed_string : std::false_type {};
+
+template <std::size_t N>
+struct is_fixed_string<FixedString<N>> : std::true_type {};
+
+template <typename T>
+inline constexpr bool is_fixed_string_v = is_fixed_string<T>::value;
 
 }  // namespace intrinsic::icon
 

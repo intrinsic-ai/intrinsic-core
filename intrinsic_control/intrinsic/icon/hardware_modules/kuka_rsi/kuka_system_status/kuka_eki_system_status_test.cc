@@ -69,18 +69,20 @@ icon::RealtimeStatusOr<std::string> CreateEkiTelemetryXml(
   INTRINSIC_RT_ASSIGN_OR_RETURN(auto root, generator.AddRootElement("Robot"));
   INTRINSIC_RT_RETURN_IF_ERROR(
       root->AddElementWithText("Cycle", telemetry.cycle).status());
+  // Must stay alive until `generator.GenerateXMLString(...)` completes because
+  // `RtXmlElement::SetText` stores a non-owning `absl::string_view`.
+  const std::string software_version =
+      telemetry.software_version.empty()
+          ? kMinimumRsiHwmSoftwareVersion.ToString()
+          : telemetry.software_version;
   INTRINSIC_RT_RETURN_IF_ERROR(
-      root->AddElementWithText("SoftwareVersion",
-                               telemetry.software_version.empty()
-                                   ? kMinimumRsiHwmSoftwareVersion.ToString()
-                                   : telemetry.software_version)
-          .status());
+      root->AddElementWithText("SoftwareVersion", software_version).status());
+  const std::string protocol_version =
+      telemetry.protocol_version.empty()
+          ? kMinimumRsiHwmProtocolVersion.ToString()
+          : telemetry.protocol_version;
   INTRINSIC_RT_RETURN_IF_ERROR(
-      root->AddElementWithText("ProtocolVersion",
-                               telemetry.protocol_version.empty()
-                                   ? kMinimumRsiHwmProtocolVersion.ToString()
-                                   : telemetry.protocol_version)
-          .status());
+      root->AddElementWithText("ProtocolVersion", protocol_version).status());
 
   INTRINSIC_RT_RETURN_IF_ERROR(
       root->AddElementWithText("RobotModel", telemetry.robot_model).status());
@@ -120,10 +122,10 @@ icon::RealtimeStatusOr<std::string> CreateEkiTelemetryXml(
   INTRINSIC_RT_RETURN_IF_ERROR(
       root->AddElementWithText("ProgramSelected", telemetry.program_selected)
           .status());
+  // Must stay alive until `generator.GenerateXMLString(...)` completes.
+  const std::string messages = absl::StrJoin(telemetry.message_numbers, ";");
   INTRINSIC_RT_RETURN_IF_ERROR(
-      root->AddElementWithText("Messages",
-                               absl::StrJoin(telemetry.message_numbers, ";"))
-          .status());
+      root->AddElementWithText("Messages", messages).status());
 
   std::string xml_str;
   xml_str.resize(1000);
