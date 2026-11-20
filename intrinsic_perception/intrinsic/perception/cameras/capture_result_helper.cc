@@ -16,6 +16,7 @@
 
 #include <algorithm>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <optional>
 #include <tuple>
@@ -24,9 +25,11 @@
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
+#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
@@ -502,8 +505,9 @@ absl::Status SensorImagesHaveSameTypeAndSize(
   return absl::OkStatus();
 }
 
-CaptureResult MergeCaptureResults(std::vector<CaptureResult> capture_results,
-                                  const std::vector<Pose3d>& world_ts_camera) {
+CaptureResult MergeCaptureResults(std::vector<CaptureResult>&& capture_results,
+                                  absl::Span<const Pose3d> ref_ts_camera) {
+  CHECK_EQ(capture_results.size(), ref_ts_camera.size());
   if (capture_results.empty()) {
     return CaptureResult{};
   }
@@ -511,24 +515,31 @@ CaptureResult MergeCaptureResults(std::vector<CaptureResult> capture_results,
     return std::move(capture_results[0]);
   }
 
-  // Merge individual capture results.
-  const Pose3d cam_0_t_world = world_ts_camera[0].inverse();
+  // Merge individual capture results into camera 0's coordinate frame.
+  const Pose3d cam_0_t_ref = ref_ts_camera[0].inverse();
   CaptureResult merged_capture_results;
-  merged_capture_results.sensor_images.reserve(capture_results.size());
-  int sensor_id = 0;
-  for (int i = 0; i < capture_results.size(); ++i) {
+  merged_capture_results.capture_at = capture_results[0].capture_at;
+  size_t total_sensor_images = 0;
+  for (const CaptureResult& capture_result : capture_results) {
+    total_sensor_images += capture_result.sensor_images.size();
+  }
+  merged_capture_results.sensor_images.reserve(total_sensor_images);
+  int64_t sensor_id = 0;
+  for (size_t i = 0; i < capture_results.size(); ++i) {
     CaptureResult& capture_result = capture_results[i];
-    const Pose3d cam_0_t_cam_i = cam_0_t_world * world_ts_camera[i];
+    const Pose3d cam_0_t_cam_i =
+        (i == 0) ? Pose3d() : Pose3d(cam_0_t_ref * ref_ts_camera[i]);
     for (SensorImage& sensor_image : capture_result.sensor_images) {
       const Pose3d cam_i_t_sensor = sensor_image.camera_t_sensor().has_value()
-                                        ? sensor_image.camera_t_sensor().value()
-                                        : Pose3d::Identity();
-      SensorImage updated_sensor_image =
-          SensorImageBuilder()
-              .From(std::move(sensor_image))
-              .SetSensorId(sensor_id++)
-              .SetCameraTSensor(cam_0_t_cam_i * cam_i_t_sensor)
-              .Build();
+                                        ? *sensor_image.camera_t_sensor()
+                                        : Pose3d();
+      const Pose3d cam_0_t_sensor =
+          (i == 0) ? cam_i_t_sensor : Pose3d(cam_0_t_cam_i * cam_i_t_sensor);
+      SensorImage updated_sensor_image = SensorImageBuilder()
+                                             .From(std::move(sensor_image))
+                                             .SetSensorId(sensor_id++)
+                                             .SetCameraTSensor(cam_0_t_sensor)
+                                             .Build();
       merged_capture_results.sensor_images.push_back(
           std::move(updated_sensor_image));
     }

@@ -27,6 +27,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/types/span.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/cameras/sensor_image.h"
@@ -223,9 +224,11 @@ absl::StatusOr<CaptureResult> AdjustCaptureForROI(
 absl::Status SensorImagesHaveSameTypeAndSize(
     const std::vector<const SensorImage*>& images);
 
-// Merges individual capture results into the frame of the first camera.
-CaptureResult MergeCaptureResults(std::vector<CaptureResult> capture_results,
-                                  const std::vector<Pose3d>& world_ts_camera);
+// Merges individual capture results into the coordinate frame of the first
+// camera (`ref_ts_camera[0]`). `ref_ts_camera` must contain one camera pose per
+// entry in `capture_results`, all expressed in the same reference frame.
+CaptureResult MergeCaptureResults(std::vector<CaptureResult>&& capture_results,
+                                  absl::Span<const Pose3d> ref_ts_camera);
 
 }  // namespace intrinsic::perception
 
