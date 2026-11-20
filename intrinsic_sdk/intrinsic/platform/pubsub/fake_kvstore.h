@@ -18,21 +18,24 @@
 #include <optional>
 #include <string>
 #include <utility>
+#include <variant>
 
 #include "absl/base/thread_annotations.h"
-#include "absl/container/node_hash_map.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "absl/synchronization/mutex.h"
+#include "absl/time/time.h"
 #include "google/protobuf/any.pb.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
 
 namespace intrinsic {
 
 // A fake implementation of KeyValueStore for use in unit tests.
 //
-// This class stores key-value pairs in an in-memory `absl::node_hash_map`.
+// This class stores key-value pairs in an in-memory `absl::flat_hash_map`.
 // It avoids dependencies on Zenoh or real PubSub infrastructure, making it
 // fast and suitable for testing components that require a KeyValueStore.
 //
@@ -48,7 +51,10 @@ class FakeKeyValueStore : public KeyValueStore {
       : KeyValueStore(std::move(prefix_override)) {}
   ~FakeKeyValueStore() override = default;
 
+  using KeyValueStore::GetRaw;
   using KeyValueStore::Set;
+  using KeyValueStore::SetRaw;
+  using KeyValueStore::SetRawWithVerification;
   using KeyValueStore::SetWithVerification;
 
   // Stores the key-value pair in memory.
@@ -60,6 +66,15 @@ class FakeKeyValueStore : public KeyValueStore {
       absl::string_view key, const google::protobuf::Any& value,
       const SetWithVerificationOptions& options) override;
 
+  absl::Status SetRaw(absl::string_view key, ImmutableBuffer value) override;
+
+  absl::Status SetRawWithVerification(
+      absl::string_view key, ImmutableBuffer value,
+      const SetWithVerificationOptions& options) override;
+
+  absl::StatusOr<ImmutableBuffer> GetRaw(absl::string_view key,
+                                         absl::Duration timeout) override;
+
   absl::Status Delete(absl::string_view key) override;
 
  protected:
@@ -67,9 +82,14 @@ class FakeKeyValueStore : public KeyValueStore {
                                                absl::Duration timeout) override;
 
  private:
+  template <typename T>
+  absl::StatusOr<T> GetTyped(absl::string_view key, absl::Duration timeout,
+                             absl::string_view mismatch_error);
+
   absl::Mutex mutex_;
-  absl::node_hash_map<std::string, google::protobuf::Any> store_
-      ABSL_GUARDED_BY(mutex_);
+  absl::flat_hash_map<std::string,
+                      std::variant<google::protobuf::Any, ImmutableBuffer>>
+      store_ ABSL_GUARDED_BY(mutex_);
 };
 
 }  // namespace intrinsic
