@@ -157,6 +157,8 @@ func translateToNetworkConfig(n map[string]shared.Interface) *clustermanagerpb.I
 			conf.EtherType = clustermanagerpb.EtherType_ETHER_TYPE_ETHERCAT
 		case shared.EtherTypeIPRealtime:
 			conf.EtherType = clustermanagerpb.EtherType_ETHER_TYPE_REALTIME
+		case shared.EtherTypeEtherlab:
+			conf.EtherType = clustermanagerpb.EtherType_ETHER_TYPE_ETHERLAB
 		}
 		c.Interfaces[name] = conf
 	}
