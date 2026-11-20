@@ -64,6 +64,7 @@ cc_library(
     hdrs = ["pts_to_ai_scene.h"],
     visibility = [
         "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [
@@ -85,6 +86,7 @@ cc_library(
     hdrs = ["pts_to_point_cloud.h"],
     visibility = [
         "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
         "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
     ],
     deps = [

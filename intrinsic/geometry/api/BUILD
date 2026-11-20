@@ -290,8 +290,8 @@ cc_library(
     srcs = ["file_io.cc"],
     hdrs = ["file_io.h"],
     deps = [
-        "//intrinsic/geometry/internal/legacy/point_cloud:ai_scene_to_point_cloud",
-        "//intrinsic/geometry/internal/legacy/point_cloud:load_point_cloud_from_buffer",
+        "//intrinsic_runtime/intrinsic/geometry/internal/legacy/point_cloud:ai_scene_to_point_cloud",
+        "//intrinsic_runtime/intrinsic/geometry/internal/legacy/point_cloud:load_point_cloud_from_buffer",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
