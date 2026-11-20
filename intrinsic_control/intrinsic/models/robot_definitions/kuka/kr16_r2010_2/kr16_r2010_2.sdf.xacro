@@ -18,12 +18,6 @@ limitations under the License.
 <sdf version="1.9" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/kuka/kr16_r2010_2/kr16_r2010_2.xacro"/>
     <xacro:kr16_r2010_2_sdf name="arm"
-                joint_0_initial="0.0"
-                joint_1_initial="-1.5707963267948966"
-                joint_2_initial="0.0"
-                joint_3_initial="0.0"
-                joint_4_initial="1.5707963267948966"
-                joint_5_initial="0.0"
     >
       <model_options/>
     </xacro:kr16_r2010_2_sdf>

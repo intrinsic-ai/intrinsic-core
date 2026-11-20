@@ -15,7 +15,7 @@ limitations under the License.
 -->
 <sdf version='1.9' xmlns:xacro='http://www.ros.org/wiki/xacro'>
 <xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/kuka/kr6_r900_2/kr6_r900_2_base.xacro"/>
-<xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/kuka/timeslicer_plugins.xacro"/>
+<xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/kuka/simulation_plugins.xacro"/>
 
 <!-- Expands to an Kuka KR6 R900 2 robot that can be customized with various
   options like starting pose.
@@ -28,24 +28,12 @@ limitations under the License.
         <pose>1 2 3 0 0 0</pose>
       </model_options>
     </xacro:kr6_r900_2_sdf>
-  joint_*_initial: Initial joint positions of the generated robot (in radians).
 -->
 <xacro:macro name='kr6_r900_2_sdf' params='name
-                                     **model_options
-                                     joint_0_initial:=0
-                                     joint_1_initial:=0
-                                     joint_2_initial:=0
-                                     joint_3_initial:=0
-                                     joint_4_initial:=0
-                                     joint_5_initial:=0 '>
+                                     **model_options'>
   <xacro:kr6_r900_2_base_sdf name="${name}">
     <model_options>
-      <xacro:timeslicer_plugins joint_0_initial="${joint_0_initial}"
-                                joint_1_initial="${joint_1_initial}"
-                                joint_2_initial="${joint_2_initial}"
-                                joint_3_initial="${joint_3_initial}"
-                                joint_4_initial="${joint_4_initial}"
-                                joint_5_initial="${joint_5_initial}"/>
+      <xacro:simulation_plugins/>
       <!-- Append passed in model options. -->
       <xacro:insert_block name="model_options"/>
     </model_options>

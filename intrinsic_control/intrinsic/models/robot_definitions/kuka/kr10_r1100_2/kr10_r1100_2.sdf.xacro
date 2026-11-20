@@ -17,14 +17,7 @@ limitations under the License.
 -->
 <sdf version="1.9" xmlns:xacro="http://www.ros.org/wiki/xacro">
   <xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/kuka/kr10_r1100_2/kr10_r1100_2.xacro"/>
-    <xacro:kr10_r1100_2_sdf name="arm"
-                joint_0_initial="0.0"
-                joint_1_initial="-1.5707963267948966"
-                joint_2_initial="1.571"
-                joint_3_initial="0.0"
-                joint_4_initial="0.0"
-                joint_5_initial="0.0"
-    >
+    <xacro:kr10_r1100_2_sdf name="arm">
       <model_options/>
     </xacro:kr10_r1100_2_sdf>
 </sdf>

@@ -23,13 +23,7 @@ limitations under the License.
 
         <xacro:include filename="$(cwd)/intrinsic_control/intrinsic/models/robot_definitions/kuka/kr6_r900_2/kr6_r900_2.xacro"/>
 
-        <xacro:kr6_r900_2_sdf name="iris622"
-                    joint_0_initial="0"
-                    joint_1_initial="-2"
-                    joint_2_initial="2"
-                    joint_3_initial="0"
-                    joint_4_initial="0"
-                    joint_5_initial="0">
+        <xacro:kr6_r900_2_sdf name="iris622">
             <model_options>
                 <pose>0.620633 -0.617091 0.014591 0.000099 0.005144 3.139627</pose>
                 <joint name="base" type="fixed">
@@ -48,13 +42,7 @@ limitations under the License.
             </model_options>
         </xacro:kr6_r900_2_sdf>
 
-        <xacro:kr6_r900_2_sdf name="iris692"
-                    joint_0_initial="0"
-                    joint_1_initial="-2"
-                    joint_2_initial="2"
-                    joint_3_initial="0"
-                    joint_4_initial="0"
-                    joint_5_initial="0">
+        <xacro:kr6_r900_2_sdf name="iris692">
             <model_options>
                 <pose>-0.619797 -0.615755 0.014108 -0.001547 0.000748 -0.002139</pose>
                 <joint name="base" type="fixed">
@@ -83,13 +71,7 @@ limitations under the License.
             </joint>
         </model>
 
-        <xacro:kr6_r900_2_sdf name="agilus-03"
-                    joint_0_initial="0"
-                    joint_1_initial="-2"
-                    joint_2_initial="2"
-                    joint_3_initial="0"
-                    joint_4_initial="0"
-                    joint_5_initial="0">
+        <xacro:kr6_r900_2_sdf name="agilus-03">
             <model_options>
                 <pose>-0.615691 0.622351 0.0116668 -0.001780 -0.001903 -0.005796</pose>
                 <joint name="base" type="fixed">
@@ -108,13 +90,7 @@ limitations under the License.
             </model_options>
         </xacro:kr6_r900_2_sdf>
 
-        <xacro:kr6_r900_2_sdf name="agilus-04"
-                    joint_0_initial="0"
-                    joint_1_initial="-2"
-                    joint_2_initial="2"
-                    joint_3_initial="0"
-                    joint_4_initial="0"
-                    joint_5_initial="0">
+        <xacro:kr6_r900_2_sdf name="agilus-04">
             <model_options>
                 <pose>0.623598 0.619270 0.0142757 0.000695 0.002447 3.134007</pose>
                 <joint name="base" type="fixed">
