@@ -12,6 +12,12 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+// Functions for converting SDFormat (SDF) models, worlds, and files to
+// Intrinsic `SceneObject` protos.
+//
+// SDF `<visual><material>` properties are folded into the generated renderable
+// rather than stored as `Geometry.material_overrides`.
+
 #ifndef INTRINSIC_SCENE_SDF_SCENE_OBJECT_FROM_SDF_H_
 #define INTRINSIC_SCENE_SDF_SCENE_OBJECT_FROM_SDF_H_
 
