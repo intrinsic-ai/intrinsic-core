@@ -206,7 +206,7 @@ intrinsic_solution = rule(
             default = Label("@rules_shell//shell/runfiles"),
         ),
         "_solution_update": attr.label(
-            default = Label("//intrinsic/assets/build_defs:solution_update"),
+            default = Label("//intrinsic_sdk/intrinsic/assets/build_defs:solution_update"),
             cfg = "target",
             executable = True,
         ),

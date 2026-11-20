@@ -21,6 +21,7 @@ go_library(
     visibility = [
         "//intrinsic/assets:__subpackages__",
         "//intrinsic/tools/inctl/util:__pkg__",
+        "//intrinsic_sdk/intrinsic/assets/build_defs:__pkg__",
         "//intrinsic_sdk/intrinsic/assets/catalog:__pkg__",
         "//intrinsic_sdk/intrinsic/assets/inctl:__pkg__",
         "//intrinsic_sdk/intrinsic/assets/scene_objects:__pkg__",
