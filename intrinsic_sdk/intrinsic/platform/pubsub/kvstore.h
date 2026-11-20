@@ -15,7 +15,9 @@
 #ifndef INTRINSIC_PLATFORM_PUBSUB_KVSTORE_H_
 #define INTRINSIC_PLATFORM_PUBSUB_KVSTORE_H_
 
+#include <cstddef>
 #include <functional>
+#include <initializer_list>
 #include <memory>
 #include <optional>
 #include <string>
@@ -34,6 +36,8 @@
 #include "absl/time/time.h"
 #include "google/protobuf/any.pb.h"
 #include "google/protobuf/message.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
+#include "intrinsic_sdk/intrinsic/middleware/imw.h"
 #include "intrinsic/platform/pubsub/pubsub_callbacks.h"
 #include "intrinsic/platform/pubsub/subscription.h"
 #include "intrinsic/platform/pubsub/topic_config.h"
@@ -59,22 +63,25 @@ using KeyValueCallback = std::function<void(
 // Make sure to keep this callback lightweight.
 using OnDoneCallback = std::function<void(absl::string_view key)>;
 
+// Move-only handle returned for asynchronous KeyValueStore queries.
+// Active query callback state is owned centrally by IMWZenoh and cleaned up
+// automatically on completion, error, GC timeout, or session shutdown.
 class KVQuery {
  public:
-  explicit KVQuery(std::unique_ptr<imw_callback_functor_t> callback,
-                   std::unique_ptr<imw_on_done_functor_t> on_done)
-      : callback_(std::move(callback)),
-        on_done_(std::move(on_done)),
-        context_(
-            std::make_unique<QueryContext>(callback_.get(), on_done_.get())) {}
-
-  QueryContext* GetContext() { return context_.get(); }
-
- private:
-  std::unique_ptr<imw_callback_functor_t> callback_;
-  std::unique_ptr<imw_on_done_functor_t> on_done_;
-  std::unique_ptr<QueryContext> context_;
+  KVQuery() = default;
+  KVQuery(const KVQuery&) = delete;
+  KVQuery& operator=(const KVQuery&) = delete;
+  KVQuery(KVQuery&&) noexcept = default;
+  KVQuery& operator=(KVQuery&&) noexcept = default;
+  ~KVQuery();
 };
+
+namespace kvstore_internal {
+template <typename T>
+concept NonAnyProtoMessage =
+    std::is_base_of_v<google::protobuf::Message, std::remove_cvref_t<T>> &&
+    !std::is_same_v<google::protobuf::Any, std::remove_cvref_t<T>>;
+}  // namespace kvstore_internal
 
 class KeyValueStore {
  public:
@@ -148,9 +155,7 @@ class KeyValueStore {
   //   instead.
   template <typename T>
   absl::Status Set(absl::string_view key, T&& value)
-    requires(
-        std::is_base_of_v<google::protobuf::Message, std::remove_cvref_t<T>> &&
-        !std::is_same_v<google::protobuf::Any, std::remove_cvref_t<T>>)
+    requires kvstore_internal::NonAnyProtoMessage<T>
   {
     google::protobuf::Any any;
     if (!any.PackFrom(std::forward<T>(value))) {
@@ -178,9 +183,7 @@ class KeyValueStore {
   [[deprecated("Use SetWithVerification() instead.")]]
   absl::Status Set(absl::string_view key, T&& value,
                    std::optional<bool> high_consistency)
-    requires(
-        std::is_base_of_v<google::protobuf::Message, std::remove_cvref_t<T>> &&
-        !std::is_same_v<google::protobuf::Any, std::remove_cvref_t<T>>)
+    requires kvstore_internal::NonAnyProtoMessage<T>
   {
     google::protobuf::Any any;
     if (!any.PackFrom(std::forward<T>(value))) {
@@ -208,9 +211,7 @@ class KeyValueStore {
   template <typename T>
   absl::Status SetWithVerification(absl::string_view key, T&& value,
                                    const SetWithVerificationOptions& options)
-    requires(
-        std::is_base_of_v<google::protobuf::Message, std::remove_cvref_t<T>> &&
-        !std::is_same_v<google::protobuf::Any, std::remove_cvref_t<T>>)
+    requires kvstore_internal::NonAnyProtoMessage<T>
   {
     google::protobuf::Any any;
     if (!any.PackFrom(std::forward<T>(value))) {
@@ -220,6 +221,12 @@ class KeyValueStore {
     return SetWithVerification(key, any, options);
   }
 
+  // Retrieves and unpacks the Protobuf value stored at `key`. Returns
+  // `absl::StatusCode::kNotFound` if `key` has no value,
+  // `absl::StatusCode::kInvalidArgument` if `key` stores raw bytes or another
+  // non-Protobuf encoding (Go returns `kvstore.ErrWrongEncoding`),
+  // `absl::StatusCode::kDeadlineExceeded` if the query times out, or
+  // `absl::StatusCode::kInternal` on unpack or transport failure.
   template <typename T>
   absl::StatusOr<T> Get(absl::string_view key,
                         absl::Duration timeout = kDefaultGetTimeout)
@@ -234,9 +241,23 @@ class KeyValueStore {
     }
   }
 
+  // Retrieves raw unparsed payload bytes stored at `key` as a 256-byte aligned
+  // ImmutableBuffer. Returns `absl::StatusCode::kNotFound` if `key` has no
+  // value, `absl::StatusCode::kDeadlineExceeded` if the query times out,
+  // `absl::StatusCode::kInvalidArgument` if `timeout` is negative, `key` is
+  // invalid, or `key` stores Protobuf or another unsupported encoding, or
+  // `absl::StatusCode::kResourceExhausted` if buffer allocation fails.
+  absl::StatusOr<ImmutableBuffer> GetRaw(absl::string_view key) {
+    return GetRaw(key, kDefaultGetTimeout);
+  }
+  virtual absl::StatusOr<ImmutableBuffer> GetRaw(absl::string_view key,
+                                                 absl::Duration timeout);
+
   // For a given key and WildcardQueryConfig, the KeyValueCallback will be
-  // invoked for each key that matches the expression. The caller is expected to
-  // keep the Query object alive until the OnDoneCallback is called.
+  // invoked for each key that matches the expression. The returned `KVQuery` is
+  // a move-only handle; callback state is owned centrally by `IMWZenoh` and
+  // cleaned up automatically after `on_done`, on error, on timeout, or at
+  // session shutdown, so callers do not need to keep the handle alive.
   absl::StatusOr<KVQuery> GetAll(
       absl::string_view key, KeyValueCallback callback,
       OnDoneCallback on_done = [](absl::string_view key) {});
@@ -265,7 +286,8 @@ class KeyValueStore {
   // to kv_store_repl/<destination_ipc>/key. To use this method, the you must be
   // running on a cluster with credentials that allow cloud ingress access. The
   // timeout is not enforced for the entire duration of the copy, but rather for
-  // the call to the cloud server.
+  // the call to the cloud server. Copies Protobuf entries only; fails with
+  // `absl::StatusCode::kInvalidArgument` on raw-byte or non-Protobuf keys.
   absl::Status AdminCloudCopy(absl::string_view source_key,
                               absl::string_view target_key,
                               absl::Duration timeout);
@@ -388,11 +410,13 @@ class KeyValueStore {
   }
 
  private:
+  template <typename ResultT, typename OnMessageFn>
+  static absl::StatusOr<ResultT> QuerySingleMessage(const std::string& raw_key,
+                                                    absl::Duration timeout,
+                                                    OnMessageFn&& on_message);
+
   static std::string MakeKeyImpl(
       std::initializer_list<absl::string_view> parts);
-
-  absl::StatusOr<std::vector<std::string>> ExecuteList(
-      absl::string_view keyexpr, absl::Duration timeout);
 
  protected:
   explicit KeyValueStore(std::optional<std::string> prefix_override);
@@ -402,7 +426,21 @@ class KeyValueStore {
   virtual absl::StatusOr<google::protobuf::Any> GetAny(absl::string_view key,
                                                        absl::Duration timeout);
 
+  // Lists live keys matching the already-prefixed `keyexpr`.
+  virtual absl::StatusOr<std::vector<std::string>> ExecuteList(
+      absl::string_view keyexpr, absl::Duration timeout);
+
  private:
+  struct EncodedValue {
+    imw_encoding_t encoding = IMW_ENCODING_VARINT_PREFIXED_BYTES;
+    std::string bytes;
+    bool operator==(const EncodedValue&) const = default;
+  };
+
+  // Queries raw serialized bytes and encoding for the given raw key.
+  absl::StatusOr<EncodedValue> GetEncodedWithRawKey(const std::string& raw_key,
+                                                    absl::Duration timeout);
+
   // Returns the raw serialized bytes for the given key.
   // The key is processed as is, i.e. no prefixes are added to it.
   //
