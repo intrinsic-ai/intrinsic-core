@@ -42,6 +42,7 @@ service_def {
         args: "--world_service_address=world.app-intrinsic-base.svc.cluster.local:8080"
         args: "--geometry_service_address=geomservice.app-intrinsic-base.svc.cluster.local:8080"
         args: "--cas_grpc_service_address=content-addressable-storage.app-intrinsic-base.svc.cluster.local:9747"
+        args: "--opencensus_tracing=true"
         security_context: {
           posix_capabilities: {
             add: POSIX_CAPABILITY_SYS_RAWIO
@@ -77,6 +78,7 @@ service_def {
         args: "--world_service_address=world.app-intrinsic-base.svc.cluster.local:8080"
         args: "--geometry_service_address=geomservice.app-intrinsic-base.svc.cluster.local:8080"
         args: "--cas_grpc_service_address=content-addressable-storage.app-intrinsic-base.svc.cluster.local:9747"
+        args: "--opencensus_tracing=true"
         security_context: {
           posix_capabilities: {
             add: POSIX_CAPABILITY_SYS_RAWIO
