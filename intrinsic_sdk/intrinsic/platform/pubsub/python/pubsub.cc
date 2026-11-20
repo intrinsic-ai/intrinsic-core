@@ -152,34 +152,74 @@ SubscriptionErrorExpandedCallback WrapErrorExpandedCallback(
   return error_callback;
 }
 
+bool IsPythonRuntimeAlive() {
+  if (!Py_IsInitialized()) {
+    return false;
+  }
+#if PY_VERSION_HEX >= 0x030D0000
+  return !Py_IsFinalizing();
+#else
+  return !_Py_IsFinalizing();
+#endif
+}
+
+struct GilSafePyObjectDeleter {
+  void operator()(pybind11::object* p) const {
+    std::unique_ptr<pybind11::object> owned(p);
+    if (!IsPythonRuntimeAlive()) {
+      // Interpreter is finalized or finalizing; leak the Python reference
+      // rather than acquiring the GIL or calling Py_DECREF during teardown.
+      static_cast<void>(owned->release());
+      return;
+    }
+    pybind11::gil_scoped_acquire gil;
+    owned.reset();
+  }
+};
+
+// Wraps a Python callable in a shared_ptr whose deleter acquires the GIL when
+// destroyed from a non-Python thread (such as IMWZenoh's query completion,
+// reaper, or session teardown threads).
+std::shared_ptr<pybind11::object> MakeGilSafePyObject(pybind11::object obj) {
+  return std::shared_ptr<pybind11::object>(new pybind11::object(std::move(obj)),
+                                           GilSafePyObjectDeleter{});
+}
+
 KeyValueCallback WrapKeyValueCallback(pybind11::object cb) {
   if (!cb || cb.is_none()) {
     return [](absl::string_view key,
               std::unique_ptr<google::protobuf::Any> value) {};
   }
-  return [py_cb = std::move(cb)](absl::string_view key,
-                                 std::unique_ptr<google::protobuf::Any> value) {
-    pybind11::gil_scoped_acquire gil;
-    try {
-      if (value) {
-        py_cb(key, *value);
-      } else {
-        py_cb(key, pybind11::none());
-      }
-    } catch (const pybind11::error_already_set& e) {
-      LOG(ERROR) << "Exception in KeyValueCallback: " << e.what();
-    }
-  };
+  return
+      [py_cb = MakeGilSafePyObject(std::move(cb))](
+          absl::string_view key, std::unique_ptr<google::protobuf::Any> value) {
+        if (!IsPythonRuntimeAlive()) {
+          return;
+        }
+        pybind11::gil_scoped_acquire gil;
+        try {
+          if (value) {
+            (*py_cb)(key, *value);
+          } else {
+            (*py_cb)(key, pybind11::none());
+          }
+        } catch (const pybind11::error_already_set& e) {
+          LOG(ERROR) << "Exception in KeyValueCallback: " << e.what();
+        }
+      };
 }
 
 OnDoneCallback WrapOnDoneCallback(pybind11::object cb) {
   if (!cb || cb.is_none()) {
     return [](absl::string_view key) {};
   }
-  return [py_cb = std::move(cb)](absl::string_view key) {
+  return [py_cb = MakeGilSafePyObject(std::move(cb))](absl::string_view key) {
+    if (!IsPythonRuntimeAlive()) {
+      return;
+    }
     pybind11::gil_scoped_acquire gil;
     try {
-      py_cb();
+      (*py_cb)();
     } catch (const pybind11::error_already_set& e) {
       LOG(ERROR) << "Exception in OnDoneCallback: " << e.what();
     }
@@ -319,8 +359,10 @@ absl::StatusOr<KeyValueStore> CreateReplicationKVStore(GilAwarePubSub* self) {
 absl::StatusOr<KVQuery> GetAll(KeyValueStore* self, const std::string& key,
                                pybind11::object callback,
                                pybind11::object on_done) {
-  return self->GetAll(key, WrapKeyValueCallback(std::move(callback)),
-                      WrapOnDoneCallback(std::move(on_done)));
+  KeyValueCallback wrapped_cb = WrapKeyValueCallback(std::move(callback));
+  OnDoneCallback wrapped_done = WrapOnDoneCallback(std::move(on_done));
+  pybind11::gil_scoped_release release_gil;
+  return self->GetAll(key, std::move(wrapped_cb), std::move(wrapped_done));
 }
 
 absl::StatusOr<google::protobuf::Any> Get(KeyValueStore* self,
@@ -565,12 +607,14 @@ PYBIND11_MODULE(pubsub, m) {
                std::optional<bool>)>(
                &KeyValueStore::Set<const google::protobuf::Message&>),
            pybind11::arg("key"), pybind11::arg("value"),
-           pybind11::arg("high_consistency"))
+           pybind11::arg("high_consistency"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("set",
            static_cast<absl::Status (KeyValueStore::*)(
                absl::string_view, const google::protobuf::Message&)>(
                &KeyValueStore::Set<const google::protobuf::Message&>),
-           pybind11::arg("key"), pybind11::arg("value"))
+           pybind11::arg("key"), pybind11::arg("value"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("set_with_verification",
            static_cast<absl::Status (KeyValueStore::*)(
                absl::string_view, const google::protobuf::Message&,
@@ -579,19 +623,27 @@ PYBIND11_MODULE(pubsub, m) {
                    const google::protobuf::Message&>),
            pybind11::arg("key"), pybind11::arg("value"),
            pybind11::arg("options") =
-               KeyValueStore::SetWithVerificationOptions())
-      .def("get", &Get, pybind11::arg("key"), pybind11::arg("timeout") = 10)
+               KeyValueStore::SetWithVerificationOptions(),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("get", &Get, pybind11::arg("key"), pybind11::arg("timeout") = 10,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("get_all", &GetAll)
       .def("get_all_synchronous", &GetAllSynchronous, pybind11::arg("keyexpr"),
-           pybind11::arg("timeout") = 10)
-      .def("list_all_keys", &ListAllKeys, pybind11::arg("timeout") = 10)
+           pybind11::arg("timeout") = 10,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("list_all_keys", &ListAllKeys, pybind11::arg("timeout") = 10,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("list_all_global_keys", &ListAllGlobalKeys,
-           pybind11::arg("timeout") = 10)
+           pybind11::arg("timeout") = 10,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("list_all_onprem_keys", &ListAllOnpremKeys,
-           pybind11::arg("workcell_name"), pybind11::arg("timeout") = 10)
-      .def("delete", &KeyValueStore::Delete, pybind11::arg("key"))
+           pybind11::arg("workcell_name"), pybind11::arg("timeout") = 10,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("delete", &KeyValueStore::Delete, pybind11::arg("key"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("admin_cloud_copy", &AdminCloudCopy, pybind11::arg("source_key"),
-           pybind11::arg("target_key"), pybind11::arg("timeout") = 10)
+           pybind11::arg("target_key"), pybind11::arg("timeout") = 10,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("create_subscription", &CreateRawKVStoreSubscription,
            pybind11::arg("key_expression"), pybind11::arg("config"),
            pybind11::arg("value_callback") = nullptr,
@@ -602,7 +654,8 @@ PYBIND11_MODULE(pubsub, m) {
            pybind11::arg("del_callback") = nullptr,
            pybind11::arg("err_callback") = nullptr)
       .def("get_workcell_replication_namespace",
-           &GetWorkcellReplicationNamespace, pybind11::arg("timeout") = 10)
+           &GetWorkcellReplicationNamespace, pybind11::arg("timeout") = 10,
+           pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("get_global_replication_namespace",
            &KeyValueStore::GetGlobalReplicationNamespace)
       .def_static("make_key", &MakeKey);
