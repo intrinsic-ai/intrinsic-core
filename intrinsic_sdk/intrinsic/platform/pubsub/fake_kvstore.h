@@ -19,6 +19,7 @@
 #include <string>
 #include <utility>
 #include <variant>
+#include <vector>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
@@ -51,6 +52,8 @@ class FakeKeyValueStore : public KeyValueStore {
       : KeyValueStore(std::move(prefix_override)) {}
   ~FakeKeyValueStore() override = default;
 
+  using KeyValueStore::GetAll;
+  using KeyValueStore::GetAllRaw;
   using KeyValueStore::GetRaw;
   using KeyValueStore::Set;
   using KeyValueStore::SetRaw;
@@ -75,16 +78,42 @@ class FakeKeyValueStore : public KeyValueStore {
   absl::StatusOr<ImmutableBuffer> GetRaw(absl::string_view key,
                                          absl::Duration timeout) override;
 
+  absl::StatusOr<KVQuery> GetAll(absl::string_view key,
+                                 KeyValueCallback callback,
+                                 OnDoneCallback on_done) override;
+
+  absl::StatusOr<KVQuery> GetAllRaw(absl::string_view keyexpr,
+                                    RawKeyValueCallback callback,
+                                    OnDoneCallback on_done,
+                                    RawQueryErrorCallback on_error) override;
+
   absl::Status Delete(absl::string_view key) override;
 
  protected:
   absl::StatusOr<google::protobuf::Any> GetAny(absl::string_view key,
                                                absl::Duration timeout) override;
 
+  absl::StatusOr<std::vector<std::string>> ExecuteList(
+      absl::string_view keyexpr, absl::Duration timeout) override;
+
+  absl::StatusOr<KVQuery> ExecuteGetAll(
+      absl::string_view keyexpr, KeyValueCallback callback,
+      OnDoneCallback on_done, std::optional<absl::Duration> timeout) override;
+
+  absl::StatusOr<KVQuery> ExecuteGetAllRaw(
+      absl::string_view keyexpr, RawKeyValueCallback callback,
+      OnDoneCallback on_done, RawQueryErrorCallback on_error,
+      std::optional<absl::Duration> timeout) override;
+
  private:
   template <typename T>
   absl::StatusOr<T> GetTyped(absl::string_view key, absl::Duration timeout,
                              absl::string_view mismatch_error);
+
+  template <typename T, typename CallbackFn, typename EmitFn>
+  absl::StatusOr<KVQuery> CollectMatches(absl::string_view keyexpr,
+                                         CallbackFn callback, EmitFn emit,
+                                         OnDoneCallback on_done);
 
   absl::Mutex mutex_;
   absl::flat_hash_map<std::string,
