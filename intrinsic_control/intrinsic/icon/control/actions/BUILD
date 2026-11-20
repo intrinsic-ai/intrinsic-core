@@ -722,10 +722,33 @@ cc_library(
 )
 
 cc_library(
+    name = "trajectory_tracking_utils",
+    srcs = ["trajectory_tracking_utils.cc"],
+    hdrs = ["trajectory_tracking_utils.h"],
+    deps = [
+        "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
+        "//intrinsic_control/intrinsic/icon/utils:realtime_status_macro",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:check_joint_limits",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:dynamic_limits_check_mode",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
+        "//intrinsic_kinematics/intrinsic/kinematics/types:joint_trajectories",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/time",
+        "@abseil-cpp//absl/types:span",
+    ],
+)
+
+cc_library(
     name = "trajectory_tracker",
     srcs = ["trajectory_tracker.cc"],
     hdrs = ["trajectory_tracker.h"],
     deps = [
+        ":trajectory_tracking_utils",
         "//intrinsic_control/intrinsic/icon/actions:trajectory_tracking_action_info",
         "//intrinsic_control/intrinsic/icon/control:joint_position_command",
         "//intrinsic_control/intrinsic/icon/control:realtime_slot_map",
@@ -737,6 +760,7 @@ cc_library(
         "//intrinsic_control/intrinsic/icon/dynamics:rigid_body_interface",
         "//intrinsic_control/intrinsic/icon/dynamics:robotics_library_dynamics_creator",
         "//intrinsic_control/intrinsic/icon/proto:cart_space_conversion",
+        "//intrinsic_control/intrinsic/icon/testing:realtime_annotations",
         "//intrinsic_control/intrinsic/icon/utils:log",
         "//intrinsic_control/intrinsic/icon/utils:realtime_guard",
         "//intrinsic_control/intrinsic/icon/utils:realtime_status",
@@ -745,14 +769,15 @@ cc_library(
         "//intrinsic_kinematics/intrinsic/kinematics:group",
         "//intrinsic_kinematics/intrinsic/kinematics:skeleton",
         "//intrinsic_kinematics/intrinsic/kinematics/proto:kinematics_conversion",
-        "//intrinsic_kinematics/intrinsic/kinematics/types:check_joint_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:dynamic_limits_check_mode",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_limits",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_state",
         "//intrinsic_kinematics/intrinsic/kinematics/types:joint_trajectories",
         "//intrinsic_motion_planning/intrinsic/motion_planning/trajectory_planning:trajectory_utils",
         "//intrinsic_sdk/intrinsic/eigenmath:clamp",
+        "//intrinsic_sdk/intrinsic/util:fixed_vector",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log:check",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",

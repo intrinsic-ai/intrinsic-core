@@ -19,7 +19,9 @@
 #include <memory>
 #include <optional>
 #include <utility>
+#include <vector>
 
+#include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
@@ -28,6 +30,7 @@
 #include "absl/time/time.h"
 #include "intrinsic/eigenmath/clamp.h"
 #include "intrinsic/icon/actions/trajectory_tracking_action_info.h"
+#include "intrinsic/icon/control/actions/trajectory_tracking_utils.h"
 #include "intrinsic/icon/dynamics/rigid_body_interface.h"
 #include "intrinsic/icon/dynamics/robotics_library_dynamics_creator.h"
 #include "intrinsic/icon/proto/cart_space_conversion.h"
@@ -37,7 +40,6 @@
 #include "intrinsic/kinematics/chain.h"
 #include "intrinsic/kinematics/proto/kinematics_conversion.h"
 #include "intrinsic/kinematics/skeleton.h"
-#include "intrinsic/kinematics/types/check_joint_limits.h"
 #include "intrinsic/kinematics/types/dynamic_limits_check_mode.h"
 #include "intrinsic/motion_planning/trajectory_planning/trajectory_utils.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -54,26 +56,27 @@ bool IsTrajectoryJerkLimited(const JointTrajectoryPVA& trajectory) {
          JointTrajectoryInterpolationType::kQuinticPolynomial;
 }
 
-// Designs the initial state residual for the `trajectory` and
-// `previous_joint_setpoint` such that it guarantees continuity of the state. In
-// general, this is computed as the difference between the
-// `previous_joint_setpoint` and the `trajectory` initial state.
+// Designs the initial state residual for the `[joint_offset, joint_offset +
+// ndof)` slice of `trajectory` and `previous_joint_setpoint` such that it
+// guarantees continuity of the state. In general, this is computed as the
+// difference between the `previous_joint_setpoint` and the `trajectory` initial
+// state.
 // - If the trajectory is jerk-limited, then the initial state residual is set
 //   to the difference between the previous setpoint and the initial state
 //   of the trajectory such that the acceleration is continuous.
 // - If the trajectory is acceleration-limited, we consider continuity of the PV
 // state only. The initial acceleration residual is set to zero.
 RealtimeStatusOr<JointStatePVA> DesignInitialStateResidual(
-    const JointTrajectoryPVA& trajectory,
-    const JointStatePVA& previous_joint_setpoint) {
+    const JointTrajectoryPVA& trajectory, const size_t joint_offset,
+    const size_t ndof, const JointStatePVA& previous_joint_setpoint) {
   if (trajectory.size() == 0) {
-    return icon::InvalidArgumentError(
+    return InvalidArgumentError(
         "TrajectoryTracker requires a non-empty trajectory.");
   }
-  if (previous_joint_setpoint.size() != trajectory.data().front().size()) {
+  if (previous_joint_setpoint.size() != ndof) {
     return InvalidArgumentError(RealtimeStatus::StrCat(
-        "Dimension mismatch for trajectory (", trajectory.data().front().size(),
-        ") and setpoint (", previous_joint_setpoint.size(), ")."));
+        "Dimension mismatch for trajectory (", ndof, ") and setpoint (",
+        previous_joint_setpoint.size(), ")."));
   }
 
   JointStatePVA initial_state_residual;
@@ -81,14 +84,23 @@ RealtimeStatusOr<JointStatePVA> DesignInitialStateResidual(
       initial_state_residual.SetSize(previous_joint_setpoint.size()));
   INTRINSIC_RT_ASSIGN_OR_RETURN(JointStatePVA trajectory_initial_state,
                                 trajectory.DataAt(0));
+  if (joint_offset + ndof > trajectory_initial_state.size()) {
+    return InvalidArgumentError(RealtimeStatus::StrCat(
+        "Slice [", joint_offset, ", ", joint_offset + ndof,
+        ") exceeds trajectory dimension (", trajectory_initial_state.size(),
+        ")."));
+  }
 
   initial_state_residual.position =
-      previous_joint_setpoint.position - trajectory_initial_state.position;
+      previous_joint_setpoint.position -
+      trajectory_initial_state.position.segment(joint_offset, ndof);
   initial_state_residual.velocity =
-      previous_joint_setpoint.velocity - trajectory_initial_state.velocity;
+      previous_joint_setpoint.velocity -
+      trajectory_initial_state.velocity.segment(joint_offset, ndof);
   if (IsTrajectoryJerkLimited(trajectory)) {
-    initial_state_residual.acceleration = previous_joint_setpoint.acceleration -
-                                          trajectory_initial_state.acceleration;
+    initial_state_residual.acceleration =
+        previous_joint_setpoint.acceleration -
+        trajectory_initial_state.acceleration.segment(joint_offset, ndof);
   }
   return initial_state_residual;
 }
@@ -96,105 +108,163 @@ RealtimeStatusOr<JointStatePVA> DesignInitialStateResidual(
 }  // namespace
 
 absl::StatusOr<std::unique_ptr<TrajectoryTracker>> TrajectoryTracker::Create(
-    PartParams part, double frequency_hz) {
+    std::vector<PartParams> parts, const double frequency_hz) {
   INTRINSIC_ASSERT_NON_REALTIME();
-  if (part.command_trajectory.size() == 0) {
+  if (parts.empty()) {
     return absl::InvalidArgumentError(
-        "TrajectoryTracker requires a non-empty trajectory.");
+        "TrajectoryTracker requires at least one part.");
   }
-  if (part.command_trajectory.data().front().position.size() !=
-      part.system_limits.size()) {
+  if (parts.size() > kMaxNumParts) {
     return absl::InvalidArgumentError(
-        absl::StrCat("Dimension mismatch between trajectory, which is ",
-                     part.command_trajectory.data().front().position.size(),
-                     " and limits, which is ", part.system_limits.size()));
+        absl::StrCat("TrajectoryTracker supports at most ", kMaxNumParts,
+                     " parts (got ", parts.size(), ")."));
   }
 
-  // Loop through discretized trajectory and check it against limits.
-  for (size_t k = 0; k < part.command_trajectory.size(); ++k) {
-    const JointStatePVA& state = part.command_trajectory.data().at(k);
-    INTRINSIC_RT_ASSIGN_OR_RETURN(auto limit_check_result,
-                                  IsWithinLimits(state, part.system_limits));
-    if (!limit_check_result.p_ok) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("Provided joint trajectory violates joint position "
-                       "limits at index ",
-                       k));
-    } else if (!limit_check_result.v_ok) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("Provided joint trajectory violates joint velocity "
-                       "limits at index ",
-                       k));
-    } else if (!limit_check_result.a_ok &&
-               part.command_trajectory.joint_dynamic_limits_check_mode() ==
-                   DynamicLimitsCheckMode::kCheckJointAcceleration) {
-      return absl::InvalidArgumentError(absl::StrCat(
-          "Provided joint trajectory violates joint acceleration limits at "
-          "index ",
-          k));
+  absl::flat_hash_map<RealtimeSlotId, size_t> part_index_by_slot_id;
+  FixedVector<ArmPartState, kMaxNumParts> arm_part_states;
+  std::vector<TrajectoryAndLimits> part_trajectories_and_limits;
+  part_trajectories_and_limits.reserve(parts.size());
+  size_t current_joint_offset = 0;
+
+  for (size_t i = 0; i < parts.size(); ++i) {
+    PartParams& part = parts[i];
+    if (parts.size() > 1 &&
+        part.command_trajectory.joint_dynamic_limits_check_mode() ==
+            DynamicLimitsCheckMode::kCheckNone) {
+      return absl::UnimplementedError(absl::StrCat(
+          "Multi-part trajectory tracking with "
+          "DynamicLimitsCheckMode::kCheckNone (torque-limit checking) is not "
+          "supported (part ",
+          i, ", slot ", part.slot_id.value(), ")."));
     }
+    const auto [existing, inserted] =
+        part_index_by_slot_id.try_emplace(part.slot_id, i);
+    if (!inserted) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Duplicate slot_id ", part.slot_id.value(), " found between part ",
+          existing->second, " and part ", i, "."));
+    }
+    if (!part.planning_limits.IsSizeConsistent()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Planning limits are inconsistent in size (part ", i,
+                       ", slot ", part.slot_id.value(), ")."));
+    }
+    if (part.planning_limits.size() != part.system_limits.size()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Dimension mismatch between planning limits, which is ",
+          part.planning_limits.size(), " and system limits, which is ",
+          part.system_limits.size(), " (part ", i, ", slot ",
+          part.slot_id.value(), ")."));
+    }
+    if (part.command_trajectory.size() == 0) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "TrajectoryTracker requires a non-empty trajectory (part ", i,
+          ", slot ", part.slot_id.value(), ")."));
+    }
+    if (part.command_trajectory.data().front().position.size() !=
+        part.system_limits.size()) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Dimension mismatch between trajectory, which is ",
+                       part.command_trajectory.data().front().position.size(),
+                       " and limits, which is ", part.system_limits.size(),
+                       " (part ", i, ", slot ", part.slot_id.value(), ")."));
+    }
+
+    // Check the trajectory against Cartesian limits if possible.
+    if (part.generic_config.has_cartesian_limits_config() &&
+        part.generic_config.has_manipulator_kinematics_config()) {
+      INTR_ASSIGN_OR_RETURN(
+          CartesianLimits cartesian_limits,
+          FromProto(part.generic_config.cartesian_limits_config()
+                        .default_cartesian_limits()),
+          _ << " (part " << i << ", slot " << part.slot_id.value() << ")");
+      INTR_ASSIGN_OR_RETURN(
+          std::unique_ptr<intrinsic::kinematics::Skeleton> skeleton,
+          intrinsic::kinematics::FromProto(
+              part.generic_config.manipulator_kinematics_config().skeleton()),
+          _ << " (part " << i << ", slot " << part.slot_id.value() << ")");
+      INTR_ASSIGN_OR_RETURN(
+          kinematics::Chain chain,
+          kinematics::ExtractNonBranchingChain(*skeleton),
+          _ << " (part " << i << ", slot " << part.slot_id.value() << ")");
+      INTR_RETURN_IF_ERROR(intrinsic::IsTrajectoryWithinCartesianPositionLimits(
+          chain, cartesian_limits, part.command_trajectory))
+          << " (part " << i << ", slot " << part.slot_id.value() << ")";
+    }
+
+    std::optional<std::vector<double>> cartesian_arc_lengths;
+    if (part.command_trajectory.HasCartesianArcLength()) {
+      cartesian_arc_lengths.emplace(
+          part.command_trajectory.cartesian_arc_lengths()->begin(),
+          part.command_trajectory.cartesian_arc_lengths()->end());
+    }
+
+    const size_t ndof = part.system_limits.size();
+    arm_part_states.push_back(ArmPartState{
+        .slot_id = part.slot_id,
+        .joint_offset = current_joint_offset,
+        .ndof = ndof,
+        .cartesian_arc_lengths = std::move(cartesian_arc_lengths),
+        .planning_limits = std::move(part.planning_limits),
+        .system_limits = part.system_limits,
+    });
+    current_joint_offset += ndof;
+    part_trajectories_and_limits.push_back(TrajectoryAndLimits{
+        .trajectory = std::move(part.command_trajectory),
+        .limits = std::move(part.system_limits),
+    });
   }
 
-  // Check the trajectory against Cartesian limits if possible.
-  if (part.generic_config.has_cartesian_limits_config() &&
-      part.generic_config.has_manipulator_kinematics_config()) {
-    INTR_ASSIGN_OR_RETURN(
-        CartesianLimits cartesian_limits,
-        icon::FromProto(part.generic_config.cartesian_limits_config()
-                            .default_cartesian_limits()));
-    INTR_ASSIGN_OR_RETURN(
-        std::unique_ptr<intrinsic::kinematics::Skeleton> skeleton,
-        intrinsic::kinematics::FromProto(
-            part.generic_config.manipulator_kinematics_config().skeleton()));
-    INTR_ASSIGN_OR_RETURN(kinematics::Chain chain,
-                          kinematics::ExtractNonBranchingChain(*skeleton));
-    INTR_RETURN_IF_ERROR(intrinsic::IsTrajectoryWithinCartesianPositionLimits(
-        chain, cartesian_limits, part.command_trajectory));
-  }
+  // Merge all parts' trajectories and check discretized samples against each
+  // part's system limits.
+  INTR_ASSIGN_OR_RETURN(
+      TrajectoryAndLimits merged,
+      MergeTrajectoriesAndLimits(std::move(part_trajectories_and_limits)));
 
   // If the commanded trajectory is torque-limited, we construct a rigid body
   // interface for the trajectory player to be able to play it while
-  // respecting torque-limits.
-  std::unique_ptr<icon::RigidBodyInterface> rigid_body_interface = nullptr;
-  if (part.command_trajectory.joint_dynamic_limits_check_mode() ==
+  // respecting torque-limits (`kCheckNone` is rejected above for multiple
+  // parts).
+  std::unique_ptr<RigidBodyInterface> rigid_body_interface = nullptr;
+  if (merged.trajectory.joint_dynamic_limits_check_mode() ==
           DynamicLimitsCheckMode::kCheckNone &&
-      part.generic_config.has_manipulator_kinematics_config()) {
+      parts[0].generic_config.has_manipulator_kinematics_config()) {
     INTR_ASSIGN_OR_RETURN(
         std::unique_ptr<intrinsic::kinematics::Skeleton> skeleton,
         intrinsic::kinematics::FromProto(
-            part.generic_config.manipulator_kinematics_config().skeleton()));
-    INTR_ASSIGN_OR_RETURN(
-        rigid_body_interface,
-        icon::CreateRoboticsLibraryDynamics(std::move(skeleton)));
+            parts[0]
+                .generic_config.manipulator_kinematics_config()
+                .skeleton()));
+    INTR_ASSIGN_OR_RETURN(rigid_body_interface,
+                          CreateRoboticsLibraryDynamics(std::move(skeleton)));
   }
 
-  INTR_ASSIGN_OR_RETURN(
-      std::unique_ptr<TrajectoryResidualController> residual_controller,
-      TrajectoryResidualController::Create(frequency_hz, part.planning_limits,
-                                           part.system_limits));
+  for (size_t i = 0; i < arm_part_states.size(); ++i) {
+    ArmPartState& arm = arm_part_states[i];
+    INTR_ASSIGN_OR_RETURN(
+        arm.residual_controller,
+        TrajectoryResidualController::Create(frequency_hz, arm.planning_limits,
+                                             arm.system_limits),
+        _ << " (part " << i << ", slot " << arm.slot_id.value() << ")");
+    INTR_ASSIGN_OR_RETURN(
+        arm.is_settled_criterion, IsSettledCriterion::Create(frequency_hz),
+        _ << " (part " << i << ", slot " << arm.slot_id.value() << ")");
+  }
   INTR_ASSIGN_OR_RETURN(
       std::unique_ptr<TrajectoryPlayer> trajectory_player,
       TrajectoryPlayer::Create(
-          std::move(part.command_trajectory), absl::Seconds(1. / frequency_hz),
-          part.system_limits, std::move(rigid_body_interface)));
-  INTR_ASSIGN_OR_RETURN(std::unique_ptr<IsSettledCriterion> settled_criterion,
-                        IsSettledCriterion::Create(frequency_hz));
+          std::move(merged.trajectory), absl::Seconds(1. / frequency_hz),
+          std::move(merged.limits), std::move(rigid_body_interface)));
 
-  ArmPartState arm{
-      .slot_id = part.slot_id,
-      .residual_controller = std::move(residual_controller),
-      .is_settled_criterion = std::move(settled_criterion),
-      .planning_limits = part.planning_limits,
-      .system_limits = part.system_limits,
-  };
-
-  return absl::WrapUnique(
-      new TrajectoryTracker(std::move(trajectory_player), std::move(arm)));
+  return absl::WrapUnique(new TrajectoryTracker(std::move(trajectory_player),
+                                                std::move(arm_part_states)));
 }
 
 TrajectoryTracker::TrajectoryTracker(
-    std::unique_ptr<TrajectoryPlayer> trajectory_player, ArmPartState arm)
-    : trajectory_player_(std::move(trajectory_player)), arm_(std::move(arm)) {}
+    std::unique_ptr<TrajectoryPlayer> trajectory_player,
+    FixedVector<ArmPartState, kMaxNumParts> arm_part_states)
+    : trajectory_player_(std::move(trajectory_player)),
+      arm_part_states_(std::move(arm_part_states)) {}
 
 void TrajectoryTracker::SetPathAccurateStopRequested() {
   // This is a one-way latch; once requested, path_accurate_stop_requested_
@@ -203,11 +273,13 @@ void TrajectoryTracker::SetPathAccurateStopRequested() {
   (void)trajectory_player_->SetDesiredSpeedOverrideFactor(0.0);
 }
 
-RealtimeStatus TrajectoryTracker::OnEnter(double global_speed_override,
+RealtimeStatus TrajectoryTracker::OnEnter(const double global_speed_override,
                                           const RealtimeSlotMap& slot_map) {
-  // The final state residual will be computed and used after the trajectory
-  // has been finished.
-  arm_.final_state_residual = std::nullopt;
+  for (ArmPartState& arm : arm_part_states_) {
+    // The final state residual will be computed and used after the trajectory
+    // has been finished.
+    arm.final_state_residual = std::nullopt;
+  }
 
   trajectory_player_->ResetPhase();
   // Initialize the trajectory player to currently active speed override
@@ -216,85 +288,108 @@ RealtimeStatus TrajectoryTracker::OnEnter(double global_speed_override,
   INTRINSIC_RT_RETURN_IF_ERROR(
       trajectory_player_->ForceSpeedOverrideFactor(global_speed_override));
 
-  const JointPosition* const joint_position_interface =
-      slot_map.GetInterfaceForSlot<JointPosition>(arm_.slot_id);
-  if (joint_position_interface == nullptr) {
-    return icon::InternalError("Slot doesn't have JointPosition.");
+  for (size_t i = 0; i < arm_part_states_.size(); ++i) {
+    ArmPartState& arm = arm_part_states_[i];
+    const JointPosition* const joint_position_interface =
+        slot_map.GetInterfaceForSlot<JointPosition>(arm.slot_id);
+    if (joint_position_interface == nullptr) {
+      return InternalError(
+          RealtimeStatus::StrCat("Slot doesn't have JointPosition (part ", i,
+                                 ", slot ", arm.slot_id.value(), ")."));
+    }
+
+    const JointPositionCommand& previous_position_setpoints =
+        joint_position_interface->PreviousPositionSetpoints();
+    const size_t ndof = previous_position_setpoints.position().size();
+
+    JointStatePVA previous_joint_setpoint;
+    INTRINSIC_RT_RETURN_IF_ERROR(previous_joint_setpoint.SetSize(ndof));
+    previous_joint_setpoint.position = previous_position_setpoints.position();
+
+    // If there is no velocity feedforward available in the previous command,
+    // we set the starting velocity to the sensed velocity. This should only
+    // happen once, in the very first control cycle of this action.
+    const auto* const sensed_velocity =
+        slot_map.GetInterfaceForSlot<JointVelocityEstimator>(arm.slot_id);
+    if (sensed_velocity == nullptr) {
+      return InternalError(RealtimeStatus::StrCat(
+          "Slot does not have JointVelocityEstimator (part ", i, ", slot ",
+          arm.slot_id.value(), ")"));
+    }
+    previous_joint_setpoint.velocity =
+        previous_position_setpoints.velocity_feedforward().value_or(
+            sensed_velocity->GetVelocityEstimate().velocity);
+
+    // If there is no acceleration feedforward available in the previous
+    // command, we set the starting acceleration to zero. This should only
+    // happen once, in the very first control cycle of this action.
+    // TODO(b/370698109): this can lead to very high jerk values and
+    // potentially jerk limit violation.
+    previous_joint_setpoint.acceleration =
+        previous_position_setpoints.acceleration_feedforward().value_or(
+            eigenmath::VectorNd::Zero(ndof));
+
+    // Set the initial state residual.
+    INTRINSIC_RT_ASSIGN_OR_RETURN(
+        arm.initial_state_residual,
+        DesignInitialStateResidual(trajectory_player_->GetTrajectory(),
+                                   arm.joint_offset, arm.ndof,
+                                   previous_joint_setpoint),
+        "Part ", i, " (slot ", arm.slot_id.value(), ")");
+
+    const double max_position_deviation =
+        arm.initial_state_residual.position.cwiseAbs().maxCoeff();
+    if (max_position_deviation >
+        TrajectoryTrackingActionInfo::kMaxInitialJointPositionDeviation) {
+      return FailedPreconditionError(RealtimeStatus::StrCat(
+          "Difference between previous setpoint and position command (",
+          max_position_deviation, ") exceeds ",
+          TrajectoryTrackingActionInfo::kMaxInitialJointPositionDeviation,
+          " (part ", i, ", slot ", arm.slot_id.value(), ")"));
+    }
+
+    const double max_velocity_deviation =
+        arm.initial_state_residual.velocity.cwiseAbs().maxCoeff();
+    if (max_velocity_deviation >
+        TrajectoryTrackingActionInfo::kMaxInitialJointVelocityDeviation) {
+      return FailedPreconditionError(RealtimeStatus::StrCat(
+          "Difference between previous setpoint and velocity command (",
+          max_velocity_deviation, ") exceeds ",
+          TrajectoryTrackingActionInfo::kMaxInitialJointVelocityDeviation,
+          " (part ", i, ", slot ", arm.slot_id.value(), ")"));
+    }
+
+    arm.distance_to_final_setpoint = std::numeric_limits<double>::max();
+    arm.is_settled = false;
+    INTRINSIC_RT_RETURN_IF_ERROR(arm.is_settled_criterion->Initialize());
   }
 
-  const JointPositionCommand& previous_position_setpoints =
-      joint_position_interface->PreviousPositionSetpoints();
-  const size_t ndof = previous_position_setpoints.position().size();
-
-  JointStatePVA previous_joint_setpoint;
-  INTRINSIC_RT_RETURN_IF_ERROR(previous_joint_setpoint.SetSize(ndof));
-  previous_joint_setpoint.position = previous_position_setpoints.position();
-
-  // If there is no velocity feedforward available in the previous command,
-  // we set the starting velocity to the sensed velocity. This should only
-  // happen once, in the very first control cycle of this action.
-  const auto* sensed_velocity =
-      slot_map.GetInterfaceForSlot<JointVelocityEstimator>(arm_.slot_id);
-  if (sensed_velocity == nullptr) {
-    return icon::InternalError("Slot does not have JointVelocityEstimator");
-  }
-  previous_joint_setpoint.velocity =
-      previous_position_setpoints.velocity_feedforward().value_or(
-          sensed_velocity->GetVelocityEstimate().velocity);
-
-  // If there is no acceleration feedforward available in the previous
-  // command, we set the starting acceleration to zero. This should only
-  // happen once, in the very first control cycle of this action.
-  // TODO(b/370698109): this can lead to very high jerk values and
-  // potentially jerk limit violation.
-  previous_joint_setpoint.acceleration =
-      previous_position_setpoints.acceleration_feedforward().value_or(
-          eigenmath::VectorNd::Zero(ndof));
-
-  // Set the initial state residual.
-  INTRINSIC_RT_ASSIGN_OR_RETURN(
-      arm_.initial_state_residual,
-      DesignInitialStateResidual(trajectory_player_->GetTrajectory(),
-                                 previous_joint_setpoint));
-
-  if (arm_.initial_state_residual.position.cwiseAbs().maxCoeff() >
-      TrajectoryTrackingActionInfo::kMaxInitialJointPositionDeviation) {
-    return icon::FailedPreconditionError(icon::RealtimeStatus::StrCat(
-        "Difference between previous setpoint and position command (",
-        arm_.initial_state_residual.position.cwiseAbs().maxCoeff(),
-        ") exceeds ",
-        TrajectoryTrackingActionInfo::kMaxInitialJointPositionDeviation));
-  }
-
-  if (arm_.initial_state_residual.velocity.cwiseAbs().maxCoeff() >
-      TrajectoryTrackingActionInfo::kMaxInitialJointVelocityDeviation) {
-    return icon::FailedPreconditionError(icon::RealtimeStatus::StrCat(
-        "Difference between previous setpoint and velocity command (",
-        arm_.initial_state_residual.velocity.cwiseAbs().maxCoeff(),
-        ") exceeds ",
-        TrajectoryTrackingActionInfo::kMaxInitialJointVelocityDeviation));
-  }
-
-  arm_.distance_to_final_setpoint = std::numeric_limits<double>::max();
   trajectory_done_for_seconds_ = 0.0;
   wall_time_passed_since_trajectory_start_ = 0.0;
-  arm_.is_settled = false;
-  INTRINSIC_RT_RETURN_IF_ERROR(arm_.is_settled_criterion->Initialize());
 
-  return icon::OkStatus();
+  return OkStatus();
 }
 
 RealtimeStatus TrajectoryTracker::Sense(const RealtimeSlotMap& slot_map) {
   // Update distance to final setpoint.
-  const auto* sensed_joint_position =
-      slot_map.GetInterfaceForSlot<JointPositionSensor>(arm_.slot_id);
-  if (sensed_joint_position == nullptr) {
-    return icon::InternalError("Slot does not have JointPositionSensor");
+  const JointStatePVA& final_state =
+      trajectory_player_->GetTrajectory().data().back();
+  for (size_t i = 0; i < arm_part_states_.size(); ++i) {
+    ArmPartState& arm = arm_part_states_[i];
+    const auto* const sensed_joint_position =
+        slot_map.GetInterfaceForSlot<JointPositionSensor>(arm.slot_id);
+    if (sensed_joint_position == nullptr) {
+      return InternalError(RealtimeStatus::StrCat(
+          "Slot does not have JointPositionSensor (part ", i, ", slot ",
+          arm.slot_id.value(), ")"));
+    }
+    // Create() + MergeTrajectoriesAndLimits() guarantee that
+    // [joint_offset, joint_offset + ndof) partitions every merged sample.
+    arm.distance_to_final_setpoint =
+        (sensed_joint_position->GetSensedPosition().position -
+         final_state.position.segment(arm.joint_offset, arm.ndof))
+            .norm();
   }
-  arm_.distance_to_final_setpoint =
-      (sensed_joint_position->GetSensedPosition().position -
-       trajectory_player_->GetTrajectory().data().back().position)
-          .norm();
 
   const bool is_done = IsDone();
   if (is_done) {
@@ -309,43 +404,59 @@ RealtimeStatus TrajectoryTracker::Sense(const RealtimeSlotMap& slot_map) {
       absl::ToDoubleSeconds(trajectory_player_->GetControlSamplingTime());
 
   // Update the settled state estimator with new measurements.
-  const JointPosition* position_command =
-      slot_map.GetInterfaceForSlot<JointPosition>(arm_.slot_id);
-  if (position_command == nullptr) {
-    return icon::FailedPreconditionError(
-        "Slot does not have JointPosition feature interface");
-  }
-  CHECK(position_command->PreviousPositionSetpoints()
-            .velocity_feedforward()
-            .has_value());
+  for (size_t i = 0; i < arm_part_states_.size(); ++i) {
+    ArmPartState& arm = arm_part_states_[i];
+    const JointPosition* const position_command =
+        slot_map.GetInterfaceForSlot<JointPosition>(arm.slot_id);
+    if (position_command == nullptr) {
+      return FailedPreconditionError(RealtimeStatus::StrCat(
+          "Slot does not have JointPosition feature interface (part ", i,
+          ", slot ", arm.slot_id.value(), ")"));
+    }
+    CHECK(position_command->PreviousPositionSetpoints()
+              .velocity_feedforward()
+              .has_value());
 
-  const auto* sensed_velocity =
-      slot_map.GetInterfaceForSlot<JointVelocityEstimator>(arm_.slot_id);
-  if (sensed_velocity == nullptr) {
-    return icon::InternalError("Slot does not have JointVelocityEstimator");
+    const auto* const sensed_velocity =
+        slot_map.GetInterfaceForSlot<JointVelocityEstimator>(arm.slot_id);
+    if (sensed_velocity == nullptr) {
+      return InternalError(RealtimeStatus::StrCat(
+          "Slot does not have JointVelocityEstimator (part ", i, ", slot ",
+          arm.slot_id.value(), ")"));
+    }
+
+    const bool was_settled = arm.is_settled;
+    INTRINSIC_RT_ASSIGN_OR_RETURN(
+        arm.is_settled,
+        arm.is_settled_criterion->Update(
+            sensed_velocity->GetVelocityEstimate().velocity,
+            position_command->PreviousPositionSetpoints()
+                .velocity_feedforward()
+                .value(),
+            /*has_trajectory_ended=*/is_done),
+        "Part ", i, " (slot ", arm.slot_id.value(), ")");
+    if (!was_settled && arm.is_settled) {
+      INTRINSIC_RT_LOG(INFO) << "Trajectory settled for part " << i
+                             << " (slot_id: " << arm.slot_id.value() << ").";
+    }
   }
 
-  INTRINSIC_RT_ASSIGN_OR_RETURN(
-      arm_.is_settled, arm_.is_settled_criterion->Update(
-                           sensed_velocity->GetVelocityEstimate().velocity,
-                           position_command->PreviousPositionSetpoints()
-                               .velocity_feedforward()
-                               .value(),
-                           /*has_trajectory_ended=*/is_done));
-  if (arm_.is_settled) {
-    INTRINSIC_RT_LOG_THROTTLED(INFO)
-        << "Trajectory settled (slot_id: " << arm_.slot_id.value() << ").";
-  }
-
-  return icon::OkStatus();
+  return OkStatus();
 }
 
-RealtimeStatus TrajectoryTracker::Control(double combined_speed_override_factor,
-                                          RealtimeSlotMap& slot_map) {
-  JointPosition* const joint_position_interface =
-      slot_map.GetMutableInterfaceForSlot<JointPosition>(arm_.slot_id);
-  if (joint_position_interface == nullptr) {
-    return icon::InternalError("Slot doesn't have JointPosition.");
+RealtimeStatus TrajectoryTracker::Control(
+    const double combined_speed_override_factor, RealtimeSlotMap& slot_map) {
+  FixedVector<JointPosition*, kMaxNumParts> joint_position_interfaces;
+  for (size_t i = 0; i < arm_part_states_.size(); ++i) {
+    const ArmPartState& arm = arm_part_states_[i];
+    JointPosition* const joint_position_interface =
+        slot_map.GetMutableInterfaceForSlot<JointPosition>(arm.slot_id);
+    if (joint_position_interface == nullptr) {
+      return InternalError(
+          RealtimeStatus::StrCat("Slot doesn't have JointPosition (part ", i,
+                                 ", slot ", arm.slot_id.value(), ")."));
+    }
+    joint_position_interfaces.push_back(joint_position_interface);
   }
 
   // If a path accurate stop is requested, the speed override is overwritten
@@ -362,102 +473,131 @@ RealtimeStatus TrajectoryTracker::Control(double combined_speed_override_factor,
   const bool is_done = IsDone();
 
   // Evaluate the new reference state according to the trajectory.
-  INTRINSIC_RT_ASSIGN_OR_RETURN(JointStatePVA new_trajectory_reference_state,
+  INTRINSIC_RT_ASSIGN_OR_RETURN(JointStatePVA merged_reference_state,
                                 trajectory_player_->GetNextState());
 
   const JointTrajectoryPVA& trajectory = trajectory_player_->GetTrajectory();
 
-  if (is_done) {
-    // We need to account for the fact that the commanded trajectory may not
-    // exactly end with zero velocity or acceleration. Since we should
-    // effectively reach a steady-state if there is no follow-up action, we
-    // need to actively enforce zero velocity and acceleration once the full
-    // trajectory has been played back and is therefore "done". The residual
-    // controller is then used to eliminate a "final" residual, e.g. a
-    // non-zero terminal velocity/acceleration in the trajectory. We
-    // initialize the final residual controller once.
-    if (!arm_.final_state_residual.has_value()) {
-      arm_.final_state_residual = JointStatePVA();
-      INTRINSIC_RT_RETURN_IF_ERROR(arm_.final_state_residual->SetSize(
-          new_trajectory_reference_state.size()));
-      // We would like to converge to the position of the last trajectory
-      // datapoint, so the final residual position just needs to take over
-      // the remaining "initial" position residual.
-      arm_.final_state_residual->position =
-          arm_.initial_state_residual.position;
-      // Start from the final velocity and acceleration setpoint
-      // interpolated from the trajectory, and add the remaining residual
-      // from the initial state. This total residual will subsequently be
-      // brought to zero using the full planning limits.
-      arm_.final_state_residual->velocity =
-          new_trajectory_reference_state.velocity +
-          arm_.initial_state_residual.velocity;
-      if (IsTrajectoryJerkLimited(trajectory)) {
-        arm_.final_state_residual->acceleration =
-            new_trajectory_reference_state.acceleration +
-            arm_.initial_state_residual.acceleration;
-      } else {
-        arm_.final_state_residual->acceleration.setZero();
+  FixedVector<JointPositionCommand, kMaxNumParts> new_joint_position_commands;
+  for (size_t i = 0; i < arm_part_states_.size(); ++i) {
+    ArmPartState& arm = arm_part_states_[i];
+    JointStatePVA new_trajectory_reference_state;
+    INTRINSIC_RT_RETURN_IF_ERROR(
+        new_trajectory_reference_state.SetSize(arm.ndof));
+    // Create() + MergeTrajectoriesAndLimits() guarantee that
+    // [joint_offset, joint_offset + ndof) partitions the merged trajectory,
+    // and TrajectoryPlayer::GetNextState() preserves that dimension.
+    new_trajectory_reference_state.position =
+        merged_reference_state.position.segment(arm.joint_offset, arm.ndof);
+    new_trajectory_reference_state.velocity =
+        merged_reference_state.velocity.segment(arm.joint_offset, arm.ndof);
+    new_trajectory_reference_state.acceleration =
+        merged_reference_state.acceleration.segment(arm.joint_offset, arm.ndof);
+
+    if (is_done) {
+      // We need to account for the fact that the commanded trajectory may not
+      // exactly end with zero velocity or acceleration. Since we should
+      // effectively reach a steady-state if there is no follow-up action, we
+      // need to actively enforce zero velocity and acceleration once the full
+      // trajectory has been played back and is therefore "done". The residual
+      // controller is then used to eliminate a "final" residual, e.g. a
+      // non-zero terminal velocity/acceleration in the trajectory. We
+      // initialize the final residual controller once.
+      if (!arm.final_state_residual.has_value()) {
+        arm.final_state_residual = JointStatePVA();
+        INTRINSIC_RT_RETURN_IF_ERROR(arm.final_state_residual->SetSize(
+            new_trajectory_reference_state.size()));
+        // We would like to converge to the position of the last trajectory
+        // datapoint, so the final residual position just needs to take over
+        // the remaining "initial" position residual.
+        arm.final_state_residual->position =
+            arm.initial_state_residual.position;
+        // Start from the final velocity and acceleration setpoint
+        // interpolated from the trajectory, and add the remaining residual
+        // from the initial state. This total residual will subsequently be
+        // brought to zero using the full planning limits.
+        arm.final_state_residual->velocity =
+            new_trajectory_reference_state.velocity +
+            arm.initial_state_residual.velocity;
+        if (IsTrajectoryJerkLimited(trajectory)) {
+          arm.final_state_residual->acceleration =
+              new_trajectory_reference_state.acceleration +
+              arm.initial_state_residual.acceleration;
+        } else {
+          arm.final_state_residual->acceleration.setZero();
+        }
+      }
+      // New reference velocity and acceleration get set to zero. This needs
+      // to happen after the initialization of the final_state_residual_.
+      new_trajectory_reference_state.velocity.setZero();
+      new_trajectory_reference_state.acceleration.setZero();
+    }
+
+    JointStatePVA filtered_reference = new_trajectory_reference_state;
+    // The actual command is a superposition of reference state and residual.
+    // Update and include initial state residual as long as the trajectory has
+    // not been played back to its end.
+    if (!arm.final_state_residual.has_value()) {
+      INTRINSIC_RT_ASSIGN_OR_RETURN(
+          arm.initial_state_residual,
+          arm.residual_controller->ComputeResidualUsingLimitMargin(
+              arm.initial_state_residual),
+          "Part ", i, " (slot ", arm.slot_id.value(), ")");
+      filtered_reference.position += arm.initial_state_residual.position;
+      filtered_reference.velocity += arm.initial_state_residual.velocity;
+      filtered_reference.acceleration +=
+          arm.initial_state_residual.acceleration;
+    } else {
+      // Final state of the trajectory has been reached, update and include
+      // final state residual. Since the residual compensation remains the
+      // only motion, use planning limits.
+      INTRINSIC_RT_ASSIGN_OR_RETURN(
+          arm.final_state_residual,
+          arm.residual_controller->ComputeResidualUsingPlanningLimits(
+              *arm.final_state_residual),
+          "Part ", i, " (slot ", arm.slot_id.value(), ")");
+      filtered_reference.position += arm.final_state_residual->position;
+      filtered_reference.velocity += arm.final_state_residual->velocity;
+      filtered_reference.acceleration += arm.final_state_residual->acceleration;
+    }
+
+    // Polynomial splining (as used by the trajectory player) may lead to
+    // slight oscillations at the acceleration level, which might sometimes
+    // surpass the maximum acceleration limits. This is not a critical
+    // failure, can be tolerated, and trajectory execution may proceed as
+    // intended. To avoid a failure at the HAL level (which strictly checks
+    // the acceleration), we saturate the joint acceleration command ONLY for
+    // acceleration-limited trajectories. In jerk-limited trajectories, this
+    // is not enforced as it could induce an actual jerk-limit violation.
+    // TODO(b/371952663): Remove once fine interpolation for acceleration
+    // limited trajectories is limit-aware at the acceleration level.
+    if (!IsTrajectoryJerkLimited(trajectory)) {
+      if (!eigenmath::ClampVector(-arm.system_limits.max_acceleration,
+                                  arm.system_limits.max_acceleration,
+                                  filtered_reference.acceleration)) {
+        return InternalError(RealtimeStatus::StrCat(
+            "Clamping joint accelerations to limits failed (part ", i,
+            ", slot ", arm.slot_id.value(), ")."));
       }
     }
-    // New reference velocity and acceleration get set to zero. This needs
-    // to happen after the initialization of the final_state_residual_.
-    new_trajectory_reference_state.velocity.setZero();
-    new_trajectory_reference_state.acceleration.setZero();
-  }
 
-  JointStatePVA filtered_reference = new_trajectory_reference_state;
-  // The actual command is a superposition of reference state and residual.
-  // Update and include initial state residual as long as the trajectory has
-  // not been played back to its end.
-  if (!arm_.final_state_residual.has_value()) {
     INTRINSIC_RT_ASSIGN_OR_RETURN(
-        arm_.initial_state_residual,
-        arm_.residual_controller->ComputeResidualUsingLimitMargin(
-            arm_.initial_state_residual));
-    filtered_reference.position += arm_.initial_state_residual.position;
-    filtered_reference.velocity += arm_.initial_state_residual.velocity;
-    filtered_reference.acceleration += arm_.initial_state_residual.acceleration;
-  } else {
-    // Final state of the trajectory has been reached, update and include
-    // final state residual. Since the residual compensation remains the
-    // only motion, use planning limits.
-    INTRINSIC_RT_ASSIGN_OR_RETURN(
-        arm_.final_state_residual,
-        arm_.residual_controller->ComputeResidualUsingPlanningLimits(
-            *arm_.final_state_residual));
-    filtered_reference.position += arm_.final_state_residual->position;
-    filtered_reference.velocity += arm_.final_state_residual->velocity;
-    filtered_reference.acceleration += arm_.final_state_residual->acceleration;
+        JointPositionCommand new_joint_position_command,
+        JointPositionCommand::Create(
+            filtered_reference.position, filtered_reference.velocity,
+            filtered_reference.acceleration,
+            trajectory.joint_dynamic_limits_check_mode()),
+        "Part ", i, " (slot ", arm.slot_id.value(), ")");
+    new_joint_position_commands.push_back(
+        std::move(new_joint_position_command));
   }
 
-  // Polynomial splining (as used by the trajectory player) may lead to
-  // slight oscillations at the acceleration level, which might sometimes
-  // surpass the maximum acceleration limits. This is not a critical
-  // failure, can be tolerated, and trajectory execution may proceed as
-  // intended. To avoid a failure at the HAL level (which strictly checks
-  // the acceleration), we saturate the joint acceleration command ONLY for
-  // acceleration-limited trajectories. In jerk-limited trajectories, this
-  // is not enforced as it could induce an actual jerk-limit violation.
-  // TODO(b/371952663): Remove once fine interpolation for acceleration
-  // limited trajectories is limit-aware at the acceleration level.
-  if (!IsTrajectoryJerkLimited(trajectory)) {
-    if (!eigenmath::ClampVector(-arm_.system_limits.max_acceleration,
-                                arm_.system_limits.max_acceleration,
-                                filtered_reference.acceleration)) {
-      return icon::InternalError(
-          "Clamping joint accelerations to limits failed.");
-    }
+  for (size_t i = 0; i < arm_part_states_.size(); ++i) {
+    INTRINSIC_RT_RETURN_IF_ERROR(
+        joint_position_interfaces[i]->SetPositionSetpoints(
+            new_joint_position_commands[i]));
   }
-
-  INTRINSIC_RT_ASSIGN_OR_RETURN(
-      JointPositionCommand new_joint_position_command,
-      JointPositionCommand::Create(
-          filtered_reference.position, filtered_reference.velocity,
-          filtered_reference.acceleration,
-          trajectory.joint_dynamic_limits_check_mode()));
-  return joint_position_interface->SetPositionSetpoints(
-      new_joint_position_command);
+  return OkStatus();
 }
 
 bool TrajectoryTracker::IsDone() const {
@@ -471,8 +611,72 @@ bool TrajectoryTracker::IsDone() const {
   return 1.0 - phase < kDoubleEqThreshold;
 }
 
-RealtimeStatusOr<double> TrajectoryTracker::GetCartesianArcLength() const {
-  return trajectory_player_->GetCartesianArcLength();
+namespace {
+
+RealtimeStatus CheckPartIndex(const size_t part_index, const size_t num_parts) {
+  if (part_index >= num_parts) {
+    return OutOfRangeError(RealtimeStatus::StrCat(
+        "Part index ", part_index, " is out of range [0, ", num_parts, ")"));
+  }
+  return OkStatus();
+}
+
+}  // namespace
+
+RealtimeStatusOr<bool> TrajectoryTracker::IsSettled(
+    const size_t part_index) const {
+  INTRINSIC_RT_RETURN_IF_ERROR(
+      CheckPartIndex(part_index, arm_part_states_.size()));
+  return arm_part_states_[part_index].is_settled;
+}
+
+RealtimeStatusOr<double> TrajectoryTracker::GetIsSettledUncertainty(
+    const size_t part_index) const {
+  INTRINSIC_RT_RETURN_IF_ERROR(
+      CheckPartIndex(part_index, arm_part_states_.size()));
+  return arm_part_states_[part_index].is_settled_criterion->GetUncertainty();
+}
+
+RealtimeStatusOr<double> TrajectoryTracker::GetDistanceToFinalSetpoint(
+    const size_t part_index) const {
+  INTRINSIC_RT_RETURN_IF_ERROR(
+      CheckPartIndex(part_index, arm_part_states_.size()));
+  return arm_part_states_[part_index].distance_to_final_setpoint;
+}
+
+RealtimeStatusOr<double> TrajectoryTracker::GetCartesianArcLength(
+    const size_t part_index) const {
+  INTRINSIC_RT_RETURN_IF_ERROR(
+      CheckPartIndex(part_index, arm_part_states_.size()));
+  const std::optional<std::vector<double>>& arc_lengths =
+      arm_part_states_[part_index].cartesian_arc_lengths;
+  if (!arc_lengths.has_value()) {
+    return FailedPreconditionError(RealtimeStatus::StrCat(
+        "Trajectory does not have Cartesian arc length (part ", part_index,
+        ", slot ", arm_part_states_[part_index].slot_id.value(), ")."));
+  }
+  const JointTrajectoryPVA& merged_trajectory =
+      trajectory_player_->GetTrajectory();
+  const double phase = trajectory_player_->GetPhase();
+  if (phase < 0.0 || phase > 1.0) {
+    return InvalidArgumentError(RealtimeStatus::StrCat(
+        "phase should be in value range [0, 1], but instead has value ", phase,
+        "."));
+  }
+  const absl::Duration time_since_start = phase * merged_trajectory.Duration();
+  const size_t lower_index = static_cast<size_t>(
+      merged_trajectory.GetLowerIndexForTime(time_since_start));
+  if (lower_index + 1 >= arc_lengths->size()) {
+    return arc_lengths->back();
+  }
+  INTRINSIC_RT_ASSIGN_OR_RETURN(const absl::Duration t_lower,
+                                merged_trajectory.TimeAt(lower_index));
+  INTRINSIC_RT_ASSIGN_OR_RETURN(const absl::Duration t_upper,
+                                merged_trajectory.TimeAt(lower_index + 1));
+  const double interpolation_fraction =
+      absl::FDivDuration(time_since_start - t_lower, t_upper - t_lower);
+  return (1.0 - interpolation_fraction) * (*arc_lengths)[lower_index] +
+         interpolation_fraction * (*arc_lengths)[lower_index + 1];
 }
 
 }  // namespace intrinsic::icon

@@ -16,6 +16,7 @@
 
 #include <memory>
 #include <utility>
+#include <vector>
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
@@ -110,16 +111,18 @@ TrajectoryTrackingAction::Create(
   // ActionInstanceId.
   context.StoreTrajectory(command.trajectory);
 
-  TrajectoryTracker::PartParams part_params{
+  std::vector<TrajectoryTracker::PartParams> parts;
+  parts.reserve(1);
+  parts.push_back(TrajectoryTracker::PartParams{
       .slot_id = arm_info.slot_id,
       .generic_config = arm_info.config.generic_config(),
       .planning_limits = std::move(planning_limits),
       .system_limits = std::move(system_limits),
       .command_trajectory = std::move(command.trajectory),
-  };
+  });
   INTR_ASSIGN_OR_RETURN(
       std::unique_ptr<TrajectoryTracker> trajectory_tracker,
-      TrajectoryTracker::Create(std::move(part_params),
+      TrajectoryTracker::Create(std::move(parts),
                                 context.ServerConfig().frequency_hz()));
 
   INTR_ASSIGN_OR_RETURN(
@@ -205,10 +208,20 @@ RealtimeStatusOr<StateVariableValue> TrajectoryTrackingAction::GetStateVariable(
     return StateVariableValue(trajectory_tracker_->IsDone());
   }
   if (name == TrajectoryTrackingActionInfo::kIsSettled) {
-    return StateVariableValue(trajectory_tracker_->IsSettled());
+    // Only a single arm part is supported in this Action, see Create(). Hence,
+    // setting part_index=0.
+    INTRINSIC_RT_ASSIGN_OR_RETURN(
+        const bool is_settled,
+        trajectory_tracker_->IsSettled(/*part_index=*/0));
+    return StateVariableValue(is_settled);
   }
   if (name == TrajectoryTrackingActionInfo::kIsSettledUncertainty) {
-    return StateVariableValue(trajectory_tracker_->GetIsSettledUncertainty());
+    // Only a single arm part is supported in this Action, see Create(). Hence,
+    // setting part_index=0.
+    INTRINSIC_RT_ASSIGN_OR_RETURN(
+        const double uncertainty,
+        trajectory_tracker_->GetIsSettledUncertainty(/*part_index=*/0));
+    return StateVariableValue(uncertainty);
   }
   if (name == TrajectoryTrackingActionInfo::kTrajectoryProgress) {
     return StateVariableValue(trajectory_tracker_->GetTrajectoryProgress());
@@ -218,8 +231,12 @@ RealtimeStatusOr<StateVariableValue> TrajectoryTrackingAction::GetStateVariable(
         trajectory_tracker_->GetTrajectoryDoneForSeconds());
   }
   if (name == TrajectoryTrackingActionInfo::kDistanceToFinalSetpoint) {
-    return StateVariableValue(
-        trajectory_tracker_->GetDistanceToFinalSetpoint());
+    // Only a single arm part is supported in this Action, see Create(). Hence,
+    // setting part_index=0.
+    INTRINSIC_RT_ASSIGN_OR_RETURN(
+        const double distance,
+        trajectory_tracker_->GetDistanceToFinalSetpoint(/*part_index=*/0));
+    return StateVariableValue(distance);
   }
   if (name == TrajectoryTrackingActionInfo::kTimeSinceTrajectoryStartSeconds) {
     return StateVariableValue(
@@ -227,8 +244,11 @@ RealtimeStatusOr<StateVariableValue> TrajectoryTrackingAction::GetStateVariable(
   }
   if (name ==
       TrajectoryTrackingActionInfo::kCartesianArcLengthAlongTrajectoryMeters) {
-    INTRINSIC_RT_ASSIGN_OR_RETURN(double cart_arc_length,
-                                  trajectory_tracker_->GetCartesianArcLength());
+    // Only a single arm part is supported in this Action, see Create(). Hence,
+    // setting part_index=0.
+    INTRINSIC_RT_ASSIGN_OR_RETURN(
+        const double cart_arc_length,
+        trajectory_tracker_->GetCartesianArcLength(/*part_index=*/0));
     return StateVariableValue(cart_arc_length);
   }
   return NotFoundError(RealtimeStatus::StrCat(
