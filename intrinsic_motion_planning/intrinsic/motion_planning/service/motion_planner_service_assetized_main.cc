@@ -62,13 +62,6 @@
 #include "intrinsic/world/proto/object_world_service.grpc.pb.h"
 #include "intrinsic/world/world.h"
 
-ABSL_FLAG(std::string, world_service_address,
-          "world.app-intrinsic-base.svc.cluster.local:8080",
-          "gRpc target for the World service");
-// TODO(b/587253361): Delete once no launcher passes this flag anymore.
-ABSL_RETIRED_FLAG(std::string, geometry_service_address,
-                  "geomservice.app-intrinsic-base.svc.cluster.local:8080",
-                  "Retired; MPS uses CAS and KeyValueStore directly.");
 ABSL_FLAG(absl::Duration, grpc_connect_timeout,
           intrinsic::connect::kGrpcClientConnectDefaultTimeout,
           "Time to wait for other grpc services to become available.");
@@ -92,13 +85,6 @@ int MainImpl() {
   OpenCensusPlugin open_census(/*service_name=*/kMotionPlannerServiceName,
                                /*use_otel_metrics=*/true);
 
-  // Initialize sub-services.
-  ASSIGN_OR_DIE(
-      std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>
-          object_world_service,
-      CreateObjectWorldServiceStub(absl::GetFlag(FLAGS_world_service_address),
-                                   absl::GetFlag(FLAGS_grpc_connect_timeout)));
-
   ASSIGN_OR_DIE(const auto context,
                 GetBinaryProto<intrinsic_proto::config::RuntimeContext>(
                     absl::GetFlag(FLAGS_runtime_context_file)));
@@ -108,6 +94,28 @@ int MainImpl() {
       UnpackAny<
           intrinsic_proto::motion_planning::v1::MotionPlannerServiceConfig>(
           context.config()));
+
+  // Initialize sub-services.
+  ASSIGN_OR_DIE(
+      auto runtime_channels,
+      intrinsic::assets::dependencies::
+          ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnly(
+              proto_config.intrinsic_runtime(),
+              {
+                  "grpc://intrinsic_proto.assets.v1.InstalledAssetsReader",
+                  "grpc://intrinsic_proto.data_logger.DataLogger",
+                  "grpc://intrinsic_proto.world.ObjectWorldService",
+              },
+              connect::UnlimitedMessageSizeGrpcChannelArgs()));
+  auto [installed_assets_reader_channel, data_logger_channel,
+        object_world_channel] = std::move(runtime_channels);
+
+  QCHECK_OK(intrinsic::connect::WaitForChannelReady(
+      object_world_channel, absl::GetFlag(FLAGS_grpc_connect_timeout)));
+  std::unique_ptr<intrinsic_proto::world::ObjectWorldService::Stub>
+      object_world_service =
+          intrinsic_proto::world::ObjectWorldService::NewStub(
+              object_world_channel);
 
   constexpr int kDefaultGeometryCacheSize = 1000;
   constexpr absl::Duration kKvStoreTimeout = absl::Seconds(5);
@@ -148,21 +156,8 @@ int MainImpl() {
     }
   });
 
-  ASSIGN_OR_DIE(
-      auto runtime_channels,
-      intrinsic::assets::dependencies::
-          ConnectManyWithRuntimeAssetFallbackForAssetMigrationOnly(
-              proto_config.intrinsic_runtime(),
-              {
-                  "grpc://intrinsic_proto.assets.v1.InstalledAssetsReader",
-                  "grpc://intrinsic_proto.data_logger.DataLogger",
-              },
-              connect::UnlimitedMessageSizeGrpcChannelArgs()));
-
   // Start the structured logging client and data logger.
   // Do not fail if the logger is unavailable.
-  auto [installed_assets_reader_channel, data_logger_channel] =
-      std::move(runtime_channels);
   if (auto s = intrinsic::connect::WaitForChannelReady(
           data_logger_channel, absl::GetFlag(FLAGS_grpc_connect_timeout));
       !s.ok()) {
