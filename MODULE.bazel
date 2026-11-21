@@ -606,7 +606,7 @@ bazel_dep(name = "nanopb", version = "0.3.9.10")
 bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.2", repo_name = "com_github_nlohmann_json")
 bazel_dep(name = "nlopt", version = "2.10.1.bcr1")  
 bazel_dep(name = "octomap", version = "1.10.0")  # used by coal 
-bazel_dep(name = "ogre-next", version = "2.3.3.bcr.7")  
+bazel_dep(name = "ogre-next", version = "2.3.3.bcr.8")  
 bazel_dep(name = "onetbb", version = "2022.3.0")
 bazel_dep(name = "open-inference-protocol", version = "0.0.0-20250512-d49cc23.bcr.1", repo_name = "open_inference_protocol")  
 bazel_dep(name = "open62541", version = "1.4.14.bcr.1")  
