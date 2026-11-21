@@ -15,58 +15,22 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 cc_library(
-    name = "merge_scene_object_links",
-    srcs = ["merge_scene_object_links.cc"],
-    hdrs = ["merge_scene_object_links.h"],
-    visibility = ["//intrinsic_runtime/intrinsic/scene/service:__pkg__"],
-    deps = [
-        "//intrinsic_runtime/intrinsic/scene/processing/util:transform_util",
-        "//intrinsic_sdk/intrinsic/scene/scene_object:scene_object_view",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@abseil-cpp//absl/types:span",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
-        "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
-    ],
-)
-
-cc_library(
     name = "transform_imported_scene",
     srcs = ["transform_imported_scene.cc"],
     hdrs = ["transform_imported_scene.h"],
     visibility = ["//intrinsic_runtime/intrinsic/scene/service:__pkg__"],
     deps = [
-        ":transform_scene_object",
         "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_cc_proto",
         "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/scene/processing:transform_scene_object",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@intrinsic_apis//intrinsic/math/proto:quaternion_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:vector3_cc_proto",
-    ],
-)
-
-cc_library(
-    name = "transform_scene_object",
-    srcs = ["transform_scene_object.cc"],
-    hdrs = ["transform_scene_object.h"],
-    deps = [
-        "//intrinsic_runtime/intrinsic/scene/processing/util:transform_util",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/scene/scene_object:root_entity",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@abseil-cpp//absl/strings",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
     ],
 )
 
@@ -76,12 +40,12 @@ cc_library(
     hdrs = ["scale_imported_scene.h"],
     visibility = ["//intrinsic_runtime/intrinsic/scene/service:__pkg__"],
     deps = [
-        ":scale_scene_object",
         "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_cc_proto",
         "//intrinsic_runtime/intrinsic/scene/proto/v1:imported_scene_updates_cc_proto",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
+        "//intrinsic_sdk/intrinsic/scene/processing:scale_scene_object",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -90,24 +54,5 @@ cc_library(
         "@intrinsic_apis//intrinsic/math/proto:point_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:quaternion_cc_proto",
         "@intrinsic_apis//intrinsic/math/proto:vector3_cc_proto",
-    ],
-)
-
-cc_library(
-    name = "scale_scene_object",
-    srcs = ["scale_scene_object.cc"],
-    hdrs = ["scale_scene_object.h"],
-    deps = [
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/geometry/api:io",
-        "//intrinsic_sdk/intrinsic/math:pose3",
-        "//intrinsic_sdk/intrinsic/math:proto_conversion",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/status",
-        "@abseil-cpp//absl/status:statusor",
-        "@intrinsic_apis//intrinsic/math/proto:vector3_cc_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:entity_cc_proto",
-        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
-        "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
     ],
 )
