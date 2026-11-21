@@ -219,12 +219,6 @@ absl::Status ValidateParentType(const Entity& entity, const Entity& parent) {
 absl::Status ValidateJointValue(const Entity& entity,
                                 const Pose3d& parent_t_this,
                                 const Pose3d& computed_parent_t_this) {
-  // This is the default when the pose is unset, so if it's roughly identity
-  // then ignore it (as some tools may write it out when processing).
-  if (parent_t_this.isApprox(Pose3d())) {
-    return absl::OkStatus();
-  }
-
   const auto& kinematics = entity.joint().kinematics_component();
   // If no joint value is set then it's valid.
   if (!kinematics.has_raw_value()) {
