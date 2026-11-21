@@ -603,6 +603,13 @@ PYBIND11_MODULE(pubsub, m) {
   kvstore_class
       .def("set",
            static_cast<absl::Status (KeyValueStore::*)(
+               absl::string_view, const google::protobuf::Any&,
+               std::optional<bool>)>(&KeyValueStore::Set),
+           pybind11::arg("key"), pybind11::arg("value"),
+           pybind11::arg("high_consistency"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("set",
+           static_cast<absl::Status (KeyValueStore::*)(
                absl::string_view, const google::protobuf::Message&,
                std::optional<bool>)>(
                &KeyValueStore::Set<const google::protobuf::Message&>),
@@ -611,9 +618,24 @@ PYBIND11_MODULE(pubsub, m) {
            pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("set",
            static_cast<absl::Status (KeyValueStore::*)(
+               absl::string_view, const google::protobuf::Any&)>(
+               &KeyValueStore::Set),
+           pybind11::arg("key"), pybind11::arg("value"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("set",
+           static_cast<absl::Status (KeyValueStore::*)(
                absl::string_view, const google::protobuf::Message&)>(
                &KeyValueStore::Set<const google::protobuf::Message&>),
            pybind11::arg("key"), pybind11::arg("value"),
+           pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("set_with_verification",
+           static_cast<absl::Status (KeyValueStore::*)(
+               absl::string_view, const google::protobuf::Any&,
+               const KeyValueStore::SetWithVerificationOptions&)>(
+               &KeyValueStore::SetWithVerification),
+           pybind11::arg("key"), pybind11::arg("value"),
+           pybind11::arg("options") =
+               KeyValueStore::SetWithVerificationOptions(),
            pybind11::call_guard<pybind11::gil_scoped_release>())
       .def("set_with_verification",
            static_cast<absl::Status (KeyValueStore::*)(
