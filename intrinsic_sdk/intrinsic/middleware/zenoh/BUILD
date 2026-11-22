@@ -41,7 +41,10 @@ cc_library(
         "imw_zenoh_subscription.h",
     ],
     linkstatic = True,
-    visibility = ["//visibility:public"],
+    visibility = [
+        "//intrinsic_sdk/intrinsic/middleware:__subpackages__",
+        "//intrinsic_sdk/intrinsic/platform/pubsub/zenoh_util:__pkg__",
+    ],
     deps = [
         "//intrinsic_sdk/intrinsic/middleware:imw_interface",
         "@abseil-cpp//absl/base:core_headers",
