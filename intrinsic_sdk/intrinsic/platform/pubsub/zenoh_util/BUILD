@@ -31,6 +31,7 @@ cc_library(
     hdrs = ["zenoh_handle.h"],
     visibility = [
         "//intrinsic/platform/pubsub:__subpackages__",
+        "//intrinsic/tools/introspect:__subpackages__",
         "//intrinsic_sdk/intrinsic/platform/pubsub:__subpackages__",
     ],
     deps = [
