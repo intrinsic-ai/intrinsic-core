@@ -931,6 +931,9 @@ service ClustersService {
 
   // CreateCluster allows to add a new cluster.
   // This requires a device to become the control-plane.
+  // Returns FAILED_PRECONDITION if the cluster is still registered to another
+  // organization or project and must be deleted from its previous project
+  // first.
   // Note: Don't rely on the return value of this or AddDevice for now.
   // They will change to be in line with https://google.aip.dev/151
   rpc CreateCluster(CreateClusterRequest)
