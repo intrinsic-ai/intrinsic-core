@@ -180,3 +180,30 @@ proto_source_code_info_transitive_descriptor_set = rule(
     },
     provides = [ProtoSourceCodeInfo],
 )
+
+def _binary_file_descriptor_set_impl(ctx):
+    out = ctx.file.src
+    return [
+        DefaultInfo(
+            files = depset([out]),
+            runfiles = ctx.runfiles(files = [out]),
+        ),
+        ProtoSourceCodeInfo(
+            direct_descriptor_set = out,
+            transitive_descriptor_sets = depset([out]),
+        ),
+    ]
+
+binary_file_descriptor_set = rule(
+    implementation = _binary_file_descriptor_set_impl,
+    attrs = {
+        "src": attr.label(
+            doc = """A binary protobuf file containing a complete file
+            descriptor set.  This should have source code information included,
+            but that is not enforced.""",
+            mandatory = True,
+            allow_single_file = [".binpb", ".proto.bin"],
+        ),
+    },
+    provides = [ProtoSourceCodeInfo],
+)
