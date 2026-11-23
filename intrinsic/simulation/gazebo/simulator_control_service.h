@@ -17,6 +17,7 @@
 
 #include <functional>
 #include <memory>
+#include <string>
 
 #include "absl/base/thread_annotations.h"
 #include "absl/status/statusor.h"
@@ -112,17 +113,24 @@ class SimulatorControlService final
       intrinsic_proto::simulation::v1::GetSimulatorStatusResponse* response)
       override ABSL_LOCKS_EXCLUDED(gazebo_mutex_);
 
+  // Returns the simulator world id that was used most recently to initialize
+  // `GazeboRunner`, i.e. the id from `Config` or from the latest
+  // `ResetSimulator` request.
+  std::string GetSimulatorWorldId() ABSL_LOCKS_EXCLUDED(gazebo_mutex_);
+
  private:
   SimulatorControlService(
       std::unique_ptr<GazeboRunner> gazebo_runner,
       const GazeboRunnerFactoryFunction& gazebo_runner_factory_fn,
-      Profiler* sim_step_profiler, absl::Status run_gazebo_status);
+      Profiler* sim_step_profiler, absl::Status run_gazebo_status,
+      std::string simulator_world_id);
 
   absl::Mutex gazebo_mutex_;
   std::unique_ptr<GazeboRunner> gazebo_runner_ ABSL_GUARDED_BY(gazebo_mutex_);
   GazeboRunnerFactoryFunction gazebo_runner_factory_fn_;
   Profiler* sim_step_profiler_ = nullptr;
   absl::Status last_run_gazebo_status_ = absl::OkStatus();
+  std::string simulator_world_id_ ABSL_GUARDED_BY(gazebo_mutex_);
 };
 
 }  // namespace simulation

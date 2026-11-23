@@ -16,6 +16,7 @@
 
 #include <cstdint>
 #include <memory>
+#include <string>
 #include <utility>
 
 #include "absl/flags/flag.h"
@@ -134,17 +135,24 @@ SimulatorControlService::Create(
 
   return absl::WrapUnique(new SimulatorControlService(
       std::move(gazebo_runner), gazebo_runner_factory_fn, sim_step_profiler,
-      std::move(create_gazebo_error_status)));
+      std::move(create_gazebo_error_status), config.simulator_world_id));
 }
 
 SimulatorControlService::SimulatorControlService(
     std::unique_ptr<GazeboRunner> gazebo_runner,
     const GazeboRunnerFactoryFunction& gazebo_runner_factory_fn,
-    Profiler* sim_step_profiler, absl::Status run_gazebo_status)
+    Profiler* sim_step_profiler, absl::Status run_gazebo_status,
+    std::string simulator_world_id)
     : gazebo_runner_(std::move(gazebo_runner)),
       gazebo_runner_factory_fn_(gazebo_runner_factory_fn),
       sim_step_profiler_(sim_step_profiler),
-      last_run_gazebo_status_(std::move(run_gazebo_status)) {}
+      last_run_gazebo_status_(std::move(run_gazebo_status)),
+      simulator_world_id_(std::move(simulator_world_id)) {}
+
+std::string SimulatorControlService::GetSimulatorWorldId() {
+  absl::MutexLock lock(gazebo_mutex_);
+  return simulator_world_id_;
+}
 
 SimulatorControlService::~SimulatorControlService() = default;
 
@@ -168,6 +176,8 @@ SimulatorControlService::~SimulatorControlService() = default;
     LOG(INFO) << "Simulation reset was cancelled after Gazebo was stopped.";
     return ToGrpcStatus(absl::CancelledError());
   }
+
+  simulator_world_id_ = request->simulator_world_id();
 
   auto set_last_error = [this](absl::Status status) {
     if (!status.ok()) {

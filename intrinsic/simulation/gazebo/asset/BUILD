@@ -69,6 +69,7 @@ intrinsic_service(
     deps = [
         ":gazebo_simulator_config_proto",
         "//intrinsic/simulation/simulator/proto/v1:simulator_control_service_proto",
+        "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_state_proto",
         "@intrinsic_apis//intrinsic/simulation/gazebo/proto/v1:gazebo_service_proto",
     ],
 )

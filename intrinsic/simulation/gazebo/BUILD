@@ -35,6 +35,7 @@ cc_library(
         ":gazebo_performance_logger",
         ":gazebo_runner",
         ":gazebo_service",
+        ":gazebo_service_state",
         ":gz_sim_static_systems",
         ":simulator_control_service",
         ":world_sync_system",
@@ -231,6 +232,31 @@ cc_library(
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",
         "@gz-sim",
+    ],
+)
+
+cc_library(
+    name = "gazebo_service_state",
+    srcs = ["gazebo_service_state.cc"],
+    hdrs = ["gazebo_service_state.h"],
+    deps = [
+        ":simulator_control_service",
+        "//intrinsic/simulation/simulator/proto/v1:simulator_control_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_grpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_conversion_rpc",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros_grpc",
+        "@abseil-cpp//absl/base:core_headers",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/log:die_if_null",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/synchronization",
+        "@com_github_grpc_grpc//:grpc++",
+        "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_state_cc_grpc_proto",
+        "@intrinsic_apis//intrinsic/assets/services/proto/v1:service_state_cc_proto",
+        "@intrinsic_apis//intrinsic/util/status:extended_status_cc_proto",
     ],
 )
 

@@ -33,6 +33,10 @@ service_def {
   config_message_full_name: "intrinsic_proto.simulation.gazebo.v1.GazeboConfig"
   service_proto_prefixes: "/intrinsic_proto.simulation.v1.SimulatorControlService/"
   service_proto_prefixes: "/intrinsic_proto.simulation.v1.GazeboService/"
+  service_proto_prefixes: "/intrinsic_proto.services.v1.ServiceState/"
+  service_state_config {
+    service_versions: INTRINSIC_PROTO_SERVICES_V1_SERVICE_STATE
+  }
 
   # Gazebo is only run when deployed in sim, not on real hardware.
   real_spec {

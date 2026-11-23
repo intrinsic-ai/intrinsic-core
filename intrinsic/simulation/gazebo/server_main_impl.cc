@@ -68,6 +68,7 @@
 #include "intrinsic/simulation/gazebo/gazebo_performance_logger.h"
 #include "intrinsic/simulation/gazebo/gazebo_runner.h"
 #include "intrinsic/simulation/gazebo/gazebo_service.h"
+#include "intrinsic/simulation/gazebo/gazebo_service_state.h"
 #include "intrinsic/simulation/gazebo/outfeed/outfeed_manager.h"
 #include "intrinsic/simulation/gazebo/plugins/cameras/camera_services.h"
 #include "intrinsic/simulation/gazebo/plugins/gpio/gpio_service.h"
@@ -949,6 +950,10 @@ int RunGazeboSimulationServerWithServices(int argc, char* argv[]) {
 
   LOG(INFO) << "Registering Gazebo service";
   builder.RegisterService(gazebo_service.get());
+
+  LOG(INFO) << "Registering ServiceState service";
+  GazeboServiceState service_state(service.get());
+  builder.RegisterService(&service_state);
   std::unique_ptr<grpc::Server> sim_control_server(builder.BuildAndStart());
 
   // Wait for SIGINT or SIGTERM signals to exit.
