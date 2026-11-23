@@ -224,7 +224,10 @@ proto_library(
     name = "image_buffer_proto",
     srcs = ["image_buffer.proto"],
     visibility = ["//visibility:public"],
-    deps = [":dimensions_proto"],
+    deps = [
+        ":dimensions_proto",
+        "@intrinsic_apis//intrinsic/platform/pubsub:storage_location",
+    ],
 )
 
 cc_proto_library(
@@ -238,7 +241,10 @@ go_proto_library(
     importpath = "intrinsic/perception/proto/v1/image_buffer_go_proto",
     protos = [":image_buffer_proto"],
     visibility = ["//visibility:public"],
-    deps = [":dimensions_go_proto"],
+    deps = [
+        ":dimensions_go_proto",
+        "@intrinsic_apis//intrinsic/platform/pubsub:storage_location_go_proto",
+    ],
 )
 
 py_proto_library(

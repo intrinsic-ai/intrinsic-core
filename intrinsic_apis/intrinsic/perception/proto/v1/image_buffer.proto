@@ -17,6 +17,7 @@ syntax = "proto3";
 package intrinsic_proto.perception.v1;
 
 import "intrinsic/perception/proto/v1/dimensions.proto";
+import "intrinsic/platform/pubsub/storage_location.proto";
 
 option go_package = "intrinsic/perception/proto/v1/image_buffer_go_proto";
 
@@ -83,8 +84,20 @@ message ImageBuffer {
   // uncompressed, i.e. when encoding is ENCODING_UNSPECIFIED.
   optional Dimensions dimensions = 5;
 
-  // The actual underlying data.
-  bytes data = 6;
+  // Image payload source (inline bytes or external KeyValueStore reference).
+  // All image metadata fields on this `ImageBuffer` (`encoding`, `pixel_type`,
+  // `num_channels`, `type`, `dimensions`, `packing_type`) remain populated in
+  // both cases to describe the image bytes.
+  oneof data_source {
+    // Inline image payload bytes (raw uncompressed pixels when `encoding` is
+    // ENCODING_UNSPECIFIED, or encoded image bytes matching `encoding`).
+    bytes data = 6;
+
+    // Key-value store location holding the raw or encoded image bytes that
+    // would otherwise be stored inline in `data` (not a serialized
+    // `ImageBuffer` message).
+    kvstore.StorageLocation buffer_storage_location = 8;
+  }
 
   // The packing type of the pixels. If not present, implementations should
   // default to PACKING_TYPE_INTERLEAVED.
