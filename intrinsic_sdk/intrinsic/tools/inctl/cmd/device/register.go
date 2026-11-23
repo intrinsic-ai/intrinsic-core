@@ -203,6 +203,8 @@ func registerControlPlane(ctx context.Context, client authedClient, projectName,
 		switch status.Code(err) {
 		case codes.AlreadyExists:
 			return fmt.Errorf("cluster %q already exists. Please use a unique value for --hostname if this is a new cluster.\nTo replace the old cluster, call with --%s", hostname, replaceKey)
+		case codes.FailedPrecondition:
+			return fmt.Errorf("cluster %q is still registered to another organization or project.\nDelete it from its previous project before registering it here", hostname)
 		case codes.NotFound:
 			return fmt.Errorf("device %q does not exist. Please make sure you have the exact id from the device you are trying to register", deviceID)
 		case codes.Unauthenticated:
