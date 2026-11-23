@@ -87,6 +87,9 @@ proto_library(
 
 cc_proto_library(
     name = "page_token_cc_proto",
+    visibility = [
+        "//intrinsic:intrinsic_internal",
+    ],
     deps = [":page_token_proto"],
 )
 
