@@ -145,13 +145,14 @@
   "For skill in REPROJECT-ON-VOLUME conflict handling mode only: Gracefully
   handle projection failures in case other actions' footprint volumes were
   potentially present in the world. Transition to CONFLICT-WAITING and wait
-  until those actions finish before re-projecting."
+  until those actions finish before re-projecting (at most once per skill
+  call)."
   ?af <- (plan-action (uid ?uid) (state PROJECTING) (skill-id ?skill-id)
-                      (conflict-handling-mode REPROJECT-ON-VOLUME)
                       (action-uids-with-volumes-at-projection
-                        $?volumes-at-projection&:(non-empty$ ?volumes-at-projection))
+                        $?volumes-at-projection)
                       (world-id-projection ?world-id-projection)
                       (span-reference-id ?span-id))
+  (test (plan-action-should-wait-on-projection-failure ?af))
   ?sf <- (skill-status (action-id ?uid) (status FAILED) (message ?message)
                        (extended-status-proto-id ?es-proto))
   (skill-info (skill-id ?skill-id))
@@ -172,7 +173,8 @@
   )
   (modify ?af (state CONFLICT-WAITING)
               (projection-end-time (now))
-              (world-id-projection ""))
+              (world-id-projection "")
+              (projection-failed-before TRUE))
   (retract ?sf)
 )
 
@@ -182,13 +184,9 @@
   ; straight to failed. This could occur if the skill is not known or the gRPC
   ; service cannot be reached.
   ?af <- (plan-action (uid ?uid) (state ?state&PROJECTING) (skill-id ?skill-id)
-                      (conflict-handling-mode ?ch-mode)
-                      (action-uids-with-volumes-at-projection
-                        $?volumes-at-projection)
                       (projection-running-actions $?running-actions)
                       (world-id-projection ?world-id-projection))
-  (test (or (neq ?ch-mode REPROJECT-ON-VOLUME)
-            (empty$ ?volumes-at-projection)))
+  (test (not (plan-action-should-wait-on-projection-failure ?af)))
   ?sf <- (skill-status (action-id ?uid) (status FAILED) (message ?message)
                        (extended-status-proto-id ?es-proto))
   (skill-info (skill-id ?skill-id))

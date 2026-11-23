@@ -209,6 +209,14 @@
   ; transient swept volume.
   (multislot action-uids-with-volumes-at-projection (type SYMBOL))
 
+  ; TRUE once this action has fallen back to CONFLICT-WAITING after a failed
+  ; projection in REPROJECT-ON-VOLUME mode. Preserved across re-projections and
+  ; suspend/resume so a skill call retries a failed projection at most once;
+  ; reset naturally for new skill calls (e.g., loops or RetryNode) when a fresh
+  ; plan-action is duplicated from the prototype.
+  (slot projection-failed-before (type SYMBOL)
+        (allowed-values FALSE TRUE) (default FALSE))
+
   ; Temporary world used for projection. It will be cloned from the main world
   ; before projection and has a unique ID. After projection success or failure
   ; it will not be used any further and will be deleted.
@@ -303,6 +311,9 @@
   ; Re-projection will create a new footprint proto.
   (bind ?footprint-proto (fact-slot-value ?af footprint-proto))
   (if (<> ?footprint-proto 0) then (pb-remove ?footprint-proto))
+  ; Intentionally preserve projection-failed-before so the per-skill-call
+  ; projection-failure retry limit holds across re-projections and
+  ; suspend/resume.
   (return (modify ?af (state SELECTED)
                       (footprint-proto 0)
                       (action-uids-running-at-projection (create$))
@@ -316,6 +327,16 @@
     (return (get-flag-value enable_executive_skill_conflict_default_wait))
   )
   (return (or (eq ?ch-mode WAIT) (eq ?ch-mode REPROJECT-ON-VOLUME)))
+)
+
+; Returns TRUE if ?af should transition to CONFLICT-WAITING and retry after a
+; failed projection, or FALSE if it should fail immediately.
+(deffunction plan-action-should-wait-on-projection-failure (?af)
+  (return (and (eq (fact-slot-value ?af conflict-handling-mode)
+                   REPROJECT-ON-VOLUME)
+               (non-empty$
+                 (fact-slot-value ?af action-uids-with-volumes-at-projection))
+               (eq (fact-slot-value ?af projection-failed-before) FALSE)))
 )
 
 (deffunction plan-action-remove (?uid)
