@@ -53,8 +53,11 @@
                       (conflict-handling-mode REPROJECT-ON-VOLUME)
                       (action-uids-running-at-projection $?running-at-projection)
                       (span-reference-id ?span-id))
+  ; Only FOOTPRINT-CONFLICT dependencies are eligible for early re-projection.
+  ; PROJECTION-FAILED dependencies must wait until blockers finish.
   (action-conflict-dependency (waiting-action-uid ?waiting-uid)
-                              (blocker-action-uid ?blocker-uid))
+                              (blocker-action-uid ?blocker-uid)
+                              (wait-reason FOOTPRINT-CONFLICT))
   ; ?blocker-uid was not running when ?waiting-uid started projecting, so its
   ; footprint volumes were likely not in the world snapshot used by that
   ; projection.
@@ -63,7 +66,7 @@
   ; swept volumes must have been added to the world).
   (plan-action (uid ?blocker-uid) (state RUNNING)
                (footprint-proto ?blocker-footprint&~0))
-  ; The REPROJECT_ON_VOLUME mode targets footprint conflicts with volumes
+  ; The REPROJECT-ON-VOLUME mode targets footprint conflicts with volumes
   ; involved which were not visible during the projection phase. The intention
   ; is that a re-projection could solve the conflict as the skill was previously
   ; not aware of said volumes. Therefore, we ignore blockers which only added

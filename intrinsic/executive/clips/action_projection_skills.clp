@@ -47,10 +47,25 @@
     (log-context-create ?session-log-id ?bt-log-id ?action-log-id
                         ?parent-log-id ?operation-name))
 
+  ; Snapshot conservative lower (action-uids-running-at-projection) and upper
+  ; (action-uids-with-volumes-at-projection) bounds on actions with active
+  ; footprint volumes at world-clone. Used by REPROJECT-ON-VOLUME conflict
+  ; handling mode. See plan.clp for details.
   (bind ?action-uids-running-at-projection (create$))
-  (do-for-all-facts ((?pa plan-action)) (eq ?pa:state RUNNING)
-    (bind ?action-uids-running-at-projection
-      (append$ ?action-uids-running-at-projection ?pa:uid))
+  (bind ?action-uids-with-volumes-at-projection (create$))
+  (do-for-all-facts ((?pa plan-action))
+      (isoneof ?pa:state PENDING RUNNING
+               CANCELLATION-REQUESTED CANCELLATION-PENDING
+               CANCELING CANCELING-EXECUTION-TIMEOUT)
+    (if (eq ?pa:state RUNNING) then
+      (bind ?action-uids-running-at-projection
+        (append$ ?action-uids-running-at-projection ?pa:uid))
+    )
+    (if (and (<> ?pa:footprint-proto 0)
+             (> (pb-get-repeated-length ?pa:footprint-proto "volume") 0)) then
+      (bind ?action-uids-with-volumes-at-projection
+        (append$ ?action-uids-with-volumes-at-projection ?pa:uid))
+    )
   )
   (bind ?world-id-projection (world-clone ?world-id "project" ?parent-span-id))
 
@@ -76,7 +91,9 @@
               (projection-start-time (now))
               (projection-running-actions ?running-actions)
               (action-uids-running-at-projection
-                ?action-uids-running-at-projection))
+                ?action-uids-running-at-projection)
+              (action-uids-with-volumes-at-projection
+                ?action-uids-with-volumes-at-projection))
 )
 
 (defrule action-projection-skill-succeeded
@@ -124,21 +141,58 @@
   (retract ?sf)
 )
 
+(defrule action-projection-skill-failed-wait
+  "For skill in REPROJECT-ON-VOLUME conflict handling mode only: Gracefully
+  handle projection failures in case other actions' footprint volumes were
+  potentially present in the world. Transition to CONFLICT-WAITING and wait
+  until those actions finish before re-projecting."
+  ?af <- (plan-action (uid ?uid) (state PROJECTING) (skill-id ?skill-id)
+                      (conflict-handling-mode REPROJECT-ON-VOLUME)
+                      (action-uids-with-volumes-at-projection
+                        $?volumes-at-projection&:(non-empty$ ?volumes-at-projection))
+                      (world-id-projection ?world-id-projection)
+                      (span-reference-id ?span-id))
+  ?sf <- (skill-status (action-id ?uid) (status FAILED) (message ?message)
+                       (extended-status-proto-id ?es-proto))
+  (skill-info (skill-id ?skill-id))
+ =>
+  (printout t "Projection of " ?skill-id " (" ?uid ") failed, waiting for "
+              (implode$ ?volumes-at-projection) " to finish: " ?message crlf)
+  (if (neq ?world-id-projection "") then
+    (assert (world-request (type DELETE) (world-id ?world-id-projection))))
+  (if (<> ?es-proto 0) then
+    (pb-remove ?es-proto))
+  (foreach ?blocker ?volumes-at-projection
+    (assert (action-conflict-dependency (waiting-action-uid ?uid)
+                                        (blocker-action-uid ?blocker)
+                                        (wait-reason PROJECTION-FAILED)))
+  )
+  (if (<> ?span-id ?*TRACING-INVALID-SPAN-ID*) then
+    (span-add-event-annotation ?span-id "projection_failed_waiting")
+  )
+  (modify ?af (state CONFLICT-WAITING)
+              (projection-end-time (now))
+              (world-id-projection ""))
+  (retract ?sf)
+)
+
 (defrule action-projection-skill-failed
   "Observe skill status by ClipsSkillDispatcher for projection failure"
   ; Note that here, we also expect that skills can go from SELECTED/PENDING
   ; straight to failed. This could occur if the skill is not known or the gRPC
   ; service cannot be reached.
   ?af <- (plan-action (uid ?uid) (state ?state&PROJECTING) (skill-id ?skill-id)
+                      (conflict-handling-mode ?ch-mode)
+                      (action-uids-with-volumes-at-projection
+                        $?volumes-at-projection)
                       (projection-running-actions $?running-actions)
                       (world-id-projection ?world-id-projection))
+  (test (or (neq ?ch-mode REPROJECT-ON-VOLUME)
+            (empty$ ?volumes-at-projection)))
   ?sf <- (skill-status (action-id ?uid) (status FAILED) (message ?message)
                        (extended-status-proto-id ?es-proto))
   (skill-info (skill-id ?skill-id))
  =>
-  ; Some actions were running and thus footprints locked, so try again after
-  ; those actions completed
-  ; TODO(b/236694783): Re-enable retrying projection on conflict in BTs
   (if (neq ?world-id-projection "") then
     (assert (world-request (type DELETE) (world-id ?world-id-projection))))
   (modify ?af (state EXECUTION-FAILED) (projection-end-time (now))

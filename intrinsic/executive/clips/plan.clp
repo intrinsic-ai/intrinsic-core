@@ -102,14 +102,15 @@
   ; FOOTPRINT-CHECKING: for selected action that finished projection the
   ;                     footprint is currently being checked against all other
   ;                     running/ready actions for conflicts
-  ; TODO(b/b/586839100): Update comment below as soon as this state is not
-  ; just used by footprint conflicts
-  ; CONFLICT-WAITING: footprint conflict checking detected a conflict with a
-  ;                   currently running action and the action's conflict
-  ;                   handling mode is set to WAIT or REPROJECT-ON-VOLUME. The
-  ;                   action waits until all conflicting blocking actions finish
-  ;                   (or, for REPROJECT-ON-VOLUME, until a blocker has added
-  ;                   new footprint volumes to the world).
+  ; CONFLICT-WAITING: the action is waiting for blocking actions to clear before
+  ;                   re-projecting. Entered either when footprint conflict
+  ;                   checking detects a conflict (in WAIT or
+  ;                   REPROJECT-ON-VOLUME mode), or when projection fails while
+  ;                   other actions' footprint volumes were potentially present
+  ;                   in the world (in REPROJECT-ON-VOLUME mode). The action
+  ;                   waits until all blocking actions finish (or, for
+  ;                   REPROJECT-ON-VOLUME after a footprint conflict, until a
+  ;                   blocker adds new footprint volumes to the world).
   ; READY: conflict checking has been completed and no conflicts have been
   ;        found. The action is now ready for execution. Actions in this state
   ;        can be suspended.
@@ -156,15 +157,17 @@
                         SUCCEEDED FAILED CANCELED)
         (default ACCEPTED))
 
-  ; Specifies how footprint conflicts detected after action projection should be
-  ; handled.
+  ; Specifies how footprint conflicts detected after action projection (and, for
+  ; REPROJECT-ON-VOLUME, projection failures) should be handled.
   ; UNSPECIFIED / FAIL: default behavior; report footprint conflict error and
   ; fail action execution.
   ; WAIT: enter CONFLICT-WAITING state and pause action execution until all
   ; conflicting running actions finish.
   ; REPROJECT-ON-VOLUME: like WAIT, but additionally re-project as soon as a
   ; conflicting action added footprint volumes to the world which were not
-  ; visible to this action's last projection.
+  ; visible to this action's last projection, and fall back to CONFLICT-WAITING
+  ; if projection fails while other actions' footprint volumes may have been
+  ; present.
   (slot conflict-handling-mode (type SYMBOL)
         (allowed-values UNSPECIFIED FAIL WAIT REPROJECT-ON-VOLUME)
         (default UNSPECIFIED))
@@ -185,10 +188,26 @@
   ; started.
   (multislot projection-running-actions (type INTEGER))
 
-  ; UIDs of all actions that were RUNNING when the projection world was cloned,
-  ; i.e., the skill was aware of their volumes during projection. Used by the
-  ; REPROJECT-ON-VOLUME conflict handling mode to trigger an early reprojection.
+  ; Conservative lower bound of actions whose footprint volumes (if any) were
+  ; definitely present when the projection world was cloned (only RUNNING
+  ; actions). Used by REPROJECT-ON-VOLUME to trigger an early re-projection when
+  ; a blocker was not guaranteed to be known during projection.
+  ; Under-approximating is safe here: volumes are added asynchronously while
+  ; PENDING, so excluding PENDING actions at worst triggers an unnecessary
+  ; re-projection rather than missing a re-projection.
   (multislot action-uids-running-at-projection (type SYMBOL))
+
+  ; Conservative upper bound of actions whose footprint volumes *may* have been
+  ; present when the projection world was cloned (PENDING, RUNNING, or canceling
+  ; actions with non-empty footprint volumes, since volumes are added during
+  ; PENDING and removed after cancellation completes). Used by
+  ; REPROJECT-ON-VOLUME to fall back to CONFLICT-WAITING and retry once those
+  ; actions finish if projection fails. Over-approximating is safe here: if a
+  ; PENDING action had not yet added its volumes (or a canceling action had
+  ; already removed them), we at worst gracefully handle the projection failure,
+  ; wait, and retry instead of falsely failing a projection blocked by a
+  ; transient swept volume.
+  (multislot action-uids-with-volumes-at-projection (type SYMBOL))
 
   ; Temporary world used for projection. It will be cloned from the main world
   ; before projection and has a unique ID. After projection success or failure
@@ -215,6 +234,16 @@
   (slot waiting-action-uid (type SYMBOL))
   ; uid of an action that was a conflict when trying to start waiting-action-uid
   (slot blocker-action-uid (type SYMBOL))
+  ; Why waiting-action-uid is blocked on blocker-action-uid:
+  ;   FOOTPRINT-CONFLICT: footprint checking detected a conflict with the
+  ;     blocker; eligible for early re-projection in REPROJECT-ON-VOLUME mode
+  ;     if the blocker was not yet running with volumes at projection start.
+  ;   PROJECTION-FAILED: projection failed while the blocker's footprint volumes
+  ;     may have been present; must wait until the blocker finishes (not
+  ;     eligible for early re-projection).
+  (slot wait-reason (type SYMBOL)
+        (allowed-values FOOTPRINT-CONFLICT PROJECTION-FAILED)
+        (default FOOTPRINT-CONFLICT))
 )
 
 ; --------------------------------- FUNCTIONS ---------------------------------
@@ -276,7 +305,8 @@
   (if (<> ?footprint-proto 0) then (pb-remove ?footprint-proto))
   (return (modify ?af (state SELECTED)
                       (footprint-proto 0)
-                      (action-uids-running-at-projection (create$))))
+                      (action-uids-running-at-projection (create$))
+                      (action-uids-with-volumes-at-projection (create$))))
 )
 
 ; Returns TRUE if an action with ?ch-mode should wait on a conflict, or FALSE
