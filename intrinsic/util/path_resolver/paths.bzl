@@ -12,17 +12,15 @@
 # See the License for the specific language governing permissions and
 # limitations under the License.
 
-"""Path resolution functions."""
+"""Compatibility shim for //intrinsic_sdk/intrinsic/util/path_resolver:paths.bzl."""
 
-load("@bazel_lib//lib:paths.bzl", _BASH_RLOCATION_FUNCTION = "BASH_RLOCATION_FUNCTION", _to_rlocation_path = "to_rlocation_path")
+load(
+    "//intrinsic_sdk/intrinsic/util/path_resolver:paths.bzl",
+    _BASH_RLOCATION_FUNCTION = "BASH_RLOCATION_FUNCTION",
+    _WRAPPER_HEADER = "WRAPPER_HEADER",
+    _to_rlocation_path = "to_rlocation_path",
+)
 
 BASH_RLOCATION_FUNCTION = _BASH_RLOCATION_FUNCTION
+WRAPPER_HEADER = _WRAPPER_HEADER
 to_rlocation_path = _to_rlocation_path
-
-WRAPPER_HEADER = """#!/bin/bash
-set -euo pipefail
-
-{rlocation_function}
-
-runfiles_export_envvars
-""".format(rlocation_function = BASH_RLOCATION_FUNCTION)
