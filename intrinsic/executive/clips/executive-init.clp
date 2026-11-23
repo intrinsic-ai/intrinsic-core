@@ -38,6 +38,7 @@
    "action_execution_noop.clp"
    "action_execution_no_handlers.clp"
    "action_footprint_conflict_checking.clp"
+   "action_conflict_wait.clp"
    "blackboard_check.clp"
    "skill_reset.clp"
   )
