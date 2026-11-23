@@ -546,12 +546,6 @@ bazel_dep(name = "etherlab-ethercat", version = "1.6.7.bcr.1")
 bazel_dep(name = "ffmpeg", version = "7.1.1.bcr.beta.13")  
 bazel_dep(name = "flatbuffers", version = "25.12.19.bcr.1", repo_name = "com_github_google_flatbuffers")
 bazel_dep(name = "fmt", version = "12.2.0.bcr.1")  
-
-# TODO(b/585605362): Remove once ogre-next upgrades its transitive freeimage
-# dependency to >= 3.19.10.bcr.7 (or 3.19.33), which links against external BCR
-# codec libraries instead of bundled third-party libraries (avoiding duplicate
-# symbol errors with @opencv//:imgcodecs).
-bazel_dep(name = "freeimage", version = "3.19.33")  
 bazel_dep(name = "fuzztest", version = "20250805.0", repo_name = "com_google_fuzztest")
 bazel_dep(name = "glib", version = "2.84.4.bcr.1")  
 
