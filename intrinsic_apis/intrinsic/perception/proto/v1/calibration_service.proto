@@ -248,6 +248,14 @@ message IntrinsicCalibrationResult {
   optional string display_message = 5;
   // Reprojection error for each individual capture ID.
   map<string, double> reprojection_error_by_capture_id = 6;
+  // KV store location of the annotated image for each capture ID included in
+  // the calibration (matching the keys of `reprojection_error_by_capture_id`).
+  // Each location references a serialized
+  // `intrinsic_proto.perception.v1.ImageBuffer` proto stored under
+  // `calibration/sessions/<session_id>/captures/<capture_id>/cameras/<camera_index>/annotated_image`
+  // in `StorageLocation.store`.
+  map<string, kvstore.StorageLocation> annotated_image_location_by_capture_id =
+      7;
 }
 
 message StereoCalibrationResult {

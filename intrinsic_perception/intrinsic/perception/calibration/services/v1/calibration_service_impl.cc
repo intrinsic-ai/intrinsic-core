@@ -835,6 +835,8 @@ grpc::Status CalibrationServiceImpl::CaptureData(
 
   INTR_ASSIGN_OR_RETURN_GRPC(std::shared_ptr<KeyValueStore> kvstore,
                              kvstore_factory_(kDefaultKeyPrefix));
+  calibration_data_point.annotated_image_locations.resize(
+      annotated_image_buffers.size());
   for (int i = 0; i < annotated_image_buffers.size(); ++i) {
     const intrinsic_proto::perception::v1::ImageBuffer& annotated_image_buffer =
         annotated_image_buffers[i];
@@ -849,6 +851,8 @@ grpc::Status CalibrationServiceImpl::CaptureData(
         response->add_annotated_image_locations();
     annotated_image_location->set_store(kDefaultKeyPrefix);
     annotated_image_location->set_key(key);
+    calibration_data_point.annotated_image_locations[i] =
+        *annotated_image_location;
 
     if (sharpness_scores[i].has_value()) {
       google::protobuf::DoubleValue sharpness_val;
@@ -975,11 +979,17 @@ absl::Status CalibrationServiceImpl::CalibrateIntrinsics(
     }
     auto* reprojection_errors_map =
         result.mutable_reprojection_error_by_capture_id();
+    auto* annotated_image_locations_map =
+        result.mutable_annotated_image_location_by_capture_id();
     auto error_it = intrinsic_calibration_result.errors_per_image.begin();
 
     for (const auto& calib_item : calibration_data) {
       if (!calib_item.pattern_detections[i].image_points().empty()) {
         (*reprojection_errors_map)[calib_item.capture_id] = *error_it++;
+        if (i < calib_item.annotated_image_locations.size()) {
+          (*annotated_image_locations_map)[calib_item.capture_id] =
+              calib_item.annotated_image_locations[i];
+        }
       }
     }
 

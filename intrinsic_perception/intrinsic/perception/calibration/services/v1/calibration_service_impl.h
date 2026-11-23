@@ -54,6 +54,7 @@
 #include "intrinsic/perception/proto/v1/pattern_detection_result.pb.h"
 #include "intrinsic/perception/storage/capture_result_storage.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
+#include "intrinsic/platform/pubsub/storage_location.pb.h"
 #include "intrinsic/resources/proto/resource_handle.pb.h"
 #include "intrinsic/util/grpc/connection_params.h"
 #include "intrinsic/world/objects/kinematic_object.h"
@@ -135,6 +136,8 @@ class CalibrationServiceImpl final
     // be performed.
     std::optional<intrinsic_proto::Pose> base_t_flange;
     std::string capture_id;
+    std::vector<intrinsic_proto::kvstore::StorageLocation>
+        annotated_image_locations;
   };
   std::vector<CalibrationDataPoint> calibration_data_ ABSL_GUARDED_BY(mutex_);
   intrinsic_proto::perception::v1::PatternDetectionConfig
