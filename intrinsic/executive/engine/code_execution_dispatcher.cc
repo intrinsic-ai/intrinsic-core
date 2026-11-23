@@ -54,6 +54,8 @@
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_specs.h"
 #include "intrinsic/util/thread/thread.h"
+#include "opentelemetry/trace/scope.h"
+#include "opentelemetry/trace/span.h"
 #include "opentelemetry/trace/span_context.h"
 #include "opentelemetry/trace/span_startoptions.h"
 
@@ -127,9 +129,13 @@ absl::Status CodeExecutionDispatcher::Init(
       })));
 
   INTR_RETURN_IF_ERROR(function_facade->AddFunction(
-      "code-execution-service-restart-kernels", std::function([this]() {
+      "code-execution-service-restart-kernels",
+      std::function([this](int64_t parent_span_id) {
         assert_facade_->GetClipsMutex()->AssertHeld();
-        INTR_RETURN_IF_ERROR(ResetKernels()).LogWarning().With(ReturnVoid());
+        INTR_RETURN_IF_ERROR(
+            ResetKernels(clips::TraceSpanReferenceId(parent_span_id)))
+            .LogWarning()
+            .With(ReturnVoid());
       })));
 
   return absl::OkStatus();
@@ -222,9 +228,21 @@ void CodeExecutionDispatcher::ReportClipsResponseStdout(
   assert_facade->NotifyRunner();
 }
 
-absl::Status CodeExecutionDispatcher::ResetKernels() {
+absl::Status CodeExecutionDispatcher::ResetKernels(
+    clips::TraceSpanReferenceId parent_span_id) {
   if (code_execution_stub_ == nullptr) {
     return absl::FailedPreconditionError("Code execution stub not initialized");
+  }
+  // Scope only attaches the span to OTel's RuntimeContext for outbound gRPC
+  // parenting and does not end the span (whose lifetime is managed by CLIPS).
+  std::optional<opentelemetry::trace::Scope> span_scope;
+  if (span_mgr_ != nullptr &&
+      parent_span_id != clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
+    if (absl::StatusOr<std::shared_ptr<opentelemetry::trace::Span>> span =
+            span_mgr_->GetSpanForParenting(parent_span_id);
+        span.ok()) {
+      span_scope.emplace(*span);
+    }
   }
   LOG(INFO) << "Calling CodeExecutionService::ResetKernels RPC.";
   grpc::ClientContext ctx;

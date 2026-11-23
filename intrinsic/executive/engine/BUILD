@@ -561,6 +561,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/world/proto:geometry_component_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_cc_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
+        "@io_opentelemetry_cpp//api",
     ],
 )
 
@@ -600,6 +601,7 @@ cc_library(
     deps = [
         "//intrinsic/executive/clips_cpp",
         "//intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic/executive/clips_cpp:clips_trace_span_manager",
         "//intrinsic_sdk/intrinsic/conductor/proto:conductor_cc_grpc",
         "//intrinsic_sdk/intrinsic/conductor/proto:conductor_cc_proto",
         "//intrinsic_sdk/intrinsic/executive/proto:run_metadata_cc_proto",
@@ -624,5 +626,6 @@ cc_library(
         "@com_google_googleapis//google/longrunning:longrunning_cc_proto",
         "@com_google_protobuf//:protobuf",
         "@intrinsic_apis//intrinsic/util/status:extended_status_cc_proto",
+        "@io_opentelemetry_cpp//api",
     ],
 )

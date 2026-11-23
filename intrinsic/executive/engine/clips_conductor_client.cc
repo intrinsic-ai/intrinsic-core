@@ -14,7 +14,9 @@
 
 #include "intrinsic/executive/engine/clips_conductor_client.h"
 
+#include <cstdint>
 #include <functional>
+#include <memory>
 #include <optional>
 #include <string>
 #include <utility>
@@ -39,6 +41,7 @@
 #include "intrinsic/executive/clips_cpp/assert_facade.h"
 #include "intrinsic/executive/clips_cpp/function_facade.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
+#include "intrinsic/executive/clips_cpp/trace_span_manager.h"
 #include "intrinsic/executive/clips_cpp/value.h"
 #include "intrinsic/util/grpc/grpc.h"
 #include "intrinsic/util/status/extended_status.pb.h"
@@ -48,6 +51,8 @@
 #include "intrinsic/util/status/status_conversion_rpc.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/status/status_specs.h"
+#include "opentelemetry/trace/scope.h"
+#include "opentelemetry/trace/span.h"
 
 ABSL_FLAG(bool, enable_conductor_process_start, true,
           "If true, the conductor will be notified when a process is started "
@@ -152,10 +157,12 @@ absl::StatusOr<PrepareProcessStartResponse> UnpackPrepareProcessStartResponse(
 ClipsConductorClient::ClipsConductorClient(
     clips::EnvironmentAssertFacade* assert_facade,
     clips::ProtobufManager* protobuf_manager,
-    intrinsic_proto::conductor::ConductorService::StubInterface* conductor_stub)
+    intrinsic_proto::conductor::ConductorService::StubInterface* conductor_stub,
+    clips::TraceSpanManager* span_manager)
     : assert_facade_(assert_facade),
       protobuf_manager_(protobuf_manager),
-      conductor_stub_(conductor_stub) {}
+      conductor_stub_(conductor_stub),
+      span_manager_(span_manager) {}
 
 absl::Status ClipsConductorClient::Init(
     clips::EnvironmentFunctionFacade* function_facade,
@@ -184,19 +191,27 @@ absl::Status ClipsConductorClient::Init(
 
   INTR_RETURN_IF_ERROR(function_facade->AddFunction(
       kConductorCheckPreparationIsDoneAsync,
-      std::function([this](const std::string& conductor_operation_name) {
-        CheckConductorPrepareProcessStartDoneAsync(conductor_operation_name);
+      std::function([this](const std::string& conductor_operation_name,
+                           int64_t parent_span_id) {
+        CheckConductorPrepareProcessStartDoneAsync(
+            conductor_operation_name,
+            clips::TraceSpanReferenceId(parent_span_id));
       })));
 
   INTR_RETURN_IF_ERROR(function_facade->AddFunction(
       kConductorCancelPreparationAsync,
-      std::function([this](const std::string& conductor_operation_name) {
-        CancelConductorPrepareProcessStartAsync(conductor_operation_name);
+      std::function([this](const std::string& conductor_operation_name,
+                           int64_t parent_span_id) {
+        CancelConductorPrepareProcessStartAsync(
+            conductor_operation_name,
+            clips::TraceSpanReferenceId(parent_span_id));
       })));
 
   INTR_RETURN_IF_ERROR(function_facade->AddFunction(
-      kConductorPrepareProcessResume, std::function([this]() -> clips::Values {
-        INTR_RETURN_IF_ERROR(PrepareConductorProcessResume())
+      kConductorPrepareProcessResume,
+      std::function([this](int64_t parent_span_id) -> clips::Values {
+        INTR_RETURN_IF_ERROR(PrepareConductorProcessResume(
+                                 clips::TraceSpanReferenceId(parent_span_id)))
             .LogWarning()
             .With([](const absl::Status& s) -> clips::Values {
               return {clips::Symbol::False(), clips::Value(s.message())};
@@ -206,8 +221,9 @@ absl::Status ClipsConductorClient::Init(
 
   INTR_RETURN_IF_ERROR(function_facade->AddFunction(
       kConductorNotifyAllProcessesStopped,
-      std::function([this]() -> clips::Values {
-        INTR_RETURN_IF_ERROR(NotifyConductorAllProcessesStopped())
+      std::function([this](int64_t parent_span_id) -> clips::Values {
+        INTR_RETURN_IF_ERROR(NotifyConductorAllProcessesStopped(
+                                 clips::TraceSpanReferenceId(parent_span_id)))
             .LogWarning()
             .With([](const absl::Status& s) -> clips::Values {
               return {clips::Symbol::False(), clips::Value(s.message())};
@@ -242,6 +258,7 @@ ClipsConductorClient::PrepareConductorProcessStart(
   google::longrunning::Operation prepare_operation;
   LOG(INFO) << "Calling Conductor::PrepareProcessStart RPC.";
   grpc::ClientContext context;
+  intrinsic::ConfigureClientContext(&context);
   // Set a short deadline since this is the start of an LRO and expected to
   // return quickly.
   context.set_deadline(absl::Now() + kConductorLROStartRpcDeadline);
@@ -331,9 +348,26 @@ ClipsConductorClient::ExtractPrepareProcessStartResponse(
 }
 
 void ClipsConductorClient::CheckConductorPrepareProcessStartDoneAsync(
-    absl::string_view conductor_operation_name) {
+    absl::string_view conductor_operation_name,
+    clips::TraceSpanReferenceId parent_span_id) {
+  std::shared_ptr<opentelemetry::trace::Span> parent_span;
+  if (span_manager_ != nullptr &&
+      parent_span_id != clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
+    if (absl::StatusOr<std::shared_ptr<opentelemetry::trace::Span>> span =
+            span_manager_->GetSpanForParenting(parent_span_id);
+        span.ok()) {
+      parent_span = *std::move(span);
+    }
+  }
   absl::Status schedule_status = bundle_->Schedule(
-      [this, conductor_operation_name = std::string(conductor_operation_name)] {
+      [this, conductor_operation_name = std::string(conductor_operation_name),
+       parent_span = std::move(parent_span)] {
+        // Scope only attaches parent_span to OTel's RuntimeContext for outbound
+        // gRPC parenting and does not end it.
+        std::optional<opentelemetry::trace::Scope> span_scope;
+        if (parent_span != nullptr) {
+          span_scope.emplace(parent_span);
+        }
         INTR_ASSIGN_OR_RETURN(
             std::optional<PrepareProcessStartResponse> response,
             GetConductorPrepareProcessStartResponse(conductor_operation_name),
@@ -374,12 +408,29 @@ void ClipsConductorClient::CheckConductorPrepareProcessStartDoneAsync(
 }
 
 void ClipsConductorClient::CancelConductorPrepareProcessStartAsync(
-    absl::string_view conductor_operation_name) {
+    absl::string_view conductor_operation_name,
+    clips::TraceSpanReferenceId parent_span_id) {
   if (conductor_stub_ == nullptr) {
     LOG(ERROR) << "Conductor stub not initialized";
   }
+  std::shared_ptr<opentelemetry::trace::Span> parent_span;
+  if (span_manager_ != nullptr &&
+      parent_span_id != clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
+    if (absl::StatusOr<std::shared_ptr<opentelemetry::trace::Span>> span =
+            span_manager_->GetSpanForParenting(parent_span_id);
+        span.ok()) {
+      parent_span = *std::move(span);
+    }
+  }
   absl::Status schedule_status = bundle_->Schedule(
-      [this, conductor_operation_name = std::string(conductor_operation_name)] {
+      [this, conductor_operation_name = std::string(conductor_operation_name),
+       parent_span = std::move(parent_span)] {
+        // Scope only attaches parent_span to OTel's RuntimeContext for outbound
+        // gRPC parenting and does not end it.
+        std::optional<opentelemetry::trace::Scope> span_scope;
+        if (parent_span != nullptr) {
+          span_scope.emplace(parent_span);
+        }
         LOG(INFO) << "Cancelling conductor client operation '"
                   << conductor_operation_name << "'.";
         grpc::ClientContext context;
@@ -397,9 +448,21 @@ void ClipsConductorClient::CancelConductorPrepareProcessStartAsync(
       << conductor_operation_name << "': " << schedule_status;
 }
 
-absl::Status ClipsConductorClient::PrepareConductorProcessResume() {
+absl::Status ClipsConductorClient::PrepareConductorProcessResume(
+    clips::TraceSpanReferenceId parent_span_id) {
   if (conductor_stub_ == nullptr) {
     return absl::FailedPreconditionError("Conductor stub not initialized");
+  }
+  // Scope only attaches the span to OTel's RuntimeContext for outbound gRPC
+  // parenting and does not end the span (whose lifetime is managed by CLIPS).
+  std::optional<opentelemetry::trace::Scope> span_scope;
+  if (span_manager_ != nullptr &&
+      parent_span_id != clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
+    if (absl::StatusOr<std::shared_ptr<opentelemetry::trace::Span>> span =
+            span_manager_->GetSpanForParenting(parent_span_id);
+        span.ok()) {
+      span_scope.emplace(*span);
+    }
   }
   LOG(INFO) << "Calling Conductor::PrepareProcessResume RPC.";
   grpc::ClientContext context;
@@ -412,9 +475,21 @@ absl::Status ClipsConductorClient::PrepareConductorProcessResume() {
   return absl::OkStatus();
 }
 
-absl::Status ClipsConductorClient::NotifyConductorAllProcessesStopped() {
+absl::Status ClipsConductorClient::NotifyConductorAllProcessesStopped(
+    clips::TraceSpanReferenceId parent_span_id) {
   if (conductor_stub_ == nullptr) {
     return absl::FailedPreconditionError("Conductor stub not initialized");
+  }
+  // Scope only attaches the span to OTel's RuntimeContext for outbound gRPC
+  // parenting and does not end the span (whose lifetime is managed by CLIPS).
+  std::optional<opentelemetry::trace::Scope> span_scope;
+  if (span_manager_ != nullptr &&
+      parent_span_id != clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
+    if (absl::StatusOr<std::shared_ptr<opentelemetry::trace::Span>> span =
+            span_manager_->GetSpanForParenting(parent_span_id);
+        span.ok()) {
+      span_scope.emplace(*span);
+    }
   }
   LOG(INFO) << "Calling Conductor::NotifyAllProcessesStopped RPC.";
   grpc::ClientContext context;

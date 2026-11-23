@@ -341,7 +341,7 @@ ClipsExecutor::ClipsExecutor(ClipsExecutorCreateOptions create_options)
       conductor_service_stub_(std::move(create_options.conductor_service_stub)),
       clips_conductor_client_(std::make_unique<ClipsConductorClient>(
           clips_->GetAssertFacade(), proto_mgr_.get(),
-          conductor_service_stub_.get())),
+          conductor_service_stub_.get(), span_mgr_.get())),
       config_(create_options.config),
       loop_manually_(create_options.loop_manually) {
   skill_client_generator_ = std::make_unique<SkillClientGenerator>(
@@ -1701,17 +1701,18 @@ absl::StatusOr<std::string> ClipsExecutor::CallConductorPrepareProcessStart(
     ABSL_LOCKS_EXCLUDED(clips_->mutex()) {
   clips::TraceSpanReferenceId preparation_span_id =
       clips::TraceSpanManager::kInvalidTraceSpanReferenceId;
+  std::shared_ptr<opentelemetry::trace::Span> otel_preparation_span;
   if (execution_span_id !=
       clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
     INTR_ASSIGN_OR_RETURN(
         std::shared_ptr<opentelemetry::trace::Span> execution_span,
         span_mgr_->GetSpanForParenting(execution_span_id));
-    std::shared_ptr<opentelemetry::trace::Span> preparation_span =
+    otel_preparation_span =
         stats::GetTracer()->StartSpan("Wait for conductor preparations",
                                       {.parent = execution_span->GetContext()});
 
     INTR_ASSIGN_OR_RETURN(preparation_span_id,
-                          span_mgr_->AddSpan(preparation_span));
+                          span_mgr_->AddSpan(otel_preparation_span));
   }
 
   // If preparation_span_id is kInvalidTraceSpanReferenceId, this span will
@@ -1748,10 +1749,19 @@ absl::StatusOr<std::string> ClipsExecutor::CallConductorPrepareProcessStart(
         .SetCode(absl::StatusCode::kInternal);
   }
 
+  // Scope only attaches otel_preparation_span to OTel's RuntimeContext for
+  // outbound gRPC parenting and does not end it (its lifetime is managed by
+  // preparation_span / TraceSpanManager). Reset it right after the RPC so it is
+  // detached before transferring span ownership to CLIPS under the lock.
+  std::optional<opentelemetry::trace::Scope> preparation_scope;
+  if (otel_preparation_span != nullptr) {
+    preparation_scope.emplace(otel_preparation_span);
+  }
   absl::StatusOr<ClipsConductorClient::ConductorClientOperationInfo>
       rpc_result = clips_conductor_client_->PrepareConductorProcessStart(
           operation_name, scene_id,
           /*all_executive_operations=*/{});
+  preparation_scope.reset();
 
   {
     absl::MutexLock lock(*clips_->mutex());

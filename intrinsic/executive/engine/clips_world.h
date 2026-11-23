@@ -129,8 +129,8 @@ class ClipsWorld {
   absl::Status DeleteWorld(const std::string& world_id);
 
   // Pauses/Resumes the world updater.
-  absl::Status PauseWorldUpdater();
-  absl::Status ResumeWorldUpdater();
+  absl::Status PauseWorldUpdater(clips::TraceSpanReferenceId parent_span_id);
+  absl::Status ResumeWorldUpdater(clips::TraceSpanReferenceId parent_span_id);
 
   // Checks the given footprint ID for conflicts with running actions.
   void CheckFootprintForConflict(absl::string_view world_id,

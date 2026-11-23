@@ -684,7 +684,7 @@
  =>
   (conductor-preparation-client-operation-delete ?op-name)
   (if (operation-are-all-waiting) then
-    (conductor-notify-all-processes-stopped)
+    (conductor-notify-all-processes-stopped ?*TRACING-INVALID-SPAN-ID*)
   )
   (retract ?mf)
 )
@@ -694,6 +694,7 @@
   (operation-envelope (state ?op-state&~ACCEPTED) (name ?op-name))
   (conductor-preparation-client-operation
     (conductor-operation-name ?conductor-op-name)
+    (span-reference-id ?prep-span-id)
     (is-done ?conductor-op-is-done) (operation-name ?op-name))
   ?mf <- (conductor-modify-client-operation
            (action STOP-PREPARATION)
@@ -704,7 +705,7 @@
     ; conductor-preparation-client-operation fact to be updated.
     (printout t (str-cat "Stopping conductor preparation client operation "
                          " in executive operation state: " ?op-state) crlf)
-    (conductor-cancel-preparation-async ?conductor-op-name)
+    (conductor-cancel-preparation-async ?conductor-op-name ?prep-span-id)
   )
   (retract ?mf)
 )
@@ -746,13 +747,15 @@
     ; For a process tree in PREVIEW sim we need to pause the world updater
     (bind ?world-updater-pause-span
       (span-start "World Updater Pause" ?tree-span "world-updater-pause"))
-    (bind ?world-updater-successful (world-updater-pause))
+    (bind ?world-updater-successful
+      (world-updater-pause ?world-updater-pause-span))
     (span-end ?world-updater-pause-span)
    else
     ; For a process tree NOT in PREVIEW sim we need to resume the world updater
     (bind ?world-updater-resume-span
     (span-start "World Updater Resume" ?tree-span "world-updater-resume"))
-    (bind ?world-updater-successful (world-updater-resume))
+    (bind ?world-updater-successful
+      (world-updater-resume ?world-updater-resume-span))
     (span-end ?world-updater-resume-span)
   )
 
@@ -869,7 +872,7 @@
     (bind ?conductor-notify-span
       (span-start "Notify conductor all processes stopped" ?span-id
         "conductor-notify-all-processes-stopped"))
-    (conductor-notify-all-processes-stopped)
+    (conductor-notify-all-processes-stopped ?conductor-notify-span)
     (span-end ?conductor-notify-span)
   )
 
@@ -895,7 +898,7 @@
     (bind ?conductor-notify-span
       (span-start "Notify conductor all processes stopped" ?span-id
         "conductor-notify-all-processes-stopped"))
-    (conductor-notify-all-processes-stopped)
+    (conductor-notify-all-processes-stopped ?conductor-notify-span)
     (span-end ?conductor-notify-span)
   )
 )
@@ -1029,12 +1032,13 @@
     (bind ?conductor-notify-span
       (span-start "Notify conductor all processes stopped" ?execution-span
         "conductor-notify-all-processes-stopped"))
-    (conductor-notify-all-processes-stopped)
+    (conductor-notify-all-processes-stopped ?conductor-notify-span)
     (span-end ?conductor-notify-span)
     (bind ?code-execution-service-restart-kernels-span
       (span-start "Restart code execution service kernels" ?execution-span
         "code-execution-service-restart-kernels"))
-    (code-execution-service-restart-kernels)
+    (code-execution-service-restart-kernels
+      ?code-execution-service-restart-kernels-span)
     (span-end ?code-execution-service-restart-kernels-span)
   )
 

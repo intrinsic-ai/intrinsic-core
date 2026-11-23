@@ -73,6 +73,7 @@
 #include "intrinsic/world/service/updater/world_updater.pb.h"
 #include "intrinsic/world/util/remove_redundant_updates.h"
 #include "intrinsic/world/world.pb.h"
+#include "opentelemetry/trace/scope.h"
 #include "opentelemetry/trace/span.h"
 #include "re2/re2.h"
 
@@ -247,16 +248,20 @@ absl::Status ClipsWorld::Init(clips::EnvironmentFunctionFacade* facade) {
       })));
 
   INTR_RETURN_IF_ERROR(facade->AddFunction(
-      kWorldPauseUpdater, std::function([this]() -> clips::Symbol {
-        INTR_RETURN_IF_ERROR(PauseWorldUpdater())
+      kWorldPauseUpdater,
+      std::function([this](int64_t parent_span_id) -> clips::Symbol {
+        INTR_RETURN_IF_ERROR(
+            PauseWorldUpdater(clips::TraceSpanReferenceId(parent_span_id)))
             .LogWarning()
             .With(Return(clips::Symbol::False()));
         return clips::Symbol::True();
       })));
 
   INTR_RETURN_IF_ERROR(facade->AddFunction(
-      kWorldResumeUpdater, std::function([this]() -> clips::Symbol {
-        INTR_RETURN_IF_ERROR(ResumeWorldUpdater())
+      kWorldResumeUpdater,
+      std::function([this](int64_t parent_span_id) -> clips::Symbol {
+        INTR_RETURN_IF_ERROR(
+            ResumeWorldUpdater(clips::TraceSpanReferenceId(parent_span_id)))
             .LogWarning()
             .With(Return(clips::Symbol::False()));
         return clips::Symbol::True();
@@ -348,10 +353,22 @@ absl::Status ClipsWorld::DeleteWorld(const std::string& world_id) {
   return absl::OkStatus();
 }
 
-absl::Status ClipsWorld::PauseWorldUpdater() {
+absl::Status ClipsWorld::PauseWorldUpdater(
+    clips::TraceSpanReferenceId parent_span_id) {
   if (world_updater_stub_ == nullptr) {
     return absl::FailedPreconditionError(
         "WorldUpdater stub to pause not initialized");
+  }
+  // Scope only attaches the span to OTel's RuntimeContext for outbound gRPC
+  // parenting and does not end the span (whose lifetime is managed by CLIPS).
+  std::optional<opentelemetry::trace::Scope> span_scope;
+  if (span_manager_ != nullptr &&
+      parent_span_id != clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
+    if (absl::StatusOr<std::shared_ptr<opentelemetry::trace::Span>> span =
+            span_manager_->GetSpanForParenting(parent_span_id);
+        span.ok()) {
+      span_scope.emplace(*span);
+    }
   }
   grpc::ClientContext context;
   intrinsic::ConfigureClientContext(&context);
@@ -365,10 +382,22 @@ absl::Status ClipsWorld::PauseWorldUpdater() {
   return absl::OkStatus();
 }
 
-absl::Status ClipsWorld::ResumeWorldUpdater() {
+absl::Status ClipsWorld::ResumeWorldUpdater(
+    clips::TraceSpanReferenceId parent_span_id) {
   if (world_updater_stub_ == nullptr) {
     return absl::FailedPreconditionError(
         "WorldUpdater stub to resume not initialized");
+  }
+  // Scope only attaches the span to OTel's RuntimeContext for outbound gRPC
+  // parenting and does not end the span (whose lifetime is managed by CLIPS).
+  std::optional<opentelemetry::trace::Scope> span_scope;
+  if (span_manager_ != nullptr &&
+      parent_span_id != clips::TraceSpanManager::kInvalidTraceSpanReferenceId) {
+    if (absl::StatusOr<std::shared_ptr<opentelemetry::trace::Span>> span =
+            span_manager_->GetSpanForParenting(parent_span_id);
+        span.ok()) {
+      span_scope.emplace(*span);
+    }
   }
   grpc::ClientContext context;
   intrinsic::ConfigureClientContext(&context);

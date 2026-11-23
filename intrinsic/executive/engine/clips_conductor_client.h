@@ -31,6 +31,7 @@
 #include "intrinsic/executive/clips_cpp/assert_facade.h"
 #include "intrinsic/executive/clips_cpp/function_facade.h"
 #include "intrinsic/executive/clips_cpp/protobuf.h"
+#include "intrinsic/executive/clips_cpp/trace_span_manager.h"
 #include "intrinsic/executive/proto/run_metadata.pb.h"
 #include "intrinsic/util/thread/thread_pool.h"
 
@@ -46,7 +47,8 @@ class ClipsConductorClient {
       clips::EnvironmentAssertFacade* assert_facade,
       clips::ProtobufManager* protobuf_manager,
       intrinsic_proto::conductor::ConductorService::StubInterface*
-          conductor_stub);
+          conductor_stub,
+      clips::TraceSpanManager* span_manager);
 
   // Must be called after construction.
   // Register the conductor functions with the CLIPS environment, and creates
@@ -104,7 +106,8 @@ class ClipsConductorClient {
   GetConductorPrepareProcessStartResponse(
       absl::string_view conductor_operation_name);
   void CheckConductorPrepareProcessStartDoneAsync(
-      absl::string_view conductor_operation_name);
+      absl::string_view conductor_operation_name,
+      clips::TraceSpanReferenceId parent_span_id);
   // If the LRO was completed successfully, the unpacked response will be
   // returned.
   // If the LRO finished with an error, an error status will be returned.
@@ -117,19 +120,23 @@ class ClipsConductorClient {
 
   // Cancel the `PrepareProcessStart` client operation in conductor.
   void CancelConductorPrepareProcessStartAsync(
-      absl::string_view conductor_operation_name);
+      absl::string_view conductor_operation_name,
+      clips::TraceSpanReferenceId parent_span_id);
 
   // Notify the conductor that a process is being resumed.
-  absl::Status PrepareConductorProcessResume();
+  absl::Status PrepareConductorProcessResume(
+      clips::TraceSpanReferenceId parent_span_id);
 
   // Notify the conductor that all running processes have reached a waiting
   // state.
-  absl::Status NotifyConductorAllProcessesStopped();
+  absl::Status NotifyConductorAllProcessesStopped(
+      clips::TraceSpanReferenceId parent_span_id);
 
   clips::EnvironmentAssertFacade* assert_facade_;  // externally owned
   clips::ProtobufManager* protobuf_manager_;       // externally owned
   intrinsic_proto::conductor::ConductorService::StubInterface*
-      conductor_stub_;  // externally owned
+      conductor_stub_;                     // externally owned
+  clips::TraceSpanManager* span_manager_;  // externally owned
   std::optional<intrinsic::ThreadPool> bundle_;
 };
 

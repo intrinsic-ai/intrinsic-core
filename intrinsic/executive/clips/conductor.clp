@@ -96,10 +96,11 @@
   "Deletes the conductor preparation fact for a given operation name."
   (do-for-fact ((?cf conductor-preparation-client-operation))
                (eq ?cf:operation-name ?operation-name)
-    (span-end ?cf:span-reference-id)
     (if (not ?cf:is-done) then
-      (conductor-cancel-preparation-async ?cf:conductor-operation-name)
+      (conductor-cancel-preparation-async
+        ?cf:conductor-operation-name ?cf:span-reference-id)
     )
+    (span-end ?cf:span-reference-id)
     (pb-remove ?cf:extended-status-proto-id)
     (retract ?cf)
   )
@@ -118,7 +119,8 @@
   (bind ?conductor-notify-span
     (span-start "Notify conductor process resuming" ?parent-span-id
       "conductor-prepare-process-resume"))
-  (bind ?conductor-result (conductor-prepare-process-resume))
+  (bind ?conductor-result
+    (conductor-prepare-process-resume ?conductor-notify-span))
   (span-end ?conductor-notify-span)
 
   (if (not (result-ok ?conductor-result)) then
@@ -141,6 +143,7 @@
   (time (timestamp $?now))
   ?cf <- (conductor-preparation-client-operation
            (is-done FALSE) (conductor-operation-name ?conductor-operation-name)
+           (span-reference-id ?span-id)
            (last-checked $?last-checked&:(timeout ?now ?last-checked
                                                   ?interval))
            ; Don't trigger check if the operation status was updated in this
@@ -153,7 +156,7 @@
   ; Start an async check that the conductor operation is done. Once a response
   ; is received, the conductor-client-operation-update rule will be triggered if
   ; the operation is done.
-  (conductor-check-preparation-is-done-async ?conductor-operation-name)
+  (conductor-check-preparation-is-done-async ?conductor-operation-name ?span-id)
   (modify ?cf (last-checked ?now))
 )
 

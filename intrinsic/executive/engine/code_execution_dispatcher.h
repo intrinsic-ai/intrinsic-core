@@ -154,7 +154,7 @@ class CodeExecutionDispatcher {
   // restart as soon as possible rather than have the code execution service
   // restart the kernel once a request with a new operation id set as scope
   // comes in.
-  absl::Status ResetKernels();
+  absl::Status ResetKernels(clips::TraceSpanReferenceId parent_span_id);
 
   // Retrieves proto_id from proto_mgr and returns the proto on success.
   // If the proto cannot be found, a failed code-execution-state-update is
