@@ -38,6 +38,7 @@ cc_library(
         "@abseil-cpp//absl/base:nullability",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
         "@abseil-cpp//absl/strings:str_format",
         "@com_github_grpc_grpc//:grpc++",
         "@intrinsic_apis//intrinsic/assets/data/proto/v1:data_asset_cc_proto",
