@@ -18,7 +18,7 @@
 
 ; ----------------------------------- RULES -----------------------------------
 
-(defrule conflict-dependency-cleanup-inactive-blocker
+(defrule conflict-wait-dependency-cleanup-inactive-blocker
   "Retract dependency when blocker action is no longer active."
   ?dep <- (action-conflict-dependency (blocker-action-uid ?blocker-uid))
   ; Note that this *must not* capture positive facts, e.g., a blocker
@@ -37,7 +37,7 @@
   (retract ?dep)
 )
 
-(defrule conflict-waiting-auto-resume
+(defrule conflict-wait-auto-resume
   "Auto-resume waiting action when all blocker dependencies have cleared."
   ?af <- (plan-action (uid ?waiting-uid) (state CONFLICT-WAITING))
   (not (action-conflict-dependency (waiting-action-uid ?waiting-uid)))
@@ -45,7 +45,7 @@
   (plan-action-reset-for-reprojection ?af)
 )
 
-(defrule conflict-reproject-on-volume
+(defrule conflict-wait-reproject-on-volume
   "REPROJECT-ON-VOLUME: A blocker of a waiting action is running and has added
   footprint volumes to the world which were not visible to the waiting action's
   last projection. Re-project right away so it can try to plan around them."
@@ -79,7 +79,7 @@
   (plan-action-reset-for-reprojection ?af)
 )
 
-(defrule conflict-dependency-cleanup-orphan-waiting-action
+(defrule conflict-wait-cleanup-orphan-dependencies
   "Retract dependency if waiting action is no longer in CONFLICT-WAITING state."
   ?dep <- (action-conflict-dependency (waiting-action-uid ?waiting-uid))
   (not (plan-action (uid ?waiting-uid) (state CONFLICT-WAITING)))
