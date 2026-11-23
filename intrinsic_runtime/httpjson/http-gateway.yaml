@@ -25,7 +25,11 @@ spec:
       labels:
         app: http-gateway
     spec:
+      {{- if .Values.feature_options.enable_webrtc_turn_auth_servers }}
+      serviceAccountName: http-gateway
+      {{- else }}
       automountServiceAccountToken: false
+      {{- end }}
       containers:
         - name: http-gateway
           image: {{ .Values.registry }}{{ .Values.images.http_gateway_service }}
@@ -152,5 +156,24 @@ spec:
   selector:
     app: http-gateway
   type: NodePort
+{{- end }}
+{{- if .Values.feature_options.enable_webrtc_turn_auth_servers }}
 ---
+apiVersion: v1
+kind: ServiceAccount
+metadata:
+  name: http-gateway
+---
+apiVersion: rbac.authorization.k8s.io/v1
+kind: ClusterRoleBinding
+metadata:
+  name: http-gateway-sa-xfa-config-ipcidentity-fetcher
+roleRef:
+  apiGroup: rbac.authorization.k8s.io
+  kind: ClusterRole
+  name: xfa-config-ipcidentity-fetcher
+subjects:
+  - kind: ServiceAccount
+    name: http-gateway
+    namespace: {{ .Release.Namespace }}
 {{- end }}
