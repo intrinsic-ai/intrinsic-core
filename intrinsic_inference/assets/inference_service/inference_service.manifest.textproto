@@ -56,6 +56,11 @@ service_def {
           name: "inference-shm"
           mount_path: "/dev/shm"
         }
+        # Use CUDA's async allocator so TensorFlow returns unused GPU memory.
+        env_vars {
+          name: "TF_GPU_ALLOCATOR"
+          value: "cuda_malloc_async"
+        }
         resource_requirements {
           limits {
             key: "nvidia.com/gpu"
@@ -121,6 +126,11 @@ service_def {
         volume_mounts {
           name: "inference-shm"
           mount_path: "/dev/shm"
+        }
+        # Use CUDA's async allocator so TensorFlow returns unused GPU memory.
+        env_vars {
+          name: "TF_GPU_ALLOCATOR"
+          value: "cuda_malloc_async"
         }
         resource_requirements {
           limits {
