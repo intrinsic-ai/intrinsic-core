@@ -57,8 +57,15 @@ struct CreateJointEntitiesResult {
   std::vector<intrinsic_proto::scene_object::v1::Entity> sensor_entities;
   std::string joint_child_name;
 };
+
+// Returns the joint entity, any attached sensor entities, and the child link
+// name converted from `sdf_joint`.
+//
+// `child_link`, if not null, is the joint's child link. It allows poses that
+// are expressed directly relative to the joint to be parsed exactly; see
+// sdf::ParseJoint().
 absl::StatusOr<CreateJointEntitiesResult> EntitiesFromSdfJoint(
-    const ::sdf::Joint& sdf_joint);
+    const ::sdf::Joint& sdf_joint, const ::sdf::Link* child_link = nullptr);
 
 // Converts a SDFormat Sensor to an Intrinsic Scene Object Entity with
 // entity_type sensor.

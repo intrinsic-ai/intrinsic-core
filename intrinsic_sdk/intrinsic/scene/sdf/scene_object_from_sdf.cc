@@ -188,10 +188,11 @@ SceneObjectFromSdfModel(const ::sdf::Model& sdf_model,
   absl::flat_hash_map<std::string, std::string> ball_joint_sdf;
   for (auto i = 0; i < joint_count; ++i) {
     const ::sdf::Joint* joint = sdf_model.JointByIndex(i);
-    INTR_ASSIGN_OR_RETURN(auto joint_entities, EntitiesFromSdfJoint(*joint),
-                          _ << "While parsing joints in SDF Model "
-                            << sdf_model.Name()
-                            << " to convert to an Intrinsic Scene Object.");
+    INTR_ASSIGN_OR_RETURN(
+        auto joint_entities,
+        EntitiesFromSdfJoint(*joint, sdf_model.LinkByName(joint->ChildName())),
+        _ << "While parsing joints in SDF Model " << sdf_model.Name()
+          << " to convert to an Intrinsic Scene Object.");
 
     const auto& joint_name = joint_entities.joint_entity.name();
     // Keep track of ball joints in a map of joint name to joint sdf string

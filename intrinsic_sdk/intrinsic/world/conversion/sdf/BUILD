@@ -69,6 +69,7 @@ cc_library(
         ":sensor_conversion",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/scene/sdf:sdf_util",
+        "//intrinsic_sdk/intrinsic/simulation/gazebo:type_conversion",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/component:kinematics_component",
         "@abseil-cpp//absl/status:statusor",

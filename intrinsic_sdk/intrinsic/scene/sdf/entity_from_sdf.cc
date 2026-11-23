@@ -23,7 +23,6 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/substitute.h"
-#include "gz/math/Pose3.hh"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/math/proto_conversion.h"
@@ -31,7 +30,6 @@
 #include "intrinsic/scene/sdf/custom_tags.h"
 #include "intrinsic/scene/sdf/sdf_path_resolver.h"
 #include "intrinsic/scene/sdf/sdf_util.h"
-#include "intrinsic/simulation/gazebo/type_conversion.h"
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/component/physics_component.h"
@@ -90,12 +88,11 @@ EntityFromSdfFrame(const ::sdf::Frame& sdf_frame) {
   std::string body;
   INTR_RETURN_IF_ERROR(sdf::ToStatus(sdf_frame.ResolveAttachedToBody(body)));
 
-  gz::math::Pose3d gz_parent_t_this;
-  INTR_RETURN_IF_ERROR(
-      sdf::ToStatus(sdf_frame.SemanticPose().Resolve(gz_parent_t_this, body)));
-
+  // `Frame::SemanticPose()` already substitutes `attached_to` for an empty
+  // `relative_to`, so a frame whose pose is relative to `body` gets its raw
+  // pose back exactly.
   INTR_ASSIGN_OR_RETURN(const Pose3d parent_t_this,
-                        GzToIntrinsicChecked(gz_parent_t_this));
+                        sdf::ParseSemanticPose(sdf_frame.SemanticPose(), body));
 
   intrinsic_proto::scene_object::v1::Entity entity;
   entity.set_name(sdf_frame.Name());
@@ -147,10 +144,10 @@ EntitiesFromSdfLink(const ::sdf::Link& sdf_link,
 }
 
 absl::StatusOr<CreateJointEntitiesResult> EntitiesFromSdfJoint(
-    const ::sdf::Joint& sdf_joint) {
+    const ::sdf::Joint& sdf_joint, const ::sdf::Link* child_link) {
   CreateJointEntitiesResult result;
   INTR_ASSIGN_OR_RETURN(sdf::ParseJointResult parse_joint_result,
-                        sdf::ParseJoint(sdf_joint));
+                        sdf::ParseJoint(sdf_joint, child_link));
   INTR_ASSIGN_OR_RETURN(result.joint_entity,
                         JointEntityFromParsedJoint(parse_joint_result));
   result.joint_child_name = std::move(parse_joint_result).child_name;

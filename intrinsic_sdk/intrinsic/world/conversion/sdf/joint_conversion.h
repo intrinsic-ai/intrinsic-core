@@ -25,6 +25,7 @@
 #include "intrinsic/world/component/kinematics_component.h"
 #include "intrinsic/world/conversion/sdf/sensor_conversion.h"
 #include "sdf/Joint.hh"
+#include "sdf/Link.hh"
 #include "sdf/Model.hh"
 
 namespace intrinsic {
@@ -86,7 +87,13 @@ struct ParseJointResult {
   // Sensors that are direct children elements of the sdf joint.
   std::vector<ParseSensorResult> sensors;
 };
-absl::StatusOr<ParseJointResult> ParseJoint(const ::sdf::Joint& sdf_joint);
+
+// Parses `sdf_joint`.
+//
+// Accepts optional `child_link` entity to prevent minor numerical difference in
+// joint's calculated pose.
+absl::StatusOr<ParseJointResult> ParseJoint(
+    const ::sdf::Joint& sdf_joint, const ::sdf::Link* child_link = nullptr);
 }  // namespace sdf
 }  // namespace intrinsic
 

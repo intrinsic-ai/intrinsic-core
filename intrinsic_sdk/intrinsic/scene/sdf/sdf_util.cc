@@ -252,8 +252,14 @@ absl::StatusOr<Pose3d> ParsePose3(const ::sdf::ElementConstPtr& element) {
 absl::StatusOr<Pose3d> ParseSemanticPose(
     const ::sdf::SemanticPose& semantic_pose, const std::string& resolve_to) {
   ::gz::math::Pose3d resolved_pose;
-  if (const auto errors = semantic_pose.Resolve(resolved_pose, resolve_to);
-      !errors.empty()) {
+  if (semantic_pose.RelativeTo() == resolve_to) {
+    // The pose is already expressed in the requested frame. sdformat resolves
+    // poses by composing both frames' poses relative to the model root, which
+    // adds rounding error. The raw pose is exact.
+    resolved_pose = semantic_pose.RawPose();
+  } else if (const auto errors =
+                 semantic_pose.Resolve(resolved_pose, resolve_to);
+             !errors.empty()) {
     auto error_builder = DataLossErrorBuilder().LogError();
     error_builder << absl::Substitute(
         "Failed to resolve semantic pose originally relative to '$0', "
