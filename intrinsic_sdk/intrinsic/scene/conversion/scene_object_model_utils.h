@@ -15,20 +15,12 @@
 #ifndef INTRINSIC_SCENE_CONVERSION_SCENE_OBJECT_MODEL_UTILS_H_
 #define INTRINSIC_SCENE_CONVERSION_SCENE_OBJECT_MODEL_UTILS_H_
 
-#include <string>
-#include <vector>
-
-#include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "intrinsic/math/pose3.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 
 namespace intrinsic {
 namespace scene_object {
-
-// Returns the names of the non-fixed joints in the given entities.
-absl::flat_hash_set<std::string> GetNonFixedJointNames(
-    const std::vector<intrinsic_proto::scene_object::v1::Entity>& entities);
 
 // Computes a joint entity's local parent_t_this transform from its
 // KinematicsComponent:

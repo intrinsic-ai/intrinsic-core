@@ -16,11 +16,8 @@
 
 #include <cmath>
 #include <optional>
-#include <string>
 #include <utility>
-#include <vector>
 
-#include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
@@ -68,18 +65,6 @@ double DefaultJointValueFromLimits(const KinematicsComponent& kinematics) {
 }
 
 }  // namespace
-
-absl::flat_hash_set<std::string> GetNonFixedJointNames(
-    const std::vector<Entity>& entities) {
-  absl::flat_hash_set<std::string> joint_names;
-  for (const auto& entity : entities) {
-    if (entity.has_joint() &&
-        entity.joint().kinematics_component().motion_type() !=
-            intrinsic_proto::world::KinematicsComponent::MOTION_TYPE_FIXED)
-      joint_names.insert(entity.name());
-  }
-  return joint_names;
-}
 
 absl::StatusOr<Pose3d> ResolveJointEntityPose(const Entity& entity) {
   if (!entity.has_joint()) {
