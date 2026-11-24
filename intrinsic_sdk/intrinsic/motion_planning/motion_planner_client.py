@@ -351,15 +351,23 @@ class BatchCollisionQueryResult:
     success: Whether the collision check could be performed, i.e. whether the
       inputs were valid. This is not the outcome of the check itself.
     error_message: Error message if the collision check could not be performed.
-    has_collision: Whether the checked configuration or path is in collision.
-    collision_debug_msg: Description of the first collision encountered, if
+    has_collision: Whether the checked configuration or path is in collision or
+      violates joint limits.
+    collision_debug_msg: Description of the first failure encountered, if
       `has_collision` is True.
+    error: Structured reason why the check failed (`collision_error` or
+      `joint_limit_error`) when `has_collision` is True, or None if the service
+      did not provide one. Always optional: an older service, an intermediate
+      waypoint on a multi-waypoint path, or an edge failure between waypoints
+      leaves it unset. Unlike `BatchIkQueryResult.error`, this is always None
+      when `success` is False (invalid inputs report only `error_message`).
   """
 
   success: bool
   error_message: str
   has_collision: bool
   collision_debug_msg: str
+  error: Optional[motion_planning_error_pb2.MotionPlanningError] = None
 
 
 @dataclasses.dataclass
@@ -443,6 +451,7 @@ def _batch_collision_result_from_proto(
       error_message=result.error_message,
       has_collision=result.has_collision,
       collision_debug_msg=result.collision_debug_msg,
+      error=result.error if result.HasField("error") else None,
   )
 
 

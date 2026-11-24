@@ -16,6 +16,7 @@
 
 #include <optional>
 #include <string>
+#include <utility>
 
 #include "absl/log/log.h"
 #include "absl/status/status.h"
@@ -95,6 +96,29 @@ bool HasMotionPlanningErrorPayload(const absl::Status& status) {
         }
       });
   return has_payload;
+}
+
+std::optional<MotionPlanningError> GetMotionPlanningErrorPayload(
+    const absl::Status& status) {
+  std::optional<MotionPlanningError> motion_planning_error;
+  status.ForEachPayload([&motion_planning_error](absl::string_view type_url,
+                                                 const absl::Cord& payload) {
+    // The type URL of a `MotionPipelineError` payload contains
+    // `MotionPlanningError` as well, but the payload is a different message.
+    if (motion_planning_error.has_value() ||
+        !absl::StrContains(type_url, "MotionPlanningError") ||
+        absl::StrContains(type_url, "MotionPipelineError")) {
+      return;
+    }
+    MotionPlanningError parsed_error;
+    if (!parsed_error.ParseFromCord(payload)) {
+      LOG(ERROR) << "Failed to parse MotionPlanningError from payload: "
+                 << type_url;
+      return;
+    }
+    motion_planning_error = std::move(parsed_error);
+  });
+  return motion_planning_error;
 }
 
 absl::StatusOr<intrinsic_proto::motion_planning::v1::CollisionError>

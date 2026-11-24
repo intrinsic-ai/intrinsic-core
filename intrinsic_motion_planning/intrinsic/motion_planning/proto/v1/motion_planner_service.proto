@@ -370,6 +370,19 @@ message CheckCollisionsResponse {
   // that this message only lists the first collision encountered. There may
   // be more collisions.
   string collision_debug_msg = 2;
+
+  // Machine-readable reason why the check failed. Only populated when
+  // `has_collision` is true, and only when the failed check produced a
+  // structured error; callers must treat it as optional and fall back to
+  // `collision_debug_msg`.
+  //
+  // `has_collision` is also true when a waypoint violates the joint limits, so
+  // this is either a `collision_error` or a `joint_limit_error`. For a path
+  // with several waypoints, only failures on the first or the last waypoint
+  // produce a structured error, and its `error_context` tells which one;
+  // failures on intermediate waypoints or along edges between waypoints leave
+  // this field unset.
+  optional MotionPlanningError error = 3;
 }
 
 // Single inverse kinematics query within a batch request.
@@ -456,6 +469,16 @@ message BatchCollisionQueryResult {
 
   // Description of the first collision encountered, if has_collision is true.
   string collision_debug_msg = 4;
+
+  // Machine-readable reason why the check failed, with the same content as
+  // `CheckCollisionsResponse.error`. Only populated when `has_collision` is
+  // true, and only when the failed check produced a structured error; callers
+  // must treat it as optional and fall back to `collision_debug_msg`.
+  //
+  // Unlike `BatchIkQueryResult.error`, this field does not describe a query
+  // with `success` false: a collision check that could not be performed
+  // reports only `error_message`.
+  optional MotionPlanningError error = 5;
 }
 
 // Request message for BatchCheck.

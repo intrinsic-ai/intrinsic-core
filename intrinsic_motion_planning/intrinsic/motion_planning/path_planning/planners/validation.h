@@ -31,6 +31,7 @@
 #include "intrinsic/motion_planning/path_planning/path_segment.h"
 #include "intrinsic/motion_planning/path_planning/validators.h"
 #include "intrinsic/motion_planning/proto/v1/motion_planner_service.pb.h"
+#include "intrinsic/motion_planning/proto/v1/motion_planning_error.pb.h"
 #include "intrinsic/motion_planning/proto/v1/motion_specification.pb.h"
 #include "intrinsic/motion_planning/trajectory_planning/topp/path_sample.h"
 #include "intrinsic/world/collision/collision_context.pb.h"
@@ -158,6 +159,12 @@ struct CheckLimitsAndCollisionsForPointPathResult {
   const bool is_valid;
   // Empty if the path is valid.
   const std::string debug_message;
+  // The structured reason why the path is not valid. Unset if the path is
+  // valid, or if the check that failed did not produce a structured error
+  // (such as a failure on an intermediate waypoint or along an edge between
+  // waypoints).
+  const std::optional<intrinsic_proto::motion_planning::v1::MotionPlanningError>
+      error = std::nullopt;
 };
 
 // Check if all points in the given path are within limits and collisions free.

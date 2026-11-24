@@ -159,6 +159,12 @@ absl::Status CreateStatusWithFinePathIKError(
 // Returns true if the status has a payload that contains a MotionPlanningError
 bool HasMotionPlanningErrorPayload(const absl::Status& s);
 
+// Returns the `MotionPlanningError` carried by `status` as a payload, or
+// nullopt if `status` carries none. A `MotionPlanningError` that is wrapped in
+// a `MotionPipelineError` payload is not returned.
+std::optional<intrinsic_proto::motion_planning::v1::MotionPlanningError>
+GetMotionPlanningErrorPayload(const absl::Status& status);
+
 // Updates the error context in a status that contains a
 // MotionPlanningError payload. StatusCode is optional and allows user to update
 // type of error we want to surface.

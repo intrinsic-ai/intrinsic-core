@@ -89,6 +89,21 @@ absl::Status update_status(absl::Status& status, std::string prepend_message,
       });
   return updated_status;
 };
+
+// Creates an invalid-argument status carrying a `JointLimitError` payload for
+// `configuration`, attaching `proxy`'s joint limits when available.
+absl::Status CreateJointLimitErrorStatus(
+    const KinematicsSystemProxy& proxy,
+    const eigenmath::VectorXd& configuration, absl::string_view error_message,
+    const ErrorContext::Type error_context) {
+  const absl::StatusOr<JointLimits> limits =
+      ToJointLimits(proxy.GetJointLimits());
+  const std::optional<JointLimits> optional_limits =
+      limits.ok() ? std::make_optional(*limits) : std::nullopt;
+  return CreateStatusWithJointLimitError(
+      error_message, configuration, kMotionPlanningErrorSuffix, error_context,
+      absl::StatusCode::kInvalidArgument, optional_limits);
+}
 }  // namespace
 
 using intrinsic_proto::motion_planning::v1::MotionSegment;
@@ -123,11 +138,8 @@ absl::Status ValidateWithinLimitsAndValidStartAndEnd(
         "The initial configuration [%s] (in rad) of the path is not "
         "within joint limits.",
         toString(path.front()));
-    const auto& joint_positions = path.front();
-    return CreateStatusWithJointLimitError(
-        error_message, joint_positions, kMotionPlanningErrorSuffix,
-        ErrorContext::INITIAL_CONF_VALIDATION,
-        absl::StatusCode::kInvalidArgument);
+    return CreateJointLimitErrorStatus(proxy, path.front(), error_message,
+                                       ErrorContext::INITIAL_CONF_VALIDATION);
   }
   INTR_ASSIGN_OR_RETURN(bool is_back_within_limits,
                         proxy.IsWithinLimits(path.back()));
@@ -136,10 +148,8 @@ absl::Status ValidateWithinLimitsAndValidStartAndEnd(
         "The goal configuration [%s] (in rad) of the path is not "
         "within joint limits.",
         toString(path.back()));
-    const auto& joint_positions = path.back();
-    return CreateStatusWithJointLimitError(
-        error_message, joint_positions, kMotionPlanningErrorSuffix,
-        ErrorContext::GOAL_CONF_VALIDATION, absl::StatusCode::kInvalidArgument);
+    return CreateJointLimitErrorStatus(proxy, path.back(), error_message,
+                                       ErrorContext::GOAL_CONF_VALIDATION);
   }
   // Check for collisions.
   INTR_RETURN_IF_ERROR(ValidateConfiguration(proxy, path.front()))
@@ -507,11 +517,31 @@ absl::StatusOr<CheckLimitsAndCollisionsForPointPathResult>
 CheckLimitsAndCollisionsForConfiguration(
     const KinematicsSystemProxy& proxy,
     const eigenmath::VectorXd& configuration) {
+  const absl::StatusOr<bool> is_within_limits =
+      proxy.IsWithinLimits(configuration);
+  if (!is_within_limits.ok()) {
+    return CheckLimitsAndCollisionsForPointPathResult{
+        .is_valid = false,
+        .debug_message = is_within_limits.status().ToString()};
+  }
+  if (!*is_within_limits) {
+    const std::string error_message = absl::StrFormat(
+        "Configuration [%s] (in rad) is not within joint limits.",
+        toString(configuration));
+    const absl::Status validate_result = CreateJointLimitErrorStatus(
+        proxy, configuration, error_message, ErrorContext::CONF_VALIDATION);
+    return CheckLimitsAndCollisionsForPointPathResult{
+        .is_valid = false,
+        .debug_message = validate_result.ToString(),
+        .error = GetMotionPlanningErrorPayload(validate_result)};
+  }
+
   absl::Status validate_result = ValidateConfiguration(proxy, configuration);
 
   return CheckLimitsAndCollisionsForPointPathResult{
       .is_valid = validate_result.ok(),
-      .debug_message = validate_result.ToString()};
+      .debug_message = validate_result.ToString(),
+      .error = GetMotionPlanningErrorPayload(validate_result)};
 }
 
 absl::StatusOr<CheckLimitsAndCollisionsForPointPathResult>
@@ -523,7 +553,9 @@ CheckLimitsAndCollisionsForPointPath(const KinematicsSystemProxy& proxy,
       ValidateWithinLimitsAndValidStartAndEnd(path, proxy);
   if (!validate_result.ok()) {
     return CheckLimitsAndCollisionsForPointPathResult{
-        .is_valid = false, .debug_message = validate_result.ToString()};
+        .is_valid = false,
+        .debug_message = validate_result.ToString(),
+        .error = GetMotionPlanningErrorPayload(validate_result)};
   }
 
   // Now set up and validate the remaining points/edges.

@@ -379,36 +379,12 @@ BatchIkQueryResult ExecuteSingleIkQuery(
     // motion_planning_error_utils.h). Without this, batched callers can only
     // classify failures by matching on `error_message`, whereas single-query
     // `ComputeIk` callers receive this same proto as a gRPC status detail.
-    //
-    // Only bare `MotionPlanningError` payloads are handled here.
-    // `MotionPipelineError`-wrapped payloads are produced exclusively by
-    // `UpdateStatusWithPipelineError`, which runs in the multi-segment
-    // trajectory-planning pipeline that this stateless single-query path never
-    // enters. Their type URLs nevertheless contain the substring
-    // "MotionPlanningError", so they are excluded explicitly to avoid parsing
-    // one message type as the other.
-    ik_status_or_solutions.status().ForEachPayload(
-        [&result](absl::string_view type_url, const absl::Cord& payload) {
-          // `GetCollisionFreeIkSolutions` attaches exactly one such payload,
-          // so at most one match is expected. Should that ever change,
-          // `ForEachPayload`'s visitation order is unspecified, so pick the
-          // first one visited rather than letting a later one silently
-          // overwrite it.
-          if (result.has_error() ||
-              !absl::StrContains(type_url, "MotionPlanningError") ||
-              absl::StrContains(type_url, "MotionPipelineError")) {
-            return;
-          }
-          intrinsic_proto::motion_planning::v1::MotionPlanningError
-              motion_planning_error;
-          if (!motion_planning_error.ParseFromString(payload)) {
-            LOG(ERROR) << "Failed to parse MotionPlanningError from IK status "
-                          "payload with type URL: "
-                       << type_url;
-            return;
-          }
-          *result.mutable_error() = std::move(motion_planning_error);
-        });
+    if (std::optional<intrinsic_proto::motion_planning::v1::MotionPlanningError>
+            motion_planning_error =
+                GetMotionPlanningErrorPayload(ik_status_or_solutions.status());
+        motion_planning_error.has_value()) {
+      *result.mutable_error() = std::move(*motion_planning_error);
+    }
     return result;
   }
 
@@ -483,6 +459,9 @@ BatchCollisionQueryResult ExecuteSingleCollisionQuery(
     result.set_has_collision(!check_status_or->is_valid);
     if (!check_status_or->is_valid) {
       result.set_collision_debug_msg(check_status_or->debug_message);
+      if (check_status_or->error.has_value()) {
+        *result.mutable_error() = *check_status_or->error;
+      }
     }
   } else {
     const auto check_status_or = CheckLimitsAndCollisionsForPointPath(
@@ -496,6 +475,9 @@ BatchCollisionQueryResult ExecuteSingleCollisionQuery(
     result.set_has_collision(!check_status_or->is_valid);
     if (!check_status_or->is_valid) {
       result.set_collision_debug_msg(check_status_or->debug_message);
+      if (check_status_or->error.has_value()) {
+        *result.mutable_error() = *check_status_or->error;
+      }
     }
   }
 
@@ -1200,6 +1182,9 @@ absl::Status MotionPlannerService::ComputeIkInternal(
                          *proxy, ToVectorXds(request->waypoint()).front()));
     response->set_has_collision(!result.is_valid);
     response->set_collision_debug_msg(result.debug_message);
+    if (!result.is_valid && result.error.has_value()) {
+      *response->mutable_error() = *result.error;
+    }
   } else {
     // Path validation
     INTR_ASSIGN_OR_RETURN_GRPC(
@@ -1208,6 +1193,9 @@ absl::Status MotionPlannerService::ComputeIkInternal(
                          mps_config_.flags.default_collision_check_spacing));
     response->set_has_collision(!result.is_valid);
     response->set_collision_debug_msg(result.debug_message);
+    if (!result.is_valid && result.error.has_value()) {
+      *response->mutable_error() = *result.error;
+    }
   }
 
   return grpc::Status::OK;
