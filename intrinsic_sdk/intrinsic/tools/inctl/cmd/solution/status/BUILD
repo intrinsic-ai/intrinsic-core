@@ -26,9 +26,9 @@ go_library(
     deps = [
         "//intrinsic_sdk/intrinsic/assets:clientutils",
         "//intrinsic_sdk/intrinsic/assets:cmdutils",
-        "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:solution_service_go_proto",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:printer",
         "@com_github_spf13_cobra//:go_default_library",
+        "@intrinsic_apis//intrinsic/frontend/solution_service/proto:solution_service_go_proto",
         "@intrinsic_apis//intrinsic/frontend/solution_service/proto:status_go_proto",
         "@org_golang_google_protobuf//encoding/protojson:go_default_library",
     ],

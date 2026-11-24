@@ -31,12 +31,12 @@ go_library(
     visibility = ["//intrinsic_runtime/solution_service:__subpackages__"],
     deps = [
         ":find",
-        "//intrinsic_sdk/intrinsic/executive/proto:run_metadata_go_proto",
-        "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:sequence_list_go_proto",
         "//intrinsic_sdk/intrinsic/logging/proto:log_item_go_proto",
         "@com_github_golang_glog//:glog",
         "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto",
         "@intrinsic_apis//intrinsic/executive/proto:log_items_go_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:run_metadata_go_proto",
+        "@intrinsic_apis//intrinsic/frontend/solution_service/proto:sequence_list_go_proto",
         "@org_golang_google_protobuf//types/known/timestamppb",
     ],
 )

@@ -25,8 +25,6 @@ py_library(
         ":referenced_assets",
         "//intrinsic_sdk/intrinsic/assets:id_utils_py",
         "//intrinsic_sdk/intrinsic/assets/install:installed_assets_client",
-        "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:solution_service_py_pb2",
-        "//intrinsic_sdk/intrinsic/frontend/solution_service/proto:solution_service_py_pb2_grpc",
         "//intrinsic_sdk/intrinsic/solutions:behavior_tree",
         "//intrinsic_sdk/intrinsic/solutions:providers",
         "//intrinsic_sdk/intrinsic/util/grpc:error_handling",
@@ -38,6 +36,8 @@ py_library(
         "@intrinsic_apis//intrinsic/assets/proto:metadata_py_pb2",
         "@intrinsic_apis//intrinsic/assets/proto:view_py_pb2",
         "@intrinsic_apis//intrinsic/executive/proto:behavior_tree_py_pb2",
+        "@intrinsic_apis//intrinsic/frontend/solution_service/proto:solution_service_py_pb2",
+        "@intrinsic_apis//intrinsic/frontend/solution_service/proto:solution_service_py_pb2_grpc",
     ],
 )
 

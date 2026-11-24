@@ -41,8 +41,6 @@ cc_library(
         "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic_runtime/intrinsic/executive/clips_cpp:context",
         "//intrinsic_runtime/intrinsic/executive/proto:process_tree_cc_proto",  # fixdeps: keep
-        "//intrinsic_sdk/intrinsic/executive/proto:executive_events_cc_proto",
-        "//intrinsic_sdk/intrinsic/executive/proto:run_metadata_cc_proto",
         "//intrinsic_sdk/intrinsic/util/path_resolver",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
@@ -59,6 +57,8 @@ cc_library(
         "@abseil-cpp//absl/types:span",
         "@com_google_googleapis//google/rpc:status_cc_proto",
         "@com_google_protobuf//:protobuf",
+        "@intrinsic_apis//intrinsic/executive/proto:executive_events_cc_proto",
+        "@intrinsic_apis//intrinsic/executive/proto:run_metadata_cc_proto",
         "@intrinsic_apis//intrinsic/executive/proto:run_response_cc_proto",
         "@intrinsic_apis//intrinsic/executive/proto:world_query_cc_proto",
         "@or_tools//ortools/base:path",
