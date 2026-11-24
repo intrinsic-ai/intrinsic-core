@@ -145,7 +145,6 @@ cc_library(
     hdrs = ["world_sync_system.h"],
     deps = [
         "//intrinsic/simulation/gazebo/components:world_component",
-        "//intrinsic/world/proto/v1:pubsub_world_updates_cc_proto",
         "//intrinsic/world/util:tf_frame_util",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
@@ -162,6 +161,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:world_object",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/world/proto/v1:pubsub_world_updates_cc_proto",
         "@abseil-cpp//absl/base:log_severity",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
