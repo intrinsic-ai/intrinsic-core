@@ -66,8 +66,10 @@ namespace intrinsic::perception {
 class CalibrationServiceImpl final
     : public intrinsic_proto::perception::v1::CalibrationService::Service {
  public:
-  // The pointer arguments of the constructor can be null, in which case
-  // the corresponding stubs will be created internally.
+  // `operations_stub`, `asset_instances_stub`, and `object_world_service_stub`
+  // must be non-null for RPC paths that use them.
+  // `asset_deployment_service_stub` may be null, in which case it is created
+  // lazily over the ingress.
   explicit CalibrationServiceImpl(
       std::unique_ptr<::google::longrunning::Operations::StubInterface>
           operations_stub,
@@ -169,27 +171,28 @@ class CalibrationServiceImpl final
 
   absl::Mutex stub_mutex_;
   std::shared_ptr<grpc::Channel> ingress_channel_ ABSL_GUARDED_BY(stub_mutex_);
-  std::unique_ptr<::google::longrunning::Operations::StubInterface>
-      operations_stub_ ABSL_GUARDED_BY(stub_mutex_);
-  std::unique_ptr<intrinsic_proto::assets::v1::AssetInstances::StubInterface>
-      asset_instances_stub_ ABSL_GUARDED_BY(stub_mutex_);
+  const std::unique_ptr<::google::longrunning::Operations::StubInterface>
+      operations_stub_;
+  const std::unique_ptr<
+      intrinsic_proto::assets::v1::AssetInstances::StubInterface>
+      asset_instances_stub_;
   std::unique_ptr<
       intrinsic_proto::assets::AssetDeploymentService::StubInterface>
       asset_deployment_service_stub_ ABSL_GUARDED_BY(stub_mutex_);
-  std::shared_ptr<intrinsic_proto::world::ObjectWorldService::StubInterface>
-      object_world_service_stub_ ABSL_GUARDED_BY(stub_mutex_);
+  const std::shared_ptr<
+      intrinsic_proto::world::ObjectWorldService::StubInterface>
+      object_world_service_stub_;
 
-  // Helper functions to get or create stubs.
+  // Helper functions to get injected stubs or lazily create ingress stubs.
   std::shared_ptr<grpc::Channel> GetOrCreateIngressChannel()
       ABSL_EXCLUSIVE_LOCKS_REQUIRED(stub_mutex_);
   intrinsic_proto::assets::AssetDeploymentService::StubInterface*
   GetOrCreateAssetDeploymentServiceStub() ABSL_LOCKS_EXCLUDED(stub_mutex_);
   intrinsic_proto::assets::v1::AssetInstances::StubInterface*
-  GetOrCreateAssetInstancesStub() ABSL_LOCKS_EXCLUDED(stub_mutex_);
-  google::longrunning::Operations::StubInterface* GetOrCreateOperationsStub()
-      ABSL_LOCKS_EXCLUDED(stub_mutex_);
+  GetAssetInstancesStub() const;
+  google::longrunning::Operations::StubInterface* GetOperationsStub() const;
   std::shared_ptr<intrinsic_proto::world::ObjectWorldService::StubInterface>
-  GetOrCreateObjectWorldServiceStub() ABSL_LOCKS_EXCLUDED(stub_mutex_);
+  GetObjectWorldServiceStub() const;
 
   // Helper function to retrieve camera config.
   absl::StatusOr<intrinsic_proto::perception::v1::CameraConfig>

@@ -43,12 +43,10 @@
 #include "grpcpp/client_context.h"
 #include "grpcpp/server_context.h"
 #include "grpcpp/support/status.h"
-#include "intrinsic/assets/dependencies/utils.h"
 #include "intrinsic/assets/proto/asset_deployment.grpc.pb.h"
 #include "intrinsic/assets/proto/asset_deployment.pb.h"
 #include "intrinsic/assets/proto/v1/asset_instances.grpc.pb.h"
 #include "intrinsic/assets/proto/v1/asset_instances.pb.h"
-#include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
 #include "intrinsic/logging/proto/context.pb.h"
 #include "intrinsic/math/pose3.h"
@@ -534,7 +532,7 @@ grpc::Status CalibrationServiceImpl::Initialize(
     calibration_object_ = std::nullopt;
 
     if (request->has_arm_part() || request->has_calibration_object()) {
-      auto object_world_service_stub = GetOrCreateObjectWorldServiceStub();
+      auto object_world_service_stub = GetObjectWorldServiceStub();
       world::ObjectWorldClient object_world_client(execute_world_id_,
                                                    object_world_service_stub);
       if (request->has_arm_part()) {
@@ -632,7 +630,7 @@ grpc::Status CalibrationServiceImpl::CaptureData(
   std::optional<intrinsic_proto::Pose> base_t_flange;
   std::optional<Pose3d> base_t_flange_cached;
   if (robot_object_.has_value() && robot_flange_.has_value()) {
-    auto object_world_service_stub = GetOrCreateObjectWorldServiceStub();
+    auto object_world_service_stub = GetObjectWorldServiceStub();
     world::ObjectWorldClient object_world_client(execute_world_id_,
                                                  object_world_service_stub);
 
@@ -1135,7 +1133,7 @@ absl::Status CalibrationServiceImpl::CalibrateCameraToRobot(
           request->camera_to_robot_calibration_type(), calibration_data));
 
   // Run calibration and update camera poses in the Execute world.
-  auto object_world_service_stub = GetOrCreateObjectWorldServiceStub();
+  auto object_world_service_stub = GetObjectWorldServiceStub();
   world::ObjectWorldClient object_world_client(execute_world_id_,
                                                object_world_service_stub);
   for (int i = 0; i < requests.size(); ++i) {
@@ -1212,7 +1210,7 @@ absl::Status CalibrationServiceImpl::CalibrateCameraToCamera(
         calibration_data[k].pattern_detections[kDefaultReferenceCameraId]);
   }
 
-  auto object_world_service_stub = GetOrCreateObjectWorldServiceStub();
+  auto object_world_service_stub = GetObjectWorldServiceStub();
   world::ObjectWorldClient object_world_client(execute_world_id_,
                                                object_world_service_stub);
 
@@ -1636,7 +1634,7 @@ absl::Status CalibrationServiceImpl::ValidateCameraToRobot(
       CreateCameraToRobotCalibrationRequests(
           request->camera_to_robot_calibration_type(), calibration_data));
 
-  auto object_world_service_stub = GetOrCreateObjectWorldServiceStub();
+  auto object_world_service_stub = GetObjectWorldServiceStub();
   world::ObjectWorldClient object_world_client(execute_world_id_,
                                                object_world_service_stub);
 
@@ -1701,7 +1699,7 @@ absl::Status CalibrationServiceImpl::ValidateCameraToCamera(
   const std::vector<Pose3d> camera_ts_sensor =
       GetCameraTsSensor(validation_data[0]);
 
-  auto object_world_service_stub = GetOrCreateObjectWorldServiceStub();
+  auto object_world_service_stub = GetObjectWorldServiceStub();
   world::ObjectWorldClient object_world_client(execute_world_id_,
                                                object_world_service_stub);
 
@@ -1920,7 +1918,7 @@ grpc::Status CalibrationServiceImpl::Save(
 
 grpc::Status CalibrationServiceImpl::SaveCameraPosesToInitialWorld(
     const intrinsic_proto::perception::v1::CalibrationResult* request) {
-  auto object_world_service_stub = GetOrCreateObjectWorldServiceStub();
+  auto object_world_service_stub = GetObjectWorldServiceStub();
   world::ObjectWorldClient init_world_client(initial_world_id_,
                                              object_world_service_stub);
 
@@ -2091,7 +2089,7 @@ grpc::Status CalibrationServiceImpl::SaveIntrinsicCalibrationResults(
         *wait_request.mutable_timeout(),
         FromAbslDuration(kGrpcClientServiceCallDefaultTimeout));
     google::longrunning::Operations::StubInterface* operations_stub =
-        GetOrCreateOperationsStub();
+        GetOperationsStub();
     INTR_RETURN_IF_ERROR_GRPC(operations_stub->WaitOperation(
         &wait_context, wait_request, &operation));
     if (operation.has_error()) {
@@ -2150,39 +2148,20 @@ absl::Status CalibrationServiceImpl::ScheduleCoverageMapsUpdate(
 }
 
 google::longrunning::Operations::StubInterface*
-CalibrationServiceImpl::GetOrCreateOperationsStub() {
-  absl::MutexLock stub_lock(&stub_mutex_);
-  if (operations_stub_ == nullptr) {
-    auto status_or_operations_channel =
-        intrinsic::assets::dependencies::Connect(
-            intrinsic_proto::assets::v1::ResolvedDependency(),
-            "grpc://google.longrunning.Operations",
-            connect::UnlimitedMessageSizeGrpcChannelArgs());
-    CHECK_OK(status_or_operations_channel.status());
-    auto operations_channel = status_or_operations_channel.value();
-    CHECK_OK(intrinsic::connect::WaitForChannelReady(operations_channel));
-    operations_stub_ =
-        google::longrunning::Operations::NewStub(operations_channel);
-  }
+CalibrationServiceImpl::GetOperationsStub() const {
+  // The stub is created from the `intrinsic_runtime` dependency in
+  // calibration_service_main.cc and must be injected via the constructor.
+  CHECK(operations_stub_ != nullptr)
+      << "The Operations stub must be provided to CalibrationServiceImpl.";
   return operations_stub_.get();
 }
 
 intrinsic_proto::assets::v1::AssetInstances::StubInterface*
-CalibrationServiceImpl::GetOrCreateAssetInstancesStub() {
-  absl::MutexLock stub_lock(&stub_mutex_);
-  if (asset_instances_stub_ == nullptr) {
-    auto status_or_asset_instances_channel =
-        intrinsic::assets::dependencies::Connect(
-            intrinsic_proto::assets::v1::ResolvedDependency(),
-            "grpc://intrinsic_proto.assets.v1.AssetInstances",
-            connect::UnlimitedMessageSizeGrpcChannelArgs());
-    CHECK_OK(status_or_asset_instances_channel.status());
-    auto asset_instances_channel = status_or_asset_instances_channel.value();
-    CHECK_OK(intrinsic::connect::WaitForChannelReady(asset_instances_channel));
-    asset_instances_stub_ =
-        intrinsic_proto::assets::v1::AssetInstances::NewStub(
-            asset_instances_channel);
-  }
+CalibrationServiceImpl::GetAssetInstancesStub() const {
+  // The stub is created from the `intrinsic_runtime` dependency in
+  // calibration_service_main.cc and must be injected via the constructor.
+  CHECK(asset_instances_stub_ != nullptr)
+      << "The AssetInstances stub must be provided to CalibrationServiceImpl.";
   return asset_instances_stub_.get();
 }
 
@@ -2210,23 +2189,12 @@ CalibrationServiceImpl::GetOrCreateAssetDeploymentServiceStub() {
 }
 
 std::shared_ptr<intrinsic_proto::world::ObjectWorldService::StubInterface>
-CalibrationServiceImpl::GetOrCreateObjectWorldServiceStub() {
-  absl::MutexLock stub_lock(&stub_mutex_);
-  if (object_world_service_stub_ == nullptr) {
-    auto status_or_object_world_service_channel =
-        intrinsic::assets::dependencies::Connect(
-            intrinsic_proto::assets::v1::ResolvedDependency(),
-            "grpc://intrinsic_proto.world.ObjectWorldService",
-            connect::UnlimitedMessageSizeGrpcChannelArgs());
-    CHECK_OK(status_or_object_world_service_channel.status());
-    auto object_world_service_channel =
-        status_or_object_world_service_channel.value();
-    CHECK_OK(
-        intrinsic::connect::WaitForChannelReady(object_world_service_channel));
-    object_world_service_stub_ =
-        intrinsic_proto::world::ObjectWorldService::NewStub(
-            object_world_service_channel);
-  }
+CalibrationServiceImpl::GetObjectWorldServiceStub() const {
+  // The stub is created from the `intrinsic_runtime` dependency in
+  // calibration_service_main.cc and must be injected via the constructor.
+  CHECK(object_world_service_stub_ != nullptr)
+      << "The ObjectWorldService stub must be provided to "
+         "CalibrationServiceImpl.";
   return object_world_service_stub_;
 }
 
@@ -2241,7 +2209,7 @@ CalibrationServiceImpl::GetCameraConfigFromAssetInstances(
   grpc::ClientContext get_context;
   intrinsic_proto::assets::v1::AssetInstance asset_instance;
   intrinsic_proto::assets::v1::AssetInstances::StubInterface*
-      asset_instances_stub = GetOrCreateAssetInstancesStub();
+      asset_instances_stub = GetAssetInstancesStub();
   grpc::Status status = asset_instances_stub->GetAssetInstance(
       &get_context, get_request, &asset_instance);
   if (!status.ok()) {
