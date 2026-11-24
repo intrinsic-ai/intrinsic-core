@@ -19,23 +19,27 @@ package intrinsic_proto.solution_versions.v1;
 
 import "google/longrunning/operations.proto";
 
+
 import "google/protobuf/descriptor.proto";
 import "google/protobuf/field_mask.proto";
 import "google/rpc/status.proto";
-
 import "intrinsic/assets/proto/v1/solution.proto";
+
 
 import "intrinsic/modified_solution/proto/v1/modified_solution.proto";
 
-import "intrinsic/solution_versions/proto/v1/solution_diff.proto";
 
 import "intrinsic/solution_versions/proto/v1/branch.proto";
 import "intrinsic/solution_versions/proto/v1/conflict.proto";
+import "intrinsic/solution_versions/proto/v1/solution_diff.proto";
+
 
 import "intrinsic/solution_versions/proto/v1/conflict_resolution.proto";
 
+
 import "intrinsic/solution_versions/proto/v1/snapshot.proto";
 import "intrinsic/solution_versions/proto/v1/snapshot_source.proto";
+import "intrinsic/solution_versions/proto/v1/solution_source.proto";
 import "intrinsic/solution_versions/proto/v1/warning.proto";
 
 option go_package = "intrinsic/solution_versions/proto/v1/solution_version_service_go_proto";
@@ -699,20 +703,41 @@ message GetSolutionRequest {
 
 message DiffRequest {
   // The baseline state of the comparison.
-  SnapshotSource reference = 1;
+  //
+  // Deprecated: use `reference_source`. Ignored if `reference_source` is set.
+  SnapshotSource reference = 1 [deprecated = true];
 
-  // The state that is compared against the reference. Applying the returned
-  // patch to the reference yields the target.
-  SnapshotSource target = 2;
+  // The state that is compared against the reference.
+  //
+  // Deprecated: use `target_source`. Ignored if `target_source` is set.
+  SnapshotSource target = 2 [deprecated = true];
+
+  // The baseline state of the comparison.
+  SolutionSource reference_source = 3;
+
+  // The state that is compared against the reference source. Applying the
+  // returned patch to the reference source yields the target.
+  SolutionSource target_source = 4;
 }
 
 
 message DiffAndOverlayRequest {
   // The baseline state of the comparison.
-  SnapshotSource reference = 1;
+  //
+  // Deprecated: use `reference_source`. Ignored if `reference_source` is set.
+  SnapshotSource reference = 1 [deprecated = true];
 
   // The state that is compared against the reference and overlaid on top of it.
-  SnapshotSource target = 2;
+  //
+  // Deprecated: use `target_source`. Ignored if `target_source` is set.
+  SnapshotSource target = 2 [deprecated = true];
+
+  // The baseline state of the comparison.
+  SolutionSource reference_source = 3;
+
+  // The state that is compared against the `reference_source` and overlaid on
+  // top of it.
+  SolutionSource target_source = 4;
 }
 
 

@@ -125,6 +125,30 @@ py_proto_library(
 )
 
 proto_library(
+    name = "solution_source_proto",
+    srcs = ["solution_source.proto"],
+    deps = [
+        ":snapshot_source_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_proto",
+    ],
+)
+
+go_proto_library(
+    name = "solution_source_go_proto",
+    importpath = "intrinsic/solution_versions/proto/v1/solution_source_go_proto",
+    protos = [":solution_source_proto"],
+    deps = [
+        ":snapshot_source_go_proto",
+        "@intrinsic_apis//intrinsic/assets/proto/v1:solution_go_proto",
+    ],
+)
+
+py_proto_library(
+    name = "solution_source_py_pb2",
+    deps = [":solution_source_proto"],
+)
+
+proto_library(
     name = "solution_diff_proto",
     srcs = ["solution_diff.proto"],
     deps = [

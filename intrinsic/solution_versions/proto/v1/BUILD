@@ -37,6 +37,7 @@ proto_library(
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_source_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:solution_diff_proto",
+        "@intrinsic_apis//intrinsic/solution_versions/proto/v1:solution_source_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:warning_proto",
     ],
 )
@@ -82,6 +83,7 @@ go_proto_library(
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:snapshot_source_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:solution_diff_go_proto",
+        "@intrinsic_apis//intrinsic/solution_versions/proto/v1:solution_source_go_proto",
         "@intrinsic_apis//intrinsic/solution_versions/proto/v1:warning_go_proto",
         "@io_bazel_rules_go//proto/wkt:descriptor_go_proto",
         "@io_bazel_rules_go//proto/wkt:field_mask_go_proto",
