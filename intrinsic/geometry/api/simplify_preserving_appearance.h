@@ -33,11 +33,13 @@ namespace intrinsic::geo {
 // and the exact mesh always match. A generated renderable is not stored.
 // `material_properties` are preserved. Returns `geo` unchanged if its mesh is
 // empty or nothing can be simplified, including when the GLB uses glTF data
-// the simplifier doesn't support.
+// the simplifier doesn't support. A file without triangles, such as an empty
+// scene, loads as an empty point cloud and is also returned unchanged.
 //
 // Returns InvalidArgumentError if `target_triangle_ratio` is not in (0, 1] or
-// `geo` contains primitive shapes, and CancelledError if `stop_token` is
-// triggered. Other errors from simplifying or reading the GLB are returned.
+// `geo` contains primitive shapes or a non-empty point cloud, and
+// CancelledError if `stop_token` is triggered. Other errors from simplifying
+// or reading the GLB are returned.
 absl::StatusOr<Geometry> SimplifyPreservingAppearance(
     const Geometry& geo, double target_triangle_ratio,
     StopToken stop_token = StopToken());

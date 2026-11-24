@@ -33,6 +33,7 @@
 #include "intrinsic/geometry/internal/mesh/io/load_ai_scene_from_buffer.h"
 #include "intrinsic/geometry/internal/mesh/mesh.h"
 #include "intrinsic/geometry/internal/mesh_simplification/appearance/glb_appearance_simplifier.h"
+#include "intrinsic/geometry/shapes/point_cloud.h"
 #include "intrinsic/util/object_store/object_ref.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/thread/stop_token.h"
@@ -61,6 +62,22 @@ absl::Status CheckInUnitInterval(absl::string_view name, double value) {
   return absl::OkStatus();
 }
 
+// Returns true if `exact` is an empty point cloud, false if it is not a point
+// cloud, and InvalidArgumentError if it is a point cloud with points.
+absl::StatusOr<bool> IsEmptyPointCloud(const ExactGeometry& exact) {
+  if (!exact.HasPointCloud()) {
+    return false;
+  }
+  INTR_ASSIGN_OR_RETURN(const ObjectRef<PointCloud>& point_cloud,
+                        exact.GetPointCloud());
+  if (!point_cloud.Value().getPoints().empty()) {
+    return absl::InvalidArgumentError(
+        "SimplifyPreservingAppearance supports triangle meshes, but the "
+        "geometry is a point cloud.");
+  }
+  return true;
+}
+
 }  // namespace
 
 absl::StatusOr<Geometry> SimplifyPreservingAppearance(
@@ -73,6 +90,14 @@ absl::StatusOr<Geometry> SimplifyPreservingAppearance(
   if (!geo.GetExactGeometry().GetPrimitiveShapes().empty()) {
     return absl::InvalidArgumentError(
         "SimplifyPreservingAppearance does not support primitive shapes.");
+  }
+  // A file without triangles (e.g. an empty scene, or one whose triangles are
+  // all degenerate) loads as a point cloud. An empty one has nothing to
+  // simplify.
+  INTR_ASSIGN_OR_RETURN(const bool empty_point_cloud,
+                        IsEmptyPointCloud(geo.GetExactGeometry()));
+  if (empty_point_cloud) {
+    return geo;
   }
   INTR_ASSIGN_OR_RETURN(const ObjectRef<Mesh>& mesh,
                         geo.GetExactGeometry().GetMesh());
