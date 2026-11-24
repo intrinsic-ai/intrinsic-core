@@ -17,9 +17,9 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_binary")
 package(default_visibility = ["//visibility:public"])
 
 go_binary(
-    name = "inctl_external",
-    srcs = ["inctl_external.go"],
-    importpath = "intrinsic/tools/inctl/inctl_external",
+    name = "inctl",
+    srcs = ["inctl.go"],
+    importpath = "intrinsic/tools/inctl/inctl",
     deps = [
         "//intrinsic_sdk/intrinsic/assets/inctl:assetcmd",
         "//intrinsic_sdk/intrinsic/assets/services/inctl:service",

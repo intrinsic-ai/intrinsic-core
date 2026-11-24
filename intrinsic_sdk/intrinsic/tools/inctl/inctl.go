@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-// inctl_external is the subset of inctl that we release to external developers. 
+// inctl provides utilities and high-level API access to Intrinsic developers.
 package main
 
 import (

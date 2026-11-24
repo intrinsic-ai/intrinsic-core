@@ -372,7 +372,7 @@ When a client or tool needs to parse or construct `google.protobuf.Any` configur
 1. **Install the skill bundle (`inctl skill install <skill.bundle.tar> --address=localhost:17080`)**:
    Call `intrinsic_proto.assets.v1.InstalledAssets/CreateInstalledAsset` and poll `google.longrunning.Operations/WaitOperation` until `done == true`.
 2. **Reset world state prior to execution (`inctl world reset --address=localhost:17080`)**:
-   Note that `/usr/local/bin/inctl` (`inctl_external`) omits `sim` and `executive` subcommands; reset the world via `inctl world reset --address=localhost:17080` or call `intrinsic_proto.simulation.v1.SimulationService/ResetSimulation` over gRPC, retrying with exponential backoff on `codes.Unavailable` while ingress routes stabilize.
+   Note that `/usr/local/bin/inctl` omits `sim` and `executive` subcommands; reset the world via `inctl world reset --address=localhost:17080` or call `intrinsic_proto.simulation.v1.SimulationService/ResetSimulation` over gRPC, retrying with exponential backoff on `codes.Unavailable` while ingress routes stabilize.
 3. **Load and execute the behavior tree via gRPC (`ExecutiveService`)**:
    Note that `inctl process set --server=localhost:17080` only calls `ListOperations`, `DeleteOperation`, and `CreateOperation` (it never calls `StartOperation`), and `inctl process get --server=localhost:17080` only returns the static `BehaviorTree` proto definition rather than runtime execution state. To execute and monitor a behavior tree:
    - Call `intrinsic_proto.executive.ExecutiveService/ListOperations`.
