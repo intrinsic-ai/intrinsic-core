@@ -77,7 +77,7 @@ func NewCommand() *cobra.Command {
 				return fmt.Errorf("failed to share solution %j: %w", solutionID, err)
 			}
 
-			return printResult(cmd, &shareResult{solutionID, viper.GetString(orgutil.KeyOrganization)})
+			return printResult(cmd, &shareResult{solutionID, viperLocal.GetString(orgutil.KeyOrganization)})
 		},
 	}, viperLocal)
 
