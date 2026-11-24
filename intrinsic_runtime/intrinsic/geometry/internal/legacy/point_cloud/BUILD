@@ -34,21 +34,3 @@ cc_library(
         "@assimp",
     ],
 )
-
-cc_library(
-    name = "load_point_cloud_from_buffer",
-    srcs = ["load_point_cloud_from_buffer.cc"],
-    hdrs = ["load_point_cloud_from_buffer.h"],
-    deps = [
-        ":ai_scene_to_point_cloud",
-        "//intrinsic_sdk/intrinsic/eigenmath",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:load_ai_scene_from_buffer",
-        "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:point_cloud_riegeli_coder",
-        "//intrinsic_sdk/intrinsic/geometry/shapes",
-        "//intrinsic_sdk/intrinsic/util/object_store",
-        "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
-        "//intrinsic_sdk/intrinsic/util/status:status_macros",
-        "@abseil-cpp//absl/status:statusor",
-        "@assimp",
-    ],
-)

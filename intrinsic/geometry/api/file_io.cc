@@ -20,7 +20,6 @@
 // a redefinition of the assimp importer class.
 // TODO(b/73746994): Reconcile this with blue/shared and decide which version to
 // use.
-#include <assimp/cimport.h>
 #include <assimp/postprocess.h>
 
 #include <memory>
@@ -29,7 +28,6 @@
 #include <utility>
 
 #include "absl/container/flat_hash_set.h"
-#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/ascii.h"
@@ -37,9 +35,7 @@
 #include "absl/strings/str_join.h"
 #include "absl/strings/string_view.h"
 #include "absl/strings/substitute.h"
-#include "assimp/Exporter.hpp"
 #include "assimp/cexport.h"
-#include "assimp/cimport.h"
 #include "assimp/color4.h"
 #include "assimp/config.h"
 #include "assimp/material.h"
@@ -50,33 +46,14 @@
 #include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/api/renderable.h"
 #include "intrinsic/geometry/internal/legacy/point_cloud/ai_scene_to_point_cloud.h"
-#include "intrinsic/geometry/internal/legacy/point_cloud/load_point_cloud_from_buffer.h"
 #include "intrinsic/geometry/internal/mesh/io/ai_scene_to_mesh.h"
 #include "intrinsic/geometry/internal/mesh/io/load_ai_scene_from_buffer.h"
-#include "intrinsic/geometry/internal/mesh/io/mesh_to_ai_scene.h"
 #include "intrinsic/geometry/internal/mesh/io/restrict_importer.h"
 #include "intrinsic/geometry/internal/mesh/mesh.h"
 #include "intrinsic/geometry/internal/point_cloud/pts_to_ai_scene.h"
 #include "intrinsic/geometry/internal/point_cloud/pts_to_point_cloud.h"
 #include "intrinsic/geometry/internal/util/export_as_gltf.h"
-#include "intrinsic/geometry/proto/v1/exact_geometry.pb.h"
-#include "intrinsic/geometry/proto/v1/geometry.pb.h"
-#include "intrinsic/geometry/proto/v1/geometry_options.pb.h"
-#include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
-#include "intrinsic/geometry/proto/v1/inline_geometry.pb.h"
-#include "intrinsic/geometry/proto/v1/octree.pb.h"
-#include "intrinsic/geometry/proto/v1/octree_wrapping.pb.h"
-#include "intrinsic/geometry/proto/v1/point_cloud.pb.h"
-#include "intrinsic/geometry/proto/v1/primitive_shape.pb.h"
-#include "intrinsic/geometry/proto/v1/primitives.pb.h"
-#include "intrinsic/geometry/proto/v1/renderable.pb.h"
-#include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
-#include "intrinsic/geometry/proto/v1/transformed_primitive_shape.pb.h"
-#include "intrinsic/geometry/proto/v1/triangle_mesh.pb.h"
 #include "intrinsic/geometry/shapes/point_cloud.h"
-#include "intrinsic/geometry/shapes/shapes.h"
-#include "intrinsic/math/proto/vector3.pb.h"
-#include "intrinsic/util/object_store/object_ref.h"
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "ortools/base/helpers.h"
