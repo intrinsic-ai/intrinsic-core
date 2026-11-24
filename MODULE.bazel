@@ -862,7 +862,7 @@ oci.pull(
 )
 oci.pull(
     name = "distroless_python3",
-    digest = "sha256:3f3fd24c6e8aa74559a8e84110a9b2916ae6e5ac6f482eea38d8bdac074fa03b",
+    digest = "sha256:4d4b3e43e67a4d3e149d68d30a68b7d48c289e4e1dabf8201271e6252805c9dd",
     image = "gcr.io/distroless/python3",
     platforms = [
         "linux/amd64",
