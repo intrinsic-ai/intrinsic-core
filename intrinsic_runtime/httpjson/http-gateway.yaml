@@ -26,6 +26,8 @@ spec:
         app: http-gateway
     spec:
       {{- if .Values.feature_options.enable_webrtc_turn_auth_servers }}
+      # Specified twice to allow safe reverts/downgrades via synk three-way merge (b/590004657).
+      serviceAccount: http-gateway
       serviceAccountName: http-gateway
       {{- else }}
       automountServiceAccountToken: false
