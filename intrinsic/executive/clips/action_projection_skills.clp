@@ -146,7 +146,8 @@
   handle projection failures in case other actions' footprint volumes were
   potentially present in the world. Transition to CONFLICT-WAITING and wait
   until those actions finish before re-projecting (at most once per skill
-  call)."
+  call). Currently gated behind the
+  enable_executive_experimental_projection_failure_wait feature flag."
   ?af <- (plan-action (uid ?uid) (state PROJECTING) (skill-id ?skill-id)
                       (action-uids-with-volumes-at-projection
                         $?volumes-at-projection)

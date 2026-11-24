@@ -170,6 +170,11 @@ ABSL_FLAG(
     bool, enable_executive_skill_conflict_default_wait, false,
     "If set to true, default skill conflict handling mode for UNSPECIFIED is "
     "WAIT instead of FAIL.");
+ABSL_FLAG(
+    bool, enable_executive_experimental_projection_failure_wait, false,
+    "If set to true, skills in REPROJECT-ON-VOLUME mode whose projection fails "
+    "while other actions' footprint volumes may have been present wait and "
+    "retry once instead of failing immediately.");
 ABSL_FLAG(absl::Duration, conductor_client_operation_poll_interval,
           absl::Milliseconds(100),
           "Time interval in which the executive polls the conductor service "
@@ -296,6 +301,14 @@ BuildExecutiveConfig() {
     intrinsic_proto::executive::ExecutiveConfig::Flag* flag =
         config.mutable_flags()->Add();
     flag->set_name("enable_executive_skill_conflict_default_wait");
+    flag->set_bool_value(true);
+  }
+
+  if (absl::GetFlag(
+          FLAGS_enable_executive_experimental_projection_failure_wait)) {
+    intrinsic_proto::executive::ExecutiveConfig::Flag* flag =
+        config.mutable_flags()->Add();
+    flag->set_name("enable_executive_experimental_projection_failure_wait");
     flag->set_bool_value(true);
   }
 

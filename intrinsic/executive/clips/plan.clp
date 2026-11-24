@@ -332,7 +332,9 @@
 ; Returns TRUE if ?af should transition to CONFLICT-WAITING and retry after a
 ; failed projection, or FALSE if it should fail immediately.
 (deffunction plan-action-should-wait-on-projection-failure (?af)
-  (return (and (eq (fact-slot-value ?af conflict-handling-mode)
+  (return (and (get-flag-value
+                 enable_executive_experimental_projection_failure_wait)
+               (eq (fact-slot-value ?af conflict-handling-mode)
                    REPROJECT-ON-VOLUME)
                (non-empty$
                  (fact-slot-value ?af action-uids-with-volumes-at-projection))

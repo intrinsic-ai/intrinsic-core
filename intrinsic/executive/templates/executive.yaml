@@ -97,6 +97,9 @@ spec:
             {{- if .Values.feature_options.enable_executive_skill_conflict_default_wait }}
             - --enable_executive_skill_conflict_default_wait
             {{- end }}
+            {{- if .Values.feature_options.enable_executive_experimental_projection_failure_wait }}
+            - --enable_executive_experimental_projection_failure_wait
+            {{- end }}
             # Simulation service is only started if the deployment is in simulated mode.
             {{ if .Values.simulated }}
             - --simulation_service_address=simulation-service.app-intrinsic-base.svc.cluster.local:8080
