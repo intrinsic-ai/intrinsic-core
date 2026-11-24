@@ -37,7 +37,6 @@ go_proto_library(
         "//intrinsic/resources/service:__pkg__",
         "//intrinsic/skills/internal:__pkg__",
         "//intrinsic/skills/proto:__pkg__",
-        "//intrinsic/solution_versions:__subpackages__",
         "//intrinsic_sdk/intrinsic/skills/internal:__pkg__",
         "//intrinsic_sdk/intrinsic/skills/proto:__pkg__",
     ],

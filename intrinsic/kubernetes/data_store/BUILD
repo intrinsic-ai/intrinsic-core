@@ -22,7 +22,6 @@ go_library(
         "//intrinsic/kubernetes/data_store:__subpackages__",
         "//intrinsic/resources:__pkg__",
         "//intrinsic/resources/catalog:__subpackages__",
-        "//intrinsic/solution_versions:__subpackages__",
         "//intrinsic/storage:__subpackages__",
     ],
     deps = ["@org_golang_google_grpc//codes:go_default_library"],

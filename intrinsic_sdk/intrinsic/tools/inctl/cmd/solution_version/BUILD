@@ -27,7 +27,7 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools:__subpackages__",
     ],
     deps = [
-        "//intrinsic/solution_versions/proto/v1:solution_version_service_go_proto",
+        "//intrinsic_sdk/intrinsic/solution_versions/proto/v1:solution_version_service_go_proto",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:root",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:color",

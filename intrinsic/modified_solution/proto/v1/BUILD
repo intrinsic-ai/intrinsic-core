@@ -21,7 +21,7 @@ proto_library(
     srcs = ["modified_solution.proto"],
     visibility = [
         # Modified solution should not be added as dependencies to any other protos.
-        "//intrinsic/solution_versions/proto/v1:__pkg__",
+        "//intrinsic_sdk/intrinsic/solution_versions/proto/v1:__pkg__",
     ],
     deps = [
         "//intrinsic/config/proto:application_proto",
@@ -50,7 +50,7 @@ go_proto_library(
         "//intrinsic/assets/install:__pkg__",
         "//intrinsic/kubernetes/workcell_spec:__pkg__",
         "//intrinsic/modified_solution:__subpackages__",
-        "//intrinsic/solution_versions:__subpackages__",
+        "//intrinsic_sdk/intrinsic/solution_versions/proto/v1:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution/create:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution_version:__pkg__",
     ],
@@ -77,7 +77,7 @@ go_proto_library(
     protos = [":modified_solution_metadata_proto"],
     visibility = [
         "//intrinsic/modified_solution:__subpackages__",
-        "//intrinsic/solution_versions:__subpackages__",
+        "//intrinsic_sdk/intrinsic/solution_versions/proto/v1:__pkg__",
     ],
 )
 

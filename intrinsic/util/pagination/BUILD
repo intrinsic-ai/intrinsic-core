@@ -65,7 +65,6 @@ go_library(
         "//intrinsic/kubernetes/data_store:__subpackages__",
         "//intrinsic/resources/service:__pkg__",
         "//intrinsic/skills/internal:__pkg__",
-        "//intrinsic/solution_versions:__subpackages__",
         "//intrinsic_runtime/intrinsic/longrunning/go:__pkg__",
         "//intrinsic_runtime/solution_service:__subpackages__",
         "//intrinsic_sdk/intrinsic/skills/internal:__pkg__",
@@ -97,5 +96,4 @@ go_proto_library(
     name = "page_token_go_proto",
     importpath = "intrinsic/util/pagination/page_token_go_proto",
     protos = [":page_token_proto"],
-    visibility = ["//intrinsic/solution_versions:__subpackages__"],
 )
