@@ -29,15 +29,9 @@
 #include "intrinsic/geometry/api/exact_geometry.h"
 #include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/api/geometry_fingerprint.h"
-#include "intrinsic/geometry/api/geometry_options.h"
 #include "intrinsic/geometry/api/io.h"
 #include "intrinsic/geometry/api/renderable.h"
 #include "intrinsic/geometry/api/renderable_generation.h"
-
-#include "intrinsic/geometry/compatibility/io.h"
-
-#include "intrinsic/geometry/proto/geometry_storage_refs.pb.h"
-#include "intrinsic/geometry/proto/lazy_exact_geometry.pb.h"
 #include "intrinsic/geometry/proto/v1/geometry_storage_refs.pb.h"
 #include "intrinsic/geometry/proto/v1/material.pb.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
@@ -56,11 +50,7 @@ const ChunkId::ValueType kGLBChunkId = 'GLTF';
 // Version 0 == binary glb string for Renderable..
 const uint32_t kRenderableVersionNumber = 0;
 
-// Version 0 == The geometry saved as binary AnyShape proto
 // Version 1 == The geometry saved as binary v1::ExactGeometry proto
-
-const uint32_t kGeometryVersionNumber = 0;
-
 const uint32_t kGeometryVersionNumberV1 = 1;
 
 absl::StatusOr<ChunkKey> ObjectIdToKeyOld(absl::string_view id) {
@@ -68,59 +58,6 @@ absl::StatusOr<ChunkKey> ObjectIdToKeyOld(absl::string_view id) {
   CHECK(absl::SimpleHexAtoi(id, &chunk_key));
   return absl::StrCat(chunk_key);
 }
-
-
-// TODO(b/442842561): Remove this method once all users are migrated to v1
-// geometry protos.
-absl::StatusOr<Geometry> ReadGeometryFromGzfV0(
-    const GZFile& gzfile, const GeometryOptions& options,
-    const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs) {
-  // TODO(b/321989362): Don't use the fingerprint as the identifier.
-  const std::string& id = geo_storage_refs.fingerprint();
-  INTR_ASSIGN_OR_RETURN(ChunkKey chunk_key, ObjectIdToKeyOld(id));
-  std::optional<ChunkEntry> shape_chunk_entry =
-      gzfile.GetChunk(ChunkId(kGeometryChunkId), chunk_key);
-  if (shape_chunk_entry == std::nullopt) {
-    return NotFoundErrorBuilder() << absl::StrCat(
-               "Geometry for object with ID '", id, "' not found in GZFile");
-  }
-
-  if (shape_chunk_entry->GetDataVersion() != kGeometryVersionNumber) {
-    return DataLossErrorBuilder() << "Unknown shape geo version number "
-                                  << shape_chunk_entry->GetDataVersion();
-  }
-
-  intrinsic_proto::geometry::LazyExactGeometry shape_proto;
-  if (!shape_proto.ParseFromString(shape_chunk_entry->GetUncompressedData())) {
-    return DataLossErrorBuilder() << "Could not parse the shape data";
-  }
-
-  INTR_ASSIGN_OR_RETURN(
-      ExactGeometry shape,
-      geometry_compatibility::ToExactGeometry(shape_proto, options));
-  std::shared_ptr<const Renderable> renderable;
-
-  const auto maybe_glb_chunk_entry =
-      gzfile.GetChunk(ChunkId(kGLBChunkId), chunk_key);
-
-  bool keep_renderable = false;
-  if (maybe_glb_chunk_entry.has_value()) {
-    const auto& chunk_entry = maybe_glb_chunk_entry.value();
-    if (chunk_entry.GetDataVersion() != kRenderableVersionNumber) {
-      return DataLossErrorBuilder() << "Unknown renderable version number "
-                                    << chunk_entry.GetDataVersion();
-    }
-
-    renderable = std::make_shared<Renderable>(
-        std::string(chunk_entry.GetUncompressedData()));
-    keep_renderable = true;
-  }
-
-  return Geometry(std::move(shape), std::move(renderable), keep_renderable,
-                  /*material_properties=*/std::nullopt,
-                  /*provenance=*/std::nullopt);
-}
-
 
 // TODO(b/442842561): Rename this method once all users are migrated to v1
 // geometry protos.
@@ -246,17 +183,6 @@ class GzfGeometryLibrary : public GeometryLibrary,
   }
 
  private:
-
-  // TODO(b/442842561): Remove this method once all users are migrated to v1
-  // geometry protos.
-  absl::StatusOr<Geometry> DoGetGeometryV0(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override {
-    return ReadGeometryFromGzfV0(gzfile_, options, geo_storage_refs);
-  }
-
-
-
   GZFile& gzfile_;
 };
 
@@ -286,17 +212,6 @@ class ReadOnlyGzfGeometryLibrary : public GeometryLibrary,
   }
 
  private:
-
-  // TODO(b/442842561): Remove this method once all users are migrated to v1
-  // geometry protos.
-  absl::StatusOr<Geometry> DoGetGeometryV0(
-      const intrinsic_proto::geometry::GeometryStorageRefs& geo_storage_refs,
-      const GeometryOptions& options) const override {
-    return ReadGeometryFromGzfV0(gzfile_, options, geo_storage_refs);
-  }
-
-
-
   const GZFile& gzfile_;
 };
 
