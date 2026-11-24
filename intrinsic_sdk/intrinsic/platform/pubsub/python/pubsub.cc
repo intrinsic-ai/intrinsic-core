@@ -701,7 +701,8 @@ PYBIND11_MODULE(pubsub, m) {
             opt.timeout = absl::Seconds(s);
           });
 
-  pybind11::class_<KeyValueStore> kvstore_class(m, "KeyValueStore");
+  pybind11::class_<KeyValueStore, std::shared_ptr<KeyValueStore>> kvstore_class(
+      m, "KeyValueStore");
   kvstore_class
       .def("set",
            static_cast<absl::Status (KeyValueStore::*)(
