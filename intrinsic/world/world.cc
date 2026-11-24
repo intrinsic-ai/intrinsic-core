@@ -55,9 +55,11 @@
 #include "intrinsic/geometry/api/fuse_geometries.h"
 #include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/api/geometry_options.h"
+#include "intrinsic/geometry/api/io.h"
 #include "intrinsic/geometry/shapes/point_cloud.h"
 #include "intrinsic/geometry/storage/dummy_storage.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
+#include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
 #include "intrinsic/geometry/storage/gzf_storage.h"
 #include "intrinsic/kinematics/skeleton.h"
@@ -286,6 +288,31 @@ void RemapRuleSetEntityIds(intrinsic_proto::RuleSet& rule_set,
       rule.set_id_2(i, mapping.at(EntityId(rule.id_2(i))).value());
     }
   }
+}
+
+// Re-serializes every GeometryComponent in `world` using `deserializer` to
+// load shapes and `serializer` to write updated geometry storage references.
+absl::Status ReserializeWorldGeometries(
+    const GeometryDeserializer& deserializer, GeometrySerializer& serializer,
+    World& world) {
+  for (const GeometryEntityId geo_id :
+       world.GetTypedEntityIds<GeometryEntityId>()) {
+    INTR_ASSIGN_OR_RETURN(
+        GeometryComponent* const geo_component,
+        world.GetComponentByEntityId<GeometryComponent>(geo_id));
+    for (const std::string& geo_set_name : geo_component->GetGeometryNames()) {
+      INTR_ASSIGN_OR_RETURN(
+          const NamedGeometrySet geos,
+          geo_component->GetGeometry(geo_set_name, deserializer));
+      NamedGeometryProtoSet proto_set;
+      proto_set.reserve(geos.size());
+      for (const auto& [geo_name, geo] : geos) {
+        INTR_ASSIGN_OR_RETURN(proto_set[geo_name], ToProto(geo, &serializer));
+      }
+      geo_component->SetGeometry(geo_set_name, proto_set);
+    }
+  }
+  return absl::OkStatus();
 }
 
 }  // namespace
@@ -686,53 +713,19 @@ absl::StatusOr<intrinsic::World> World::FromFile(const GZFile& gzfile) {
   return std::move(result);
 }
 
-absl::Status World::ToFile(GZFile* gzfile) const {
-  CHECK(gzfile != nullptr);
-
-  // Write the World proto chunk.
-  auto geolib = GetGzfGeometryLibrary(*gzfile);
-  INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::internal::World world_proto,
-                        Serialize(geolib->Serializer()));
-
-  std::string pbtxt;
-  {
-    // Enable deterministic serialization (see b/172338083). Also, this block is
-    // scoped to make sure output_stream does not hold a pointer to pbtxt when
-    // std::move(pbtxt) is called below.
-    google::protobuf::io::StringOutputStream output_stream(&pbtxt);
-    google::protobuf::io::CodedOutputStream coded_stream(&output_stream);
-    coded_stream.SetSerializationDeterministic(true);
-    CHECK(world_proto.SerializeToCodedStream(&coded_stream));
-  }
-  ChunkEntry chunk(kWorldProtoChunkVersionNumber, std::move(pbtxt));
-  INTR_RETURN_IF_ERROR(gzfile->SetChunk(ChunkId(kWorldProtoChunkId), chunk));
-
-  return absl::OkStatus();
-}
-
 absl::Status World::ToFile(GZFile* gzfile,
-                           const GeometryDeserializer& deserializer) {
+                           const GeometryDeserializer& deserializer) const {
   CHECK(gzfile != nullptr);
 
-  // Serialize all of the geometries.
-  auto geolib = GetGzfGeometryLibrary(*gzfile);
-  for (const auto geo_id : GetTypedEntityIds<GeometryEntityId>()) {
-    INTR_ASSIGN_OR_RETURN(GeometryComponent * geo_component,
-                          GetComponentByEntityId<GeometryComponent>(geo_id));
-    for (const std::string& geo_set_name : geo_component->GetGeometryNames()) {
-      INTR_ASSIGN_OR_RETURN(
-          NamedGeometrySet geos,
-          geo_component->GetGeometry(geo_set_name, deserializer));
-      for (const auto& [_, geo] : geos) {
-        INTR_RETURN_IF_ERROR(
-            geolib->Serializer().SaveGeometry(geo.shape(), {}).status());
-      }
-    }
-  }
+  World cloned_world = Clone();
+  const std::unique_ptr<GeometryLibrary> geolib =
+      GetGzfGeometryLibrary(*gzfile);
+  INTR_RETURN_IF_ERROR(ReserializeWorldGeometries(
+      deserializer, geolib->Serializer(), cloned_world));
 
   // Write the World proto chunk.
   INTR_ASSIGN_OR_RETURN(intrinsic_proto::world::internal::World world_proto,
-                        Serialize());
+                        cloned_world.Serialize());
 
   std::string pbtxt;
   {

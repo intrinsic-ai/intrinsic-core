@@ -28,6 +28,7 @@
 #include "absl/strings/substitute.h"
 #include "intrinsic/geometry/api/axis_aligned_bounding_box_3d.h"
 #include "intrinsic/geometry/api/compute_axis_aligned_bounding_box_3d.h"
+#include "intrinsic/geometry/storage/dummy_storage.h"
 #include "intrinsic/icon/release/portable/init_intrinsic.h"
 #include "intrinsic/util/macros.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -213,7 +214,8 @@ void MainImpl() {
   }
 
   LOG(INFO) << "Writing world in gzfile format to: " << output_world_gz_file;
-  QCHECK_OK(world->ToFile(gzfile.get()));
+  QCHECK_OK(
+      world->ToFile(gzfile.get(), GetDummyGeometryLibrary()->Deserializer()));
 }
 
 }  // namespace intrinsic

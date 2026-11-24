@@ -29,6 +29,7 @@ cc_binary(
         "//intrinsic/world/objects:object_world",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
         "//intrinsic_runtime/intrinsic/world/service/objects:object_world_updates_utils",
+        "//intrinsic_sdk/intrinsic/geometry/storage:dummy_storage",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:labels",
         "//intrinsic_sdk/intrinsic/world/gzfile",

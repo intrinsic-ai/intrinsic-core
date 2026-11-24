@@ -164,13 +164,10 @@ class World : public CollisionCheckerWorld,
   // Load the world from a gz file.
   static absl::StatusOr<intrinsic::World> FromFile(const GZFile& gzfile);
 
-  // Save the world to the given gz file.
-  ABSL_DEPRECATED("Pass a deserializer")
-  absl::Status ToFile(GZFile* gzfile) const;
-
   // Save the world to the given gz file. Deserialize geometries in order to
   // properly write them out to disk.
-  absl::Status ToFile(GZFile* gzfile, const GeometryDeserializer& deserializer);
+  absl::Status ToFile(GZFile* gzfile,
+                      const GeometryDeserializer& deserializer) const;
 
   // Updates the world based on the given proto. This will do a full
   // override, if something is missing from this proto it will override any

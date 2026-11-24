@@ -43,6 +43,7 @@ cc_binary(
         "//intrinsic_sdk/intrinsic/geometry/api:affine_transform_of_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:axis_aligned_bounding_box_3d",
         "//intrinsic_sdk/intrinsic/geometry/api:compute_axis_aligned_bounding_box_3d",
+        "//intrinsic_sdk/intrinsic/geometry/storage:dummy_storage",
         "//intrinsic_sdk/intrinsic/util:macros",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world:entity_id",

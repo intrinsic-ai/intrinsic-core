@@ -24,6 +24,7 @@
 #include "absl/status/status.h"
 #include "absl/strings/str_split.h"
 #include "absl/strings/string_view.h"
+#include "intrinsic/geometry/storage/dummy_storage.h"
 #include "intrinsic/icon/release/portable/init_intrinsic.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/gzfile/gzfile.h"
@@ -137,7 +138,8 @@ absl::Status MainImpl() {
   LOG(INFO) << "Saving serialized world to " << output_world_filename;
 
   INTR_ASSIGN_OR_RETURN(auto gzfile, GZFile::Create(output_world_filename));
-  INTR_RETURN_IF_ERROR(world.ToFile(gzfile.get()));
+  INTR_RETURN_IF_ERROR(
+      world.ToFile(gzfile.get(), GetDummyGeometryLibrary()->Deserializer()));
   INTR_RETURN_IF_ERROR(gzfile->Flush());
 
   return absl::OkStatus();
