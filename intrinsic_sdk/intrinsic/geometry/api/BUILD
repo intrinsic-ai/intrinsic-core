@@ -301,7 +301,6 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/internal/util:export_as_gltf",
         "//intrinsic_sdk/intrinsic/geometry/shapes",
         "//intrinsic_sdk/intrinsic/geometry/shapes:geometry_shape",
-        "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/log:check",

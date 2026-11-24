@@ -50,7 +50,6 @@
 #include "intrinsic/geometry/shapes/mesh_file.h"
 #include "intrinsic/geometry/shapes/shape_base.h"
 #include "intrinsic/geometry/shapes/shapes.h"
-#include "intrinsic/math/pose3.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "ortools/base/helpers.h"
 #include "ortools/base/options.h"
