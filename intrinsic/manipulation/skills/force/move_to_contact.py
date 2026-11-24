@@ -248,7 +248,9 @@ class MoveToContact(skill_interface.Skill):
           PARAMETER_ERROR_CODE,
           "Parameter 'fixed_vector' or 'target' must be set.",
       )
-    elif params.HasField("fixed_vector"):
+    elif params.HasField("fixed_vector") and params.fixed_vector.HasField(
+        "direction"
+    ):
       direction = params.fixed_vector.direction
       direction_norm = np.linalg.norm(
           np.array([direction.x, direction.y, direction.z])
