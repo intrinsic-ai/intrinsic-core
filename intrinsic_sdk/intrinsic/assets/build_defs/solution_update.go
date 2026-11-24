@@ -243,24 +243,24 @@ fronted, then use inctl app save-as.
 `,
 		Example: `
 Start a solution using the org and cluster:
-$ bazel run //intrinsic/config:empty_application --\
+$ bazel run //intrinsic_sdk/intrinsic/config:empty_application --\
 		--org my_org \
 		--cluster my_cluster_id
 
 Start a solution using the $INTRINSIC_CLUSTER and $INTRINSIC_ORG variables:
-$ bazel run //intrinsic/config:empty_application
+$ bazel run //intrinsic_sdk/intrinsic/config:empty_application
 
 Overwrite a currently running solution:
-$ bazel run //intrinsic/config:empty_application --\
+$ bazel run //intrinsic_sdk/intrinsic/config:empty_application --\
 		--org my_org \
 		--solution my_solution_id
 
 Start a solution on a cluster on the local network:
-$ bazel run //intrinsic/config:empty_application --\
+$ bazel run //intrinsic_sdk/intrinsic/config:empty_application --\
 		--address 192.168.0.100:17080
 
 Start a solution with the recoverable validation policy, deploying despite non-blocking validation issues:
-$ bazel run //intrinsic/config:empty_application --\
+$ bazel run //intrinsic_sdk/intrinsic/config:empty_application --\
 		--validation_policy=recoverable
 `,
 		// Do not print usage when a command exits with an error.

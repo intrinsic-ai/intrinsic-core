@@ -17,8 +17,6 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 # Application, process and resource set describe all user-accessible configuration of a
 # solution.
 
-load("//intrinsic/assets/build_defs:solution.bzl", "intrinsic_solution")
-
 package(default_visibility = ["//visibility:public"])
 
 go_library(
@@ -67,12 +65,6 @@ go_library(
         "@com_github_pkg_errors//:go_default_library",
         "@org_golang_google_protobuf//proto",
     ],
-)
-
-intrinsic_solution(
-    name = "empty_application",
-    display_name = "Empty solution",
-    visibility = ["//intrinsic:intrinsic_internal"],
 )
 
 go_library(

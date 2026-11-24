@@ -14,6 +14,7 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:python.bzl", "py_library")
+load("//intrinsic_sdk/intrinsic/assets/build_defs:solution.bzl", "intrinsic_solution")
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 # Application, process and resource set describe all user-accessible configuration of a
@@ -71,4 +72,10 @@ go_library(
     srcs = ["operation_mode.go"],
     importpath = "intrinsic/config/operationmode",
     deps = ["@intrinsic_apis//intrinsic/config/proto:operation_mode_go_proto"],
+)
+
+intrinsic_solution(
+    name = "empty_application",
+    display_name = "Empty solution",
+    visibility = ["//intrinsic:intrinsic_internal"],
 )
