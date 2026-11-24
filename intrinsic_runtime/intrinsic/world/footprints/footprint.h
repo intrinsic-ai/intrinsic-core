@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef INTRINSIC_CHOREOGRAPHER_FOOTPRINTS_FOOTPRINT_H_
-#define INTRINSIC_CHOREOGRAPHER_FOOTPRINTS_FOOTPRINT_H_
+#ifndef INTRINSIC_WORLD_FOOTPRINTS_FOOTPRINT_H_
+#define INTRINSIC_WORLD_FOOTPRINTS_FOOTPRINT_H_
 
 #include <functional>
 #include <vector>
@@ -21,13 +21,13 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "intrinsic/choreographer/footprints/entity_reservation.h"
-#include "intrinsic/choreographer/footprints/object_world_reservation.h"
-#include "intrinsic/choreographer/footprints/volume_reservation.h"
 #include "intrinsic/geometry/api/affine_transform_of_geometry.h"
 #include "intrinsic/geometry/storage/geometry_deserializer.h"
 #include "intrinsic/geometry/storage/geometry_serializer.h"
 #include "intrinsic/skills/proto/footprint.pb.h"
+#include "intrinsic/world/footprints/entity_reservation.h"
+#include "intrinsic/world/footprints/object_world_reservation.h"
+#include "intrinsic/world/footprints/volume_reservation.h"
 #include "intrinsic/world/world.h"
 
 namespace intrinsic {
@@ -177,4 +177,4 @@ class Footprint {
 
 }  // namespace intrinsic
 
-#endif  // INTRINSIC_CHOREOGRAPHER_FOOTPRINTS_FOOTPRINT_H_
+#endif  // INTRINSIC_WORLD_FOOTPRINTS_FOOTPRINT_H_

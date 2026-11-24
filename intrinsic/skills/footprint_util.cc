@@ -19,7 +19,6 @@
 
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "intrinsic/choreographer/footprints/footprint.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/geometry/api/affine_transform_of_geometry.h"
 #include "intrinsic/geometry/api/geometry.h"
@@ -34,6 +33,7 @@
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/entity_id.h"
+#include "intrinsic/world/footprints/footprint.h"
 #include "intrinsic/world/hashing/hashing.h"
 #include "intrinsic/world/util/entity_search_util.h"
 #include "intrinsic/world/world.h"

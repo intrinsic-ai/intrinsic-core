@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/choreographer/footprints/volume_reservation.h"
+#include "intrinsic/world/footprints/volume_reservation.h"
 
 #include <optional>
 #include <utility>

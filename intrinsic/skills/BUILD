@@ -21,11 +21,11 @@ cc_library(
     srcs = ["footprint_util.cc"],
     hdrs = ["footprint_util.h"],
     deps = [
-        "//intrinsic/choreographer/footprints:footprint",
         "//intrinsic/world",
         "//intrinsic/world:world_acl_spec",
         "//intrinsic/world:world_entity_acl_spec",
         "//intrinsic/world/util:entity_search_util",
+        "//intrinsic_runtime/intrinsic/world/footprints:footprint",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:affine_transform_of_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",

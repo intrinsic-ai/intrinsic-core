@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/choreographer/footprints/entity_reservation.h"
+#include "intrinsic/world/footprints/entity_reservation.h"
 
 #include <string>
 #include <utility>

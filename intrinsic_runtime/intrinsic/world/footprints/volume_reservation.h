@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef INTRINSIC_CHOREOGRAPHER_FOOTPRINTS_VOLUME_RESERVATION_H_
-#define INTRINSIC_CHOREOGRAPHER_FOOTPRINTS_VOLUME_RESERVATION_H_
+#ifndef INTRINSIC_WORLD_FOOTPRINTS_VOLUME_RESERVATION_H_
+#define INTRINSIC_WORLD_FOOTPRINTS_VOLUME_RESERVATION_H_
 
 #include <functional>
 #include <utility>
@@ -82,4 +82,4 @@ class VolumeReservation {
 
 }  // namespace intrinsic
 
-#endif  // INTRINSIC_CHOREOGRAPHER_FOOTPRINTS_VOLUME_RESERVATION_H_
+#endif  // INTRINSIC_WORLD_FOOTPRINTS_VOLUME_RESERVATION_H_
