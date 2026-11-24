@@ -16,17 +16,22 @@
 
 #include <cmath>
 #include <memory>
+#include <utility>
 #include <vector>
 
 #include "absl/memory/memory.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
+#include "absl/time/time.h"
 #include "intrinsic/geometry/api/geometry.h"
 #include "intrinsic/geometry/api/simplify_mesh_strict_memoize.h"
+#include "intrinsic/geometry/internal/util/timeout_predicate.h"
 #include "intrinsic/geometry/processing/pipeline_config.pb.h"
 #include "intrinsic/longrunning/cc/operation_context.h"
+#include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_macros.h"
+#include "intrinsic/util/thread/stop_token.h"
 
 constexpr absl::Duration kDefaultSimplificationTimeLimit = absl::Minutes(2);
 

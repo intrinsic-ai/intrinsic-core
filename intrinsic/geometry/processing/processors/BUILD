@@ -81,13 +81,17 @@ cc_library(
         "//intrinsic/geometry/api:simplify_mesh_strict_memoize",
         "//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/internal/util:timeout_predicate",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
+        "//intrinsic_sdk/intrinsic/util:proto_time",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/thread:stop_token",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
+        "@abseil-cpp//absl/time",
     ],
 )
 
@@ -129,6 +133,7 @@ cc_library(
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings:str_format",
     ],
 )
 

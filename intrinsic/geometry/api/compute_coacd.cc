@@ -14,13 +14,10 @@
 
 #include "intrinsic/geometry/api/compute_coacd.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 #include <vector>
 
-#include "CGAL/number_utils.h"
-#include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
