@@ -31,8 +31,8 @@ class GeometryProcessingPipeline {
   explicit GeometryProcessingPipeline(
       std::vector<std::unique_ptr<GeometryProcessor>> processors);
 
-  // Run the pipeline on the given input geometry. Status updates are provided
-  // using the observer.
+  // Run the pipeline on the given input geometry. Progress is reported through
+  // `context`, and processing stops if `context` requests a stop.
   absl::StatusOr<std::vector<Geometry>> Process(
       longrunning::OperationContext& context, const Geometry& input) const;
 

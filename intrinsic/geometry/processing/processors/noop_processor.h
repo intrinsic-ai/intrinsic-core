@@ -25,8 +25,7 @@
 #include "intrinsic/longrunning/cc/operation_context.h"
 
 namespace intrinsic::geo {
-// A simple processor that returns the input as output and does not generate any
-// updates to the observer.
+// A simple processor that returns the input as output.
 class NoOpGeometryProcessor : public GeometryProcessor {
  public:
   // Creates an instance of NoOpGeometryProcessor from the given config.

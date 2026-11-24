@@ -25,11 +25,12 @@
 #include "intrinsic/longrunning/cc/operation_context.h"
 
 namespace intrinsic::geo {
-// A processor that applies the alpha wrap algorithm on the input geometry to
-// create new output geometry.
+// A processor that simplifies the input mesh while keeping it within
+// `max_hausdorff_distance` of the input.
 class MeshSimplificationGeometryProcessor : public GeometryProcessor {
  public:
-  // Creates an instance of AlphaWrapGeometryProcessor from the given config.
+  // Creates an instance of MeshSimplificationGeometryProcessor from the given
+  // config.
   static absl::StatusOr<std::unique_ptr<MeshSimplificationGeometryProcessor>>
   Create(const intrinsic_proto::geometry::MeshSimplificationProcessorConfig&
              config);

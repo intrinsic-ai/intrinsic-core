@@ -24,15 +24,15 @@
 namespace intrinsic::geo {
 // A geometry processor is a single instance of an algorithm that can be run on
 // some geometry. These can be simple or complex algorithms that take
-// milliseconds or minutes. The given observer can be used to send updates
-// during the processing of the input geometry.
+// milliseconds or minutes. They report progress through the given
+// OperationContext and use it to check whether they should stop.
 class GeometryProcessor {
  public:
   virtual ~GeometryProcessor() = default;
 
-  // Process a single geometry input sending updates to the given observer as
-  // desired. The output will be a vector of processed geometry instances or an
-  // error describing the reason for the failure.
+  // Process a single geometry input, reporting progress through `context`. The
+  // output will be a vector of processed geometry instances or an error
+  // describing the reason for the failure.
   virtual absl::StatusOr<std::vector<Geometry>> Process(
       longrunning::OperationContext& context, const Geometry& input) const = 0;
 };

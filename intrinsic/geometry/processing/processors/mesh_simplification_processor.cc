@@ -45,9 +45,9 @@ MeshSimplificationGeometryProcessor::Create(
   INTR_ASSIGN_OR_RETURN(absl::Duration timeout,
                         ToAbslDuration(config.timeout()));
   if (timeout < absl::ZeroDuration()) {
-    return absl::InvalidArgumentError(absl::StrCat(
-        "Timeout length must be greater than or equal to 0.0 but got :",
-        absl::FormatDuration(timeout), "secs"));
+    return absl::InvalidArgumentError(absl::StrFormat(
+        "Timeout must be greater than or equal to 0 but %s was provided.",
+        absl::FormatDuration(timeout)));
   }
 
   return absl::WrapUnique(new MeshSimplificationGeometryProcessor(
