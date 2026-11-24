@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/geometry/api/unpack_renderable.h"
+#include "intrinsic/geometry/gltf/unpack_renderable.h"
 
 #include <algorithm>
 #include <array>

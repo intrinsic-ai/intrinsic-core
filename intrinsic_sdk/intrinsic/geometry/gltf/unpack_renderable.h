@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef INTRINSIC_GEOMETRY_API_UNPACK_RENDERABLE_H_
-#define INTRINSIC_GEOMETRY_API_UNPACK_RENDERABLE_H_
+#ifndef INTRINSIC_GEOMETRY_GLTF_UNPACK_RENDERABLE_H_
+#define INTRINSIC_GEOMETRY_GLTF_UNPACK_RENDERABLE_H_
 
 #include <cstddef>
 #include <string>
@@ -162,4 +162,4 @@ absl::StatusOr<std::string> UnpackRenderableGlbData(
 
 }  // namespace intrinsic::geo
 
-#endif  // INTRINSIC_GEOMETRY_API_UNPACK_RENDERABLE_H_
+#endif  // INTRINSIC_GEOMETRY_GLTF_UNPACK_RENDERABLE_H_
