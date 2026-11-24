@@ -186,9 +186,9 @@ cc_library(
 )
 
 cc_library(
-    name = "simplify_preserving_appearance",
-    srcs = ["simplify_preserving_appearance.cc"],
-    hdrs = ["simplify_preserving_appearance.h"],
+    name = "simplify_preserving_appearance_memoize",
+    srcs = ["simplify_preserving_appearance_memoize.cc"],
+    hdrs = ["simplify_preserving_appearance_memoize.h"],
     deps = [
         "//intrinsic/geometry/internal/mesh_simplification/appearance:glb_appearance_simplifier",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
@@ -199,6 +199,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:ai_scene_to_mesh",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:load_ai_scene_from_buffer",
         "//intrinsic_sdk/intrinsic/geometry/shapes",
+        "//intrinsic_sdk/intrinsic/util/object_store:memoize",
         "//intrinsic_sdk/intrinsic/util/object_store:object_ref",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/thread:stop_token",

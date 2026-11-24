@@ -12,8 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#ifndef INTRINSIC_GEOMETRY_API_SIMPLIFY_PRESERVING_APPEARANCE_H_
-#define INTRINSIC_GEOMETRY_API_SIMPLIFY_PRESERVING_APPEARANCE_H_
+#ifndef INTRINSIC_GEOMETRY_API_SIMPLIFY_PRESERVING_APPEARANCE_MEMOIZE_H_
+#define INTRINSIC_GEOMETRY_API_SIMPLIFY_PRESERVING_APPEARANCE_MEMOIZE_H_
 
 #include "absl/status/statusor.h"
 #include "intrinsic/geometry/api/geometry.h"
@@ -21,7 +21,8 @@
 
 namespace intrinsic::geo {
 
-// Simplifies `geo` while preserving its visual appearance.
+// Simplifies `geo` while preserving its visual appearance. Results are
+// memoized, so repeated calls with the same input are fast.
 //
 // `target_triangle_ratio` is the fraction of each mesh primitive's triangles
 // to keep, in (0, 1] (e.g. 0.25 = a quarter of the triangles).
@@ -40,10 +41,10 @@ namespace intrinsic::geo {
 // `geo` contains primitive shapes or a non-empty point cloud, and
 // CancelledError if `stop_token` is triggered. Other errors from simplifying
 // or reading the GLB are returned.
-absl::StatusOr<Geometry> SimplifyPreservingAppearance(
+absl::StatusOr<Geometry> SimplifyPreservingAppearanceMemoize(
     const Geometry& geo, double target_triangle_ratio,
     StopToken stop_token = StopToken());
 
 }  // namespace intrinsic::geo
 
-#endif  // INTRINSIC_GEOMETRY_API_SIMPLIFY_PRESERVING_APPEARANCE_H_
+#endif  // INTRINSIC_GEOMETRY_API_SIMPLIFY_PRESERVING_APPEARANCE_MEMOIZE_H_

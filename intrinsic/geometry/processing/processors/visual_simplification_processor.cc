@@ -24,7 +24,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
 #include "intrinsic/geometry/api/geometry.h"
-#include "intrinsic/geometry/api/simplify_preserving_appearance.h"
+#include "intrinsic/geometry/api/simplify_preserving_appearance_memoize.h"
 #include "intrinsic/geometry/processing/pipeline_config.pb.h"
 #include "intrinsic/longrunning/cc/operation_context.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -47,7 +47,7 @@ VisualSimplificationGeometryProcessor::Create(
 absl::StatusOr<std::vector<Geometry>>
 VisualSimplificationGeometryProcessor::Process(
     longrunning::OperationContext& context, const Geometry& input) const {
-  INTR_ASSIGN_OR_RETURN(Geometry result, SimplifyPreservingAppearance(
+  INTR_ASSIGN_OR_RETURN(Geometry result, SimplifyPreservingAppearanceMemoize(
                                              input, target_triangle_ratio_,
                                              context.GetStopToken()));
   context.AddProgress(1.0);

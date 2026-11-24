@@ -26,9 +26,9 @@
 
 namespace intrinsic::geo {
 
-// Simplifies visual geometry with `SimplifyPreservingAppearance`: once, on the
-// renderable GLB, keeping textures, UVs, vertex colors and materials, with the
-// exact mesh rebuilt from the result. For collision geometry, use
+// Simplifies visual geometry with `SimplifyPreservingAppearanceMemoize`: once,
+// on the renderable GLB, keeping textures, UVs, vertex colors and materials,
+// with the exact mesh rebuilt from the result. For collision geometry, use
 // MeshSimplificationGeometryProcessor.
 class VisualSimplificationGeometryProcessor : public GeometryProcessor {
  public:

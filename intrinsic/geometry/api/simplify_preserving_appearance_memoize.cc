@@ -12,7 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-#include "intrinsic/geometry/api/simplify_preserving_appearance.h"
+#include "intrinsic/geometry/api/simplify_preserving_appearance_memoize.h"
 
 #include <cmath>
 #include <memory>
@@ -34,6 +34,7 @@
 #include "intrinsic/geometry/internal/mesh/mesh.h"
 #include "intrinsic/geometry/internal/mesh_simplification/appearance/glb_appearance_simplifier.h"
 #include "intrinsic/geometry/shapes/point_cloud.h"
+#include "intrinsic/util/object_store/memoize.h"
 #include "intrinsic/util/object_store/object_ref.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/thread/stop_token.h"
@@ -72,24 +73,51 @@ absl::StatusOr<bool> IsEmptyPointCloud(const ExactGeometry& exact) {
                         exact.GetPointCloud());
   if (!point_cloud.Value().getPoints().empty()) {
     return absl::InvalidArgumentError(
-        "SimplifyPreservingAppearance supports triangle meshes, but the "
+        "SimplifyPreservingAppearanceMemoize supports triangle meshes, but the "
         "geometry is a point cloud.");
   }
   return true;
 }
 
+// Simplifies `glb`, caching the result. Returns an empty string if nothing
+// could be simplified (e.g. only points or lines). Cancelled runs are not
+// cached. Other errors are cached, since they are deterministic for a given
+// input. Bump the version in the name whenever the output for the same input
+// changes.
+absl::StatusOr<ObjectRef<std::string>> SimplifyGlbMemoize(
+    const std::string& glb, double target_triangle_ratio,
+    const StopToken& stop_token) {
+  return Memoize(
+      MemoizeOptions("SimplifyGlbPreservingAppearance-v1"),
+      [](const std::string& glb, double target_triangle_ratio,
+         const StopToken& stop_token) -> absl::StatusOr<std::string> {
+        INTR_ASSIGN_OR_RETURN(std::optional<std::string> simplified_glb,
+                              SimplifyGlbPreservingAppearance(
+                                  glb, target_triangle_ratio, stop_token));
+        return std::move(simplified_glb).value_or("");
+      },
+      glb, target_triangle_ratio, stop_token);
+}
+
+// Rebuilds the exact mesh from a simplified GLB, caching the result.
+absl::StatusOr<ObjectRef<Mesh>> GlbToMeshMemoize(const std::string& glb) {
+  return Memoize(MemoizeOptions("SimplifiedGlbToMesh-v1"), &GlbToMesh, glb);
+}
+
 }  // namespace
 
-absl::StatusOr<Geometry> SimplifyPreservingAppearance(
+absl::StatusOr<Geometry> SimplifyPreservingAppearanceMemoize(
     const Geometry& geo, double target_triangle_ratio, StopToken stop_token) {
   INTR_RETURN_IF_ERROR(
       CheckInUnitInterval("target_triangle_ratio", target_triangle_ratio));
   if (stop_token.stop_requested()) {
-    return absl::CancelledError("SimplifyPreservingAppearance cancelled.");
+    return absl::CancelledError(
+        "SimplifyPreservingAppearanceMemoize cancelled.");
   }
   if (!geo.GetExactGeometry().GetPrimitiveShapes().empty()) {
     return absl::InvalidArgumentError(
-        "SimplifyPreservingAppearance does not support primitive shapes.");
+        "SimplifyPreservingAppearanceMemoize does not support primitive "
+        "shapes.");
   }
   // A file without triangles (e.g. an empty scene, or one whose triangles are
   // all degenerate) loads as a point cloud. An empty one has nothing to
@@ -118,22 +146,22 @@ absl::StatusOr<Geometry> SimplifyPreservingAppearance(
 
   // Simplify once, on the GLB. Both the renderable and the exact mesh are
   // taken from this result, so they always match.
-  INTR_ASSIGN_OR_RETURN(
-      std::optional<std::string> simplified_glb,
-      SimplifyGlbPreservingAppearance(input_renderable->GetGLBString(),
-                                      target_triangle_ratio, stop_token));
+  INTR_ASSIGN_OR_RETURN(const ObjectRef<std::string> simplified_glb,
+                        SimplifyGlbMemoize(input_renderable->GetGLBString(),
+                                           target_triangle_ratio, stop_token));
   // Nothing could be simplified (e.g. only points or lines).
-  if (!simplified_glb.has_value()) {
+  if (simplified_glb.Value().empty()) {
     return geo;
   }
-  INTR_ASSIGN_OR_RETURN(Mesh simplified_mesh, GlbToMesh(*simplified_glb),
+  INTR_ASSIGN_OR_RETURN(ObjectRef<Mesh> simplified_mesh,
+                        GlbToMeshMemoize(simplified_glb.Value()),
                         _ << "Reading the simplified GLB");
 
   // A generated renderable is not stored; it is regenerated from the new
   // exact mesh when needed.
   std::shared_ptr<const Renderable> renderable;
   if (user_renderable) {
-    renderable = std::make_shared<const Renderable>(*std::move(simplified_glb));
+    renderable = std::make_shared<const Renderable>(simplified_glb.Value());
   }
   return Geometry(
       ExactGeometry(std::move(simplified_mesh),

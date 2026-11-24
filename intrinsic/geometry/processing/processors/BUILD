@@ -158,7 +158,7 @@ cc_library(
     srcs = ["visual_simplification_processor.cc"],
     hdrs = ["visual_simplification_processor.h"],
     deps = [
-        "//intrinsic/geometry/api:simplify_preserving_appearance",
+        "//intrinsic/geometry/api:simplify_preserving_appearance_memoize",
         "//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "//intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
