@@ -23,6 +23,7 @@
 #include "intrinsic/perception/core/pixel_type.h"
 #include "intrinsic/perception/proto/v1/image_buffer.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/pixel_type.h"
+#include "intrinsic/perception/storage/kvstore_options.h"
 
 namespace intrinsic_proto::perception::v1 {
 
@@ -53,75 +54,111 @@ absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<ImageTrait>& image,
     intrinsic::perception::Encoding encoding =
         intrinsic::perception::Encoding::kUnspecified,
-    std::optional<int> compression_effort = std::nullopt);
+    std::optional<int> compression_effort = std::nullopt,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options =
+        {});
 extern template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Rgb8u>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 extern template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Gray8u>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 extern template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Gray32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 extern template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Depth32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 extern template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Normal32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 extern template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Point32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 
 template <typename ImageTrait>
 absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
-    const ImageBuffer& image_buffer);
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options =
+        {});
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
-FromProto(const ImageBuffer& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Gray8u>>
-FromProto(const ImageBuffer& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Gray32f>>
-FromProto(const ImageBuffer& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Depth32f>>
-FromProto(const ImageBuffer& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Normal32f>>
-FromProto(const ImageBuffer& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Point32f>>
-FromProto(const ImageBuffer& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 
 template <typename ImageTrait>
 absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
-    ImageBuffer&& image_buffer);
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options =
+        {});
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Gray8u>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Gray32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Depth32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Normal32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 extern template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Point32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 
 }  // namespace intrinsic_proto::perception::v1
 

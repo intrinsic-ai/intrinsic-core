@@ -35,6 +35,45 @@ cc_library(
 )
 
 cc_library(
+    name = "kvstore_options",
+    hdrs = ["kvstore_options.h"],
+    deps = [
+        ":kvstore_factory",
+        "@abseil-cpp//absl/time",
+        "@intrinsic_apis//intrinsic/platform/pubsub:storage_location_cc_proto",
+    ],
+)
+
+cc_library(
+    name = "kvstore_utils",
+    srcs = ["kvstore_utils.cc"],
+    hdrs = ["kvstore_utils.h"],
+    visibility = [
+        "//intrinsic_perception/intrinsic/perception/cameras/services/v1:__pkg__",
+        "//intrinsic_perception/intrinsic/perception/proto_conversion/v1:__pkg__",
+        "//intrinsic_perception/intrinsic/perception/storage:__pkg__",
+    ],
+    deps = [
+        ":kvstore_factory",
+        ":kvstore_options",
+        "//intrinsic_sdk/intrinsic/middleware/buffers:immutable_buffer",
+        "//intrinsic_sdk/intrinsic/middleware/buffers:mutable_buffer",
+        "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/time:deadline_timeout",
+        "@abseil-cpp//absl/base:nullability",
+        "@abseil-cpp//absl/functional:function_ref",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+        "@abseil-cpp//absl/time",
+        "@intrinsic_apis//intrinsic/platform/pubsub:storage_location_cc_proto",
+    ],
+)
+
+cc_library(
     name = "capture_result_storage",
     srcs = ["capture_result_storage.cc"],
     hdrs = ["capture_result_storage.h"],

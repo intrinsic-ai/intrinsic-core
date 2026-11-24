@@ -18,6 +18,8 @@
 #include <concepts>
 #include <cstddef>
 #include <cstdint>
+#include <cstring>
+#include <limits>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -25,11 +27,16 @@
 #include <vector>
 
 #include "absl/log/check.h"
+#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_format.h"
 #include "absl/strings/string_view.h"
+#include "absl/types/span.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/buffer_factory.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/mutable_buffer.h"
 #include "intrinsic/perception/core/color_gradient.h"
 #include "intrinsic/perception/core/conversion.h"
 #include "intrinsic/perception/core/encoding.h"
@@ -41,6 +48,9 @@
 #include "intrinsic/perception/proto/v1/dimensions.pb.h"
 #include "intrinsic/perception/proto/v1/image_buffer.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/dimensions.h"
+#include "intrinsic/perception/storage/kvstore_options.h"
+#include "intrinsic/perception/storage/kvstore_utils.h"
+#include "intrinsic/platform/pubsub/storage_location.pb.h"
 #include "intrinsic/util/status/ret_check.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "libyuv/convert.h"
@@ -162,7 +172,7 @@ TransformRgb8uToNormal32f(
 }
 
 template <typename ImageTrait>
-ImageBuffer CreateUnencodedImageBuffer(
+ImageBuffer CreateUnencodedImageBufferMetadata(
     const intrinsic::perception::Image<ImageTrait>& image) {
   ImageBuffer image_buffer;
   image_buffer.set_encoding(ENCODING_UNSPECIFIED);
@@ -170,6 +180,13 @@ ImageBuffer CreateUnencodedImageBuffer(
   image_buffer.set_num_channels(ImageTrait::kNumChannels);
   image_buffer.set_type(GetDataType<ImageTrait>());
   *image_buffer.mutable_dimensions() = ToProto(image.dimensions());
+  return image_buffer;
+}
+
+template <typename ImageTrait>
+ImageBuffer CreateUnencodedImageBuffer(
+    const intrinsic::perception::Image<ImageTrait>& image) {
+  ImageBuffer image_buffer = CreateUnencodedImageBufferMetadata(image);
   *image_buffer.mutable_data() = GetBuffer(image);
   return image_buffer;
 }
@@ -482,41 +499,58 @@ absl::StatusOr<ImageBuffer> CreateYuv420pImageBuffer(
 
 template <typename ImageTrait>
 absl::StatusOr<intrinsic::perception::Image<ImageTrait>> CreateImageFromYuv420p(
-    const ImageBuffer& image_buffer) {
+    const ImageBuffer& image_buffer, absl::Span<const uint8_t> raw_data) {
   return absl::UnimplementedError("Not implemented.");
 }
 
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Gray32f>>
-CreateImageFromYuv420p(const ImageBuffer& image_buffer);
+CreateImageFromYuv420p(const ImageBuffer& image_buffer,
+                       absl::Span<const uint8_t> raw_data);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Point32f>>
-CreateImageFromYuv420p(const ImageBuffer& image_buffer);
+CreateImageFromYuv420p(const ImageBuffer& image_buffer,
+                       absl::Span<const uint8_t> raw_data);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Depth32f>>
-CreateImageFromYuv420p(const ImageBuffer& image_buffer);
+CreateImageFromYuv420p(const ImageBuffer& image_buffer,
+                       absl::Span<const uint8_t> raw_data);
 
 template <>
 absl::StatusOr<intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
-CreateImageFromYuv420p(const ImageBuffer& image_buffer) {
-  const size_t width = image_buffer.dimensions().cols();
-  const size_t height = image_buffer.dimensions().rows();
-
-  if (width % 2 != 0 || height % 2 != 0) {
-    return absl::InvalidArgumentError("Width and height must be even.");
+CreateImageFromYuv420p(const ImageBuffer& image_buffer,
+                       absl::Span<const uint8_t> raw_data) {
+  const int32_t cols = image_buffer.dimensions().cols();
+  const int32_t rows = image_buffer.dimensions().rows();
+  if (cols <= 0 || rows <= 0 || cols % 2 != 0 || rows % 2 != 0) {
+    return absl::InvalidArgumentError(
+        "Width and height must be positive and even.");
+  }
+  const uint64_t area =
+      static_cast<uint64_t>(cols) * static_cast<uint64_t>(rows);
+  if (area > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) / 3) {
+    return absl::InvalidArgumentError("Image buffer dimensions overflow");
   }
 
+  const size_t width = static_cast<size_t>(cols);
+  const size_t height = static_cast<size_t>(rows);
   const size_t y_stride = width;
   const size_t y_size = width * height;
   const size_t uv_stride = width / 2;
   const size_t uv_size = (width / 2) * (height / 2);
   const size_t u_offset = y_size;
   const size_t v_offset = u_offset + uv_size;
+  const size_t yuv_size = y_size + uv_size * 2;
   const size_t rgb_stride = width * 3;
   const size_t rgb_size = width * height * 3;
 
-  const uint8_t* data_src =
-      reinterpret_cast<const uint8_t*>(image_buffer.data().data());
+  if (raw_data.size() < yuv_size) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("YUV420P buffer too small: got ", raw_data.size(),
+                     " bytes, expected at least ", yuv_size));
+  }
+
+  const uint8_t* data_src = raw_data.data();
   const uint8_t* y_src = data_src;
   const uint8_t* u_src = data_src + u_offset;
   const uint8_t* v_src = data_src + v_offset;
@@ -538,15 +572,33 @@ CreateImageFromYuv420p(const ImageBuffer& image_buffer) {
 
 template <>
 absl::StatusOr<intrinsic::perception::Image<intrinsic::perception::Gray8u>>
-CreateImageFromYuv420p(const ImageBuffer& image_buffer) {
-  const size_t width = image_buffer.dimensions().cols();
-  const size_t height = image_buffer.dimensions().rows();
+CreateImageFromYuv420p(const ImageBuffer& image_buffer,
+                       absl::Span<const uint8_t> raw_data) {
+  const int32_t cols = image_buffer.dimensions().cols();
+  const int32_t rows = image_buffer.dimensions().rows();
+  if (cols <= 0 || rows <= 0 || cols % 2 != 0 || rows % 2 != 0) {
+    return absl::InvalidArgumentError(
+        "Width and height must be positive and even.");
+  }
+  const uint64_t area =
+      static_cast<uint64_t>(cols) * static_cast<uint64_t>(rows);
+  if (area > static_cast<uint64_t>(std::numeric_limits<int32_t>::max())) {
+    return absl::InvalidArgumentError("Image buffer dimensions overflow");
+  }
+
+  const size_t width = static_cast<size_t>(cols);
+  const size_t height = static_cast<size_t>(rows);
   const size_t y_stride = width;
   const size_t gray_stride = width;
   const size_t gray_size = width * height;
 
-  const uint8_t* data_src =
-      reinterpret_cast<const uint8_t*>(image_buffer.data().data());
+  if (raw_data.size() < gray_size) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("YUV420P buffer too small: got ", raw_data.size(),
+                     " bytes, expected at least ", gray_size));
+  }
+
+  const uint8_t* data_src = raw_data.data();
 
   std::string data;
   data.resize(gray_size);
@@ -565,17 +617,76 @@ CreateImageFromYuv420p(const ImageBuffer& image_buffer) {
 
 template <>
 absl::StatusOr<intrinsic::perception::Image<intrinsic::perception::Normal32f>>
-CreateImageFromYuv420p(const ImageBuffer& image_buffer) {
+CreateImageFromYuv420p(const ImageBuffer& image_buffer,
+                       absl::Span<const uint8_t> raw_data) {
   LOG_FIRST_N(WARNING, 1)
       << "Normal image creation from a YUV420p buffer is inaccurate.";
   INTR_ASSIGN_OR_RETURN(
       const intrinsic::perception::Image<intrinsic::perception::Rgb8u> rgb8u,
-      CreateImageFromYuv420p<intrinsic::perception::Rgb8u>(image_buffer));
+      CreateImageFromYuv420p<intrinsic::perception::Rgb8u>(image_buffer,
+                                                           raw_data));
   return TransformRgb8uToNormal32f(rgb8u);
 }
 
 template <typename T, typename... U>
 concept IsAnyOf = (std::same_as<T, U> || ...);
+
+template <typename ImageTrait>
+absl::StatusOr<ImageBuffer> CreateEncodedOrYuv420pImageBuffer(
+    const intrinsic::perception::Image<ImageTrait>& image,
+    intrinsic::perception::Encoding encoding,
+    std::optional<int> compression_effort) {
+  if constexpr (IsAnyOf<ImageTrait, intrinsic::perception::Rgb8u,
+                        intrinsic::perception::Gray8u,
+                        intrinsic::perception::Gray32f,
+                        intrinsic::perception::Depth32f,
+                        intrinsic::perception::Normal32f,
+                        intrinsic::perception::Point32f>) {
+    if (encoding == intrinsic::perception::Encoding::kYuv420p) {
+      return CreateYuv420pImageBuffer(image);
+    }
+    return CreateEncodedImageBuffer(image, encoding, compression_effort);
+  }
+  return absl::InvalidArgumentError(
+      absl::StrCat("encoding type not implemented: ", encoding));
+}
+
+struct PreparedImageBuffer {
+  ImageBuffer metadata;
+  intrinsic::MutableBuffer raw_buffer;
+};
+
+template <typename ImageTrait>
+absl::StatusOr<PreparedImageBuffer> PrepareMetadataAndRawBuffer(
+    const intrinsic::perception::Image<ImageTrait>& image,
+    intrinsic::perception::Encoding encoding,
+    std::optional<int> compression_effort) {
+  ImageBuffer image_buffer;
+  absl::Span<const uint8_t> raw_bytes;
+  if (encoding == intrinsic::perception::Encoding::kUnspecified) {
+    image_buffer = CreateUnencodedImageBufferMetadata(image);
+    raw_bytes = absl::MakeSpan(reinterpret_cast<const uint8_t*>(image.data()),
+                               static_cast<size_t>(image.data_size()));
+  } else {
+    INTR_ASSIGN_OR_RETURN(
+        image_buffer,
+        CreateEncodedOrYuv420pImageBuffer(image, encoding, compression_effort));
+    raw_bytes = absl::MakeSpan(
+        reinterpret_cast<const uint8_t*>(image_buffer.data().data()),
+        image_buffer.data().size());
+  }
+
+  INTR_ASSIGN_OR_RETURN(intrinsic::MutableBuffer raw_buffer,
+                        intrinsic::AllocateMutableBuffer(raw_bytes.size()));
+  if (!raw_bytes.empty()) {
+    std::memcpy(raw_buffer.data(), raw_bytes.data(), raw_bytes.size());
+  }
+  image_buffer.clear_data();
+  return PreparedImageBuffer{
+      .metadata = std::move(image_buffer),
+      .raw_buffer = std::move(raw_buffer),
+  };
+}
 
 }  // namespace
 
@@ -664,49 +775,62 @@ template <typename ImageTrait>
 absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<ImageTrait>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort) {
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options) {
+  if (kvstore_options.storage_location.has_value() &&
+      kvstore_options.storage_location->key().empty()) {
+    return absl::InvalidArgumentError(
+        "ImageBuffer buffer_storage_location.key is empty.");
+  }
   if (image.empty()) return ImageBuffer{};
-  if (encoding == intrinsic::perception::Encoding::kUnspecified) {
-    return CreateUnencodedImageBuffer(image);
-  }
-  if constexpr (IsAnyOf<ImageTrait, intrinsic::perception::Rgb8u,
-                        intrinsic::perception::Gray8u,
-                        intrinsic::perception::Gray32f,
-                        intrinsic::perception::Depth32f,
-                        intrinsic::perception::Normal32f,
-                        intrinsic::perception::Point32f>) {
-    if (encoding == intrinsic::perception::Encoding::kYuv420p) {
-      return CreateYuv420pImageBuffer(image);
+
+  if (!kvstore_options.storage_location.has_value()) {
+    if (encoding == intrinsic::perception::Encoding::kUnspecified) {
+      return CreateUnencodedImageBuffer(image);
     }
-    return CreateEncodedImageBuffer(image, encoding, compression_effort);
+    return CreateEncodedOrYuv420pImageBuffer(image, encoding,
+                                             compression_effort);
   }
-  return absl::InvalidArgumentError(
-      absl::StrCat("encoding type not implemented: ", encoding));
+
+  INTR_ASSIGN_OR_RETURN(
+      PreparedImageBuffer prepared,
+      PrepareMetadataAndRawBuffer(image, encoding, compression_effort));
+  INTR_RETURN_IF_ERROR(intrinsic::perception::SetRawBufferWithVerification(
+      std::move(prepared.raw_buffer), kvstore_options));
+  *prepared.metadata.mutable_buffer_storage_location() =
+      *kvstore_options.storage_location;
+  return std::move(prepared.metadata);
 }
 template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Rgb8u>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Gray8u>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Gray32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Depth32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Normal32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 template absl::StatusOr<ImageBuffer> ToProto(
     const intrinsic::perception::Image<intrinsic::perception::Point32f>& image,
     intrinsic::perception::Encoding encoding,
-    std::optional<int> compression_effort);
+    std::optional<int> compression_effort,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options);
 
 namespace {
 
@@ -730,24 +854,70 @@ CreateImageFromUnencodedBuffer(ImageBufferRef&& image_buffer) {
   }
 }
 
-}  // namespace
+struct UnencodedImageMetadata {
+  intrinsic::perception::Dimensions dimensions;
+  size_t expected_size;
+};
 
 template <typename ImageTrait>
-absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
+absl::StatusOr<UnencodedImageMetadata> ValidateUnencodedImageMetadata(
     const ImageBuffer& image_buffer) {
-  if (image_buffer.data().empty()) {
-    return absl::InvalidArgumentError("data field in image_buffer is empty");
+  if (image_buffer.type() != GetDataType<ImageTrait>()) {
+    return absl::InvalidArgumentError("Incompatible image buffer data type");
   }
-  if (image_buffer.encoding() == ENCODING_UNSPECIFIED) {
-    return CreateImageFromUnencodedBuffer<ImageTrait>(image_buffer);
-  } else if (image_buffer.encoding() == ENCODING_YUV420P) {
-    return CreateImageFromYuv420p<ImageTrait>(image_buffer);
+  if (image_buffer.num_channels() != ImageTrait::kNumChannels) {
+    return absl::InvalidArgumentError("Incompatible image buffer num channels");
+  }
+  const intrinsic::perception::Dimensions dimensions =
+      FromProto(image_buffer.dimensions());
+  if (dimensions.cols <= 0 || dimensions.rows <= 0) {
+    return absl::InvalidArgumentError("Invalid image buffer dimensions");
+  }
+  const uint64_t area = static_cast<uint64_t>(dimensions.cols) *
+                        static_cast<uint64_t>(dimensions.rows);
+  if (area > static_cast<uint64_t>(std::numeric_limits<int32_t>::max()) /
+                 sizeof(typename ImageTrait::PixelType)) {
+    return absl::InvalidArgumentError("Image buffer dimensions overflow");
+  }
+  return UnencodedImageMetadata{
+      .dimensions = dimensions,
+      .expected_size =
+          static_cast<size_t>(area) * sizeof(typename ImageTrait::PixelType),
+  };
+}
+
+template <typename ImageTrait>
+absl::StatusOr<intrinsic::perception::Image<ImageTrait>>
+CreateImageFromUnencodedExternalSpan(const UnencodedImageMetadata& metadata,
+                                     absl::Span<const uint8_t> external_data) {
+  if (external_data.size() != metadata.expected_size) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "External image buffer size mismatch: got ", external_data.size(),
+        " bytes, expected ", metadata.expected_size));
+  }
+  intrinsic::perception::Image<ImageTrait> image(metadata.dimensions);
+  // `Image<ImageTrait>` enforces standard-layout packed `ScalarType` pixel
+  // storage; cast to `void*` to avoid `-Wnontrivial-memcall` on `Eigen::Matrix`
+  // pixel types while preserving alignment-safe byte copies from `raw_buffer`.
+  std::memcpy(static_cast<void*>(image.data()), external_data.data(),
+              metadata.expected_size);
+  return image;
+}
+
+template <typename ImageTrait>
+absl::StatusOr<intrinsic::perception::Image<ImageTrait>>
+DecodeEncodedImageFromSpan(const ImageBuffer& image_buffer,
+                           absl::Span<const uint8_t> raw_data) {
+  if (image_buffer.encoding() == ENCODING_YUV420P) {
+    return CreateImageFromYuv420p<ImageTrait>(image_buffer, raw_data);
+  }
+  if (raw_data.size() > static_cast<size_t>(std::numeric_limits<int>::max())) {
+    return absl::InvalidArgumentError("Encoded image buffer is too large");
   }
   // WebP only supports 3 channels, so we need to convert it to gray on the fly.
   // TODO: b/417927632 - Use sandboxed imdecode.
   cv::Mat image = cv::imdecode(
-      {reinterpret_cast<const unsigned char*>(image_buffer.data().data()),
-       static_cast<int>(image_buffer.data().size())},
+      {raw_data.data(), static_cast<int>(raw_data.size())},
       image_buffer.encoding() == ENCODING_WEBP && ImageTrait::kNumChannels == 1
           ? cv::IMREAD_GRAYSCALE
           : cv::IMREAD_UNCHANGED);
@@ -773,51 +943,118 @@ absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
   }
   return intrinsic::perception::MoveToImage<ImageTrait>(std::move(image));
 }
-template absl::StatusOr<
-    intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
-FromProto(const ImageBuffer& image_buffer);
-template absl::StatusOr<
-    intrinsic::perception::Image<intrinsic::perception::Gray8u>>
-FromProto(const ImageBuffer& image_buffer);
-template absl::StatusOr<
-    intrinsic::perception::Image<intrinsic::perception::Gray32f>>
-FromProto(const ImageBuffer& image_buffer);
-template absl::StatusOr<
-    intrinsic::perception::Image<intrinsic::perception::Depth32f>>
-FromProto(const ImageBuffer& image_buffer);
-template absl::StatusOr<
-    intrinsic::perception::Image<intrinsic::perception::Normal32f>>
-FromProto(const ImageBuffer& image_buffer);
-template absl::StatusOr<
-    intrinsic::perception::Image<intrinsic::perception::Point32f>>
-FromProto(const ImageBuffer& image_buffer);
+
+}  // namespace
 
 template <typename ImageTrait>
 absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
-    ImageBuffer&& image_buffer) {
-  if (!image_buffer.data().empty() &&
-      image_buffer.encoding() == ENCODING_UNSPECIFIED) {
-    return CreateImageFromUnencodedBuffer<ImageTrait>(std::move(image_buffer));
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options) {
+  if (image_buffer.has_buffer_storage_location()) {
+    std::optional<UnencodedImageMetadata> unencoded_metadata;
+    if (image_buffer.encoding() == ENCODING_UNSPECIFIED) {
+      INTR_ASSIGN_OR_RETURN(
+          unencoded_metadata,
+          ValidateUnencodedImageMetadata<ImageTrait>(image_buffer));
+    }
+    INTR_ASSIGN_OR_RETURN(
+        const intrinsic::ImmutableBuffer raw_buffer,
+        intrinsic::perception::GetRawBufferWithRetry(
+            image_buffer.buffer_storage_location(), kvstore_options));
+    const absl::Span<const uint8_t> raw_span(raw_buffer.data(),
+                                             raw_buffer.size());
+    if (raw_span.empty()) {
+      return absl::InvalidArgumentError(
+          "External image buffer in KeyValueStore is empty");
+    }
+    if (unencoded_metadata.has_value()) {
+      return CreateImageFromUnencodedExternalSpan<ImageTrait>(
+          *unencoded_metadata, raw_span);
+    }
+    return DecodeEncodedImageFromSpan<ImageTrait>(image_buffer, raw_span);
   }
-  return FromProto<ImageTrait>(std::as_const(image_buffer));
+  if (image_buffer.data().empty()) {
+    return absl::InvalidArgumentError("data field in image_buffer is empty");
+  }
+  if (image_buffer.encoding() == ENCODING_UNSPECIFIED) {
+    return CreateImageFromUnencodedBuffer<ImageTrait>(image_buffer);
+  }
+  return DecodeEncodedImageFromSpan<ImageTrait>(
+      image_buffer, absl::MakeConstSpan(reinterpret_cast<const uint8_t*>(
+                                            image_buffer.data().data()),
+                                        image_buffer.data().size()));
 }
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Gray8u>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Gray32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Depth32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Normal32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 template absl::StatusOr<
     intrinsic::perception::Image<intrinsic::perception::Point32f>>
-FromProto(ImageBuffer&& image_buffer);
+FromProto(
+    const ImageBuffer& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
+
+template <typename ImageTrait>
+absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options) {
+  if (!image_buffer.has_buffer_storage_location() &&
+      !image_buffer.data().empty() &&
+      image_buffer.encoding() == ENCODING_UNSPECIFIED) {
+    return CreateImageFromUnencodedBuffer<ImageTrait>(std::move(image_buffer));
+  }
+  return FromProto<ImageTrait>(std::as_const(image_buffer), kvstore_options);
+}
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Rgb8u>>
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Gray8u>>
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Gray32f>>
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Depth32f>>
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Normal32f>>
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
+template absl::StatusOr<
+    intrinsic::perception::Image<intrinsic::perception::Point32f>>
+FromProto(
+    ImageBuffer&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options);
 
 }  // namespace intrinsic_proto::perception::v1
