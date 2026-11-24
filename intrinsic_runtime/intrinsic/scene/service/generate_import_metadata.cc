@@ -40,6 +40,7 @@
 #include "intrinsic/scene/scene_object/scene_object_view.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/component/geometry_component.h"
+#include "intrinsic/world/geometry_types.h"
 
 namespace intrinsic {
 namespace {
@@ -168,8 +169,9 @@ absl::StatusOr<ImportResultMetadata> GenerateImportMetadata(
           GeometryComponent::FromProto(entity.link().geometry_component()));
 
       for (const auto& [geo_type, stats_map] : {
-               std::make_pair("Intrinsic_Visual", &scene_to_visual_stats),
-               std::make_pair("Intrinsic_Collision", &scene_to_collision_stats),
+               std::make_pair(kKindVisualGeometry, &scene_to_visual_stats),
+               std::make_pair(kKindCollisionGeometry,
+                              &scene_to_collision_stats),
            }) {
         auto named_geos =
             geom_component->GetGeometry(geo_type, geo_deserializer);

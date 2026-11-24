@@ -343,6 +343,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/scene/scene_object:scene_object_view",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/world:geometry_types",
         "//intrinsic_sdk/intrinsic/world/component:geometry_component",
         "@abseil-cpp//absl/container:flat_hash_map",
         "@abseil-cpp//absl/log",
