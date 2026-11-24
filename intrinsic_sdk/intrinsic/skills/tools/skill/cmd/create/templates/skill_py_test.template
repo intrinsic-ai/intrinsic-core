@@ -46,8 +46,12 @@ class {{.SkillNameUpperCamelCase}}Test(unittest.TestCase):
         request = stu.make_test_preview_request(params)
 
         # Update this test when you implement preview
-        with self.assertRaises(NotImplementedError):
-            skill.preview(request, context)
+        with self.assertLogs() as log_output:
+            result = skill.preview(request, context)
+
+        self.assertIsNone(result)
+        output = log_output[0][0].message
+        self.assertEqual(output, '"text" parameter passed in skill params: hello world')
 
     def test_execute(self):
         skill = {{.SkillNameUpperCamelCase}}()

@@ -25,6 +25,7 @@ limitations under the License.
 #include "absl/status/statusor.h"
 #include "{{strJoin .BazelPackage "/"}}{{if .BazelPackage}}/{{end}}{{.SkillNameSnakeCase}}.pb.h"
 #include "google/protobuf/message.h"
+#include "intrinsic/skills/cc/skill_interface_utils.h"
 #include "intrinsic/skills/cc/skill_utils.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -42,6 +43,7 @@ using ::intrinsic::skills::GetFootprintContext;
 using ::intrinsic::skills::GetFootprintRequest;
 using ::intrinsic::skills::PreviewContext;
 using ::intrinsic::skills::PreviewRequest;
+using ::intrinsic::skills::PreviewViaExecute;
 using ::intrinsic::skills::SkillInterface;
 using ::intrinsic::skills::SkillProjectInterface;
 
@@ -57,8 +59,12 @@ absl::StatusOr<intrinsic_proto::skills::Footprint> {{.SkillNameUpperCamelCase}}:
 }
 
 absl::StatusOr<std::unique_ptr<::google::protobuf::Message>> {{.SkillNameUpperCamelCase}}::Preview(
-      const PreviewRequest& request, PreviewContext& context) {
-    return absl::UnimplementedError("Skill has not implemented `Preview`.");
+    const PreviewRequest& request, PreviewContext& context) {
+  // Default to PreviewViaExecute so this skill can run in Preview execution
+  // mode (update this if Execute() requires hardware resources or modifies the
+  // world). See Execution settings:
+  // https://flowstate.intrinsic.ai/docs/guides/develop_a_process/run_a_process/#execution-settings
+  return PreviewViaExecute(*this, request, context);
 }
 
 absl::StatusOr<std::unique_ptr<::google::protobuf::Message>> {{.SkillNameUpperCamelCase}}::Execute(

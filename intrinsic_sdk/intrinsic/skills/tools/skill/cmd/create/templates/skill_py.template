@@ -21,6 +21,7 @@ from absl import logging
 from intrinsic.skills.proto import footprint_pb2
 from intrinsic.skills.python import proto_utils
 from intrinsic.skills.python import skill_interface
+from intrinsic.skills.python import skill_interface_utils
 from intrinsic.util.decorators import overrides
 
 {{if .BazelPackage}}from {{strJoin .BazelPackage "."}} {{end}}import {{.SkillNameSnakeCase}}_pb2
@@ -77,8 +78,10 @@ class {{.SkillNameUpperCamelCase}}(skill_interface.Skill):
         preview the execution. The implementation should return the expected output
         of executing the skill in that world.
 
-        If a skill does not override the default implementation, any process that
-        includes that skill will not be executable in "preview" mode.
+        This default implementation delegates to `execute` via
+        `preview_via_execute` so processes that include this skill can run in
+        "preview" mode. See Execution settings:
+        https://flowstate.intrinsic.ai/docs/guides/develop_a_process/run_a_process/#execution-settings
 
         NOTE: In preview mode, the object world provided by the PreviewContext
         is treated as the -actual- state of the physical world, rather than as the
@@ -113,11 +116,11 @@ class {{.SkillNameUpperCamelCase}}(skill_interface.Skill):
           SkillCancelledError: If the skill preview is aborted due to a cancellation
             request.
         """
-        del request  # Unused in this default implementation.
-        del context  # Unused in this default implementation.
-        raise NotImplementedError(
-            f'Skill "{type(self).__name__!r} has not implemented `preview`.'
-        )
+        # Default to `preview_via_execute` so this skill can run in Preview
+        # execution mode (update this if `execute` requires hardware resources
+        # or modifies the world). See Execution settings:
+        # https://flowstate.intrinsic.ai/docs/guides/develop_a_process/run_a_process/#execution-settings
+        return skill_interface_utils.preview_via_execute(self, request, context)
 
     @overrides(skill_interface.Skill)
     def execute(

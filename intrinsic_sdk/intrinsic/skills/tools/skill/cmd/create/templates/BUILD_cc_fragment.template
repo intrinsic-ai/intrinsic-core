@@ -38,6 +38,7 @@ cc_library(
     deps = [
         ":{{.SkillNameSnakeCase}}_cc_proto",
         "@ai_intrinsic_sdks//intrinsic/skills/cc:skill_interface",
+        "@ai_intrinsic_sdks//intrinsic/skills/cc:skill_interface_utils",
         "@ai_intrinsic_sdks//intrinsic/skills/cc:skill_utils",
         "@ai_intrinsic_sdks//intrinsic/skills/proto:equipment_cc_proto",
         "@ai_intrinsic_sdks//intrinsic/util/status:status_macros",

@@ -62,9 +62,11 @@ TEST(SaySkillTest, Preview) {
   PreviewRequest request = skill_test_factory.MakePreviewRequest(params);
   std::unique_ptr<PreviewContext> context = skill_test_factory.MakePreviewContext({});
 
+  // Update this test when you implement preview
   auto result = skill->Preview(request, *context);
 
-  ASSERT_TRUE(absl::IsUnimplemented(result.status()));
+  ASSERT_TRUE(result.ok());
+  EXPECT_EQ(*result, nullptr);
 }
 
 TEST(SaySkillTest, Execute) {

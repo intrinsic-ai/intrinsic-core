@@ -67,8 +67,10 @@ class {{.SkillNameUpperCamelCase}} : public intrinsic::skills::SkillInterface {
   // preview the execution. The implementation should return the expected output
   // of executing the skill in that world.
   //
-  // If a skill does not override the default implementation, any process that
-  // includes that skill will not be executable in "preview" mode.
+  // This default implementation delegates to Execute() via PreviewViaExecute()
+  // so processes that include this skill can run in "preview" mode. See
+  // Execution settings:
+  // https://flowstate.intrinsic.ai/docs/guides/develop_a_process/run_a_process/#execution-settings
   //
   // NOTE: In preview mode, the object world provided by the PreviewContext
   // is treated as the -actual- state of the physical world, rather than as the

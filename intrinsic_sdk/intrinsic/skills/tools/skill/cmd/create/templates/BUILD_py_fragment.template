@@ -41,6 +41,7 @@ py_library(
         "@ai_intrinsic_sdks//intrinsic/skills/proto:footprint_py_pb2",
         "@ai_intrinsic_sdks//intrinsic/skills/python:proto_utils",
         "@ai_intrinsic_sdks//intrinsic/skills/python:skill_interface",
+        "@ai_intrinsic_sdks//intrinsic/skills/python:skill_interface_utils",
         "@ai_intrinsic_sdks//intrinsic/util:decorators",
         "@com_google_absl_py//absl/logging",
         "@com_google_protobuf//:protobuf_python",
