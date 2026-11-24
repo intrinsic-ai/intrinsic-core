@@ -63,7 +63,7 @@ struct RefusedCollapse {
 };
 
 // Hashes the corner indices of the triangles around a vertex (see
-// `ring_corners` in SimplifyWithCancellation).
+// `ring_corners` in SimplifyWithLocalityBound).
 size_t HashRing(absl::Span<const unsigned int> ring_corners) {
   return absl::HashOf(ring_corners);
 }
@@ -139,7 +139,6 @@ absl::StatusOr<MeshoptLocalityResult> SimplifyWithLocalityBound(
   }
 
   double max_accepted_error = 0.0;
-  size_t rejected_collapses = 0;
   std::vector<RefusedCollapse> last_refusal(welded_vertex_count);
   bool stopped_early = false;
 
@@ -189,14 +188,13 @@ absl::StatusOr<MeshoptLocalityResult> SimplifyWithLocalityBound(
   // `ring_triangle_count` triangles that would surround `kept_vertex` after
   // the collapse. It is only valid during the call. Returns whether the
   // collapse is allowed.
-  auto can_collapse = [&welded, &stopped_early, &stop_token, &has_timed_out,
-                       &rejected_collapses, &last_refusal, &ring,
-                       &pending_handoffs, &watched_triangles, original_indices,
-                       max_hausdorff_distance, &max_accepted_error,
-                       &stop_watching, &start_watching](
-                          unsigned int removed_vertex, unsigned int kept_vertex,
-                          const unsigned int* ring_indices,
-                          size_t ring_triangle_count) -> bool {
+  auto can_collapse =
+      [&welded, &stopped_early, &stop_token, &has_timed_out, &last_refusal,
+       &ring, &pending_handoffs, &watched_triangles, original_indices,
+       max_hausdorff_distance, &max_accepted_error, &stop_watching,
+       &start_watching](unsigned int removed_vertex, unsigned int kept_vertex,
+                        const unsigned int* ring_indices,
+                        size_t ring_triangle_count) -> bool {
     const absl::Span<const unsigned int> ring_corners = absl::MakeConstSpan(
         ring_indices, ring_triangle_count * kIndicesPerTriangle);
     // Once stopped, refuse everything so meshoptimizer finishes quickly with
@@ -211,7 +209,6 @@ absl::StatusOr<MeshoptLocalityResult> SimplifyWithLocalityBound(
 
     // Refuse collapses that would delete the last triangle of a piece.
     if (ring_triangle_count == 0) {
-      ++rejected_collapses;
       return false;
     }
 
@@ -221,7 +218,6 @@ absl::StatusOr<MeshoptLocalityResult> SimplifyWithLocalityBound(
     if (refusal.kept_vertex == kept_vertex &&
         refusal.ring_triangle_count == ring_triangle_count &&
         refusal.ring_hash == HashRing(ring_corners)) {
-      ++rejected_collapses;
       return false;
     }
 
@@ -252,7 +248,6 @@ absl::StatusOr<MeshoptLocalityResult> SimplifyWithLocalityBound(
             .ring_triangle_count = ring_triangle_count,
             .ring_hash = HashRing(ring_corners),
         };
-        ++rejected_collapses;
         return false;
       }
       collapse_error = std::max(collapse_error, coverage->max_distance_bound);
@@ -316,7 +311,6 @@ absl::StatusOr<MeshoptLocalityResult> SimplifyWithLocalityBound(
                                          kFloatsPerVertex);
   result.buffers.indices = std::move(simplified_indices);
   result.resulting_error = max_accepted_error;
-  result.rejected_collapses = rejected_collapses;
   return result;
 }
 

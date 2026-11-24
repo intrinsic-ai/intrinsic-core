@@ -15,8 +15,6 @@
 #ifndef INTRINSIC_GEOMETRY_INTERNAL_MESH_SIMPLIFICATION_MESHOPT_LOCALITY_SIMPLIFIER_H_
 #define INTRINSIC_GEOMETRY_INTERNAL_MESH_SIMPLIFICATION_MESHOPT_LOCALITY_SIMPLIFIER_H_
 
-#include <cstddef>
-
 #include "absl/functional/function_ref.h"
 #include "absl/status/statusor.h"
 #include "intrinsic/geometry/internal/conversion_utils/mesh_conversion.h"
@@ -31,8 +29,6 @@ struct MeshoptLocalityResult {
   // Upper bound (in meters) on the distance from the original mesh to the
   // simplified one, from the checks of the accepted collapses.
   double resulting_error = 0.0;
-  // Number of proposed collapses refused by the distance check.
-  size_t rejected_collapses = 0;
   // True if the timeout stopped simplification early. The mesh is then only
   // partly simplified, but still within the distance limit.
   bool timed_out = false;
