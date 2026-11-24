@@ -21,6 +21,7 @@ import (
 	"maps"
 	"path"
 	"slices"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -533,6 +534,10 @@ type deployOpts struct {
 	// appDeploymentID is the app_deployment_id to use for the deployment.
 	// If empty, a new app_deployment_id is generated.
 	appDeploymentID string
+	// Whether the solution being deployed is a saved solution.
+	// This is a temporary flag to allow backwards compatibility with existing
+	// saved solutions when making changes to the deployment process.
+	savedSolution bool
 }
 
 func (s *DeployService) deployApplication(
@@ -583,6 +588,7 @@ func (s *DeployService) deployApplication(
 	}
 
 	// After normalizeApp, all assets are in the resource set.
+	var configIncompatibilities []string
 	for _, ri := range app.GetResources().GetResourceInstances() {
 		idVersion, err := idutils.IDOrIDVersionProtoFrom(ri.GetTypeIdVersion())
 		if err != nil {
@@ -595,6 +601,28 @@ func (s *DeployService) deployApplication(
 		// Ensure the Asset instance name is not reserved.
 		if err := platform.ValidateInstanceNameNotReserved(ri.GetName()); err != nil {
 			return nil, err
+		}
+
+		if ri.GetConfiguration() != nil {
+			rt, ok := rts[ri.GetTypeIdVersion()]
+			if !ok {
+				// This check should have been caught earlier, and should ideally never happen.
+				return nil, status.Errorf(codes.Internal, "Asset instance %q requires Asset %q which is not found in the solution", ri.GetName(), ri.GetTypeIdVersion())
+			}
+			assetConfigMsgName := rt.GetServiceDef().GetConfigMessageFullName()
+			if assetConfigMsgName == "" && rt.GetServiceDef() != nil && rt.GetDefaultConfiguration() != nil {
+				assetConfigMsgName = string(rt.GetDefaultConfiguration().MessageName())
+			}
+			instanceConfigMsgName := string(ri.GetConfiguration().MessageName())
+			if assetConfigMsgName != instanceConfigMsgName {
+				configIncompatibilities = append(configIncompatibilities, fmt.Sprintf("%q expects %q, got %q", ri.GetName(), assetConfigMsgName, instanceConfigMsgName))
+			}
+		}
+	}
+	if len(configIncompatibilities) > 0 {
+		log.ErrorContextf(ctx, "Solution contains Asset instances with invalid configuration message types: %s", strings.Join(configIncompatibilities, "; "))
+		if !opts.savedSolution {
+			return nil, status.Errorf(codes.InvalidArgument, "solution contains Asset instances with invalid configuration message types: %s", strings.Join(configIncompatibilities, "; "))
 		}
 	}
 
@@ -1032,7 +1060,8 @@ func (s *DeployService) scheduleVersionedSolution(ctx context.Context, solutionI
 			return nil
 		}
 		solutionDeployment, err := s.deployApplication(ctx, app, ms.GetSideloadedResourceTypes(), ms.GetSideloadedParameterizableBehaviorTrees(), deployOpts{
-			validate: validateDependencies,
+			validate:      validateDependencies,
+			savedSolution: true,
 		})
 		if err != nil {
 			return nil, err
