@@ -114,13 +114,24 @@ func main() {
 
 	fds, err := registryutil.LoadFileDescriptorSets(*fileDescriptorSets)
 	if err != nil {
-		log.Exitf("cannot build file descriptor set for asset: %v", err)
+		log.Exitf("cannot load the file descriptor set information for the asset: %v", err)
 	}
 	if *mergeFDS {
 		fds, err = descriptor.MergeFileDescriptorSets([]*dpb.FileDescriptorSet{fds})
 		if err != nil {
 			log.Exitf("cannot merge file descriptor set for asset: %v", err)
 		}
+	}
+	if _, err := registryutil.NewTypesFromFileDescriptorSet(fds); err != nil {
+		log.Exitf(`Unable to build the file descriptor set for the asset.  This can
+		occur when there are duplicate sources of information.  If you are using a
+		mixture of providers (e.g. proto_library and binary_file_descriptor_set
+		targets), use one instead.  Multiple proto_library targets can be listed in
+		"deps", but they should all come from a single, consistent source.  Use a
+		single target that represents a consistent file descriptor set when using
+		rules like binary_file_descriptor_set.
+
+		Details: %v`, err)
 	}
 	// Passing only empty files has the same effect as passing no files at all.
 	// This behavior makes it easier to handle assets for which the file

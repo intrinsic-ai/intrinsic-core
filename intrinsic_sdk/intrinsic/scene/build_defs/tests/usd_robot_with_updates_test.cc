@@ -42,16 +42,15 @@ using ::protobuf_matchers::proto::Partially;
 using ::intrinsic::scene_object::GetSceneObjectFromGzf;
 using ::intrinsic_proto::scene_object::v1::SceneObject;
 
-absl::StatusOr<SceneObject> GetSceneObjectFromGzf() {
-  const std::string file = PathResolver::ResolveRunfilesPath(
-      "intrinsic/scene/build_defs/tests/basic_robot_with_updates.gzf");
+absl::StatusOr<SceneObject> GetSceneObjectFromGzf(const std::string& filename) {
+  const std::string file = PathResolver::ResolveRunfilesPath(filename);
   INTR_ASSIGN_OR_RETURN(auto gzfile, GZFile::Open(file));
   return GetSceneObjectFromGzf(*gzfile);
 }
 
-absl::StatusOr<SceneObject> GetSceneObjectFromTextProto() {
-  const std::string file = PathResolver::ResolveRunfilesPath(
-      "intrinsic/scene/build_defs/tests/basic_robot_with_updates.pbtxt");
+absl::StatusOr<SceneObject> GetSceneObjectFromTextProto(
+    const std::string& filename) {
+  const std::string file = PathResolver::ResolveRunfilesPath(filename);
   SceneObject scene_object;
   INTR_RETURN_IF_ERROR(
       file::GetTextProto(file, &scene_object, file::Defaults()));
@@ -65,8 +64,18 @@ struct SceneObjectTestParam {
 
 std::vector<SceneObjectTestParam> GetTestParams() {
   return {
-      {"FromGzfFile", GetSceneObjectFromGzf()},
-      {"FromTextProto", GetSceneObjectFromTextProto()},
+      {"FromGzfFile",
+       GetSceneObjectFromGzf(
+           "intrinsic/scene/build_defs/tests/basic_robot_with_updates.gzf")},
+      {"FromTextProto",
+       GetSceneObjectFromTextProto(
+           "intrinsic/scene/build_defs/tests/basic_robot_with_updates.pbtxt")},
+      {"FromFdsGzfFile",
+       GetSceneObjectFromGzf("intrinsic/scene/build_defs/tests/"
+                             "basic_robot_with_updates_from_fds.gzf")},
+      {"FromFdsTextProto",
+       GetSceneObjectFromTextProto("intrinsic/scene/build_defs/tests/"
+                                   "basic_robot_with_updates_from_fds.pbtxt")},
   };
 }
 

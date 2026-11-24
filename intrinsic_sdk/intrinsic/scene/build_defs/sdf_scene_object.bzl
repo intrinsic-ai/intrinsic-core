@@ -107,8 +107,18 @@ _sdf_scene_object = rule(
     ),
     attrs = {
         "deps": attr.label_list(
-            providers = [ProtoInfo],
+            providers = [
+                [ProtoInfo],
+                [ProtoSourceCodeInfo],
+            ],
             aspects = [gen_source_code_info_descriptor_set],
+            doc = (
+                "Optional proto dependencies needed to parse the user_data " +
+                "in the SDF file or the updates pbtxts. Use either one or " +
+                "more proto_library targets from a consistent source, or a " +
+                "single self-consistent file descriptor set target (e.g., " +
+                "binary_file_descriptor_set)."
+            ),
         ),
         "large_mesh_checks_max_mesh_diagonal": attr.bool(),
         "sdf_assets": attr.label_list(allow_files = True),
@@ -152,7 +162,10 @@ def sdf_scene_object(
         (intrinsic_proto::scene_object::v1::SceneObjectUpdate) that specify
         post-processings of the SDF converted SceneObject.
       deps: list of labels, Optional. Proto dependencies needed to parse the
-        user_data in the SDF file or the updates pbtxts.
+        user_data in the SDF file or the updates pbtxts. Use either one or more
+        proto_library targets from a consistent source, or a single
+        self-consistent file descriptor set target (e.g.,
+        binary_file_descriptor_set).
       large_mesh_checks_max_mesh_diagonal: The maximum allowable size for the
         diagonal of any single mesh. The conversion will stop with an error if
         any mesh has a bounding box that exceeds this value. Setting to a value

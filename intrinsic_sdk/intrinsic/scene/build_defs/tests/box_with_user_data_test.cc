@@ -42,16 +42,15 @@ using ::testing::UnorderedElementsAre;
 using ::intrinsic::scene_object::GetSceneObjectFromGzf;
 using ::intrinsic_proto::scene_object::v1::SceneObject;
 
-absl::StatusOr<SceneObject> GetSceneObjectFromGzf() {
-  const std::string kBoxFile = PathResolver::ResolveRunfilesPath(
-      "intrinsic/scene/build_defs/tests/box_with_user_data.gzf");
+absl::StatusOr<SceneObject> GetSceneObjectFromGzf(const std::string& filename) {
+  const std::string kBoxFile = PathResolver::ResolveRunfilesPath(filename);
   INTR_ASSIGN_OR_RETURN(auto gzfile, GZFile::Open(kBoxFile));
   return GetSceneObjectFromGzf(*gzfile);
 }
 
-absl::StatusOr<SceneObject> GetSceneObjectFromTextProto() {
-  const std::string kBoxFile = PathResolver::ResolveRunfilesPath(
-      "intrinsic/scene/build_defs/tests/box_with_user_data.pbtxt");
+absl::StatusOr<SceneObject> GetSceneObjectFromTextProto(
+    const std::string& filename) {
+  const std::string kBoxFile = PathResolver::ResolveRunfilesPath(filename);
   SceneObject scene_object;
   INTR_RETURN_IF_ERROR(
       file::GetTextProto(kBoxFile, &scene_object, file::Defaults()));
@@ -65,8 +64,18 @@ struct SceneObjectTestParam {
 
 std::vector<SceneObjectTestParam> GetTestParams() {
   return {
-      {"FromGzfFile", GetSceneObjectFromGzf()},
-      {"FromTextProto", GetSceneObjectFromTextProto()},
+      {"FromGzfFile",
+       GetSceneObjectFromGzf(
+           "intrinsic/scene/build_defs/tests/box_with_user_data.gzf")},
+      {"FromTextProto",
+       GetSceneObjectFromTextProto(
+           "intrinsic/scene/build_defs/tests/box_with_user_data.pbtxt")},
+      {"FromFdsGzfFile",
+       GetSceneObjectFromGzf(
+           "intrinsic/scene/build_defs/tests/box_with_user_data_from_fds.gzf")},
+      {"FromFdsTextProto",
+       GetSceneObjectFromTextProto("intrinsic/scene/build_defs/tests/"
+                                   "box_with_user_data_from_fds.pbtxt")},
   };
 }
 

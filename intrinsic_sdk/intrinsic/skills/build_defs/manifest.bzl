@@ -111,8 +111,13 @@ skill_manifest = rule(
         "deps": attr.label_list(
             doc = "proto deps of the manifest textproto for this skill. " +
                   "This is normally the proto message declaring the skill's return type and parameter " +
-                  "type messages.",
-            providers = [ProtoInfo],
+                  "type messages. Use either one or more proto_library targets from a consistent " +
+                  "source, or a single self-consistent file descriptor set target (e.g., " +
+                  "binary_file_descriptor_set).",
+            providers = [
+                [ProtoInfo],
+                [ProtoSourceCodeInfo],
+            ],
             aspects = [gen_source_code_info_descriptor_set],
         ),
         "incompatible_disallow_manifest_dependencies": attr.bool(

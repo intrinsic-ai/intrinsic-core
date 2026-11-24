@@ -96,8 +96,17 @@ _usd_scene_object = rule(
     ),
     attrs = {
         "deps": attr.label_list(
-            providers = [ProtoInfo],
+            providers = [
+                [ProtoInfo],
+                [ProtoSourceCodeInfo],
+            ],
             aspects = [gen_source_code_info_descriptor_set],
+            doc = (
+                "Optional proto dependencies needed to parse the updates " +
+                "pbtxts. Use either one or more proto_library targets from a " +
+                "consistent source, or a single self-consistent file " +
+                "descriptor set target (e.g., binary_file_descriptor_set)."
+            ),
         ),
         "src": attr.label(allow_single_file = True),
         "updates_pbtxts": attr.label_list(allow_files = True),
@@ -132,7 +141,10 @@ def usd_scene_object(
       updates_pbtxts: list of labels, Optional. Text proto files
         (intrinsic_proto::scene_object::v1::SceneObjectUpdate) that specify
         post-processings of the converted SceneObject.
-      deps: list of labels, Optional. Proto dependencies needed to parse the updates pbtxts.
+      deps: list of labels, Optional. Proto dependencies needed to parse the
+        updates pbtxts. Use either one or more proto_library targets from a
+        consistent source, or a single self-consistent file descriptor set
+        target (e.g., binary_file_descriptor_set).
       compatible_with: The list of environments this target can be built for,
         in addition to default-supported environments.
       testonly: If true, only testonly targets can depend on this target.

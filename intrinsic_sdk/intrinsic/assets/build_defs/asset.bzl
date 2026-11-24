@@ -15,6 +15,7 @@
 """Bazel rules for Assets."""
 
 load("@com_google_protobuf//bazel/common:proto_info.bzl", "ProtoInfo")
+load("//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl", "ProtoSourceCodeInfo")
 
 AssetInfo = provider(
     "Info about an asset.",
@@ -52,7 +53,7 @@ def _intrinsic_asset_reference_impl(ctx):
     asset_catalog_ref_info_output = ctx.actions.declare_file(ctx.label.name + ".asset_catalog_ref_info.binpb")
 
     transitive_descriptor_sets = depset(transitive = [
-        f[ProtoInfo].transitive_descriptor_sets
+        f[ProtoSourceCodeInfo].transitive_descriptor_sets if ProtoSourceCodeInfo in f else f[ProtoInfo].transitive_descriptor_sets
         for f in ctx.attr.deps
     ])
 
@@ -102,11 +103,17 @@ intrinsic_asset_reference = rule(
     implementation = _intrinsic_asset_reference_impl,
     attrs = {
         "deps": attr.label_list(
-            providers = [ProtoInfo],
+            providers = [
+                [ProtoInfo],
+                [ProtoSourceCodeInfo],
+            ],
             doc = "Proto dependencies that are compatible with the catalog " +
                   "asset. These are optional but required to parse config " +
                   "files. Note that version skew or other errors may happen " +
-                  "if the wrong protos are used.",
+                  "if the wrong protos are used. Use either one or more " +
+                  "proto_library targets from a consistent source, or a " +
+                  "single self-consistent file descriptor set target (e.g., " +
+                  "binary_file_descriptor_set).",
         ),
         "id": attr.string(
             mandatory = True,

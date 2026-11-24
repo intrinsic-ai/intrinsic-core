@@ -17,6 +17,10 @@ load("//intrinsic_sdk/intrinsic/assets/scene_objects/build_defs:scene_object.bzl
 load("//intrinsic_sdk/intrinsic/scene/build_defs:scene_object.bzl", "scene_object")
 load("//intrinsic_sdk/intrinsic/scene/build_defs:sdf_scene_object.bzl", "sdf_scene_object")
 load("//intrinsic_sdk/intrinsic/scene/build_defs:usd_scene_object.bzl", "usd_scene_object")
+load(
+    "//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl",
+    "proto_source_code_info_transitive_descriptor_set",
+)
 load("//intrinsic_sdk/intrinsic/util/proto/build_defs/testing:text_proto_test.bzl", "text_proto_test_suite")
 load("//intrinsic_sdk/bazel:sh_macros.bzl", "sh_test")
 
@@ -35,6 +39,23 @@ sdf_scene_object(
     src = "box_with_user_data.sdf",
     deps = [
         "@com_google_protobuf//:struct_proto",
+    ],
+)
+
+proto_source_code_info_transitive_descriptor_set(
+    name = "struct_fds",
+    testonly = True,
+    deps = [
+        "@com_google_protobuf//:struct_proto",
+    ],
+)
+
+sdf_scene_object(
+    name = "box_with_user_data_from_fds",
+    testonly = True,
+    src = "box_with_user_data.sdf",
+    deps = [
+        ":struct_fds",
     ],
 )
 
@@ -103,7 +124,10 @@ cc_test(
 cc_test(
     name = "box_with_user_data_test",
     srcs = ["box_with_user_data_test.cc"],
-    data = [":box_with_user_data"],
+    data = [
+        ":box_with_user_data",
+        ":box_with_user_data_from_fds",
+    ],
     deps = [
         "//intrinsic_sdk/intrinsic/scene/util:scene_object_gzf",
         "//intrinsic_sdk/intrinsic/util/path_resolver",
@@ -214,10 +238,34 @@ usd_scene_object(
     ],
 )
 
+proto_source_code_info_transitive_descriptor_set(
+    name = "updates_fds",
+    testonly = True,
+    deps = [
+        "@com_google_protobuf//:any_proto",
+        "@com_google_protobuf//:struct_proto",
+        "@com_google_protobuf//:wrappers_proto",
+    ],
+)
+
+usd_scene_object(
+    name = "basic_robot_with_updates_from_fds",
+    testonly = True,
+    src = "basic_robot.usda",
+    updates_pbtxts = ["basic_robot_updates.pbtxt"],
+    visibility = ["//visibility:private"],
+    deps = [
+        ":updates_fds",
+    ],
+)
+
 cc_test(
     name = "usd_robot_with_updates_test",
     srcs = ["usd_robot_with_updates_test.cc"],
-    data = [":basic_robot_with_updates"],
+    data = [
+        ":basic_robot_with_updates",
+        ":basic_robot_with_updates_from_fds",
+    ],
     deps = [
         "//intrinsic_sdk/intrinsic/scene/util:scene_object_gzf",
         "//intrinsic_sdk/intrinsic/util/path_resolver",

@@ -123,8 +123,17 @@ intrinsic_service = rule(
             the manifest's ServiceDef.config_message_full_name.""",
         ),
         "deps": attr.label_list(
-            providers = [ProtoInfo],
+            providers = [
+                [ProtoInfo],
+                [ProtoSourceCodeInfo],
+            ],
             aspects = [gen_source_code_info_descriptor_set],
+            doc = (
+                "Proto dependencies for the service's FileDescriptorSet. " +
+                "Use either one or more proto_library targets from a " +
+                "consistent source, or a single self-consistent file " +
+                "descriptor set target (e.g., binary_file_descriptor_set)."
+            ),
         ),
         "images": attr.label_list(
             allow_empty = True,

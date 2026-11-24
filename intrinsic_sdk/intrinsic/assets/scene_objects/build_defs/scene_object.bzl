@@ -116,8 +116,18 @@ intrinsic_scene_object = rule(
     implementation = _intrinsic_scene_object_impl,
     attrs = {
         "deps": attr.label_list(
-            providers = [ProtoInfo],
+            providers = [
+                [ProtoInfo],
+                [ProtoSourceCodeInfo],
+            ],
             aspects = [gen_source_code_info_descriptor_set],
+            doc = (
+                "Optional proto dependencies for the scene object's " +
+                "FileDescriptorSet. Use either one or more proto_library " +
+                "targets from a consistent source, or a single " +
+                "self-consistent file descriptor set target (e.g., " +
+                "binary_file_descriptor_set)."
+            ),
         ),
         "manifest": attr.label(
             allow_single_file = [".textproto", ".txtpb"],
