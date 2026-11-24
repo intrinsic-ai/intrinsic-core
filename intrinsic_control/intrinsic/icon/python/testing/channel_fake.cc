@@ -15,11 +15,15 @@
 #include "intrinsic/icon/cc_client/testing/channel_fake.h"
 
 #include <pybind11/pybind11.h>
+#include <pybind11/stl.h>
 
 #include <functional>
 #include <memory>
+#include <optional>
 #include <string>
+#include <utility>
 #include <variant>
+#include <vector>
 
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
@@ -111,14 +115,26 @@ PYBIND11_MODULE(channel_fake, m) {
       .def("WithInitialRobotStatus",
            &RtclControllerChannelFake::Builder::WithInitialRobotStatus,
            pybind11::arg("robot_status"))
-      .def("Build",
-           // Need a lambda here to convert
-           // StatusOr<shared_ptr<RtclControllerChannelFake>> to
-           // StatusOr<shared_ptr<ChannelInterface>>.
-           [](RtclControllerChannelFake::Builder& builder)
-               -> absl::StatusOr<std::shared_ptr<RtclControllerChannelFake>> {
-             return builder.Build(DefaultPartConfigs());
-           });
+      .def(
+          "Build",
+          // Need a lambda here to convert
+          // StatusOr<shared_ptr<RtclControllerChannelFake>> to
+          // StatusOr<shared_ptr<ChannelInterface>>.
+          [](RtclControllerChannelFake::Builder& builder,
+             std::optional<std::vector<intrinsic_proto::icon::v1::PartConfig>>
+                 part_configs)
+              -> absl::StatusOr<std::shared_ptr<RtclControllerChannelFake>> {
+            return builder.Build(
+                std::move(part_configs).value_or(DefaultPartConfigs()));
+          },
+          pybind11::arg("part_configs") = std::nullopt);
+
+  // Returns the part configs used by `Builder.Build()` if no `part_configs`
+  // are given. Note that all of these use the placeholder part type name
+  // "fake_part_for_tests" and the same placeholder hardware resource name, so
+  // tests that rely on real HAL part type names (e.g. to resolve parts via
+  // `resolved_dependency_utils`) need to adjust them.
+  m.def("default_part_configs", []() { return DefaultPartConfigs(); });
 
   pybind11::class_<ActionWill>(m, "ActionWill")
       .def(pybind11::init<>())
@@ -156,6 +172,7 @@ PYBIND11_MODULE(channel_fake, m) {
   m.attr("ARM_FORCE_TORQUE_SENSOR_PART_NAME") =
       test_part_names::kArmForceTorqueSensorName;
   m.attr("ADIO_PART_NAME") = test_part_names::kADIOName;
+  m.attr("RANGEFINDER_PART_NAME") = test_part_names::kRangefinderName;
 }
 
 }  // namespace icon

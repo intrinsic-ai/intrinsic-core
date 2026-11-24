@@ -25,6 +25,8 @@
 #include "absl/time/time.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
+#include "intrinsic/icon/equipment/force_control_settings.pb.h"
+#include "intrinsic/icon/proto/v1/types.pb.h"
 #include "intrinsic/util/grpc/channel_interface.h"
 #include "intrinsic/world/objects/kinematic_object.h"
 #include "intrinsic/world/objects/object_world_client.h"
@@ -33,8 +35,14 @@
 namespace intrinsic {
 namespace icon {
 
-inline constexpr absl::string_view kHalArmPartTypeName = "HalArmPart";
 inline constexpr absl::string_view kHalAdioPartTypeName = "HalADIOPart";
+inline constexpr absl::string_view kHalArmPartTypeName = "HalArmPart";
+inline constexpr absl::string_view kHalForceTorqueSensorPartTypeName =
+    "HalForceTorqueSensorPart";
+inline constexpr absl::string_view kHalLinearGripperPartTypeName =
+    "HalLinearGripperPart";
+inline constexpr absl::string_view kHalRangefinderPartTypeName =
+    "HalRangefinderPart";
 
 // Pairs an ICON position part name with its corresponding kinematic object in
 // the object world.
@@ -51,12 +59,17 @@ struct IconResolvedDependency {
   using HardwareResourceName = std::string;
   using HardwareResourceNameByPartName =
       absl::flat_hash_map<PartName, HardwareResourceName>;
+  using PartConfigByPartName =
+      absl::flat_hash_map<PartName, intrinsic_proto::icon::v1::PartConfig>;
 
   std::shared_ptr<ChannelInterface> channel;
   // Maps each `PartConfig::part_type_name` (e.g. "HalArmPart") to a map of
   // `PartConfig::name` -> `PartConfig::hardware_resource_name`. Guaranteed to
   // contain a non-empty `HardwareResourceName` for every entry.
   absl::flat_hash_map<PartType, HardwareResourceNameByPartName> parts;
+  // Maps each `PartConfig::name` to the full `PartConfig` returned by the ICON
+  // server's `GetConfig()`.
+  PartConfigByPartName part_configs;
 
   // Resolves a position part name and its corresponding `KinematicObject` in
   // `world` from `parts`.
@@ -75,11 +88,44 @@ struct IconResolvedDependency {
   // in ascending lexicographical order, or an `InvalidArgumentError` if no
   // ADIO parts are present.
   absl::StatusOr<std::vector<PartName>> GetAdioPartNames() const;
+
+  // The following `Get*PartName()` helpers check `parts` for the respective HAL
+  // part type.
+  // Return the name of the part if there is exactly one part of that type.
+  // Return an `InvalidArgumentError` if there are no such parts, or if there is
+  // more than one (in which case the caller has to ask the user to select one).
+  //
+  // Skills that let users optionally specify a part name should use a
+  // user-provided part name as-is (so that any ICON part supporting the
+  // required feature interfaces can be used) and only call these helpers if the
+  // part name was omitted.
+
+  // Returns the name of the single `"HalADIOPart"` part.
+  absl::StatusOr<PartName> GetAdioPartName() const;
+
+  // Returns the name of the single `"HalLinearGripperPart"` part.
+  absl::StatusOr<PartName> GetGripperPartName() const;
+
+  // Returns the name of the single `"HalForceTorqueSensorPart"` part.
+  absl::StatusOr<PartName> GetForceTorqueSensorPartName() const;
+
+  // Returns the name of the single `"HalRangefinderPart"` part.
+  absl::StatusOr<PartName> GetRangefinderPartName() const;
+
+  // Returns the `force_control_settings` from the
+  // `HalForceTorqueSensorPartConfig` of the part named
+  // `force_torque_sensor_part` in `part_configs`.
+  //
+  // Returns an `InvalidArgumentError` if `force_torque_sensor_part` does not
+  // exist, or if its config is not a `HalForceTorqueSensorPartConfig`.
+  absl::StatusOr<intrinsic_proto::icon::ForceControlSettings>
+  GetForceControlSettings(absl::string_view force_torque_sensor_part) const;
 };
 
 // Connects to the ICON Application Layer at `resolved_dependency`, queries
 // `GetConfig()`, and populates `IconResolvedDependency::parts` keyed by
-// `part_type_name` and `name`.
+// `part_type_name` and `name` as well as `IconResolvedDependency::part_configs`
+// keyed by `name`.
 //
 // Returns an error if the connection is not made within `timeout`, if the
 // dependency configuration is malformed, or if any part in the ICON server

@@ -32,6 +32,8 @@
 #include "intrinsic/assets/interface_utils.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/icon/cc_client/client.h"
+#include "intrinsic/icon/control/parts/hal/force_torque_sensor_part/hal_force_torque_sensor_part_config.pb.h"
+#include "intrinsic/icon/equipment/force_control_settings.pb.h"
 #include "intrinsic/icon/proto/v1/service.grpc.pb.h"
 #include "intrinsic/icon/proto/v1/types.pb.h"
 #include "intrinsic/icon/server/fake_robot_connection.h"
@@ -57,6 +59,7 @@ using ::testing::_;
 using ::testing::DoAll;
 using ::testing::ElementsAre;
 using ::testing::HasSubstr;
+using ::testing::Key;
 using ::testing::Pair;
 using ::testing::Return;
 using ::testing::SetArgPointee;
@@ -67,6 +70,21 @@ intrinsic_proto::icon::v1::ServerConfig ServerConfig() {
   server_config.set_name(kIconServerName);
   server_config.set_frequency_hz(kControlFrequencyHz);
   return server_config;
+}
+
+// Returns a "HalForceTorqueSensorPart" PartConfig named `name` whose config
+// contains force control settings with `excessive_force_threshold`.
+intrinsic_proto::icon::v1::PartConfig MakeForceTorqueSensorPartConfig(
+    absl::string_view name, double excessive_force_threshold) {
+  intrinsic_proto::icon::v1::PartConfig part_config;
+  part_config.set_name(name);
+  part_config.set_part_type_name(kHalForceTorqueSensorPartTypeName);
+  part_config.set_hardware_resource_name(name);
+  intrinsic_proto::icon::HalForceTorqueSensorPartConfig ft_config;
+  ft_config.mutable_force_control_settings()->set_excessive_force_threshold(
+      excessive_force_threshold);
+  part_config.mutable_config()->PackFrom(ft_config);
+  return part_config;
 }
 
 class ResolvedDependencyUtilsTestFixture : public ::testing::Test {
@@ -151,11 +169,8 @@ TEST_F(ResolvedDependencyUtilsTestFixture, ConnectToIconResolvedDependency) {
         part_type_name: "HalADIOPart"
         hardware_resource_name: "adio_1"
       )pb"),
-      ParseTextProtoOrDie(R"pb(
-        name: "ft_sensor_1"
-        part_type_name: "HalForceTorqueSensorPart"
-        hardware_resource_name: "ft_sensor_1"
-      )pb"),
+      MakeForceTorqueSensorPartConfig("ft_sensor_1",
+                                      /*excessive_force_threshold=*/42.0),
       ParseTextProtoOrDie(R"pb(
         name: "rangefinder_1"
         part_type_name: "HalRangefinderPart"
@@ -188,6 +203,15 @@ TEST_F(ResolvedDependencyUtilsTestFixture, ConnectToIconResolvedDependency) {
                UnorderedElementsAre(Pair("rangefinder_1", "rangefinder_1"))),
           Pair("SomeOtherPart",
                UnorderedElementsAre(Pair("custom_part_1", "custom_part_1")))));
+  EXPECT_THAT(
+      icon_resolved_dependency.part_configs,
+      UnorderedElementsAre(Key("robot_arm_1"), Key("robot_arm_2"),
+                           Key("gripper_1"), Key("adio_1"), Key("ft_sensor_1"),
+                           Key("rangefinder_1"), Key("custom_part_1")));
+  ASSERT_OK_AND_ASSIGN(
+      intrinsic_proto::icon::ForceControlSettings force_control_settings,
+      icon_resolved_dependency.GetForceControlSettings("ft_sensor_1"));
+  EXPECT_EQ(force_control_settings.excessive_force_threshold(), 42.0);
 
   // Verify that we can use the returned connection.
   Client icon_client(icon_resolved_dependency.channel);
@@ -375,6 +399,222 @@ TEST(GetAdioPartNamesTest, ErrorsWhenEmptyAdioParts) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        HasSubstr("The given ICON instance does not have any "
                                  "ADIO parts")));
+}
+
+TEST(GetGripperPartNameTest, ReturnsGripperPartName) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {
+      {"HalLinearGripperPart", {{"gripper_1", "my_gripper_1"}}}};
+
+  ASSERT_OK_AND_ASSIGN(std::string part_name,
+                       icon_resolved_dependency.GetGripperPartName());
+  EXPECT_EQ(part_name, "gripper_1");
+}
+
+TEST(GetGripperPartNameTest, ErrorsWhenEmptyGripperParts) {
+  IconResolvedDependency icon_resolved_dependency;
+
+  EXPECT_THAT(icon_resolved_dependency.GetGripperPartName(),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The given ICON instance does not have any "
+                                 "gripper parts.")));
+}
+
+TEST(GetGripperPartNameTest, ErrorsWhenMultipleGripperParts) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {{"HalLinearGripperPart",
+                                     {
+                                         {"gripper_1", "my_gripper_1"},
+                                         {"gripper_2", "my_gripper_2"},
+                                     }}};
+
+  EXPECT_THAT(
+      icon_resolved_dependency.GetGripperPartName(),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("The given ICON instance has multiple gripper parts. "
+                         "Please specify which gripper part to use. Available "
+                         "gripper parts for the selected ICON instance are: "
+                         "gripper_1, gripper_2.")));
+}
+
+TEST(GetAdioPartNameTest, ReturnsAdioPartName) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {{"HalADIOPart", {{"adio_1", "my_adio_1"}}}};
+
+  ASSERT_OK_AND_ASSIGN(std::string part_name,
+                       icon_resolved_dependency.GetAdioPartName());
+  EXPECT_EQ(part_name, "adio_1");
+}
+
+TEST(GetAdioPartNameTest, ErrorsWhenEmptyAdioParts) {
+  IconResolvedDependency icon_resolved_dependency;
+
+  EXPECT_THAT(icon_resolved_dependency.GetAdioPartName(),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The given ICON instance does not have any "
+                                 "ADIO parts.")));
+}
+
+TEST(GetAdioPartNameTest, ErrorsWhenMultipleAdioParts) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {{"HalADIOPart",
+                                     {
+                                         {"adio_1", "my_adio_1"},
+                                         {"adio_2", "my_adio_2"},
+                                     }}};
+
+  EXPECT_THAT(
+      icon_resolved_dependency.GetAdioPartName(),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("The given ICON instance has multiple ADIO parts. "
+                         "Please specify which ADIO part to use. Available "
+                         "ADIO parts for the selected ICON instance are: "
+                         "adio_1, adio_2.")));
+}
+
+TEST(GetForceTorqueSensorPartNameTest, ReturnsForceTorqueSensorPartName) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {
+      {"HalForceTorqueSensorPart", {{"ft_sensor_1", "my_ft_sensor_1"}}}};
+
+  ASSERT_OK_AND_ASSIGN(std::string part_name,
+                       icon_resolved_dependency.GetForceTorqueSensorPartName());
+  EXPECT_EQ(part_name, "ft_sensor_1");
+}
+
+TEST(GetForceTorqueSensorPartNameTest, ErrorsWhenEmptyForceTorqueSensorParts) {
+  IconResolvedDependency icon_resolved_dependency;
+
+  EXPECT_THAT(icon_resolved_dependency.GetForceTorqueSensorPartName(),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The given ICON instance does not have any "
+                                 "force-torque sensor parts.")));
+}
+
+TEST(GetForceTorqueSensorPartNameTest,
+     ErrorsWhenMultipleForceTorqueSensorParts) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {{"HalForceTorqueSensorPart",
+                                     {
+                                         {"ft_sensor_1", "my_ft_sensor_1"},
+                                         {"ft_sensor_2", "my_ft_sensor_2"},
+                                     }}};
+
+  EXPECT_THAT(
+      icon_resolved_dependency.GetForceTorqueSensorPartName(),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("The given ICON instance has multiple force-torque sensor "
+                    "parts. Please specify which force-torque sensor part to "
+                    "use. Available force-torque sensor parts for the selected "
+                    "ICON instance are: ft_sensor_1, ft_sensor_2.")));
+}
+
+TEST(GetRangefinderPartNameTest, ReturnsRangefinderPartName) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {
+      {"HalRangefinderPart", {{"rangefinder_1", "my_rangefinder_1"}}}};
+
+  ASSERT_OK_AND_ASSIGN(std::string part_name,
+                       icon_resolved_dependency.GetRangefinderPartName());
+  EXPECT_EQ(part_name, "rangefinder_1");
+}
+
+TEST(GetRangefinderPartNameTest, ErrorsWhenEmptyRangefinderParts) {
+  IconResolvedDependency icon_resolved_dependency;
+
+  EXPECT_THAT(icon_resolved_dependency.GetRangefinderPartName(),
+              StatusIs(absl::StatusCode::kInvalidArgument,
+                       HasSubstr("The given ICON instance does not have any "
+                                 "rangefinder parts.")));
+}
+
+TEST(GetRangefinderPartNameTest, ErrorsWhenMultipleRangefinderParts) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.parts = {{"HalRangefinderPart",
+                                     {
+                                         {"rangefinder_1", "my_rangefinder_1"},
+                                         {"rangefinder_2", "my_rangefinder_2"},
+                                     }}};
+
+  EXPECT_THAT(
+      icon_resolved_dependency.GetRangefinderPartName(),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("The given ICON instance has multiple rangefinder "
+                         "parts. Please specify which rangefinder part to use. "
+                         "Available rangefinder parts for the selected ICON "
+                         "instance are: rangefinder_1, rangefinder_2.")));
+}
+
+TEST(GetForceControlSettingsTest, ReturnsForceControlSettings) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.part_configs = {
+      {"ft_sensor_1",
+       MakeForceTorqueSensorPartConfig("ft_sensor_1",
+                                       /*excessive_force_threshold=*/10.0)},
+      {"ft_sensor_2",
+       MakeForceTorqueSensorPartConfig("ft_sensor_2",
+                                       /*excessive_force_threshold=*/20.0)},
+  };
+
+  ASSERT_OK_AND_ASSIGN(
+      intrinsic_proto::icon::ForceControlSettings force_control_settings,
+      icon_resolved_dependency.GetForceControlSettings("ft_sensor_2"));
+  EXPECT_EQ(force_control_settings.excessive_force_threshold(), 20.0);
+}
+
+TEST(GetForceControlSettingsTest, ErrorsWhenPartNotFound) {
+  IconResolvedDependency icon_resolved_dependency;
+
+  EXPECT_THAT(
+      icon_resolved_dependency.GetForceControlSettings("other_part"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Could not find a part with name 'other_part'. The "
+                         "selected ICON instance does not have any "
+                         "force-torque sensor parts.")));
+}
+
+TEST(GetForceControlSettingsTest,
+     ErrorsWhenPartNotFoundListsOnlyCompatibleParts) {
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.part_configs = {
+      {"ft_sensor_2",
+       MakeForceTorqueSensorPartConfig("ft_sensor_2",
+                                       /*excessive_force_threshold=*/20.0)},
+      {"ft_sensor_1",
+       MakeForceTorqueSensorPartConfig("ft_sensor_1",
+                                       /*excessive_force_threshold=*/10.0)},
+      {"robot_arm", ParseTextProtoOrDie(R"pb(name: "robot_arm")pb")},
+  };
+
+  EXPECT_THAT(
+      icon_resolved_dependency.GetForceControlSettings("other_part"),
+      StatusIs(
+          absl::StatusCode::kInvalidArgument,
+          HasSubstr("Could not find a part with name 'other_part'. Please "
+                    "check you have the right part name and ICON instance "
+                    "selected. Available force-torque sensor parts for the "
+                    "selected ICON instance are: ft_sensor_1, ft_sensor_2.")));
+}
+
+TEST(GetForceControlSettingsTest,
+     ErrorsWhenConfigIsNotForceTorqueSensorPartConfig) {
+  intrinsic_proto::icon::v1::PartConfig arm_config;
+  arm_config.set_name("robot_arm");
+  arm_config.mutable_config()->PackFrom(
+      intrinsic_proto::icon::ForceControlSettings());
+  IconResolvedDependency icon_resolved_dependency;
+  icon_resolved_dependency.part_configs = {{"robot_arm", arm_config}};
+
+  EXPECT_THAT(
+      icon_resolved_dependency.GetForceControlSettings("robot_arm"),
+      StatusIs(absl::StatusCode::kInvalidArgument,
+               HasSubstr("Part 'robot_arm' does not have a "
+                         "HalForceTorqueSensorPartConfig (config type URL: "
+                         "'type.googleapis.com/"
+                         "intrinsic_proto.icon.ForceControlSettings'). Please "
+                         "check that you selected a force-torque sensor "
+                         "part.")));
 }
 
 }  // namespace

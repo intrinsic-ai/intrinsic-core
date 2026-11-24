@@ -23,8 +23,11 @@ import grpc
 from intrinsic.assets import interface_utils
 from intrinsic.assets.dependencies import utils as asset_utils
 from intrinsic.assets.proto.v1 import resolved_dependency_pb2
+from intrinsic.icon.control.parts.hal.force_torque_sensor_part import hal_force_torque_sensor_part_config_pb2
+from intrinsic.icon.equipment import force_control_settings_pb2
 from intrinsic.icon.proto.v1 import service_pb2
 from intrinsic.icon.proto.v1 import service_pb2_grpc
+from intrinsic.icon.proto.v1 import types_pb2
 from intrinsic.icon.python import errors
 from intrinsic.icon.python import icon_api
 from intrinsic.world.proto import object_world_refs_pb2
@@ -32,13 +35,17 @@ from intrinsic.world.python import object_world_client
 from intrinsic.world.python import object_world_ids
 from intrinsic.world.python import object_world_resources
 
-HAL_ARM_PART_TYPE_NAME = "HalArmPart"
 HAL_ADIO_PART_TYPE_NAME = "HalADIOPart"
+HAL_ARM_PART_TYPE_NAME = "HalArmPart"
+HAL_FORCE_TORQUE_SENSOR_PART_TYPE_NAME = "HalForceTorqueSensorPart"
+HAL_LINEAR_GRIPPER_PART_TYPE_NAME = "HalLinearGripperPart"
+HAL_RANGEFINDER_PART_TYPE_NAME = "HalRangefinderPart"
 
 PartType: TypeAlias = str
 PartName: TypeAlias = str
 HardwareResourceName: TypeAlias = str
 HardwareResourceNameByPartName: TypeAlias = dict[PartName, HardwareResourceName]
+PartConfigByPartName: TypeAlias = dict[PartName, types_pb2.PartConfig]
 
 _DEFAULT_CONNECT_TIMEOUT_SECONDS = 5
 _GRPC_OPTIONS = (
@@ -66,6 +73,60 @@ def _format_available_position_parts(
   )
 
 
+def _format_available_part_names(
+    parts_map: HardwareResourceNameByPartName,
+) -> str:
+  return ", ".join(sorted(parts_map.keys()))
+
+
+def _sorted_force_torque_sensor_part_names(
+    part_configs: PartConfigByPartName,
+) -> list[PartName]:
+  return sorted(
+      part_name
+      for part_name, part_config in part_configs.items()
+      if part_config.config.Is(
+          hal_force_torque_sensor_part_config_pb2.HalForceTorqueSensorPartConfig.DESCRIPTOR
+      )
+  )
+
+
+def _get_single_part_name_by_type(
+    parts: dict[PartType, HardwareResourceNameByPartName],
+    part_type_name: PartType,
+    part_description: str,
+) -> PartName:
+  """Returns the name of the single part of type `part_type_name` in `parts`.
+
+  Checks `parts` to see if there is exactly one part of type `part_type_name`.
+
+  Args:
+    parts: Maps part type names to part names and hardware resource names.
+    part_type_name: The part type name to look up (e.g. "HalADIOPart").
+    part_description: A human-readable description of the part type used in
+      error messages (e.g. "ADIO").
+
+  Returns:
+    The name of that part if there is exactly one.
+
+  Raises:
+    ValueError: If there are no such parts, or if there is more than one.
+  """
+  typed_parts = parts.get(part_type_name, {})
+  if not typed_parts:
+    raise ValueError(
+        f"The given ICON instance does not have any {part_description} parts."
+    )
+  if len(typed_parts) > 1:
+    raise ValueError(
+        f"The given ICON instance has multiple {part_description} parts."
+        f" Please specify which {part_description} part to use. Available"
+        f" {part_description} parts for the selected ICON instance are:"
+        f" {_format_available_part_names(typed_parts)}."
+    )
+  return next(iter(typed_parts.keys()))
+
+
 def _icon_api_interface_uri() -> str:
   return (
       f"{interface_utils.GRPC_URI_PREFIX}"
@@ -90,12 +151,15 @@ class IconResolvedDependency:
     parts: Maps each `PartConfig.part_type_name` (e.g. "HalArmPart") to a dict
       mapping `PartConfig.name` to a non-empty
       `PartConfig.hardware_resource_name`.
+    part_configs: Maps each `PartConfig.name` to the full `PartConfig` returned
+      by the ICON server's `get_config()`.
   """
 
   client: icon_api.Client
   parts: dict[PartType, HardwareResourceNameByPartName] = dataclasses.field(
       default_factory=dict
   )
+  part_configs: PartConfigByPartName = dataclasses.field(default_factory=dict)
 
   def get_position_part_and_kinematic_object(
       self,
@@ -181,6 +245,106 @@ class IconResolvedDependency:
       raise ValueError("The given ICON instance does not have any ADIO parts.")
     return sorted(adio_parts.keys())
 
+  # The following `get_*_part_name()` helpers check `parts` for the respective
+  # HAL part type.
+  # Return the name of the part if there is exactly one part of that type.
+  # Raise a `ValueError` if there are no such parts, or if there is more than
+  # one (in which case the caller has to ask the user to select one).
+  #
+  # Skills that let users optionally specify a part name should use a
+  # user-provided part name as-is (so that any ICON part supporting the required
+  # feature interfaces can be used) and only call these helpers if the part name
+  # was omitted.
+
+  def get_adio_part_name(self) -> PartName:
+    """Returns the name of the single `"HalADIOPart"` part.
+
+    Raises:
+      ValueError: If there is no or more than one ADIO part in `parts`.
+    """
+    return _get_single_part_name_by_type(
+        self.parts, HAL_ADIO_PART_TYPE_NAME, "ADIO"
+    )
+
+  def get_gripper_part_name(self) -> PartName:
+    """Returns the name of the single `"HalLinearGripperPart"` part.
+
+    Raises:
+      ValueError: If there is no or more than one gripper part in `parts`.
+    """
+    return _get_single_part_name_by_type(
+        self.parts, HAL_LINEAR_GRIPPER_PART_TYPE_NAME, "gripper"
+    )
+
+  def get_force_torque_sensor_part_name(self) -> PartName:
+    """Returns the name of the single `"HalForceTorqueSensorPart"` part.
+
+    Raises:
+      ValueError: If there is no or more than one force-torque sensor part in
+        `parts`.
+    """
+    return _get_single_part_name_by_type(
+        self.parts,
+        HAL_FORCE_TORQUE_SENSOR_PART_TYPE_NAME,
+        "force-torque sensor",
+    )
+
+  def get_rangefinder_part_name(self) -> PartName:
+    """Returns the name of the single `"HalRangefinderPart"` part.
+
+    Raises:
+      ValueError: If there is no or more than one rangefinder part in `parts`.
+    """
+    return _get_single_part_name_by_type(
+        self.parts, HAL_RANGEFINDER_PART_TYPE_NAME, "rangefinder"
+    )
+
+  def get_force_control_settings(
+      self,
+      force_torque_sensor_part: PartName,
+  ) -> force_control_settings_pb2.ForceControlSettings:
+    """Returns the force control settings of a force-torque sensor part.
+
+    Args:
+      force_torque_sensor_part: Name of the force-torque sensor part.
+
+    Returns:
+      The `force_control_settings` from the `HalForceTorqueSensorPartConfig` of
+      the part named `force_torque_sensor_part` in `part_configs`.
+
+    Raises:
+      ValueError: If `force_torque_sensor_part` does not exist, or if its config
+        is not a `HalForceTorqueSensorPartConfig`.
+    """
+    part_config = self.part_configs.get(force_torque_sensor_part)
+    if part_config is None:
+      available_parts = _sorted_force_torque_sensor_part_names(
+          self.part_configs
+      )
+      if not available_parts:
+        raise ValueError(
+            f"Could not find a part with name '{force_torque_sensor_part}'."
+            " The selected ICON instance does not have any force-torque sensor"
+            " parts."
+        )
+      raise ValueError(
+          f"Could not find a part with name '{force_torque_sensor_part}'."
+          " Please check you have the right part name and ICON instance"
+          " selected. Available force-torque sensor parts for the selected ICON"
+          f" instance are: {', '.join(available_parts)}."
+      )
+    ft_config = (
+        hal_force_torque_sensor_part_config_pb2.HalForceTorqueSensorPartConfig()
+    )
+    if not part_config.config.Unpack(ft_config):
+      raise ValueError(
+          f"Part '{force_torque_sensor_part}' does not have a"
+          " HalForceTorqueSensorPartConfig (config type URL:"
+          f" '{part_config.config.type_url}'). Please check that you selected a"
+          " force-torque sensor part."
+      )
+    return ft_config.force_control_settings
+
 
 def connect_to_icon_resolved_dependency(
     resolved_dependency: resolved_dependency_pb2.ResolvedDependency,
@@ -189,7 +353,7 @@ def connect_to_icon_resolved_dependency(
   """Connects to an ICON server and extracts part names and hardware resources.
 
   Queries `get_config()` on the ICON server to populate `parts` keyed by
-  `part_type_name` and `name`.
+  `part_type_name` and `name` as well as `part_configs` keyed by `name`.
 
   Args:
     resolved_dependency: The resolved dependency for the robot we want to
@@ -198,8 +362,9 @@ def connect_to_icon_resolved_dependency(
       ready.
 
   Returns:
-    An IconResolvedDependency instance with the connected client and a `parts`
-    mapping of `part_type_name` -> `part_name` -> `hardware_resource_name`.
+    An IconResolvedDependency instance with the connected client, a `parts`
+    mapping of `part_type_name` -> `part_name` -> `hardware_resource_name`, and
+    a `part_configs` mapping of `part_name` -> `PartConfig`.
 
   Raises:
     KeyError: If resolved_dependency does not include any connection config.
@@ -239,4 +404,5 @@ def connect_to_icon_resolved_dependency(
     out.parts.setdefault(part_config.part_type_name, {})[
         part_config.name
     ] = part_config.hardware_resource_name
+    out.part_configs[part_config.name] = part_config
   return out

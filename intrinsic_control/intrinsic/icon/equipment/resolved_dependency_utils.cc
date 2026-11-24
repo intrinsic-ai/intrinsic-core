@@ -25,6 +25,7 @@
 #include "absl/status/statusor.h"
 #include "absl/strings/str_cat.h"
 #include "absl/strings/str_join.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "grpcpp/channel.h"
@@ -33,6 +34,8 @@
 #include "intrinsic/assets/interface_utils.h"
 #include "intrinsic/assets/proto/v1/resolved_dependency.pb.h"
 #include "intrinsic/connect/cc/grpc/channel.h"
+#include "intrinsic/icon/control/parts/hal/force_torque_sensor_part/hal_force_torque_sensor_part_config.pb.h"
+#include "intrinsic/icon/equipment/force_control_settings.pb.h"
 #include "intrinsic/icon/proto/v1/service.grpc.pb.h"
 #include "intrinsic/icon/proto/v1/service.pb.h"
 #include "intrinsic/icon/proto/v1/types.pb.h"
@@ -65,6 +68,69 @@ std::string FormatAvailablePositionParts(
   }
   std::sort(formatted_parts.begin(), formatted_parts.end());
   return absl::StrJoin(formatted_parts, ", ");
+}
+
+// Returns the part names (keys) of `parts_map` sorted in ascending
+// lexicographical order.
+std::vector<IconResolvedDependency::PartName> SortedPartNames(
+    const IconResolvedDependency::HardwareResourceNameByPartName& parts_map) {
+  std::vector<IconResolvedDependency::PartName> part_names;
+  part_names.reserve(parts_map.size());
+  for (const auto& [part_name, unused_value] : parts_map) {
+    part_names.push_back(part_name);
+  }
+  std::sort(part_names.begin(), part_names.end());
+  return part_names;
+}
+
+std::string FormatAvailablePartNames(
+    const IconResolvedDependency::HardwareResourceNameByPartName& parts_map) {
+  return absl::StrJoin(SortedPartNames(parts_map), ", ");
+}
+
+// Returns the names of parts in `part_configs` whose config is a
+// `HalForceTorqueSensorPartConfig`, sorted in ascending lexicographical order.
+std::vector<IconResolvedDependency::PartName> SortedForceTorqueSensorPartNames(
+    const IconResolvedDependency::PartConfigByPartName& part_configs) {
+  std::vector<IconResolvedDependency::PartName> part_names;
+  for (const auto& [part_name, part_config] : part_configs) {
+    if (part_config.config()
+            .Is<intrinsic_proto::icon::HalForceTorqueSensorPartConfig>()) {
+      part_names.push_back(part_name);
+    }
+  }
+  std::sort(part_names.begin(), part_names.end());
+  return part_names;
+}
+
+// Checks `parts` to see if there is exactly one part of type `part_type_name`.
+// Returns the name of that part if there is exactly one.
+// Returns an `InvalidArgumentError` if there are no such parts, or if there is
+// more than one.
+//
+// `part_description` is a human-readable description of the part type used in
+// error messages (e.g. "ADIO").
+absl::StatusOr<IconResolvedDependency::PartName> GetSinglePartNameByType(
+    const absl::flat_hash_map<
+        IconResolvedDependency::PartType,
+        IconResolvedDependency::HardwareResourceNameByPartName>& parts,
+    absl::string_view part_type_name, absl::string_view part_description) {
+  const auto it = parts.find(part_type_name);
+  if (it == parts.end() || it->second.empty()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("The given ICON instance does not have any ",
+                     part_description, " parts."));
+  }
+  const auto& typed_parts = it->second;
+  if (typed_parts.size() > 1) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("The given ICON instance has multiple ", part_description,
+                     " parts. Please specify which ", part_description,
+                     " part to use. Available ", part_description,
+                     " parts for the selected ICON instance are: ",
+                     FormatAvailablePartNames(typed_parts), "."));
+  }
+  return typed_parts.begin()->first;
 }
 
 }  // namespace
@@ -100,6 +166,7 @@ absl::StatusOr<IconResolvedDependency> ConnectToIconResolvedDependency(
     }
     out.parts[part_config.part_type_name()][part_config.name()] =
         part_config.hardware_resource_name();
+    out.part_configs[part_config.name()] = part_config;
   }
 
   return out;
@@ -164,13 +231,61 @@ IconResolvedDependency::GetAdioPartNames() const {
     return absl::InvalidArgumentError(
         "The given ICON instance does not have any ADIO parts.");
   }
-  std::vector<PartName> adio_parts;
-  adio_parts.reserve(it->second.size());
-  for (const auto& [part_name, _] : it->second) {
-    adio_parts.push_back(part_name);
+  return SortedPartNames(it->second);
+}
+
+absl::StatusOr<IconResolvedDependency::PartName>
+IconResolvedDependency::GetAdioPartName() const {
+  return GetSinglePartNameByType(parts, kHalAdioPartTypeName, "ADIO");
+}
+
+absl::StatusOr<IconResolvedDependency::PartName>
+IconResolvedDependency::GetGripperPartName() const {
+  return GetSinglePartNameByType(parts, kHalLinearGripperPartTypeName,
+                                 "gripper");
+}
+
+absl::StatusOr<IconResolvedDependency::PartName>
+IconResolvedDependency::GetForceTorqueSensorPartName() const {
+  return GetSinglePartNameByType(parts, kHalForceTorqueSensorPartTypeName,
+                                 "force-torque sensor");
+}
+
+absl::StatusOr<IconResolvedDependency::PartName>
+IconResolvedDependency::GetRangefinderPartName() const {
+  return GetSinglePartNameByType(parts, kHalRangefinderPartTypeName,
+                                 "rangefinder");
+}
+
+absl::StatusOr<intrinsic_proto::icon::ForceControlSettings>
+IconResolvedDependency::GetForceControlSettings(
+    absl::string_view force_torque_sensor_part) const {
+  const auto it = part_configs.find(force_torque_sensor_part);
+  if (it == part_configs.end()) {
+    const std::vector<PartName> available_parts =
+        SortedForceTorqueSensorPartNames(part_configs);
+    if (available_parts.empty()) {
+      return absl::InvalidArgumentError(absl::StrCat(
+          "Could not find a part with name '", force_torque_sensor_part,
+          "'. The selected ICON instance does not have any force-torque sensor "
+          "parts."));
+    }
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Could not find a part with name '", force_torque_sensor_part,
+        "'. Please check you have the right part name and ICON instance "
+        "selected. Available force-torque sensor parts for the selected ICON "
+        "instance are: ",
+        absl::StrJoin(available_parts, ", "), "."));
   }
-  std::sort(adio_parts.begin(), adio_parts.end());
-  return adio_parts;
+  intrinsic_proto::icon::HalForceTorqueSensorPartConfig ft_config;
+  if (!it->second.config().UnpackTo(&ft_config)) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "Part '", force_torque_sensor_part,
+        "' does not have a HalForceTorqueSensorPartConfig (config type URL: '",
+        it->second.config().type_url(),
+        "'). Please check that you selected a force-torque sensor part."));
+  }
+  return ft_config.force_control_settings();
 }
 
 }  // namespace icon

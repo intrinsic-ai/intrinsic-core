@@ -56,6 +56,7 @@ py_library(
         "@ai_intrinsic_sdks_pip_deps//portpicker",
         "@com_google_protobuf//:protobuf_python",
         "@intrinsic_apis//intrinsic/icon/proto/v1:service_py_pb2",
+        "@intrinsic_apis//intrinsic/icon/proto/v1:types_py_pb2",
         "@pybind11_abseil//pybind11_abseil:import_status_module",
     ],
 )

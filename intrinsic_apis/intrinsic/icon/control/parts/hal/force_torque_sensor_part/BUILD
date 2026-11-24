@@ -14,6 +14,7 @@
 
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@com_google_protobuf//bazel:proto_library.bzl", "proto_library")
+load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("@io_bazel_rules_go//proto:def.bzl", "go_proto_library")
 
 package(default_visibility = ["//visibility:public"])
@@ -30,6 +31,11 @@ proto_library(
 
 cc_proto_library(
     name = "hal_force_torque_sensor_part_config_cc_proto",
+    deps = [":hal_force_torque_sensor_part_config_proto"],
+)
+
+py_proto_library(
+    name = "hal_force_torque_sensor_part_config_py_pb2",
     deps = [":hal_force_torque_sensor_part_config_proto"],
 )
 

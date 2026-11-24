@@ -32,6 +32,7 @@ import portpicker
 from pybind11_abseil import status
 
 from intrinsic.icon.proto.v1 import service_pb2
+from intrinsic.icon.proto.v1 import types_pb2
 from intrinsic.icon.python import reactions
 from intrinsic.icon.python.testing import channel_fake
 
@@ -197,14 +198,25 @@ class IconFake:
       )
     self._builder.OnNextSession(session_will)
 
-  def start(self) -> int:
+  def start(
+      self,
+      part_configs: Optional[Sequence[types_pb2.PartConfig]] = None,
+  ) -> int:
     """Starts the fake ICON service.
+
+    Args:
+      part_configs: Optional part configs to expose via `GetConfig()`. Defaults
+        to `channel_fake.default_part_configs()`. Note that the default part
+        configs all use the placeholder part type name "fake_part_for_tests"
+        and the same placeholder hardware resource name, so tests that rely on
+        real HAL part type names (e.g. to resolve parts via
+        `resolved_dependency_utils`) should pass adjusted part configs.
 
     Returns:
       The port for connecting to the service.
     """
     # Retain a reference to the channel so the caller can connect.
-    self._channel = self._builder.Build()
+    self._channel = self._builder.Build(part_configs=part_configs)
     return self._port
 
   def set_status(self, new_robot_status: service_pb2.GetStatusResponse) -> None:
