@@ -20,6 +20,10 @@
 #include <pybind11/pytypes.h>
 #include <pybind11/stl.h>
 
+#include <cmath>
+#include <cstddef>
+#include <cstring>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <string>
@@ -27,6 +31,7 @@
 #include <utility>
 #include <vector>
 
+#include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/flags/parse.h"
 #include "absl/log/log.h"
@@ -36,12 +41,16 @@
 #include "absl/time/time.h"
 #include "google/protobuf/any.pb.h"
 #include "google/protobuf/message.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/buffer_factory.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
+#include "intrinsic_sdk/intrinsic/middleware/buffers/mutable_buffer.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
 #include "intrinsic/platform/pubsub/liveliness_query.h"
 #include "intrinsic/platform/pubsub/publisher.h"
 #include "intrinsic/platform/pubsub/python/gil_aware_pubsub.h"
 #include "intrinsic/platform/pubsub/subscription.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_handle.h"
+#include "intrinsic/util/status/status_macros.h"
 #include "pybind11/cast.h"
 #include "pybind11/native_enum.h"
 #include "pybind11_abseil/absl_casters.h"
@@ -370,6 +379,99 @@ absl::StatusOr<google::protobuf::Any> Get(KeyValueStore* self,
   return self->Get<google::protobuf::Any>(key, absl::Seconds(timeout));
 }
 
+absl::StatusOr<ImmutableBuffer> CopyPyBufferToImmutableBuffer(
+    const pybind11::buffer& value) {
+  if (PyBytes_CheckExact(value.ptr())) {
+    char* src = nullptr;
+    Py_ssize_t len = 0;
+    if (PyBytes_AsStringAndSize(value.ptr(), &src, &len) != 0) {
+      throw pybind11::error_already_set();
+    }
+    if (len < 0) {
+      return absl::InvalidArgumentError("Negative Py_buffer byte length");
+    }
+    const size_t size = static_cast<size_t>(len);
+    pybind11::gil_scoped_release release_gil;
+    return CopyToImmutableBuffer(src, size);
+  }
+
+  Py_buffer view;
+  if (PyObject_GetBuffer(value.ptr(), &view, PyBUF_FULL_RO) != 0) {
+    throw pybind11::error_already_set();
+  }
+  absl::Cleanup release_view = [&view] { PyBuffer_Release(&view); };
+  if (view.len < 0) {
+    return absl::InvalidArgumentError("Negative Py_buffer byte length");
+  }
+  const size_t size = static_cast<size_t>(view.len);
+  INTR_ASSIGN_OR_RETURN(MutableBuffer buffer, AllocateMutableBuffer(size));
+  if (size > 0 &&
+      PyBuffer_ToContiguous(buffer.data(), &view, view.len, 'C') != 0) {
+    throw pybind11::error_already_set();
+  }
+  return FreezeMutableBuffer(std::move(buffer));
+}
+
+absl::Status SetRaw(KeyValueStore* self, absl::string_view key,
+                    const pybind11::buffer& value) {
+  INTR_ASSIGN_OR_RETURN(ImmutableBuffer buffer,
+                        CopyPyBufferToImmutableBuffer(value));
+  pybind11::gil_scoped_release release_gil;
+  return self->SetRaw(key, std::move(buffer));
+}
+
+absl::Status SetRawWithVerification(
+    KeyValueStore* self, absl::string_view key, const pybind11::buffer& value,
+    const KeyValueStore::SetWithVerificationOptions& options) {
+  if (options.timeout <= absl::ZeroDuration() ||
+      options.timeout == absl::InfiniteDuration()) {
+    return absl::InvalidArgumentError(
+        "SetWithVerificationOptions::timeout must be positive");
+  }
+  INTR_ASSIGN_OR_RETURN(ImmutableBuffer buffer,
+                        CopyPyBufferToImmutableBuffer(value));
+  pybind11::gil_scoped_release release_gil;
+  return self->SetRawWithVerification(key, std::move(buffer), options);
+}
+
+absl::StatusOr<pybind11::bytes> GetRaw(KeyValueStore* self,
+                                       absl::string_view key, double timeout) {
+  if (!std::isfinite(timeout) || timeout < 0.0) {
+    return absl::InvalidArgumentError("Timeout must be zero or positive");
+  }
+  absl::StatusOr<ImmutableBuffer> buffer;
+  {
+    pybind11::gil_scoped_release release_gil;
+    buffer = self->GetRaw(key, absl::Seconds(timeout));
+  }
+  if (!buffer.ok()) {
+    return buffer.status();
+  }
+  const size_t size = buffer->size();
+  if (size > static_cast<size_t>(std::numeric_limits<Py_ssize_t>::max())) {
+    return absl::ResourceExhaustedError(
+        "Raw payload exceeds Python bytes size limit");
+  }
+  PyObject* py_bytes =
+      PyBytes_FromStringAndSize(nullptr, static_cast<Py_ssize_t>(size));
+  if (py_bytes == nullptr) {
+    throw pybind11::error_already_set();
+  }
+  pybind11::bytes result =
+      pybind11::reinterpret_steal<pybind11::bytes>(py_bytes);
+  if (size > 0) {
+    const void* src = buffer->data();
+    if (src == nullptr) {
+      return absl::InternalError(
+          "Non-empty ImmutableBuffer has null data pointer");
+    }
+    char* dst = PyBytes_AS_STRING(py_bytes);
+    pybind11::gil_scoped_release release_gil;
+    std::memcpy(dst, src, size);
+  }
+  return result;
+}
+
 absl::StatusOr<std::vector<std::string>> ListAllKeys(KeyValueStore* self,
                                                      int timeout) {
   return self->ListAllKeys(absl::Seconds(timeout));
@@ -647,8 +749,15 @@ PYBIND11_MODULE(pubsub, m) {
            pybind11::arg("options") =
                KeyValueStore::SetWithVerificationOptions(),
            pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("set_raw", &SetRaw, pybind11::arg("key"), pybind11::arg("value"))
+      .def("set_raw_with_verification", &SetRawWithVerification,
+           pybind11::arg("key"), pybind11::arg("value"),
+           pybind11::arg("options") =
+               KeyValueStore::SetWithVerificationOptions())
       .def("get", &Get, pybind11::arg("key"), pybind11::arg("timeout") = 10,
            pybind11::call_guard<pybind11::gil_scoped_release>())
+      .def("get_raw", &GetRaw, pybind11::arg("key"),
+           pybind11::arg("timeout") = 10.0)
       .def("get_all", &GetAll)
       .def("get_all_synchronous", &GetAllSynchronous, pybind11::arg("keyexpr"),
            pybind11::arg("timeout") = 10,
