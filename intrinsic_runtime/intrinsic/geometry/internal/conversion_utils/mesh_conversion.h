@@ -44,11 +44,6 @@ Mesh ToMesh(const EpicIndexedTriangleSet3& indexed_triangle_set);
 // Converts a Mesh to EpicSurfaceMesh3.
 EpicSurfaceMesh3 ToEpicSurfaceMesh3(const Mesh& mesh);
 
-// Converts an EpicSurfaceMesh3 to Mesh. It cleans the mesh by removing
-// isolated vertices, removing small connected components, duplicating
-// non-manifold vertices, and removing degenerate edges and faces.
-absl::StatusOr<Mesh> ToMeshWithCleaning(const EpicSurfaceMesh3& surface_mesh);
-
 // Options for governing polygon soup mesh cleaning and repair.
 struct CleanMeshOptions {
   // If true, validates that the resulting cleaned mesh forms a valid,

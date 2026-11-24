@@ -21,20 +21,13 @@
 #include <utility>
 #include <vector>
 
-#include "CGAL/Polygon_mesh_processing/manifoldness.h"
 #include "CGAL/Polygon_mesh_processing/orient_polygon_soup.h"
 #include "CGAL/Polygon_mesh_processing/polygon_soup_to_polygon_mesh.h"
-#include "CGAL/Polygon_mesh_processing/repair.h"
-#include "CGAL/Polygon_mesh_processing/repair_degeneracies.h"
 #include "CGAL/Polygon_mesh_processing/repair_polygon_soup.h"
-#include "CGAL/Polygon_mesh_processing/self_intersections.h"
-#include "CGAL/Polygon_mesh_processing/shape_predicates.h"
 #include "CGAL/Surface_mesh/Surface_mesh.h"
 #include "CGAL/number_utils.h"
-#include "CGAL/tags.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/log/check.h"
-#include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/str_format.h"
@@ -48,18 +41,6 @@ namespace intrinsic::geo {
 namespace {
 
 constexpr size_t kMaxCleanAttempts = 10;
-
-struct SurfaceMeshCleaningState {
-  bool does_self_intersect = false;
-  bool has_degenerate_edges = false;
-  bool has_degenerate_faces = false;
-  bool non_manifold = false;
-  // TODO(b/458420439): Self intersection does not currently contribute to mesh
-  // cleanliness as auto repair is not used and requires CGAL 6.0+.
-  bool IsClean() const {
-    return !non_manifold && !has_degenerate_edges && !has_degenerate_faces;
-  }
-};
 
 struct PointHash {
   size_t operator()(const EpicPoint3& p) const {
@@ -222,95 +203,6 @@ absl::StatusOr<EpicSurfaceMesh3> ToEpicSurfaceMesh3WithCleaning(
       ToEpicIndexedTriangleSet3(mesh);
   INTR_RETURN_IF_ERROR(ProcessMeshUntilClean(indexed_triangle_set, options));
   return ToEpicSurfaceMesh3(indexed_triangle_set);
-}
-
-void CleanSurfaceMesh(EpicSurfaceMesh3& surface_mesh,
-                      SurfaceMeshCleaningState& mesh_cleaning_state) {
-  namespace PMP = CGAL::Polygon_mesh_processing;
-  CHECK(surface_mesh.is_valid());
-  if (surface_mesh.is_empty()) {
-    return;
-  }
-  VLOG(1) << "Attempting to remove isolated vertices";
-  PMP::remove_isolated_vertices(surface_mesh);
-  VLOG(1) << "Attempting to remove connected components of negligible size";
-  PMP::remove_connected_components_of_negligible_size(surface_mesh);
-
-  if (mesh_cleaning_state.non_manifold) {
-    VLOG(1) << "Attempting to duplicate non-manifold vertices";
-    PMP::duplicate_non_manifold_vertices(surface_mesh);
-  }
-
-  if (mesh_cleaning_state.has_degenerate_edges) {
-    VLOG(1) << "Attempting to repair degenerate edges";
-    PMP::remove_degenerate_edges(surface_mesh);
-  }
-
-  if (mesh_cleaning_state.has_degenerate_faces) {
-    VLOG(1) << "Attempting to repair degenerate faces";
-    PMP::remove_degenerate_faces(surface_mesh);
-  }
-}
-
-SurfaceMeshCleaningState CheckIfSurfaceMeshIsClean(
-    EpicSurfaceMesh3& surface_mesh) {
-  SurfaceMeshCleaningState mesh_cleaning_state;
-  CHECK(surface_mesh.is_valid());
-  if (surface_mesh.is_empty()) {
-    return mesh_cleaning_state;
-  }
-  namespace PMP = CGAL::Polygon_mesh_processing;
-
-  mesh_cleaning_state.does_self_intersect =
-      PMP::does_self_intersect<CGAL::Parallel_tag>(surface_mesh);
-
-  mesh_cleaning_state.has_degenerate_edges = false;
-  for (const auto& edge : surface_mesh.edges()) {
-    if (PMP::is_degenerate_edge(edge, surface_mesh)) {
-      mesh_cleaning_state.has_degenerate_edges = true;
-      break;
-    }
-  }
-
-  mesh_cleaning_state.has_degenerate_faces = false;
-  for (const auto& face : surface_mesh.faces()) {
-    if (PMP::is_degenerate_triangle_face(face, surface_mesh)) {
-      mesh_cleaning_state.has_degenerate_faces = true;
-      break;
-    }
-  }
-
-  mesh_cleaning_state.non_manifold = false;
-  for (const auto& vertex : surface_mesh.vertices()) {
-    if (PMP::is_non_manifold_vertex(vertex, surface_mesh)) {
-      mesh_cleaning_state.non_manifold = true;
-      break;
-    }
-  }
-  return mesh_cleaning_state;
-}
-
-bool ProcessSurfaceMeshUntilClean(EpicSurfaceMesh3& surface_mesh) {
-  size_t clean_attempts = 0;
-  SurfaceMeshCleaningState mesh_cleaning_state =
-      CheckIfSurfaceMeshIsClean(surface_mesh);
-  while (clean_attempts < kMaxCleanAttempts && !mesh_cleaning_state.IsClean()) {
-    CleanSurfaceMesh(surface_mesh, mesh_cleaning_state);
-    mesh_cleaning_state = CheckIfSurfaceMeshIsClean(surface_mesh);
-    clean_attempts++;
-  }
-  return mesh_cleaning_state.IsClean();
-}
-
-absl::StatusOr<Mesh> ToMeshWithCleaning(const EpicSurfaceMesh3& surface_mesh) {
-  EpicSurfaceMesh3 clean_mesh = surface_mesh;
-  bool is_clean = ProcessSurfaceMeshUntilClean(clean_mesh);
-  if (!is_clean) {
-    return absl::InternalError(
-        "Mesh is not clean after repair attempts in ToMeshWithCleaning.");
-  }
-
-  return ToMesh(clean_mesh);
 }
 
 EpicSurfaceMesh3 ToEpicSurfaceMesh3(const Mesh& mesh) {
