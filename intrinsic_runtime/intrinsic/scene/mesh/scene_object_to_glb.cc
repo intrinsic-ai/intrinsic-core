@@ -14,6 +14,7 @@
 
 #include "intrinsic/scene/mesh/scene_object_to_glb.h"
 
+#include <algorithm>
 #include <memory>
 #include <string>
 #include <utility>
@@ -36,11 +37,9 @@
 #include "intrinsic/geometry/proto/v1/transformed_geometry.pb.h"
 #include "intrinsic/geometry/storage/geometry_library.h"
 #include "intrinsic/math/pose3.h"
-#include "intrinsic/math/proto_conversion.h"
-#include "intrinsic/scene/conversion/scene_object_model_utils.h"
 #include "intrinsic/scene/proto/v1/entity.pb.h"
 #include "intrinsic/scene/proto/v1/scene_object.pb.h"
-#include "intrinsic/scene/validate/scene_object_validation.h"
+#include "intrinsic/scene/scene_object/scene_object_view.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/geometry_types.h"
 #include "intrinsic/world/proto/geometry_component.pb.h"
@@ -65,7 +64,6 @@ using ::intrinsic::geo::ParseGlb;
 using ::intrinsic::geo::Renderable;
 using ::intrinsic::geo::SerializeGltfToGlb;
 using ::intrinsic::geo::ToGeometry;
-using ::intrinsic_proto::FromProtoNormalized;
 using ::intrinsic_proto::geometry::v1::TransformedGeometry;
 using ::intrinsic_proto::scene_object::v1::Entity;
 using ::intrinsic_proto::scene_object::v1::SceneObject;
@@ -80,72 +78,43 @@ std::vector<double> ToGltfQuaternion(const Quaterniond& q) {
   return {q.x(), q.y(), q.z(), q.w()};
 }
 
-// Resolves and validates the local transform (parent_t_this) of `entity`
-// relative to its parent in the SceneObject transform tree.
-absl::StatusOr<Pose3d> ResolveEntityLocalPose(
-    const Entity& entity,
-    const absl::flat_hash_map<absl::string_view, const Entity*>&
-        entity_by_name) {
-  if (entity.has_joint()) {
-    return ResolveJointEntityPose(entity);
-  }
-  if (entity.parent_name().empty() || !entity.has_parent_t_this()) {
-    return Pose3d::Identity();
-  }
-
-  INTR_ASSIGN_OR_RETURN(const Pose3d parent_t_this,
-                        FromProtoNormalized(entity.parent_t_this()));
-
-  const auto parent_it = entity_by_name.find(entity.parent_name());
-  if (parent_it != entity_by_name.end() && parent_it->second->has_joint() &&
-      entity.has_link()) {
-    if (!parent_t_this.isApprox(Pose3d::Identity(), 1e-5)) {
-      return absl::InvalidArgumentError(
-          absl::StrCat("Link entity '", entity.name(), "' parented to joint '",
-                       entity.parent_name(),
-                       "' must have an identity parent_t_this transform."));
-    }
-  }
-
-  return parent_t_this;
-}
-
-// Creates a glTF node for every entity in `so`, resolves its local pose, wires
-// parent-child entity indices into `model`, and returns a map from entity name
-// to its node index in `model.nodes`.
+// Creates a glTF node for every entity in `view`, resolves its local pose,
+// wires parent-child entity indices into `model`, and returns a map from entity
+// name to its node index in `model.nodes`. Nodes are created in the tree order
+// of `view`, which makes the node indices independent of the entity order in
+// the SceneObject and guarantees that parents are created before children.
 absl::StatusOr<absl::flat_hash_map<std::string, int>> BuildEntityNodeHierarchy(
-    const SceneObject& so, tinygltf::Model& model) {
-  absl::flat_hash_map<absl::string_view, const Entity*> entity_by_name;
-  entity_by_name.reserve(so.entities_size());
-  for (const auto& entity : so.entities()) {
-    entity_by_name[entity.name()] = &entity;
-  }
-
+    const SceneObjectView& view, tinygltf::Model& model) {
   absl::flat_hash_map<std::string, int> entity_name_to_node_idx;
-  entity_name_to_node_idx.reserve(so.entities_size());
-  for (const auto& entity : so.entities()) {
+  entity_name_to_node_idx.reserve(view.GetNumEntities());
+  for (const Entity* entity : view.GetEntitiesInTreeOrder()) {
     const int node_idx = model.nodes.size();
-    entity_name_to_node_idx[entity.name()] = node_idx;
+    entity_name_to_node_idx[entity->name()] = node_idx;
 
     tinygltf::Node node;
-    node.name = entity.name();
+    node.name = entity->name();
 
+    const Entity* parent = view.GetParent(entity->name());
     INTR_ASSIGN_OR_RETURN(const Pose3d local_pose,
-                          ResolveEntityLocalPose(entity, entity_by_name));
-    if (!entity.parent_name().empty() || entity.has_joint()) {
+                          view.GetPoseInParent(entity->name()));
+    if (parent != nullptr && parent->has_joint() && entity->has_link() &&
+        !local_pose.isApprox(Pose3d::Identity(), 1e-5)) {
+      return absl::InvalidArgumentError(
+          absl::StrCat("Link entity '", entity->name(), "' parented to joint '",
+                       entity->parent_name(),
+                       "' must have an identity parent_t_this transform."));
+    }
+    if (parent != nullptr) {
       node.translation = ToGltfVector(local_pose.translation());
       node.rotation = ToGltfQuaternion(local_pose.quaternion());
     }
 
     model.nodes.push_back(std::move(node));
-  }
 
-  for (const auto& entity : so.entities()) {
-    const int node_idx = entity_name_to_node_idx.at(entity.name());
-    if (entity.parent_name().empty()) {
+    if (parent == nullptr) {
       model.scenes[0].nodes.push_back(node_idx);
     } else {
-      model.nodes[entity_name_to_node_idx.at(entity.parent_name())]
+      model.nodes[entity_name_to_node_idx.at(parent->name())]
           .children.push_back(node_idx);
     }
   }
@@ -213,26 +182,37 @@ absl::StatusOr<tinygltf::Model> SceneObjectToGltf(
     return model;
   }
 
-  INTR_RETURN_IF_ERROR(ValidateSceneObject(so));
+  INTR_ASSIGN_OR_RETURN(const SceneObjectView view,
+                        SceneObjectView::Create(so));
   INTR_ASSIGN_OR_RETURN(
       (const absl::flat_hash_map<std::string, int> entity_name_to_node_idx),
-      BuildEntityNodeHierarchy(so, model));
+      BuildEntityNodeHierarchy(view, model));
 
-  for (const auto& entity : so.entities()) {
-    if (!entity.has_link()) {
+  for (const Entity* entity : view.GetEntitiesInTreeOrder()) {
+    if (!entity->has_link()) {
       continue;
     }
-    const int entity_node_idx = entity_name_to_node_idx.at(entity.name());
+    const int entity_node_idx = entity_name_to_node_idx.at(entity->name());
     const auto& named_geos =
-        entity.link().geometry_component().named_geometries();
+        entity->link().geometry_component().named_geometries();
     const auto visual_it = named_geos.find(kKindVisualGeometry);
     if (visual_it == named_geos.end()) {
       continue;
     }
 
+    // Proto map iteration order is unspecified, so geometries are attached in
+    // order of their name to keep the node and mesh indices deterministic.
+    std::vector<std::pair<absl::string_view, const TransformedGeometry*>>
+        sorted_geometries;
+    sorted_geometries.reserve(visual_it->second.named_geometries().size());
     for (const auto& [geom_name, tg] : visual_it->second.named_geometries()) {
+      sorted_geometries.emplace_back(geom_name, &tg);
+    }
+    // Geometry names are unique, so the pairs are ordered by name.
+    std::ranges::sort(sorted_geometries);
+    for (const auto& [geom_name, tg] : sorted_geometries) {
       INTR_RETURN_IF_ERROR(
-          AttachGeometryNode(geom_name, tg, geo_lib, entity_node_idx, model));
+          AttachGeometryNode(geom_name, *tg, geo_lib, entity_node_idx, model));
     }
   }
 

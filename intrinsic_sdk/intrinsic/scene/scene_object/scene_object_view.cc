@@ -262,6 +262,20 @@ std::vector<const SceneObjectView::Entity*> SceneObjectView::GetPathFromRoot(
   return path;
 }
 
+absl::StatusOr<Pose3d> SceneObjectView::GetPoseInParent(
+    absl::string_view entity_name) const {
+  const auto it = index_by_name_.find(entity_name);
+  if (it == index_by_name_.end()) {
+    return absl::NotFoundError(absl::StrCat(
+        "Entity '", entity_name, "' does not exist in scene object."));
+  }
+  const Node& node = nodes_[it->second];
+  if (node.parent_index < 0) {
+    return Pose3d::Identity();
+  }
+  return ResolveLocalEntityPose(*this, *node.entity, /*joint_values=*/{});
+}
+
 absl::StatusOr<absl::flat_hash_map<absl::string_view, Pose3d>>
 SceneObjectView::GetRootPoses() const {
   return GetRootPosesWithJointValues(/*joint_values=*/{});

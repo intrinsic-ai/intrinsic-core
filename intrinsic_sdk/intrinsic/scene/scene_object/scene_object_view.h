@@ -127,6 +127,10 @@ class SceneObjectView {
   // named `name`.
   std::vector<const Entity*> GetPathFromRoot(absl::string_view name) const;
 
+  // Returns the pose of the entity named `entity_name` relative to its parent
+  // entity, or `Pose3d::Identity()` for the root entity.
+  absl::StatusOr<Pose3d> GetPoseInParent(absl::string_view entity_name) const;
+
   // Returns the pose of every entity relative to the root entity keyed
   // by entity name. Returns an error if the pose of an entity cannot be
   // computed.
