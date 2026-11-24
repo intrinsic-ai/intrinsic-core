@@ -22,6 +22,14 @@ load("@bazel_tools//tools/build_defs/repo:http.bzl", "http_archive", "http_file"
 load("//bazel:nvidia_pose_estimator_models.bzl", "nvidia_pose_estimator_models")  
 
 def _non_module_deps_impl(ctx):
+    http_archive(
+        name = "coal",
+        build_file = Label("//intrinsic_sdk/third_party/coal:coal.BUILD.bazel"),
+        sha256 = "136d7f809fccd0027265dead58abb57798fc7631f1a3331f139a74bed92066cc",
+        strip_prefix = "coal-1.0.1",
+        urls = ["https://github.com/torresl-google/coal/archive/refs/tags/v1.0.1.tar.gz"],
+    )
+
 
 
 
@@ -29,14 +37,6 @@ def _non_module_deps_impl(ctx):
         name = "firestore_emulator",
         sha256 = "9d43599ed6151199e8d604dc87fac51218e49e5f3a48519b1ae560bbe5e3382d",
         urls = ["https://storage.googleapis.com/firebase-preview-drop/emulator/cloud-firestore-emulator-v1.19.8.jar"],
-    )
-
-    http_archive(
-        name = "coal",
-        build_file = Label("//intrinsic/production/external:coal.BUILD.bazel"),
-        sha256 = "136d7f809fccd0027265dead58abb57798fc7631f1a3331f139a74bed92066cc",
-        strip_prefix = "coal-1.0.1",
-        urls = ["https://github.com/torresl-google/coal/archive/refs/tags/v1.0.1.tar.gz"],
     )
 
     http_archive(

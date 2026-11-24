@@ -507,14 +507,14 @@ bazel_dep(name = "bazel_linux_packages", version = "0.4.1")
 bazel_dep(name = "bazel_skylib", version = "1.9.2")
 bazel_dep(name = "boost.bimap", version = "1.90.0.bcr.1")  
 bazel_dep(name = "boost.container", version = "1.90.0.bcr.1")  
-bazel_dep(name = "boost.filesystem", version = "1.90.0.bcr.1")  # used by coal 
+bazel_dep(name = "boost.filesystem", version = "1.90.0.bcr.1")  # used by coal
 bazel_dep(name = "boost.format", version = "1.90.0.bcr.1")  # used by cgal 
 bazel_dep(name = "boost.functional", version = "1.90.0.bcr.1")  # used by cgal 
 bazel_dep(name = "boost.graph", version = "1.90.0.bcr.2")  
 bazel_dep(name = "boost.heap", version = "1.90.0.bcr.1")  # used by cgal 
 bazel_dep(name = "boost.iterator", version = "1.90.0.bcr.1")  
 bazel_dep(name = "boost.logic", version = "1.90.0.bcr.1")  # used by cgal 
-bazel_dep(name = "boost.math", version = "1.90.0.bcr.1")  
+bazel_dep(name = "boost.math", version = "1.90.0.bcr.1")
 bazel_dep(name = "boost.multiprecision", version = "1.90.0.bcr.1")  # used by cgal 
 bazel_dep(name = "boost.regex", version = "1.90.0.bcr.1")  
 bazel_dep(name = "boringssl", version = "0.20261105.0")
@@ -599,7 +599,7 @@ bazel_dep(name = "meshoptimizer", version = "1.3.bcr.1")
 bazel_dep(name = "nanopb", version = "0.3.9.10")  
 bazel_dep(name = "nlohmann_json", version = "3.12.0.bcr.2", repo_name = "com_github_nlohmann_json")
 bazel_dep(name = "nlopt", version = "2.10.1.bcr1")  
-bazel_dep(name = "octomap", version = "1.10.0")  # used by coal 
+bazel_dep(name = "octomap", version = "1.10.0")  # used by coal
 bazel_dep(name = "ogre-next", version = "2.3.3.bcr.8")  
 bazel_dep(name = "onetbb", version = "2022.3.0")
 bazel_dep(name = "open-inference-protocol", version = "0.0.0-20250512-d49cc23.bcr.1", repo_name = "open_inference_protocol")  
@@ -676,7 +676,6 @@ bazel_dep(name = "tensorrt_headers", version = "10.16")
 use_repo(
     non_module_deps,
     "cgal",
-    "coal",
     "firestore_emulator",
     # TODO(b/572956581): Remove NVIDIA Pose Estimator out of insrc
     "foundation_pose_inference_library",  
@@ -940,6 +939,7 @@ use_repo(
 
 use_repo(
     non_module_deps,
+    "coal",
     "com_github_openxla_xla_tsl_net_cc",  
     "com_github_openxla_xla_tsl_net_h",  
     "com_google_glog_googleinit_h",  
