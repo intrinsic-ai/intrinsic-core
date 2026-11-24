@@ -21,8 +21,8 @@ go_binary(
     importpath = "intrinsic/executive/code/code_execution_service",
     deps = [
         ":codeexecutionservice",
-        "//intrinsic/executive/proto:code_execution_service_go_proto",
         "//intrinsic/kubernetes:intrinsic",
+        "//intrinsic_runtime/intrinsic/executive/proto:code_execution_service_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@intrinsic_apis//intrinsic/executive/proto:code_execution_info_service_go_proto",
         "@org_golang_google_grpc//:go_default_library",
@@ -56,7 +56,7 @@ go_library(
     deps = [
         ":jupyterclient",
         ":pycode",
-        "//intrinsic/executive/proto:code_execution_service_go_proto",
+        "//intrinsic_runtime/intrinsic/executive/proto:code_execution_service_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@org_golang_google_grpc//codes:go_default_library",
         "@org_golang_google_grpc//status:go_default_library",
@@ -75,7 +75,7 @@ go_library(
         ":codeexecutionworker",
         ":jupyterclient",
         ":pycode",
-        "//intrinsic/executive/proto:code_execution_service_go_proto",
+        "//intrinsic_runtime/intrinsic/executive/proto:code_execution_service_go_proto",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_pborman_uuid//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",

@@ -27,6 +27,7 @@ package(default_visibility = [
     "//intrinsic/skills:__subpackages__",
     "//intrinsic_control/intrinsic/icon/skills:__subpackages__",
     "//intrinsic_motion_planning/intrinsic/motion_planning/skills:__pkg__",
+    "//intrinsic_runtime/intrinsic/executive:__subpackages__",
     "//intrinsic_runtime/intrinsic/proto_tools/registry:__subpackages__",
     "//intrinsic_sdk/intrinsic/executive:__subpackages__",
     "//intrinsic_sdk/intrinsic/skills:__subpackages__",

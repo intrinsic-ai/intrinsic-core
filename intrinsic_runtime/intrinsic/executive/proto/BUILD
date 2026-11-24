@@ -65,13 +65,10 @@ go_proto_library(
         "@io_bazel_rules_go//proto:go_proto",
     ],
     importpath = "intrinsic/executive/proto/code_execution_service_go_proto",
-    protos = [":code_execution_service_proto"],
+    proto = ":code_execution_service_proto",
     deps = [
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/executive/proto:code_execution_go_proto",
-        "@org_golang_google_protobuf//types/descriptorpb:go_default_library",
-        "@org_golang_google_protobuf//types/known/anypb",
-        "@org_golang_google_protobuf//types/known/emptypb",
     ],
 )
 
@@ -79,7 +76,10 @@ go_proto_library(
 proto_library(
     name = "executive_debug_service_proto",
     srcs = ["executive_debug_service.proto"],
-    visibility = ["//intrinsic/executive:__subpackages__"],
+    visibility = [
+        "//intrinsic/executive:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
+    ],
     deps = [
         "@opentelemetry_proto//:trace_proto",
     ],
@@ -87,7 +87,10 @@ proto_library(
 
 cc_proto_library(
     name = "executive_debug_service_cc_proto",
-    visibility = ["//intrinsic/executive:__subpackages__"],
+    visibility = [
+        "//intrinsic/executive:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
+    ],
     deps = [":executive_debug_service_proto"],
 )
 
@@ -98,6 +101,7 @@ cc_grpc_library(
     grpc_only = True,
     visibility = [
         "//intrinsic/executive:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
     ],
     deps = [":executive_debug_service_cc_proto"],
 )
@@ -109,10 +113,11 @@ go_proto_library(
         "@io_bazel_rules_go//proto:go_proto",
     ],
     importpath = "intrinsic/executive/proto/executive_debug_service_go_proto",
-    protos = [":executive_debug_service_proto"],
+    proto = ":executive_debug_service_proto",
     visibility = [
         "//intrinsic/executive:__subpackages__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
+        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__pkg__",
     ],
     deps = [
@@ -136,7 +141,7 @@ cc_proto_library(
 proto_library(
     name = "executive_flags_proto",
     srcs = ["executive_flags.proto"],
-    deps = [":executive_config_proto"],
+    deps = ["//intrinsic_runtime/intrinsic/executive/proto:executive_config_proto"],
 )
 
 cc_proto_library(
@@ -144,13 +149,13 @@ cc_proto_library(
     deps = [":executive_flags_proto"],
 )
 
+# process_tree
 proto_library(
     name = "process_tree_proto",
     srcs = ["process_tree.proto"],
     deps = ["@intrinsic_apis//intrinsic/executive/proto:behavior_tree_proto"],
 )
 
-# process_tree
 cc_proto_library(
     name = "process_tree_cc_proto",
     deps = [":process_tree_proto"],
@@ -159,4 +164,24 @@ cc_proto_library(
 py_proto_library(
     name = "process_tree_py_pb2",
     deps = [":process_tree_proto"],
+)
+
+go_proto_library(
+    name = "executive_config_go_proto",
+    importpath = "intrinsic/executive/proto/executive_config_go_proto",
+    proto = ":executive_config_proto",
+)
+
+go_proto_library(
+    name = "executive_flags_go_proto",
+    importpath = "intrinsic/executive/proto/executive_flags_go_proto",
+    proto = ":executive_flags_proto",
+    deps = [":executive_config_go_proto"],
+)
+
+go_proto_library(
+    name = "process_tree_go_proto",
+    importpath = "intrinsic/executive/proto/process_tree_go_proto",
+    proto = ":process_tree_proto",
+    deps = ["@intrinsic_apis//intrinsic/executive/proto:behavior_tree_go_proto"],
 )

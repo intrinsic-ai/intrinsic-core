@@ -32,16 +32,16 @@ cc_binary(
     srcs = ["executive_main.cc"],
     data = [
         ":status_specs_message",
-        "//intrinsic/executive/clips",
+        "//intrinsic_runtime/intrinsic/executive/clips",
         "//intrinsic_sdk/intrinsic/executive/proto:world_query_proto_descriptor_set",
     ],
     deps = [
         "//intrinsic/executive/engine:clips_executive_service",
         "//intrinsic/executive/engine:clips_metrics",
         "//intrinsic/executive/engine:extended_status_codes",
-        "//intrinsic/executive/proto:process_tree_cc_proto",  # fixdeps: keep
         "//intrinsic/stats:opencensus",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
+        "//intrinsic_runtime/intrinsic/executive/proto:process_tree_cc_proto",  # fixdeps: keep
         "//intrinsic_sdk/intrinsic/util/path_resolver",
         "//intrinsic_sdk/intrinsic/util/status:return",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",

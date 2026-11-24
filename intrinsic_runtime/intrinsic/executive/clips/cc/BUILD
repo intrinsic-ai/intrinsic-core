@@ -25,7 +25,7 @@ cc_library(
         "cel_utils.h",
     ],
     deps = [
-        "//intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/container:flat_hash_set",
         "@abseil-cpp//absl/status",
@@ -51,8 +51,8 @@ cc_library(
     ],
     deps = [
         ":cel_utils",
-        "//intrinsic/executive/clips_cpp",
-        "//intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic_sdk/intrinsic/util/proto:type_url",
         "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
         "//intrinsic_sdk/intrinsic/util/status:return",
@@ -96,9 +96,9 @@ cc_library(
     data = [
     ],
     deps = [
-        "//intrinsic/executive/cc:behavior_tree_visitor",
-        "//intrinsic/executive/clips_cpp",
-        "//intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/cc:behavior_tree_visitor",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic_sdk/intrinsic/util:unique_id",
         "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
@@ -132,10 +132,10 @@ cc_library(
     deps = [
         ":id_handling",
         ":tracing",
-        "//intrinsic/executive/cc:behavior_tree_visitor",
-        "//intrinsic/executive/clips_cpp",
-        "//intrinsic/executive/clips_cpp:clips_protobuf",
-        "//intrinsic/executive/clips_cpp:clips_trace_span_manager",
+        "//intrinsic_runtime/intrinsic/executive/cc:behavior_tree_visitor",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_trace_span_manager",
         "//intrinsic_sdk/intrinsic/util/status:get_extended_status",
         "//intrinsic_sdk/intrinsic/util/status:ret_check",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",
@@ -164,8 +164,8 @@ cc_library(
     srcs = ["operation_error.cc"],
     hdrs = ["operation_error.h"],
     deps = [
-        "//intrinsic/executive/clips_cpp",
-        "//intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic_sdk/intrinsic/util/status:status_conversion_rpc",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/status:status_specs",
@@ -186,8 +186,8 @@ cc_library(
     srcs = ["skill_info.cc"],
     hdrs = ["skill_info.h"],
     deps = [
-        "//intrinsic/executive/clips_cpp",
-        "//intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/base:core_headers",
         "@abseil-cpp//absl/status:statusor",
@@ -199,7 +199,7 @@ cc_library(
     srcs = ["time.cc"],
     hdrs = ["time.h"],
     deps = [
-        "//intrinsic/executive/clips_cpp",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/time",
     ],
@@ -212,9 +212,9 @@ cc_library(
     data = [
     ],
     deps = [
-        "//intrinsic/executive/clips_cpp",
-        "//intrinsic/executive/clips_cpp:clips_protobuf",
-        "//intrinsic/executive/clips_cpp:clips_trace_span_manager",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_trace_span_manager",
         "//intrinsic_sdk/intrinsic/util/status:return",
         "//intrinsic_sdk/intrinsic/util/status:status_builder",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",

@@ -50,7 +50,7 @@ const char kPatternFactAssert[] = "==> f-(\\d+)\\s+(.+)";
 // Output like: :== ?*GLOBAL-SYM* ==> BARSYM <== FOOSYM
 const char kPatternGlobalVar[] = ":== \\?\\*([^*]+)\\* ==> (.+) <== (.+)";
 // LINT.ThenChange(
-//     //intrinsic/executive/clips_cpp/parse_clips_trace_log.py:clips_trace_regex)
+//     //intrinsic_runtime/intrinsic/executive/clips_cpp/parse_clips_trace_log.py:clips_trace_regex)
 // )
 
 Value StringToValue(std::string_view str) {

@@ -24,7 +24,7 @@
 
 ; LINT.IfChange
 (defglobal ?*BLACKBOARD-SCOPE-PROCESS-TREE* = "PROCESS_TREE")
-; LINT.ThenChange(../proto/executive_service.proto)
+; LINT.ThenChange(//intrinsic_sdk/intrinsic/executive/proto/executive_service.proto)
 
 ; --------------------------------- TEMPLATES ---------------------------------
 

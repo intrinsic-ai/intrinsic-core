@@ -24,6 +24,7 @@ proto_library(
         "//intrinsic/conductor:__subpackages__",
         "//intrinsic/executive:__subpackages__",
         "//intrinsic/resources/proto:__pkg__",
+        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
     ],
     deps = [
         "//intrinsic/resources/proto:geometric_resource_data_proto",
@@ -39,6 +40,7 @@ cc_proto_library(
         "//intrinsic/assets:__subpackages__",
         "//intrinsic/conductor:__subpackages__",
         "//intrinsic/executive:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
     ],
     deps = [":asset_info_internal_proto"],
 )
@@ -52,6 +54,7 @@ cc_grpc_library(
         "//intrinsic/assets:__subpackages__",
         "//intrinsic/conductor:__subpackages__",
         "//intrinsic/executive:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
     ],
     deps = [":asset_info_internal_cc_proto"],
 )

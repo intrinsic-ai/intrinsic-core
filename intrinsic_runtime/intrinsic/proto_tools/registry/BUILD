@@ -140,7 +140,7 @@ cc_library(
     srcs = ["resolver_asset.cc"],
     hdrs = ["resolver_asset.h"],
     deps = [
-        "//intrinsic/executive/cc:behavior_tree_visitor",
+        "//intrinsic_runtime/intrinsic/executive/cc:behavior_tree_visitor",
         "//intrinsic_runtime/intrinsic/proto_tools/registry:resolver",
         "//intrinsic_runtime/intrinsic/proto_tools/util:descriptor_pool_loader",
         "//intrinsic_sdk/intrinsic/assets:id_utils",
