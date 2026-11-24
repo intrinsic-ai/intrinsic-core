@@ -24,6 +24,7 @@ go_library(
         "//intrinsic/assets/dependencies:runtimegraph",
         "//intrinsic/assets/proto/v1alpha1:asset_info_internal_go_proto",
         "//intrinsic/resources/proto:geometric_resource_data_go_proto",
+        "//intrinsic/resources/proto:resource_instance_go_proto",
         "//intrinsic/resources/proto:resource_type_runtime_go_proto",
         "//intrinsic/resources/service:resourcetyperuntime",
         "//intrinsic/skills/internal:skillcomposer",

@@ -33,6 +33,7 @@ import (
 
 	aiipb "intrinsic/assets/proto/v1alpha1/asset_info_internal_go_proto"
 	gridpb "intrinsic/resources/proto/geometric_resource_data_go_proto"
+	ripb "intrinsic/resources/proto/resource_instance_go_proto"
 	rrpb "intrinsic/resources/proto/resource_registry_go_proto"
 	rtrpb "intrinsic/resources/proto/resource_type_runtime_go_proto"
 	asgrpcpb "intrinsic/storage/hot_shared_state/proto/application_service_go_proto"
@@ -174,6 +175,9 @@ func (s *Server) CheckSolutionValidity(ctx context.Context, request *aiipb.Check
 
 	// Treat all errors added to the report as warnings.
 	rep := report.New(report.WithSeverityRule(report.AllWarnings))
+	if err := validateConfigMessageTypes(rep, appRes.GetApplication().GetResources().GetResourceInstances(), rtrs); err != nil {
+		return nil, err
+	}
 	if err := graph.ValidateAll(sc, graph.WithReport(rep)); err != nil {
 		return nil, grpcstatus.Errorf(codes.Internal, "validation failed: %v", err)
 	}
@@ -182,6 +186,33 @@ func (s *Server) CheckSolutionValidity(ctx context.Context, request *aiipb.Check
 		resp.ValidationErrors = rep.ToExtendedStatus().Proto()
 	}
 	return resp, nil
+}
+
+func validateConfigMessageTypes(r *report.Report, ris []*ripb.ResourceInstance, rtrs []*rtrpb.ResourceTypeRuntime) error {
+	rtrsByIDVersion := make(map[string]*rtrpb.ResourceTypeRuntime, len(rtrs))
+	for _, rtr := range rtrs {
+		rtrsByIDVersion[idutils.IDVersionFromProtoUnchecked(rtr.GetMetadata().GetIdVersion())] = rtr
+	}
+	for _, ri := range ris {
+		if ri.GetConfiguration() == nil {
+			continue
+		}
+		rtr, ok := rtrsByIDVersion[ri.GetTypeIdVersion()]
+		if !ok {
+			return grpcstatus.Errorf(codes.Internal, "Asset instance %q requires Asset %q which is not found in the solution", ri.GetName(), ri.GetTypeIdVersion())
+		}
+		assetConfigMsgName := rtr.GetServiceDef().GetConfigMessageFullName()
+		if assetConfigMsgName == "" && rtr.GetServiceDef() != nil && rtr.GetDefaultConfiguration() != nil {
+			assetConfigMsgName = string(rtr.GetDefaultConfiguration().MessageName())
+		}
+		instanceConfigMsgName := string(ri.GetConfiguration().MessageName())
+		if assetConfigMsgName != instanceConfigMsgName {
+			if err := r.Add(fmt.Errorf("Asset instance %q expected configuration message type %q, got %q", ri.GetName(), assetConfigMsgName, instanceConfigMsgName)); err != nil {
+				return err
+			}
+		}
+	}
+	return nil
 }
 
 // NewServerOpts contains various GRPC clients used by the registry.
