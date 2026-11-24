@@ -148,20 +148,22 @@ class ComputeMeshStatsFunctor {
 
   template <>
   absl::StatusOr<MeshStats> operator()(const ObjectRef<Mesh>& geo) const {
-    return Memoize(
-               MemoizeOptions("ComputeMeshStats-Mesh"),
-               [](const ObjectRef<Mesh>& geo,
-                  bool contains_primitives) -> absl::StatusOr<MeshStats> {
-                 AxisAlignedBoundingBox3d aabb;
-                 for (const auto& v : geo.Value().vertices()) {
-                   aabb.ExtendBy(v);
-                 }
+    INTR_ASSIGN_OR_RETURN(
+        const auto stats,
+        Memoize(
+            MemoizeOptions("ComputeMeshStats-Mesh"),
+            [](const ObjectRef<Mesh>& geo,
+               bool contains_primitives) -> absl::StatusOr<MeshStats> {
+              AxisAlignedBoundingBox3d aabb;
+              for (const auto& v : geo.Value().vertices()) {
+                aabb.ExtendBy(v);
+              }
 
-                 return ComputeMeshStatsImpl(geo.Value(), std::move(aabb),
-                                             contains_primitives);
-               },
-               geo, contains_primitives_)
-        ->Value();
+              return ComputeMeshStatsImpl(geo.Value(), std::move(aabb),
+                                          contains_primitives);
+            },
+            geo, contains_primitives_));
+    return stats.Value();
   }
 
   template <>
