@@ -182,15 +182,15 @@ FindSceneFileToImportInDirectory(absl::string_view scene_file_directory) {
 
 std::vector<std::string> GetAllSupportedExtensions() {
   std::vector<std::string> all_supported_extensions;
-  all_supported_extensions.insert(all_supported_extensions.end(),
-                                  SupportedSdfExtensions().begin(),
-                                  SupportedSdfExtensions().end());
-  all_supported_extensions.insert(all_supported_extensions.end(),
-                                  usd::SupportedUsdExtensions().begin(),
-                                  usd::SupportedUsdExtensions().end());
-  all_supported_extensions.insert(all_supported_extensions.end(),
-                                  geo::SupportedMeshExtensions().begin(),
-                                  geo::SupportedMeshExtensions().end());
+  // The Supported*Extensions() functions return their sets by value, so each
+  // set must be bound once before taking begin() and end() from it.
+  const auto append = [&all_supported_extensions](const auto& extensions) {
+    all_supported_extensions.insert(all_supported_extensions.end(),
+                                    extensions.begin(), extensions.end());
+  };
+  append(SupportedSdfExtensions());
+  append(usd::SupportedUsdExtensions());
+  append(geo::SupportedMeshExtensions());
   std::sort(all_supported_extensions.begin(), all_supported_extensions.end());
   return all_supported_extensions;
 }
