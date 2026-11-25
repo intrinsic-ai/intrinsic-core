@@ -379,9 +379,7 @@ message BehaviorTree {
       CANCELED = 11;
       SUCCEEDED = 8;
       FAILED = 9;
-
       CONFLICT_WAITING = 14;
-
     }
 
     // This is only set by the executive on retrieval. It is ignored when
