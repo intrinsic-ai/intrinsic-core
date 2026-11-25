@@ -19,7 +19,6 @@ package intrinsic_proto.world.internal;
 import "intrinsic/math/proto/pose.proto";
 import "intrinsic/world/proto/collections_component.proto";
 import "intrinsic/world/proto/world_entity.proto";
-import "intrinsic/world/proto/world_updates.proto";
 import "intrinsic/world/proto/physics_component.proto";
 import "intrinsic/world/proto/sensor_component.proto";
 import "intrinsic/world/world.proto";
@@ -55,33 +54,6 @@ message WorldWithMetadata {
 
   // Arbitrary user tag.
   optional string user_tag = 7;
-}
-
-// A single update to make to the world
-// TODO(stoyang): Reconcile with intrinsic_proto.world.WorldUpdate
-// Next tag: 9
-message WorldServerUpdate {
-  oneof update {
-    // Add more WorldUpdates as needed.
-    intrinsic_proto.world.SetRobotDofValues set_robot_dof_values = 8;
-    intrinsic_proto.world.ReparentEntities reparent_entity = 2;
-    intrinsic_proto.world.UpdateAttachmentPose update_attachment = 3;
-    intrinsic_proto.world.SetNamedConfiguration set_named_configuration = 4;
-    intrinsic_proto.world.AddLabel add_label = 6;
-    intrinsic_proto.world.RemoveLabel remove_label = 7;
-
-    // Deprecated. Use SetRobotDofValues instead.
-    SetDofValues set_dof_values = 1 [deprecated = true];
-  }
-
-  reserved 5;
-  reserved "set_resource";
-}
-
-// Updates to make to the world. Things like adding labels or setting dofs.
-// TODO(stoyang): Reconcile with intrinsic_proto.world.WorldUpdate
-message WorldServerUpdates {
-  repeated WorldServerUpdate updates = 1;
 }
 
 message EntityWithMetadata {

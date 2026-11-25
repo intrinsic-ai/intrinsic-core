@@ -38,7 +38,6 @@
 #include "intrinsic/util/status/status_builder.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/collision/coal_collision_checker.h"
-#include "intrinsic/world/component/attachment_component.h"
 #include "intrinsic/world/component/collections_component.h"
 #include "intrinsic/world/component/geometry_component.h"
 #include "intrinsic/world/component/robot_component.h"
@@ -51,7 +50,6 @@
 #include "intrinsic/world/labels.h"
 #include "intrinsic/world/proto/entity_search.pb.h"
 #include "intrinsic/world/proto/world_updates.pb.h"
-#include "intrinsic/world/service/world_service.pb.h"
 #include "intrinsic/world/util/entity_search_util.h"
 #include "intrinsic/world/world.h"
 
@@ -66,47 +64,6 @@ absl::Status UpdateWorld(
     INTR_RETURN_IF_ERROR(UpdateWorld(update, world));
   }
   return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::internal::WorldServerUpdates& world_updates,
-    World* world) {
-  VLOG(1) << "Running world server updates with "
-          << world_updates.updates_size() << " updates";
-
-  for (const auto& update : world_updates.updates()) {
-    INTR_RETURN_IF_ERROR(UpdateWorld(update, world));
-  }
-  return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::internal::WorldServerUpdate& world_update,
-    World* world) {
-  switch (world_update.update_case()) {
-    case intrinsic_proto::world::internal::WorldServerUpdate::kSetDofValues:
-      return UpdateWorld(world_update.set_dof_values(), world);
-    case intrinsic_proto::world::internal::WorldServerUpdate::
-        kSetRobotDofValues:
-      return UpdateWorld(world_update.set_robot_dof_values(), world);
-    case intrinsic_proto::world::internal::WorldServerUpdate::kReparentEntity:
-      return UpdateWorld(world_update.reparent_entity(), world);
-    case intrinsic_proto::world::internal::WorldServerUpdate::kUpdateAttachment:
-      return UpdateWorld(world_update.update_attachment(), world);
-    case intrinsic_proto::world::internal::WorldServerUpdate::
-        kSetNamedConfiguration:
-      return UpdateWorld(world_update.set_named_configuration(), world);
-    case intrinsic_proto::world::internal::WorldServerUpdate::kAddLabel:
-      return UpdateWorld(world_update.add_label(), world);
-    case intrinsic_proto::world::internal::WorldServerUpdate::kRemoveLabel:
-      return UpdateWorld(world_update.remove_label(), world);
-    case intrinsic_proto::world::internal::WorldServerUpdate::UPDATE_NOT_SET: {
-      break;
-    }
-  }
-
-  return absl::InvalidArgumentError(
-      "No valid update set for WorldServerUpdate");
 }
 
 absl::Status UpdateWorld(
@@ -207,25 +164,6 @@ absl::Status UpdateWorld(const intrinsic_proto::world::AddLabel& label_spec,
   for (const auto& entity_id : entities) {
     INTR_ASSIGN_OR_RETURN(auto* ent, world->GetEntityById(entity_id));
     INTR_RETURN_IF_ERROR(ent->AddLabels(label_ids_to_add));
-  }
-
-  return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(const intrinsic_proto::world::RemoveLabel& label_spec,
-                         World* world) {
-  INTR_ASSIGN_OR_RETURN(const auto entities,
-                        GetEntities(*world, label_spec.entities(),
-                                    label_spec.apply_to_multiple()));
-
-  std::set<LabelId> label_ids_to_remove;
-  for (const std::string& label : label_spec.labels_to_remove()) {
-    label_ids_to_remove.emplace(label);
-  }
-
-  for (const auto& entity_id : entities) {
-    INTR_ASSIGN_OR_RETURN(auto* ent, world->GetEntityById(entity_id));
-    INTR_RETURN_IF_ERROR(ent->RemoveLabels(label_ids_to_remove));
   }
 
   return absl::OkStatus();
@@ -585,50 +523,6 @@ absl::Status UpdateWorld(
 }
 
 absl::Status UpdateWorld(
-    const intrinsic_proto::world::ReparentEntities& reparent_entity,
-    World* world) {
-  INTR_ASSIGN_OR_RETURN(const auto entity,
-                        GetEntities(*world, reparent_entity.entity()));
-  INTR_ASSIGN_OR_RETURN(const auto new_parent,
-                        GetEntities(*world, reparent_entity.parent_entity()));
-
-  AttachmentEntityId new_parent_id(*new_parent.begin());
-  AttachmentEntityId entity_id(*entity.begin());
-
-  Pose3d parent_t_entity;
-  if (reparent_entity.has_parent_t_entity()) {
-    INTR_ASSIGN_OR_RETURN(parent_t_entity,
-                          FromProto(reparent_entity.parent_t_entity()));
-  } else {
-    parent_t_entity = world->GetTransform(new_parent_id, entity_id);
-  }
-
-  INTR_RETURN_IF_ERROR(
-      world->ReparentEntity(new_parent_id, entity_id, parent_t_entity));
-
-  return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::UpdateAttachmentPose& update_attachment,
-    World* world) {
-  INTR_ASSIGN_OR_RETURN(const auto entity,
-                        GetEntities(*world, update_attachment.entity()));
-
-  INTR_ASSIGN_OR_RETURN(Pose3d parent_t_entity,
-                        FromProto(update_attachment.parent_t_entity()));
-
-  AttachmentEntityId entity_id(*entity.begin());
-  INTR_ASSIGN_OR_RETURN(
-      auto attachment,
-      world->GetComponentByEntityId<AttachmentComponent>(entity_id));
-
-  world->UpdateAttachmentPose(attachment->GetParentId(), entity_id,
-                              parent_t_entity);
-  return absl::OkStatus();
-}
-
-absl::Status UpdateWorld(
     const intrinsic_proto::world::RenameEntity& rename_entity, World* world) {
   if (rename_entity.new_name().empty()) {
     return absl::InvalidArgumentError("RenameEntity.new_name cannot be empty");
@@ -722,60 +616,6 @@ bool IsOnlyStateChange(
     default: {
       return false;
     }
-  }
-}
-
-bool IsOnlyStateChange(
-    const intrinsic_proto::world::internal::WorldServerUpdates& world_updates) {
-  for (const auto& world_update : world_updates.updates()) {
-    if (!IsOnlyStateChange(world_update)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool IsOnlyStateChange(
-    const intrinsic_proto::world::internal::WorldServerUpdate& world_update) {
-  switch (world_update.update_case()) {
-    case intrinsic_proto::world::internal::WorldServerUpdate::kSetDofValues:
-      ABSL_FALLTHROUGH_INTENDED;
-    case intrinsic_proto::world::internal::WorldServerUpdate::
-        kSetRobotDofValues:
-      ABSL_FALLTHROUGH_INTENDED;
-    case intrinsic_proto::world::internal::WorldServerUpdate::UPDATE_NOT_SET:
-      ABSL_FALLTHROUGH_INTENDED;
-    case intrinsic_proto::world::internal::WorldServerUpdate::kUpdateAttachment:
-      return true;
-    default:
-      return false;
-  }
-}
-
-bool IsOnlyDofChange(
-    const intrinsic_proto::world::internal::WorldServerUpdates& world_updates) {
-  for (const auto& world_update : world_updates.updates()) {
-    if (!IsOnlyDofChange(world_update)) {
-      return false;
-    }
-  }
-
-  return true;
-}
-
-bool IsOnlyDofChange(
-    const intrinsic_proto::world::internal::WorldServerUpdate& world_update) {
-  switch (world_update.update_case()) {
-    case intrinsic_proto::world::internal::WorldServerUpdate::kSetDofValues:
-      ABSL_FALLTHROUGH_INTENDED;
-    case intrinsic_proto::world::internal::WorldServerUpdate::
-        kSetRobotDofValues:
-      ABSL_FALLTHROUGH_INTENDED;
-    case intrinsic_proto::world::internal::WorldServerUpdate::UPDATE_NOT_SET:
-      return true;
-    default:
-      return false;
   }
 }
 

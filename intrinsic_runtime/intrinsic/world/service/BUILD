@@ -241,7 +241,6 @@ proto_library(
         "@intrinsic_apis//intrinsic/math/proto:pose_proto",
         "@intrinsic_apis//intrinsic/world/proto:physics_component_proto",
         "@intrinsic_apis//intrinsic/world/proto:sensor_component_proto",
-        "@intrinsic_apis//intrinsic/world/proto:world_updates_proto",
     ],
 )
 
@@ -274,7 +273,6 @@ go_proto_library(
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:physics_component_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:sensor_component_go_proto",
-        "@intrinsic_apis//intrinsic/world/proto:world_updates_go_proto",
     ],
 )
 

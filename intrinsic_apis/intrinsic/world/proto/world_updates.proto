@@ -87,18 +87,6 @@ message AddLabel {
   repeated string labels_to_add = 3;
 }
 
-// Remove labels from entities in the world.
-message RemoveLabel {
-  // The search criteria to use when finding the entities to update.
-  intrinsic_proto.world.EntitySearchCriteria entities = 1;
-  // If set to true and more than one entity is found, this will update all of
-  // the entities that match the search criteria. If there are multiple matches
-  // found and apply_to_multiple is false an error will be returned.
-  bool apply_to_multiple = 2;
-  // The labels to remove to the found entities.
-  repeated string labels_to_remove = 3;
-}
-
 // Set the tip of a robot. This specifies where the solver solves for.
 message SetRobotTip {
   // The name of the robot to update.
@@ -233,36 +221,6 @@ message CollisionExclusion {
   intrinsic_proto.world.EntitySearchCriteria entity_a = 1;
   // Search criteria for finding the other entity.
   intrinsic_proto.world.EntitySearchCriteria entity_b = 2;
-}
-
-// Updates the parent of an entity
-message ReparentEntities {
-  // The search criteria to use when finding the entity to update.
-  intrinsic_proto.world.EntitySearchCriteria entity = 1;
-
-  // The search criteria to use when finding the new parent.
-  intrinsic_proto.world.EntitySearchCriteria parent_entity = 2;
-
-  // The pose of the entity relative to its new parent.
-  //
-  // NOTE: If not specified then the world relative transform of the entity and
-  // the new parent will remain the same after the reparenting.
-  intrinsic_proto.Pose parent_t_entity = 4;
-
-  reserved 3;
-  reserved "parent_t_entity_old";
-}
-
-// Updates the attachment pose between two entities
-message UpdateAttachmentPose {
-  // The search criteria to use when finding the entity to update.
-  intrinsic_proto.world.EntitySearchCriteria entity = 1;
-
-  // The pose of the entity relative to its parent.
-  intrinsic_proto.Pose parent_t_entity = 3;
-
-  reserved 2;
-  reserved "parent_t_entity_old";
 }
 
 // Changes the local and display names of an entity.

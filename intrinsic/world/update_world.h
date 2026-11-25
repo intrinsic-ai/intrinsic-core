@@ -17,7 +17,6 @@
 
 #include "absl/status/status.h"
 #include "intrinsic/world/proto/world_updates.pb.h"
-#include "intrinsic/world/service/world_service.pb.h"
 #include "intrinsic/world/world.h"
 
 namespace intrinsic {
@@ -32,18 +31,6 @@ absl::Status UpdateWorld(
 absl::Status UpdateWorld(
     const intrinsic_proto::world::WorldUpdate& world_update, World* world);
 
-// Applies the given updates to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::internal::WorldServerUpdates& world_updates,
-    World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::internal::WorldServerUpdate& world_update,
-    World* world);
-
 // Applies the given update to the world, and returns an error if there was a
 // problem updating the world.
 absl::Status UpdateWorld(const intrinsic_proto::world::MoveGroup& move_group,
@@ -52,11 +39,6 @@ absl::Status UpdateWorld(const intrinsic_proto::world::MoveGroup& move_group,
 // Applies the given update to the world, and returns an error if there was a
 // problem updating the world.
 absl::Status UpdateWorld(const intrinsic_proto::world::AddLabel& label_spec,
-                         World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(const intrinsic_proto::world::RemoveLabel& label_spec,
                          World* world);
 
 // Applies the given update to the world, and returns an error if there was a
@@ -112,18 +94,6 @@ absl::Status UpdateWorld(
 // Applies the given update to the world, and returns an error if there was a
 // problem updating the world.
 absl::Status UpdateWorld(
-    const intrinsic_proto::world::ReparentEntities& reparent_entity,
-    World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
-    const intrinsic_proto::world::UpdateAttachmentPose& update_attachment,
-    World* world);
-
-// Applies the given update to the world, and returns an error if there was a
-// problem updating the world.
-absl::Status UpdateWorld(
     const intrinsic_proto::world::RenameEntity& rename_entity, World* world);
 
 // Applies the given update to the world, and returns an error if there was a
@@ -151,28 +121,6 @@ bool IsOnlyStateChange(
 // the world and not its structure. State in this case can mean things like
 // parent_t_this and dof values.
 bool IsOnlyStateChange(const intrinsic_proto::world::WorldUpdate& world_update);
-
-// Returns true if the world updates contain only changes to the state of
-// the world and not its structure. State in this case can mean things like
-// parent_t_this and dof values.
-bool IsOnlyStateChange(
-    const intrinsic_proto::world::internal::WorldServerUpdates& world_updates);
-
-// Returns true if the world update contain only changes to the state of
-// the world and not its structure. State in this case can mean things like
-// parent_t_this and dof values.
-bool IsOnlyStateChange(
-    const intrinsic_proto::world::internal::WorldServerUpdate& world_update);
-
-// Returns true if the world updates contain only changes to dofs in the world
-// and not its structure.
-bool IsOnlyDofChange(
-    const intrinsic_proto::world::internal::WorldServerUpdates& world_updates);
-
-// Returns true if the world update contains only changes to dofs in the world
-// and not its structure.
-bool IsOnlyDofChange(
-    const intrinsic_proto::world::internal::WorldServerUpdate& world_update);
 
 }  // namespace intrinsic
 
