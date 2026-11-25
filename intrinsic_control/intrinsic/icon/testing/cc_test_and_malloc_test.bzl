@@ -67,6 +67,12 @@ def cc_test_and_malloc_test(name, deps = [], local_defines = [], tags = [], **kw
     cc_test(
         name = name + "_malloc",
         local_defines = local_defines + ["INTRINSIC_MALLOC_TEST=1"],
+        # malloc_test_main installs MallocGuard, which hooks the GOT of every
+        # loaded object and re-reads /proc/self/maps for each one. Linked
+        # against per-library shared objects (the cc_test default on toolchains
+        # that support dynamic linking), this test loads ~1200 objects and
+        # times out. Link statically, like the production ICON cc_binary.
+        linkstatic = True,
         tags = sets.to_list(tags_set),
         deps = deps + [
             "//intrinsic_control/intrinsic/icon/testing:malloc_test_main",

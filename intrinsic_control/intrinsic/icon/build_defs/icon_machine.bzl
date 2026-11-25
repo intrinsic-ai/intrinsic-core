@@ -193,6 +193,12 @@ def icon_config_init_test(
             "@com_google_googletest//:gtest_main",
         ],
         data = data,
+        # The ICON main loop installs MallocGuard, which hooks the GOT of every
+        # loaded object and re-reads /proc/self/maps for each one. Linked
+        # against per-library shared objects (the cc_test default on toolchains
+        # that support dynamic linking), this test loads ~1200 objects and
+        # times out. Link statically, like the production ICON cc_binary.
+        linkstatic = True,
         tags = [
             "requires-net:ipv4",  # Required for gRPC connection to world.
             "requires-net:loopback",
