@@ -233,7 +233,6 @@ go_library(
     deps = [
         "//intrinsic/kubernetes/workcell_spec:repositorybasename",
         "//intrinsic/production:imagepublisher",
-        "//intrinsic_sdk/intrinsic/config:environments",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_googlecloudrobotics_core//src/go/pkg/apis/apps/v1alpha1:go_default_library",
         "@com_github_pkg_errors//:go_default_library",

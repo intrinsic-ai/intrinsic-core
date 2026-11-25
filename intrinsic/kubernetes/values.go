@@ -29,7 +29,6 @@ import (
 	"strings"
 	"time"
 
-	"intrinsic/config/environments"
 	"intrinsic/kubernetes/workcell_spec/repositorybasename"
 	"intrinsic/production/imagepublisher"
 
@@ -181,6 +180,10 @@ func ClearEmbeddedChartFiles(ca *v1alpha1.ChartAssignment) {
 	ca.Spec.Chart.Values["embed_chart_files"] = nil
 }
 
+func defaultProjectDomain(project string) string {
+	return fmt.Sprintf("www.endpoints.%s.cloud.goog", project)
+}
+
 func getDomainForCluster(project string, clusterName string, cloudRoboticsConfig map[string]string) string {
 	if cloudRoboticsDomain, ok := cloudRoboticsConfig["CLOUD_ROBOTICS_DOMAIN"]; ok && cloudRoboticsDomain != "" {
 		// Cluster names for cloud clusters are slightly mangled.
@@ -195,7 +198,7 @@ func getDomainForCluster(project string, clusterName string, cloudRoboticsConfig
 	}
 
 	// The cloud robotics config didn't actually contain our target value!
-	return environments.Domain(project)
+	return defaultProjectDomain(project)
 }
 
 // ParseExtraValues parses the comma-separated YAML values passed via --values.
@@ -247,7 +250,7 @@ func setCommonValues(project string, clusterName string, location string, values
 	values["installed_by"] = os.Getenv("USER")
 	values["robot"] = map[string]any{"name": clusterName}
 	values["project"] = project
-	values["domain"] = environments.Domain(project)
+	values["domain"] = defaultProjectDomain(project)
 	if location != "" {
 		values["location"] = location
 	}

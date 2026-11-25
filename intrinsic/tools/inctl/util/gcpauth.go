@@ -23,7 +23,6 @@ import (
 	"os/user"
 	"path/filepath"
 
-	"intrinsic/config/environments"
 	"intrinsic/tools/inctl/auth/auth"
 
 	log "github.com/golang/glog"
@@ -191,7 +190,7 @@ func defaultTokenSourceFallback(ctx context.Context, project string) (*grpc.Clie
 		grpc.WithTransportCredentials(credentials.NewTLS(new(tls.Config))),
 		grpc.WithPerRPCCredentials(creds),
 	}
-	addr := environments.Domain(project) + ":443"
+	addr := fmt.Sprintf("www.endpoints.%s.cloud.goog:443", project)
 	conn, err := grpc.NewClient(addr, opts...)
 	if err != nil {
 		return nil, fmt.Errorf("failed to establish connection to %q: %w", addr, err)

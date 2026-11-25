@@ -31,7 +31,6 @@ go_library(
     srcs = ["gcpauth.go"],
     importpath = "intrinsic/tools/inctl/util/gcpauth",
     deps = [
-        "//intrinsic_sdk/intrinsic/config:environments",
         "//intrinsic_sdk/intrinsic/tools/inctl/auth",
         "@com_github_golang_glog//:go_default_library",
         "@com_github_google_go_containerregistry//pkg/v1/google:go_default_library",
