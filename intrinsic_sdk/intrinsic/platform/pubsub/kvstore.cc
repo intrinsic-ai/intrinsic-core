@@ -1078,7 +1078,7 @@ absl::StatusOr<std::vector<std::string>> KeyValueStore::ListAllOnpremKeys(
 }
 
 absl::Status KeyValueStore::Delete(absl::string_view key) {
-  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKey(key));
+  INTR_RETURN_IF_ERROR(intrinsic::ValidZenohKeyexpr(key));
   INTR_ASSIGN_OR_RETURN(std::string prefixed_name,
                         ZenohHandle::add_key_prefix(key, key_prefix_));
   LOG(INFO) << "KVStore Delete for key: " << prefixed_name;

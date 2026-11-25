@@ -121,6 +121,69 @@ bool MatchesSegments(const std::vector<absl::string_view>& p_segs, size_t p_idx,
   return MatchesSegments(p_segs, p_idx + 1, k_segs, k_idx + 1);
 }
 
+// Returns whether two single-segment Zenoh patterns share at least one
+// concrete segment (supporting `*` and `$*` on either side).
+bool SegmentPatternsIntersect(absl::string_view a, absl::string_view b) {
+  if (a == "*" || a == "$*" || b == "*" || b == "$*") {
+    return true;
+  }
+  const bool a_has_wild = absl::StrContains(a, "$*");
+  const bool b_has_wild = absl::StrContains(b, "$*");
+  if (!a_has_wild && !b_has_wild) {
+    return a == b;
+  }
+  if (!b_has_wild) {
+    return MatchesSegment(a, b);
+  }
+  if (!a_has_wild) {
+    return MatchesSegment(b, a);
+  }
+  // Both segments contain at least one `$*`. Any interior literals can be
+  // satisfied in an arbitrarily long middle substring, so the two patterns
+  // intersect iff their literal prefixes and suffixes are mutually compatible.
+  const absl::string_view a_prefix = a.substr(0, a.find("$*"));
+  const absl::string_view b_prefix = b.substr(0, b.find("$*"));
+  const absl::string_view a_suffix = a.substr(a.rfind("$*") + 2);
+  const absl::string_view b_suffix = b.substr(b.rfind("$*") + 2);
+  const bool prefixes_compatible = absl::StartsWith(a_prefix, b_prefix) ||
+                                   absl::StartsWith(b_prefix, a_prefix);
+  const bool suffixes_compatible =
+      absl::EndsWith(a_suffix, b_suffix) || absl::EndsWith(b_suffix, a_suffix);
+  return prefixes_compatible && suffixes_compatible;
+}
+
+// Returns whether two Zenoh key expressions (split into `/` segments) share at
+// least one concrete key, handling `*`, `$*`, and `**` on either side.
+bool SegmentsIntersect(const std::vector<absl::string_view>& a_segs,
+                       const std::vector<absl::string_view>& b_segs) {
+  const size_t n = a_segs.size();
+  const size_t m = b_segs.size();
+  std::vector<bool> prev(m + 1, false);
+  std::vector<bool> curr(m + 1, false);
+  prev[0] = true;
+  for (size_t j = 1; j <= m && b_segs[j - 1] == "**"; ++j) {
+    prev[j] = true;
+  }
+  for (size_t i = 1; i <= n; ++i) {
+    curr.assign(m + 1, false);
+    if (a_segs[i - 1] == "**") {
+      curr[0] = prev[0];
+    }
+    for (size_t j = 1; j <= m; ++j) {
+      if (a_segs[i - 1] == "**" || b_segs[j - 1] == "**") {
+        // `**` can match zero segments (advance its own side) or consume one
+        // segment from the other side while remaining active.
+        curr[j] = prev[j] || curr[j - 1];
+      } else {
+        curr[j] = prev[j - 1] &&
+                  SegmentPatternsIntersect(a_segs[i - 1], b_segs[j - 1]);
+      }
+    }
+    prev.swap(curr);
+  }
+  return prev[m];
+}
+
 }  // namespace
 
 FakeKeyValueStore::FakeKeyValueStore()
@@ -214,15 +277,24 @@ absl::StatusOr<KVQuery> FakeKeyValueStore::GetAllRaw(
 }
 
 absl::Status FakeKeyValueStore::Delete(absl::string_view key) {
-  INTR_RETURN_IF_ERROR(ValidZenohKey(key));
+  INTR_RETURN_IF_ERROR(ValidZenohKeyexpr(key));
 
   {
-    absl::MutexLock lock(&mutex_);
-    auto it = store_.find(key);
-    if (it == store_.end()) {
-      return absl::NotFoundError(absl::StrCat("Key not found: ", key));
+    absl::MutexLock lock(mutex_);
+    if (!absl::StrContains(key, '*')) {
+      auto it = store_.find(key);
+      if (it == store_.end()) {
+        return absl::NotFoundError(absl::StrCat("Key not found: ", key));
+      }
+      store_.erase(it);
+    } else {
+      const std::vector<absl::string_view> pattern_segments =
+          absl::StrSplit(key, '/');
+      absl::erase_if(store_, [&](const auto& entry) {
+        return MatchesSegments(pattern_segments, 0,
+                               absl::StrSplit(entry.first, '/'), 0);
+      });
     }
-    store_.erase(it);
   }
 
   DispatchMatchingSubscriptions<DeletionCallback>(
@@ -324,8 +396,8 @@ void FakeKeyValueStore::DispatchMatchingSubscriptions(
         absl::StrSplit(key, '/');
     for (const auto& [id, record] : registry->subscriptions) {
       if (extract_callback(*record) != nullptr &&
-          MatchesSegments(absl::StrSplit(record->key_expression, '/'), 0,
-                          key_segments, 0)) {
+          SegmentsIntersect(absl::StrSplit(record->key_expression, '/'),
+                            key_segments)) {
         matching_ids.push_back(id);
       }
     }
