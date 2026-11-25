@@ -14,10 +14,7 @@
 
 """ Intrinsic package geometry/api/processing. """
 
-load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("//bazel:cc_macros.bzl", "cc_library")
-load("//bazel:protos.bzl", "proto_library")
-load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
 
 package(default_visibility = ["//intrinsic:intrinsic_internal"])
 
@@ -48,37 +45,20 @@ cc_library(
     }),
     deps = [
         ":pipeline",
-        ":pipeline_config_cc_proto",
         ":processor",
-        "//intrinsic/geometry/processing/processors:alpha_wrap_processor",
-        "//intrinsic/geometry/processing/processors:coacd_processor",
-        "//intrinsic/geometry/processing/processors:convex_hull_processor",
-        "//intrinsic/geometry/processing/processors:mesh_simplification_processor",
-        "//intrinsic/geometry/processing/processors:noop_processor",
-        "//intrinsic/geometry/processing/processors:scale_processor",
-        "//intrinsic/geometry/processing/processors:visual_simplification_processor",
-        "//intrinsic/geometry/processing/processors:voxel_remeshing_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:alpha_wrap_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:coacd_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:convex_hull_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:mesh_simplification_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:noop_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:scale_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:visual_simplification_processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing/processors:voxel_remeshing_processor",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
-)
-
-proto_library(
-    name = "pipeline_config_proto",
-    srcs = ["pipeline_config.proto"],
-    deps = ["@com_google_protobuf//:duration_proto"],
-)
-
-cc_proto_library(
-    name = "pipeline_config_cc_proto",
-    deps = [":pipeline_config_proto"],
-)
-
-go_proto_library(
-    name = "pipeline_config_go_proto",
-    importpath = "intrinsic/geometry/processing/pipeline_config_go_proto",
-    protos = [":pipeline_config_proto"],
 )
 
 cc_library(

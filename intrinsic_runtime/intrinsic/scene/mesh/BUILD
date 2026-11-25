@@ -22,7 +22,6 @@ cc_library(
     hdrs = ["scene_object_from_mesh_file.h"],
     deps = [
         "//intrinsic/geometry/api:file_io",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "//intrinsic/world/objects:object_world_creation_utils",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:affine_transform_of_geometry",
@@ -41,6 +40,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_storage_refs_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:renderable_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:material_cc_proto",

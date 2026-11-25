@@ -29,10 +29,10 @@ proto_library(
     name = "scene_object_import_proto",
     srcs = ["scene_object_import.proto"],
     deps = [
-        "//intrinsic/geometry/processing:pipeline_config_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_googleapis//google/longrunning:operations_proto",
         "@com_google_protobuf//:any_proto",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:material_proto",
         "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_proto",
         "@intrinsic_apis//intrinsic/math/proto:quaternion_proto",
@@ -57,8 +57,8 @@ go_proto_library(
     importpath = "intrinsic/scene/proto/v1/scene_object_import_go_proto",
     protos = [":scene_object_import_proto"],
     deps = [
-        "//intrinsic/geometry/processing:pipeline_config_go_proto",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:material_go_proto",
         "@intrinsic_apis//intrinsic/kubernetes/generator/proto:auth_options_go_proto",
         "@intrinsic_apis//intrinsic/math/proto:quaternion_go_proto",

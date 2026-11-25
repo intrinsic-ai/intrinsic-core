@@ -290,7 +290,6 @@ cc_library(
     srcs = ["post_process_imported_scene.cc"],
     hdrs = ["post_process_imported_scene.h"],
     deps = [
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "//intrinsic/util/proto:pb_hash",
         "//intrinsic_runtime/intrinsic/geometry/compatibility:io",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
@@ -318,6 +317,7 @@ cc_library(
         "@abseil-cpp//absl/time",
         "@com_github_grpc_grpc//:grpc++",
         "@com_google_protobuf//:protobuf",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_storage_refs_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_cc_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:material_cc_proto",

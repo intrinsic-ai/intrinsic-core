@@ -25,11 +25,11 @@ proto_library(
     name = "geometry_service_proto",
     srcs = ["geometry_service.proto"],
     deps = [
-        "//intrinsic/geometry/processing:pipeline_config_proto",
         "@com_google_googleapis//google/api:annotations_proto",
         "@com_google_googleapis//google/longrunning:operations_proto",
         "@com_google_protobuf//:any_proto",
         "@com_google_protobuf//:timestamp_proto",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_service_types_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_storage_refs_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_proto",
@@ -72,8 +72,8 @@ go_proto_library(
     importpath = "intrinsic/geometry/proto/geometry_service_go_proto",
     protos = [":geometry_service_proto"],
     deps = [
-        "//intrinsic/geometry/processing:pipeline_config_go_proto",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_service_types_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto:geometry_storage_refs_go_proto",
         "@intrinsic_apis//intrinsic/geometry/proto/v1:geometry_go_proto",

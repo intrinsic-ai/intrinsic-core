@@ -84,7 +84,7 @@ cc_library(
         "@platforms//cpu:x86_64": ["-frounding-math"],
         "//conditions:default": [],
     }),
-    visibility = ["//intrinsic/geometry/processing/processors:__pkg__"],
+    visibility = ["//intrinsic_runtime/intrinsic/geometry/processing/processors:__pkg__"],
     deps = [
         "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
         "//intrinsic_runtime/intrinsic/geometry/internal/indexed_triangle_set_3",

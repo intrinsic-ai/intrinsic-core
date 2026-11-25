@@ -23,11 +23,11 @@ cc_library(
     srcs = ["noop_processor.cc"],
     hdrs = ["noop_processor.h"],
     deps = [
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "@abseil-cpp//absl/status:statusor",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
 
@@ -42,12 +42,12 @@ cc_library(
     }),
     deps = [
         "//intrinsic/geometry/api:compute_convex_hull",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/status:statusor",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
 
@@ -62,14 +62,14 @@ cc_library(
     }),
     deps = [
         "//intrinsic/geometry/api:construct_alpha_hull",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "@abseil-cpp//absl/memory",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
 
@@ -79,9 +79,8 @@ cc_library(
     hdrs = ["mesh_simplification_processor.h"],
     deps = [
         "//intrinsic/geometry/api:simplify_mesh_strict_memoize",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/geometry/internal/util:timeout_predicate",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/util:proto_time",
@@ -92,6 +91,7 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
         "@abseil-cpp//absl/time",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
 
@@ -100,8 +100,7 @@ cc_library(
     srcs = ["scale_processor.cc"],
     hdrs = ["scale_processor.h"],
     deps = [
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/api:apply_transform",
@@ -111,6 +110,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
 
@@ -125,8 +125,7 @@ cc_library(
     }),
     deps = [
         "//intrinsic/geometry/api:compute_coacd",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
@@ -134,6 +133,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
 
@@ -144,8 +144,7 @@ cc_library(
     deps = [
         "//intrinsic/geometry/api:remesh_mesh",
         "//intrinsic/geometry/api:remesh_mesh_memoize",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
@@ -155,6 +154,7 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
 
@@ -164,8 +164,7 @@ cc_library(
     hdrs = ["visual_simplification_processor.h"],
     deps = [
         "//intrinsic/geometry/api:simplify_preserving_appearance_memoize",
-        "//intrinsic/geometry/processing:pipeline_config_cc_proto",
-        "//intrinsic/geometry/processing:processor",
+        "//intrinsic_runtime/intrinsic/geometry/processing:processor",
         "//intrinsic_runtime/intrinsic/longrunning/cc:operation_context",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
@@ -173,5 +172,6 @@ cc_library(
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings:str_format",
+        "@intrinsic_apis//intrinsic/geometry/processing:pipeline_config_cc_proto",
     ],
 )
