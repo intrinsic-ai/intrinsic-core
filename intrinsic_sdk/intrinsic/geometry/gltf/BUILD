@@ -22,11 +22,6 @@ cc_library(
     name = "gltf_io",
     srcs = ["gltf_io.cc"],
     hdrs = ["gltf_io.h"],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-    ],
     deps = [
         "@abseil-cpp//absl/log",
         "@abseil-cpp//absl/status",
@@ -41,11 +36,6 @@ cc_library(
     name = "gltf_materials",
     srcs = ["gltf_materials.cc"],
     hdrs = ["gltf_materials.h"],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-    ],
     deps = [
         "@abseil-cpp//absl/strings:string_view",
         "@tinygltf",
@@ -56,10 +46,6 @@ cc_library(
     name = "gltf_merge",
     srcs = ["gltf_merge.cc"],
     hdrs = ["gltf_merge.h"],
-    visibility = [
-        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-    ],
     deps = [
         "@abseil-cpp//absl/strings",
         "@tinygltf",
@@ -87,11 +73,6 @@ cc_library(
     name = "gltf_validation",
     srcs = ["gltf_validation.cc"],
     hdrs = ["gltf_validation.h"],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-    ],
     deps = [
         ":gltf_accessor",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
@@ -106,11 +87,6 @@ cc_library(
     name = "gltf_buffer_reader",
     srcs = ["gltf_buffer_reader.cc"],
     hdrs = ["gltf_buffer_reader.h"],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-    ],
     deps = [
         ":gltf_accessor",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
@@ -125,11 +101,6 @@ cc_library(
     name = "gltf_buffer_writer",
     srcs = ["gltf_buffer_writer.cc"],
     hdrs = ["gltf_buffer_writer.h"],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic_runtime/intrinsic/scene:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-    ],
     deps = [
         ":gltf_accessor",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",

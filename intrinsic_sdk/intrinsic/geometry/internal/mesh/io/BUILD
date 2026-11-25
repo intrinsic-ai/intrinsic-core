@@ -16,15 +16,16 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
+package(default_visibility = [
+    "//intrinsic/geometry:__subpackages__",
+    "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+    "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+])
+
 cc_library(
     name = "ai_scene_to_mesh",
     srcs = ["ai_scene_to_mesh.cc"],
     hdrs = ["ai_scene_to_mesh.h"],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
-    ],
     deps = [
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:concatenate_meshes",
@@ -38,13 +39,6 @@ cc_library(
     name = "load_ai_scene_from_buffer",
     srcs = ["load_ai_scene_from_buffer.cc"],
     hdrs = ["load_ai_scene_from_buffer.h"],
-    visibility = [
-        "//intrinsic/geometry/api:__pkg__",
-        "//intrinsic_runtime/intrinsic/geometry/internal/legacy/point_cloud:__pkg__",
-        "//intrinsic_sdk/intrinsic/geometry/api:__pkg__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
-    ],
     deps = [
         ":restrict_importer",
         "//intrinsic_sdk/intrinsic/eigenmath",
@@ -63,11 +57,6 @@ cc_library(
     name = "restrict_importer",
     srcs = ["restrict_importer.cc"],
     hdrs = ["restrict_importer.h"],
-    visibility = [
-        "//intrinsic/geometry:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
-    ],
     deps = [
         "@abseil-cpp//absl/strings",
         "@assimp",
@@ -78,11 +67,6 @@ cc_library(
     name = "load_ai_scene_from_file",
     srcs = ["load_ai_scene_from_file.cc"],
     hdrs = ["load_ai_scene_from_file.h"],
-    visibility = [
-        "//intrinsic_sdk/intrinsic/geometry/api:__pkg__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
-    ],
     deps = [
         ":restrict_importer",
         "//intrinsic_sdk/intrinsic/eigenmath",
@@ -106,7 +90,6 @@ cc_library(
     visibility = [
         "//intrinsic_runtime/intrinsic/scene/sdf:__pkg__",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh:__pkg__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
         "//intrinsic_sdk/intrinsic/scene/sdf:__pkg__",
     ],
     deps = [
@@ -126,10 +109,6 @@ cc_library(
     name = "mesh_to_ai_scene",
     srcs = ["mesh_to_ai_scene.cc"],
     hdrs = ["mesh_to_ai_scene.h"],
-    visibility = [
-        "//intrinsic_sdk/intrinsic/geometry/internal/mesh/io:__pkg__",
-        "//intrinsic_sdk/intrinsic/geometry/internal/util:__pkg__",
-    ],
     deps = [
         "//intrinsic_sdk/intrinsic/geometry/api:material",
         "//intrinsic_sdk/intrinsic/geometry/internal/mesh",

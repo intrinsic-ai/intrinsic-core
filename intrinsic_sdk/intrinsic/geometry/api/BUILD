@@ -16,7 +16,7 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic:intrinsic_internal"])
+package(default_visibility = ["//visibility:public"])
 
 cc_library(
     name = "affine_transform_of",

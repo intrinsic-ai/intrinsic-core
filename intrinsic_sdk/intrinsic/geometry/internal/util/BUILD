@@ -16,7 +16,11 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = ["//intrinsic:intrinsic_internal"])
+package(default_visibility = [
+    "//intrinsic/geometry:__subpackages__",
+    "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+    "//intrinsic_sdk/intrinsic/geometry:__subpackages__",
+])
 
 cc_library(
     name = "eigen_serialization",
