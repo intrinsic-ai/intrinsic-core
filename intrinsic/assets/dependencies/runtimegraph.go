@@ -277,10 +277,17 @@ func (v *processAssetUsageVisitor) Visit(ctx context.Context, element behaviortr
 	}
 
 	if call := node.GetTask().GetCallBehavior(); call != nil {
+		var dynamicFields []graph.DynamicConfigFieldPath
+		for _, assignment := range call.GetAssignments() {
+			if assignment.GetParameterPath() != "" {
+				dynamicFields = append(dynamicFields, graph.DynamicConfigFieldPath(assignment.GetParameterPath()))
+			}
+		}
 		assetID := call.GetSkillId()
 		v.usages[assetID] = append(v.usages[assetID], graph.AssetUsage{
-			SourceDescription: fmt.Sprintf("Skill node %q", node.GetName()),
-			Configuration:     call.GetParameters(),
+			SourceDescription:   fmt.Sprintf("Skill node %q", node.GetName()),
+			Configuration:       call.GetParameters(),
+			DynamicConfigFields: dynamicFields,
 		})
 	}
 

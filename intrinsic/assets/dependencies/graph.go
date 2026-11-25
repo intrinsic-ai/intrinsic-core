@@ -40,6 +40,14 @@ import (
 	anypb "google.golang.org/protobuf/types/known/anypb"
 )
 
+// DynamicConfigFieldPath is the path to a field in an Asset's configuration whose value may be
+// assigned at runtime (e.g., by a parameter assignment on a behavior tree node), and so may be
+// absent from the static configuration.
+//
+// It uses proto text field names separated by ".", and "[i]" for elements of repeated fields
+// (e.g., "nested.deps[1]"). Map fields are not supported.
+type DynamicConfigFieldPath string
+
 // AssetUsage is usage of an Asset within the definition of another Asset.
 type AssetUsage struct {
 	// SourceDescription will be shown to users (e.g., in errors) as the name for
@@ -50,6 +58,14 @@ type AssetUsage struct {
 	// Optional config applied to the reference within the Asset. This must be
 	// resolvable using the descriptor set for the Asset being referenced.
 	Configuration *anypb.Any
+	// DynamicConfigFields are the paths of fields in Configuration whose values may be assigned at
+	// runtime.
+	//
+	// During validation, a dependency is skipped, whether or not it is set in Configuration, if its
+	// path equals one of these paths, if one of these paths is a parent of it (e.g., "cfg" for
+	// "cfg.dep" or "deps" for "deps[0]"), or if one of these paths is a sub-field of it (e.g.,
+	// "dep.name" for "dep").
+	DynamicConfigFields []DynamicConfigFieldPath
 }
 
 // ReferencedAsset is an Asset referenced by another Asset. Referenced Assets
@@ -614,7 +630,7 @@ func nodeFromInstance(instanceName string, sc *SolutionContext) (*node, error) {
 		return nil, nil
 	}
 
-	deps, err := collectDependencies(instance.Config, fds)
+	deps, err := collectDependencies(instance.Config, fds, nil)
 	if err != nil {
 		return nil, fmt.Errorf("failed to traverse resolved dependencies for instance %q: %w", instance.Name, err)
 	}
@@ -651,15 +667,38 @@ func nodeFromAsset(assetID string, sc *SolutionContext) (*node, error) {
 	}, nil
 }
 
+func isDynamic(path string, dynamicFields []DynamicConfigFieldPath) bool {
+	for _, df := range dynamicFields {
+		f := string(df)
+		if f == path {
+			return true
+		}
+		// f is a parent of the field (e.g., "cfg" for "cfg.dep" or "deps" for "deps[0]").
+		if strings.HasPrefix(path, f+".") || strings.HasPrefix(path, f+"[") {
+			return true
+		}
+		// f is a sub-field of the field (e.g., "dep.name" for "dep").
+		if strings.HasPrefix(f, path+".") {
+			return true
+		}
+	}
+	return false
+}
+
 // collectDependencies collects dependencies for an Asset or Asset instance from the provided
 // configuration and file descriptor set.
 //
 // It traverses through the config message and finds dependencies configured through
 // the `ResolvedDependency` fields.
-func collectDependencies(config *anypb.Any, fds *descriptorpb.FileDescriptorSet) ([]*dependency, error) {
+//
+// Required dependency fields that are covered by one of dynamicFields are skipped.
+func collectDependencies(config *anypb.Any, fds *descriptorpb.FileDescriptorSet, dynamicFields []DynamicConfigFieldPath) ([]*dependency, error) {
 	var deps []*dependency
 	err := traversal.ForEachResolvedDependency(config, fds, func(dep *dependencypb.Dependency, msg *rdpb.ResolvedDependency, field traversal.FieldContext) (*rdpb.ResolvedDependency, error) {
 		if (msg == nil || msg.GetName() == "") && field.Optional {
+			return nil, nil
+		}
+		if isDynamic(field.Path, dynamicFields) {
 			return nil, nil
 		}
 		deps = append(deps, &dependency{
@@ -689,7 +728,7 @@ func extractDependenciesFromReferences(references map[string]ReferencedAsset, sc
 	for _, refID := range refIDs {
 		reference := references[refID]
 		for _, usage := range reference.Usages {
-			deps, err := extractDependenciesFromConfiguration(refID, usage.Configuration, sc)
+			deps, err := extractDependenciesFromConfiguration(refID, usage, sc)
 			if err != nil {
 				return nil, fmt.Errorf("failed to extract dependencies: %w", err)
 			}
@@ -709,9 +748,9 @@ func extractDependenciesFromReferences(references map[string]ReferencedAsset, sc
 	return dependencies, nil
 }
 
-func extractDependenciesFromConfiguration(referenceID string, usageConfiguration *anypb.Any, sc *SolutionContext) ([]*dependency, error) {
+func extractDependenciesFromConfiguration(referenceID string, usage AssetUsage, sc *SolutionContext) ([]*dependency, error) {
 	info, ok := sc.Assets[referenceID]
-	if !ok || info.FileDescriptorSet == nil || usageConfiguration == nil {
+	if !ok || info.FileDescriptorSet == nil || usage.Configuration == nil {
 		return nil, nil
 	}
 	hasDeps, err := info.hasDependencies()
@@ -721,5 +760,5 @@ func extractDependenciesFromConfiguration(referenceID string, usageConfiguration
 	if !hasDeps {
 		return nil, nil
 	}
-	return collectDependencies(usageConfiguration, info.FileDescriptorSet)
+	return collectDependencies(usage.Configuration, info.FileDescriptorSet, usage.DynamicConfigFields)
 }
