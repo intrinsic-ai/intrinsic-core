@@ -16,10 +16,24 @@
 
 import abc
 import datetime
+import enum
 from typing import Optional
 
 from intrinsic.executive.proto import behavior_call_pb2
 from intrinsic.solutions import blackboard_value
+from intrinsic.solutions import utils
+
+
+@utils.protoenum(
+    proto_enum_type=(
+        behavior_call_pb2.BehaviorCall.SkillExecutionOptions.ConflictHandlingMode
+    ),
+    unspecified_proto_enum_map_to_none=(
+        behavior_call_pb2.BehaviorCall.SkillExecutionOptions.CONFLICT_HANDLING_MODE_UNSPECIFIED
+    ),
+)
+class ConflictHandlingMode(enum.Enum):
+  """Specifies how resource conflicts are handled when executing a skill."""
 
 
 class ActionBase(abc.ABC):
@@ -31,6 +45,7 @@ class ActionBase(abc.ABC):
   def __init__(self):
     self._project_timeout: Optional[datetime.timedelta] = None
     self._execute_timeout: Optional[datetime.timedelta] = None
+    self._conflict_handling_mode: Optional[ConflictHandlingMode] = None
 
   @property
   @abc.abstractmethod
@@ -68,3 +83,14 @@ class ActionBase(abc.ABC):
   @project_timeout.setter
   def project_timeout(self, timeout: datetime.timedelta) -> None:
     self._project_timeout = timeout
+
+  @property
+  def conflict_handling_mode(self) -> Optional[ConflictHandlingMode]:
+    """Conflict handling mode to use when executing the action."""
+    return self._conflict_handling_mode
+
+  @conflict_handling_mode.setter
+  def conflict_handling_mode(
+      self, mode: Optional[ConflictHandlingMode]
+  ) -> None:
+    self._conflict_handling_mode = mode

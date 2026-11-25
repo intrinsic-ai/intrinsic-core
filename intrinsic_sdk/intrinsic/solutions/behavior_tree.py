@@ -143,6 +143,7 @@ NodeInTreeType = Union[
 generate_unique_node_id = bt_util.generate_unique_node_id
 
 ActionBase = _actions_internal.ActionBase
+ConflictHandlingMode = _actions_internal.ConflictHandlingMode
 CodeExecution = _code_execution_internal.CodeExecution
 PythonScript = _code_execution_internal.PythonScript
 get_function_body_as_str = _code_execution_internal.get_function_body_as_str

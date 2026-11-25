@@ -904,6 +904,10 @@ class GeneratedSkill(provided.SkillBase):
       proto.skill_execution_options.project_timeout.FromTimedelta(
           self._project_timeout
       )
+    if self._conflict_handling_mode is not None:
+      proto.skill_execution_options.conflict_handling_mode = (
+          self._conflict_handling_mode.value
+      )
 
     if self._param_message is not None:
       proto.parameters.Pack(

@@ -64,6 +64,7 @@ py_library(
     srcs = ["actions.py"],
     deps = [
         "//intrinsic_sdk/intrinsic/solutions:blackboard_value",
+        "//intrinsic_sdk/intrinsic/solutions:utils",
         "@intrinsic_apis//intrinsic/executive/proto:behavior_call_py_pb2",
     ],
 )
