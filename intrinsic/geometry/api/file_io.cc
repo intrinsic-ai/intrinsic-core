@@ -47,6 +47,7 @@
 #include "intrinsic/geometry/api/renderable.h"
 #include "intrinsic/geometry/internal/legacy/point_cloud/ai_scene_to_point_cloud.h"
 #include "intrinsic/geometry/internal/mesh/io/ai_scene_to_mesh.h"
+#include "intrinsic/geometry/internal/mesh/io/check_gltf_binary_header.h"
 #include "intrinsic/geometry/internal/mesh/io/load_ai_scene_from_buffer.h"
 #include "intrinsic/geometry/internal/mesh/io/restrict_importer.h"
 #include "intrinsic/geometry/internal/mesh/mesh.h"
@@ -220,6 +221,7 @@ absl::StatusOr<Geometry> LoadMeshBufferToGeometry(
         "loading mesh from buffer. Supported extensions are: $1",
         extension, absl::StrJoin(SupportedMeshExtensions(), ", ")));
   }
+  INTR_RETURN_IF_ERROR(CheckGltfBinaryJsonLength(file_content, extension));
   Assimp::Importer importer;
   // Make sure no extra transform is added by assimp.
   importer.SetPropertyInteger(AI_CONFIG_IMPORT_COLLADA_IGNORE_UP_DIRECTION, 1);

@@ -40,6 +40,7 @@ cc_library(
     srcs = ["load_ai_scene_from_buffer.cc"],
     hdrs = ["load_ai_scene_from_buffer.h"],
     deps = [
+        ":check_gltf_binary_header",
         ":restrict_importer",
         "//intrinsic_sdk/intrinsic/eigenmath",
         "//intrinsic_sdk/intrinsic/geometry/internal/point_cloud:pts_to_ai_scene",
@@ -50,6 +51,20 @@ cc_library(
         "@abseil-cpp//absl/status:statusor",
         "@abseil-cpp//absl/strings",
         "@assimp",
+    ],
+)
+
+cc_library(
+    name = "check_gltf_binary_header",
+    srcs = ["check_gltf_binary_header.cc"],
+    hdrs = ["check_gltf_binary_header.h"],
+    visibility = [
+        "//intrinsic/geometry/api:__pkg__",
+    ],
+    deps = [
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
     ],
 )
 
