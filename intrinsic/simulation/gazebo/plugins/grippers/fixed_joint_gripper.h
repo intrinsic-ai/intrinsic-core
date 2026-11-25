@@ -16,13 +16,16 @@
 #define INTRINSIC_SIMULATION_GAZEBO_PLUGINS_GRIPPERS_FIXED_JOINT_GRIPPER_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <vector>
 
+#include "absl/base/thread_annotations.h"
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/time.h"
 #include "gz/sim/Entity.hh"
 #include "gz/sim/EntityComponentManager.hh"
@@ -58,9 +61,11 @@ class FixedJointGripper {
       ::gz::sim::EntityComponentManager& ecm);
 
   void OnCommand(
-      const intrinsic_proto::simulation::gazebo::GripperCommand& command);
-  const intrinsic_proto::simulation::gazebo::GripperCommand& GetCommand()
-      const {
+      const intrinsic_proto::simulation::gazebo::GripperCommand& command)
+      ABSL_LOCKS_EXCLUDED(command_mutex_);
+  intrinsic_proto::simulation::gazebo::GripperCommand GetCommand() const
+      ABSL_LOCKS_EXCLUDED(command_mutex_) {
+    absl::MutexLock lock(command_mutex_);
     return command_;
   }
   const intrinsic_proto::simulation::gazebo::GripperStatus& GetStatus() const {
@@ -132,15 +137,20 @@ class FixedJointGripper {
   // not yet removed. They must not be traversed when computing the contact
   // surface.
   absl::flat_hash_set<::gz::sim::Entity> released_payload_joints_;
-  // Tool links on which this gripper created the Interaction(kRobotTip)
-  // component (so that it can be removed again when the link is detached).
-  absl::flat_hash_set<::gz::sim::Entity> tagged_tool_links_;
+  // Tool links on which this gripper set Interaction(kRobotTip), mapped to
+  // their previous InteractionType (or std::nullopt if they had no Interaction
+  // component before attachment) so it can be restored when detached.
+  absl::flat_hash_map<::gz::sim::Entity, std::optional<int>>
+      previous_tool_link_interactions_;
 
-  intrinsic_proto::simulation::gazebo::GripperCommand command_;
+  mutable absl::Mutex command_mutex_;
+  intrinsic_proto::simulation::gazebo::GripperCommand command_
+      ABSL_GUARDED_BY(command_mutex_);
   intrinsic_proto::simulation::gazebo::GripperStatus status_;
   double grasp_debounce_time_seconds_;
   // Time the last attach or detach occurred.
-  absl::Time time_last_action_change_ = absl::InfinitePast();
+  absl::Time time_last_action_change_ ABSL_GUARDED_BY(command_mutex_) =
+      absl::InfinitePast();
 
   // Cached values of ArticulationType for links that the gripper has been in
   // contact with. The cache is periodically cleared by updating the

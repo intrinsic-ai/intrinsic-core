@@ -25,12 +25,10 @@
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/functional/any_invocable.h"
-#include "absl/functional/bind_front.h"
 #include "absl/log/check.h"
 #include "absl/log/log.h"
 #include "absl/status/status.h"
 #include "absl/time/time.h"
-#include "gloop/util/gtl/iterator_adaptors.h"
 #include "gz/common/Profiler.hh"
 #include "gz/math/AxisAlignedBox.hh"
 #include "gz/math/Vector3.hh"
@@ -46,6 +44,7 @@
 #include "gz/sim/components/ContactSensorData.hh"
 #include "gz/sim/components/DetachableJoint.hh"
 #include "gz/sim/components/Link.hh"
+#include "gz/sim/components/PoseCmd.hh"
 #include "intrinsic/simulation/gazebo/components/interaction_component.h"
 #include "intrinsic/simulation/gazebo/plugins/link_device_util.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -149,13 +148,10 @@ void ObjectInteractionModerator::Configure(
     return;
   }
 
-  // Add AxisAlignedBox component to parent model
-  self_aabb_component_ = ecm.CreateComponent(
-      model.Entity(), gz::sim::components::AxisAlignedBox());
-  if (self_aabb_component_ == nullptr) {
-    LOG(ERROR) << "Couldn't create AxisAlignedBox component for object "
-               << " model " << name_;
-  }
+  // Ensure AxisAlignedBox component exists on parent model.
+  model_entity_ = model.Entity();
+  gz::sim::enableComponent<gz::sim::components::AxisAlignedBox>(
+      ecm, model_entity_, /*_enable=*/true);
 
   bool success = false;
   std::tie(robot_tip_proximity_aabb_scale_, success) = sdf->Get(
@@ -188,25 +184,58 @@ void ObjectInteractionModerator::PreUpdate(
     return;
   }
 
-  for (const auto& [link_entity, model_entity] : robot_tip_model_entities_) {
-    if (robot_tip_aabb_components_.find(link_entity) ==
-        robot_tip_aabb_components_.end()) {
-      // Create AxisAlignedBox component for all robot tips as we use the
-      // computed bounding boxes for proximity checks.
-      gz::sim::Model model(model_entity);
-      robot_tip_aabb_components_[link_entity] = ecm.CreateComponent(
-          model.Entity(), gz::sim::components::AxisAlignedBox());
-      if (robot_tip_aabb_components_[link_entity] == nullptr) {
-        LOG(ERROR) << "Couldn't create AxisAlignedBox component for robot tip "
-                   << " model " << model.Name(ecm);
-      }
+  for (auto& [link_entity, tip] : robot_tips_) {
+    if (!tip.aabb_ensured && ecm.HasEntity(tip.model)) {
+      gz::sim::enableComponent<gz::sim::components::AxisAlignedBox>(
+          ecm, tip.model, /*_enable=*/true);
+      tip.aabb_ensured = true;
+    }
+  }
+
+  if (non_robot_detachable_joint_ != kNullEntity &&
+      !ecm.HasEntity(non_robot_detachable_joint_)) {
+    non_robot_detachable_joint_ = kNullEntity;
+    if (interaction_state_ == kTouchingNonRobotObject ||
+        interaction_state_ == kSettlingOnNonRobotObject) {
+      LOG(INFO) << "Non-robot detachable joint for object " << name_
+                << " was removed externally. Resetting state to free.";
+      attached_to_link_ = kNullEntity;
+      interaction_state_ = kFree;
+    } else {
+      LOG(INFO) << "Non-robot detachable joint for object " << name_
+                << " was removed externally.";
+    }
+  }
+  // Forget surface joints whose removal we requested once the ECM has processed
+  // their removal. In SimulationRunner this happens after PostUpdate; checking
+  // HasEntity defensively keeps any still-present joint (e.g., in tests that
+  // defer removal) from being mistaken for an external attachment.
+  absl::erase_if(removed_non_robot_detachable_joints_,
+                 [&ecm](Entity joint) { return !ecm.HasEntity(joint); });
+
+  if (ecm.EntityHasComponentType(model_entity_,
+                                 gz::sim::components::WorldPoseCmd::typeId)) {
+    if (non_robot_detachable_joint_ != kNullEntity) {
+      LOG(INFO) << "Removing non-robot detachable joint for object " << name_
+                << " due to pending WorldPoseCmd.";
+      INTR_RETURN_IF_ERROR(RemoveNonRobotDetachableJoint(ecm))
+          .With(intrinsic::ExtraMessage()
+                << "Couldn't remove non-robot detachable joint for object "
+                << name_ << ": ")
+          .LogError()
+          .With([](const absl::Status& s) { return; });
+    }
+    if (interaction_state_ == kTouchingNonRobotObject ||
+        interaction_state_ == kSettlingOnNonRobotObject) {
+      attached_to_link_ = kNullEntity;
+      interaction_state_ = kFree;
     }
   }
 
   // Update components as per new state.
   // If state is kFree, nothing to do
-  // If state is kProximityToRobotObject, remove DetachableComponent.
-  // If state is kAttachedToRobotObject, nothing to do.
+  // If state is kProximityToRobotObject or kAttachedToRobotObject, remove
+  // non-robot DetachableJoint if present.
   // If state is kSettlingOnNonRobotObject, nothing to do
   // If state is kTouchingNonRobotObject, add DetachableComponent with
   // attached_to_link_ if not.
@@ -214,21 +243,17 @@ void ObjectInteractionModerator::PreUpdate(
     case kFree: {
       break;
     }
-    case kProximityToRobotObject: {
+    case kProximityToRobotObject:
+    case kAttachedToRobotObject: {
       if (non_robot_detachable_joint_ != kNullEntity) {
         LOG(INFO) << "Removing non-robot detachable joint for object " << name_;
-        INTR_RETURN_IF_ERROR(
-            RemoveDetachableJoint(non_robot_detachable_joint_, ecm))
+        INTR_RETURN_IF_ERROR(RemoveNonRobotDetachableJoint(ecm))
             .With(intrinsic::ExtraMessage()
                   << "Couldn't remove non-robot detachable joint for object "
                   << name_ << ": ")
             .LogError()
             .With([](const absl::Status& s) { return; });
-        non_robot_detachable_joint_ = kNullEntity;
       }
-      break;
-    }
-    case kAttachedToRobotObject: {
       break;
     }
     case kSettlingOnNonRobotObject: {
@@ -265,20 +290,31 @@ void ObjectInteractionModerator::PostUpdate(
     return;
   }
 
+  absl::flat_hash_set<Entity> active_robot_tips;
   ecm.Each<gz::sim::components::Link, Interaction>(
-      [this, &ecm](const Entity& link_entity,
-                   const gz::sim::components::Link* link_component,
-                   const Interaction* interaction_component) -> bool {
-        if (!robot_tip_link_names_.contains(link_entity) &&
+      [this, &ecm, &active_robot_tips](
+          const Entity& link_entity,
+          const gz::sim::components::Link* link_component,
+          const Interaction* interaction_component) -> bool {
+        if (link_entity != link_.Entity() &&
             interaction_component->Data() == InteractionType::kRobotTip) {
-          robot_tip_link_names_[link_entity] = GetEntityName(link_entity, ecm);
-          gz::sim::Link link(link_entity);
-          std::optional<gz::sim::Model> model = link.ParentModel(ecm);
-          CHECK(model.has_value());
-          robot_tip_model_entities_[link_entity] = model->Entity();
+          active_robot_tips.insert(link_entity);
+          if (!robot_tips_.contains(link_entity)) {
+            if (std::optional<gz::sim::Model> model =
+                    gz::sim::Link(link_entity).ParentModel(ecm);
+                model.has_value()) {
+              robot_tips_[link_entity] = RobotTipInfo{
+                  .model = model->Entity(),
+                  .link_name = GetEntityName(link_entity, ecm),
+              };
+            }
+          }
         }
         return true;
       });
+  absl::erase_if(robot_tips_, [&active_robot_tips](const auto& entry) {
+    return !active_robot_tips.contains(entry.first);
+  });
 
   UpdateState(ecm, absl::FromChrono(info.dt));
 }
@@ -286,33 +322,45 @@ void ObjectInteractionModerator::PostUpdate(
 void ObjectInteractionModerator::UpdateState(
     const gz::sim::EntityComponentManager& ecm, absl::Duration dt) {
   // Allowed state transitions:
+  // kFree -> (has external DetachableJoint) -> kAttachedToRobotObject
   // kFree -> (is close to a robot tool link) -> kProximityToRobotObject
-  // kFree -> (is in contact with one or more non-robot object links) ->
-  //   kSettlingOnNonRobotObject (or kTouchingNonRobotObject if deactivation
-  //   time is zero).
+  // kFree -> (no pending WorldPoseCmd and is in contact with one or more
+  //   non-robot object links) -> kSettlingOnNonRobotObject (or
+  //   kTouchingNonRobotObject if deactivation time is zero).
   // Note: Contacts with other non-robot floating objects are ignored.
 
+  // kSettlingOnNonRobotObject -> (has external DetachableJoint) ->
+  //   kAttachedToRobotObject
+  // kSettlingOnNonRobotObject -> (is close to a robot tool link) ->
+  //   kProximityToRobotObject
+  // kSettlingOnNonRobotObject -> (has pending WorldPoseCmd or lost contact with
+  //   non-robot object) -> kFree
   // kSettlingOnNonRobotObject -> (is at rest and remains in contact with
   //   non-robot object links for a certain period of time) ->
   //   kTouchingNonRobotObject
-  // kSettlingOnNonRobotObject -> (is close to a robot tool link) ->
-  //   kProximityToRobotObject
-  // kSettlingOnNonRobotObject -> (lost contact with non-robot object) ->
-  //   kFree
 
-  // kProximityToRobotObject -> (has DetachableComponent with robot link) ->
+  // kProximityToRobotObject -> (has external DetachableJoint) ->
   //   kAttachedToRobotObject
   // kProximityToRobotObject -> (not close to a robot tool link any more) ->
   //   kFree
 
-  // kAttachedToRobotObject -> (doesn't have DetachableComponent with robot
-  //   link) -> kProximityToRobotObject
+  // kAttachedToRobotObject -> (doesn't have external DetachableJoint and is
+  //   close to a robot tool link) -> kProximityToRobotObject
+  // kAttachedToRobotObject -> (doesn't have external DetachableJoint and is not
+  //   close to a robot tool link) -> kFree
   // Note: We don't allow directly transitioning from kAttachedToRobotObject to
-  // kTouchingNonRobotObject to ensure that the DetachableComponent is first
+  // kTouchingNonRobotObject to ensure that the DetachableJoint is first
   // removed and then added again.
 
+  // kTouchingNonRobotObject -> (has external DetachableJoint) ->
+  //   kAttachedToRobotObject
   // kTouchingNonRobotObject -> (is close to a robot tool link) ->
   //   kProximityToRobotObject
+  // kTouchingNonRobotObject -> (has pending WorldPoseCmd and surface
+  //   DetachableJoint is not present) -> kFree
+  // Note: PreUpdate also resets kTouchingNonRobotObject /
+  // kSettlingOnNonRobotObject to kFree when the surface DetachableJoint is
+  // removed externally or when WorldPoseCmd is present.
 
   InteractionState new_state = interaction_state_;
 
@@ -328,12 +376,18 @@ void ObjectInteractionModerator::UpdateState(
   LazyInitialized<std::optional<Entity>> attached_to_robot_link(
       [this, &ecm]() { return CheckAttachedToRobot(ecm); });
 
+  const bool has_world_pose_cmd = ecm.EntityHasComponentType(
+      model_entity_, gz::sim::components::WorldPoseCmd::typeId);
+
   // Check for transitions.
   switch (interaction_state_) {
     case kFree: {
-      if (robot_tip_link_in_proximity().has_value()) {
+      if (attached_to_robot_link().has_value()) {
+        new_state = kAttachedToRobotObject;
+      } else if (robot_tip_link_in_proximity().has_value()) {
         new_state = kProximityToRobotObject;
-      } else if (!non_robot_object_links_in_contact().empty()) {
+      } else if (!has_world_pose_cmd &&
+                 !non_robot_object_links_in_contact().empty()) {
         if (deactivation_time_ > absl::ZeroDuration()) {
           new_state = kSettlingOnNonRobotObject;
         } else {
@@ -352,14 +406,19 @@ void ObjectInteractionModerator::UpdateState(
     }
     case kAttachedToRobotObject: {
       if (!attached_to_robot_link().has_value()) {
-        new_state = kProximityToRobotObject;
+        new_state = robot_tip_link_in_proximity().has_value()
+                        ? kProximityToRobotObject
+                        : kFree;
       }
       break;
     }
     case kSettlingOnNonRobotObject: {
-      if (robot_tip_link_in_proximity().has_value()) {
+      if (attached_to_robot_link().has_value()) {
+        new_state = kAttachedToRobotObject;
+      } else if (robot_tip_link_in_proximity().has_value()) {
         new_state = kProximityToRobotObject;
-      } else if (non_robot_object_links_in_contact().empty()) {
+      } else if (has_world_pose_cmd ||
+                 non_robot_object_links_in_contact().empty()) {
         new_state = kFree;
       } else if (CheckReadyToDeactivate(ecm, dt)) {
         new_state = kTouchingNonRobotObject;
@@ -367,8 +426,13 @@ void ObjectInteractionModerator::UpdateState(
       break;
     }
     case kTouchingNonRobotObject: {
-      if (robot_tip_link_in_proximity().has_value()) {
+      if (attached_to_robot_link().has_value()) {
+        new_state = kAttachedToRobotObject;
+      } else if (robot_tip_link_in_proximity().has_value()) {
         new_state = kProximityToRobotObject;
+      } else if (has_world_pose_cmd &&
+                 non_robot_detachable_joint_ == kNullEntity) {
+        new_state = kFree;
       }
       break;
     }
@@ -389,10 +453,11 @@ void ObjectInteractionModerator::UpdateState(
       CHECK(robot_tip_link_in_proximity().has_value());
       CHECK(!attached_to_robot_link().has_value());
       attached_to_link_ = kNullEntity;
-      LOG(INFO) << "Object " << name_ << " in state " << interaction_state_
-                << " is close to robot link "
-                << robot_tip_link_names_[robot_tip_link_in_proximity().value()]
-                << ". Switching to state " << new_state;
+      LOG(INFO)
+          << "Object " << name_ << " in state " << interaction_state_
+          << " is close to robot link "
+          << robot_tips_.at(robot_tip_link_in_proximity().value()).link_name
+          << ". Switching to state " << new_state;
       break;
     }
     case kAttachedToRobotObject: {
@@ -431,19 +496,24 @@ ObjectInteractionModerator::CheckProximityToRobotTip(
   // We check for proximity by testing whether the AABB for this object's model
   // intersects the AABB of a robot tip model. To add a margin to the check,
   // both AABBs are first scaled up.
-  AxisAlignedBox self_aabb = self_aabb_component_->Data();
-  if (self_aabb.Volume() == 0) {
+  std::optional<AxisAlignedBox> self_aabb =
+      ecm.ComponentData<gz::sim::components::AxisAlignedBox>(model_entity_);
+  if (!self_aabb.has_value() || self_aabb->Volume() == 0) {
     // The bounding box is uninitialized, so skip proximity check.
     return std::nullopt;
   }
 
   AxisAlignedBox self_aabb_scaled =
-      ScaledBoundingBox(self_aabb, robot_tip_proximity_aabb_scale_);
+      ScaledBoundingBox(*self_aabb, robot_tip_proximity_aabb_scale_);
 
-  for (const auto& [link_entity, aabb_component] : robot_tip_aabb_components_) {
-    gz::sim::Link robot_link(link_entity);
-    AxisAlignedBox aabb_scaled = ScaledBoundingBox(
-        aabb_component->Data(), robot_tip_proximity_aabb_scale_);
+  for (const auto& [link_entity, tip] : robot_tips_) {
+    std::optional<AxisAlignedBox> tip_aabb =
+        ecm.ComponentData<gz::sim::components::AxisAlignedBox>(tip.model);
+    if (!tip_aabb.has_value() || tip_aabb->Volume() == 0) {
+      continue;
+    }
+    AxisAlignedBox aabb_scaled =
+        ScaledBoundingBox(*tip_aabb, robot_tip_proximity_aabb_scale_);
     if (self_aabb_scaled.Intersects(aabb_scaled)) {
       return link_entity;
     }
@@ -497,15 +567,23 @@ ObjectInteractionModerator::CheckContactToNonRobotObject(
       // robot tip.
       gz::sim::Link parent_link(parent_link_entity);
       std::optional<gz::sim::Model> model = parent_link.ParentModel(ecm);
-      CHECK(model.has_value());
-      if (absl::c_none_of(
-              gtl::value_view(robot_tip_model_entities_),
-              absl::bind_front(std::equal_to<Entity>(), model->Entity()))) {
+      if (model.has_value() &&
+          absl::c_none_of(robot_tips_, [&](const auto& entry) {
+            return entry.second.model == model->Entity();
+          })) {
         objects_in_contact.insert(parent_link_entity);
       }
     }
   }
   return objects_in_contact;
+}
+
+absl::Status ObjectInteractionModerator::RemoveNonRobotDetachableJoint(
+    gz::sim::EntityComponentManager& ecm) {
+  INTR_RETURN_IF_ERROR(RemoveDetachableJoint(non_robot_detachable_joint_, ecm));
+  removed_non_robot_detachable_joints_.insert(non_robot_detachable_joint_);
+  non_robot_detachable_joint_ = kNullEntity;
+  return absl::OkStatus();
 }
 
 std::optional<gz::sim::Entity> ObjectInteractionModerator::CheckAttachedToRobot(
@@ -516,13 +594,11 @@ std::optional<gz::sim::Entity> ObjectInteractionModerator::CheckAttachedToRobot(
       [this, &robot_link](
           const Entity& joint,
           const gz::sim::components::DetachableJoint* component) {
-        if (component->Data().childLink == link_.Entity()) {
-          Entity parent = component->Data().parentLink;
-          // If parent link is known to be a robot tip, return it.
-          if (robot_tip_model_entities_.contains(parent)) {
-            robot_link = parent;
-            return false;
-          }
+        if (component->Data().childLink == link_.Entity() &&
+            joint != non_robot_detachable_joint_ &&
+            !removed_non_robot_detachable_joints_.contains(joint)) {
+          robot_link = component->Data().parentLink;
+          return false;
         }
         return true;
       });
@@ -547,6 +623,14 @@ bool ObjectInteractionModerator::CheckReadyToDeactivate(
 
 void ObjectInteractionModerator::UpdateContactSensorDataComponents(
     gz::sim::EntityComponentManager& ecm, absl::Duration sim_time) {
+  // When this object's link is promoted to kRobotTip (e.g. a detachable finger
+  // attached to a FixedJointGripper), the gripper manages ContactSensorData on
+  // its collision shapes; avoid overwriting it here.
+  if (ecm.ComponentData<Interaction>(link_.Entity()) ==
+      InteractionType::kRobotTip) {
+    return;
+  }
+
   bool need_contact_sensor_data;
   switch (interaction_state_) {
     case kFree: {

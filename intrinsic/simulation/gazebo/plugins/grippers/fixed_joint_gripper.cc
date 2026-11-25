@@ -18,8 +18,10 @@
 #include <memory>
 #include <optional>
 #include <string>
+#include <vector>
 
 #include "absl/base/log_severity.h"
+#include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/flag.h"
 #include "absl/log/check.h"
@@ -27,6 +29,7 @@
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
+#include "absl/synchronization/mutex.h"
 #include "absl/time/clock.h"
 #include "absl/time/time.h"
 #include "gz/sim/Entity.hh"
@@ -35,6 +38,7 @@
 #include "gz/sim/Util.hh"
 #include "gz/sim/components/ChildLinkName.hh"
 #include "gz/sim/components/ContactSensorData.hh"
+#include "gz/sim/components/DetachableJoint.hh"
 #include "gz/sim/components/JointType.hh"
 #include "gz/sim/components/Name.hh"
 #include "gz/sim/components/ParentLinkName.hh"
@@ -168,6 +172,10 @@ void FixedJointGripper::MaybeRefreshContactSurface(
     detachable_joint_entity_ = kNullEntity;
     grasped_object_link_entity_ = kNullEntity;
     status_.set_grasp_status(GripperStatus::DETACHED);
+    {
+      absl::MutexLock lock(command_mutex_);
+      command_.set_command(GripperCommand::RELEASE);
+    }
   }
   // Forget released payload joints once the ECM has processed their removal.
   absl::erase_if(released_payload_joints_,
@@ -199,7 +207,7 @@ void FixedJointGripper::RefreshContactSurface(
       [&](const Entity& entity, const Interaction* interaction) -> bool {
         if (interaction->Data() == InteractionType::kRobotTip &&
             entity != gripper_link_.Entity() &&
-            !tagged_tool_links_.contains(entity)) {
+            !previous_tool_link_interactions_.contains(entity)) {
           stop_links.insert(entity);
         }
         return true;
@@ -209,30 +217,38 @@ void FixedJointGripper::RefreshContactSurface(
       gripper_link_.Entity(), ecm, exclude_joints, stop_links);
   attached_links.erase(gripper_link_.Entity());
 
-  // Tool links that are no longer attached.
+  // Tool links that are no longer attached: restore their previous Interaction
+  // component (or remove it if they had none prior to attachment).
   for (Entity link : tool_link_entities_) {
     if (attached_links.contains(link)) continue;
     LOG(INFO) << "Link '" << EntityName(link, ecm)
               << "' is no longer part of the contact surface of gripper "
               << plugin_name_;
-    if (tagged_tool_links_.erase(link) > 0 && ecm.HasEntity(link)) {
-      ecm.RemoveComponent<Interaction>(link);
+    if (auto it = previous_tool_link_interactions_.find(link);
+        it != previous_tool_link_interactions_.end()) {
+      if (ecm.HasEntity(link)) {
+        if (it->second.has_value()) {
+          ecm.SetComponentData<Interaction>(link, *it->second);
+        } else {
+          ecm.RemoveComponent<Interaction>(link);
+        }
+      }
+      previous_tool_link_interactions_.erase(it);
     }
   }
-  // Newly attached tool links. Mark them as robot tips (unless they already
-  // carry an Interaction component, e.g. from an ObjectInteractionModerator) so
-  // that floating objects in their proximity are simulated accurately.
+  // Newly attached tool links. Mark them as robot tips (saving any existing
+  // InteractionType, such as kFloatingObject from ObjectInteractionModerator,
+  // so it can be restored on detach). This lets ObjectInteractionModerator
+  // wake up workpieces in proximity to the attached fingers and yield
+  // ContactSensorData ownership on the finger collisions to the gripper.
   for (Entity link : attached_links) {
     if (tool_link_entities_.contains(link)) continue;
     LOG(INFO) << "Link '" << EntityName(link, ecm)
               << "' is now part of the contact surface of gripper "
               << plugin_name_;
-    if (!ecm.EntityHasComponentType(link, Interaction::typeId)) {
-      if (ecm.CreateComponent(link, Interaction(InteractionType::kRobotTip)) !=
-          nullptr) {
-        tagged_tool_links_.insert(link);
-      }
-    }
+    previous_tool_link_interactions_[link] =
+        ecm.ComponentData<Interaction>(link);
+    ecm.SetComponentData<Interaction>(link, InteractionType::kRobotTip);
   }
   tool_link_entities_ = std::move(attached_links);
 
@@ -261,6 +277,7 @@ void FixedJointGripper::RefreshContactSurface(
 
 void FixedJointGripper::OnCommand(const GripperCommand& command_msg) {
   auto command = command_msg.command();
+  absl::MutexLock lock(command_mutex_);
   if (command == command_.command()) return;
 
   if (command == GripperCommand::UNKNOWN) {
@@ -295,7 +312,9 @@ void FixedJointGripper::OnCommand(const GripperCommand& command_msg) {
 void FixedJointGripper::ProcessCommand(gz::sim::EntityComponentManager& ecm) {
   MaybeRefreshContactSurface(ecm);
 
-  if (command_.command() == GripperCommand::GRASP && !IsGrasping()) {
+  const GripperCommand::Command current_command = GetCommand().command();
+
+  if (current_command == GripperCommand::GRASP && !IsGrasping()) {
     if (grasped_object_link_entity_ != kNullEntity) {
       absl::StatusOr<Entity> detachable_joint = AddDetachableJoint(
           gripper_link_.Entity(), grasped_object_link_entity_, ecm);
@@ -318,8 +337,8 @@ void FixedJointGripper::ProcessCommand(gz::sim::EntityComponentManager& ecm) {
 
   // TODO(b/244454115): Treat blowoff on as a release request. Implement a
   // physical blowoff force when needed.
-  if ((command_.command() == GripperCommand::RELEASE ||
-       command_.command() == GripperCommand::BLOWOFF_ON) &&
+  if ((current_command == GripperCommand::RELEASE ||
+       current_command == GripperCommand::BLOWOFF_ON) &&
       IsGrasping()) {
     const std::string grasped_object_name =
         EntityName(grasped_object_link_entity_, ecm);
@@ -420,9 +439,79 @@ void FixedJointGripper::UpdateGraspedObject(
   }
 
   grasped_object_link_entity_ = kNullEntity;
+  if (colliding_links.empty()) return;
+
+  const Entity gripper_top_model =
+      gz::sim::topLevelModel(gripper_link_.Entity(), ecm);
+  const absl::flat_hash_set<Entity> excluded_joints = ExcludedPayloadJoints();
+  absl::flat_hash_map<Entity, std::vector<Entity>>
+      detachable_parents_by_child_model;
+  ecm.Each<gz::sim::components::DetachableJoint>(
+      [&](const Entity& joint,
+          const gz::sim::components::DetachableJoint* comp) -> bool {
+        if (excluded_joints.contains(joint)) return true;
+        const Entity child_model =
+            gz::sim::topLevelModel(comp->Data().childLink, ecm);
+        if (child_model != kNullEntity &&
+            comp->Data().parentLink != kNullEntity) {
+          detachable_parents_by_child_model[child_model].push_back(
+              comp->Data().parentLink);
+        }
+        return true;
+      });
+
+  // Returns true if `candidate_model` is attached via active DetachableJoint(s)
+  // to this gripper's top-level model (e.g. an opposing actuated jaw), another
+  // kRobotTip gripper, or an articulated robot link, while still allowing
+  // floating workpieces temporarily welded to a kFixed/static surface by
+  // ObjectInteractionModerator.
+  auto is_attached_to_robot_or_gripper = [&](Entity candidate_model) -> bool {
+    absl::flat_hash_set<Entity> visited_models{candidate_model};
+    std::vector<Entity> stack{candidate_model};
+    while (!stack.empty()) {
+      const Entity current_model = stack.back();
+      stack.pop_back();
+      auto it = detachable_parents_by_child_model.find(current_model);
+      if (it == detachable_parents_by_child_model.end()) continue;
+      for (const Entity parent_link_entity : it->second) {
+        const Entity parent_top_model =
+            gz::sim::topLevelModel(parent_link_entity, ecm);
+        if (parent_top_model == gripper_top_model ||
+            ecm.ComponentData<Interaction>(parent_link_entity) ==
+                InteractionType::kRobotTip) {
+          return true;
+        }
+        gz::sim::Link parent_link(parent_link_entity);
+        if (!parent_link.Valid(ecm)) continue;
+        absl::StatusOr<ArticulationType> parent_articulation =
+            GetArticulationType(parent_link, ecm);
+        if (parent_articulation.ok()) {
+          link_to_articulation_type_cache_[parent_link_entity] =
+              *parent_articulation;
+          if (*parent_articulation == ArticulationType::kArticulated) {
+            return true;
+          }
+        }
+        if (parent_top_model != kNullEntity &&
+            visited_models.insert(parent_top_model).second) {
+          stack.push_back(parent_top_model);
+        }
+      }
+    }
+    return false;
+  };
 
   // grasp the first non-static, floating object.
   for (const auto& link_entity : colliding_links) {
+    if (ecm.ComponentData<Interaction>(link_entity) ==
+        InteractionType::kRobotTip) {
+      continue;
+    }
+    const Entity candidate_model = gz::sim::topLevelModel(link_entity, ecm);
+    if (candidate_model == kNullEntity ||
+        candidate_model == gripper_top_model) {
+      continue;
+    }
     gz::sim::Link link(link_entity);
     if (link.Valid(ecm)) {
       INTR_ASSIGN_OR_RETURN(
@@ -432,7 +521,8 @@ void FixedJointGripper::UpdateGraspedObject(
               .With(ReturnVoid()));
       link_to_articulation_type_cache_[link_entity] = articulation;
       if (articulation == ArticulationType::kFloating &&
-          !link.ParentModel(ecm)->Static(ecm)) {
+          !link.ParentModel(ecm)->Static(ecm) &&
+          !is_attached_to_robot_or_gripper(candidate_model)) {
         grasped_object_link_entity_ = link_entity;
         break;
       }
@@ -448,7 +538,7 @@ void FixedJointGripper::UpdateContactSensorDataComponent(
     gz::sim::EntityComponentManager& ecm) const {
   if (collision_test_entities_.empty()) return;
   const bool need_contact_sensor_data =
-      command_.command() == GripperCommand::GRASP && !IsGrasping();
+      GetCommand().command() == GripperCommand::GRASP && !IsGrasping();
   if (absl::GetFlag(FLAGS_fixed_joint_gripper_keep_contact_sensor_data) &&
       !need_contact_sensor_data) {
     return;

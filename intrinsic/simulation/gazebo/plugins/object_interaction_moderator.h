@@ -23,6 +23,7 @@
 #include "absl/container/flat_hash_map.h"
 #include "absl/container/flat_hash_set.h"
 #include "absl/flags/declare.h"
+#include "absl/status/status.h"
 #include "absl/time/time.h"
 #include "gz/sim/Entity.hh"
 #include "gz/sim/EntityComponentManager.hh"
@@ -122,19 +123,28 @@ class ObjectInteractionModerator : public gz::sim::System,
                    absl::Duration dt);
   void UpdateContactSensorDataComponents(gz::sim::EntityComponentManager& ecm,
                                          absl::Duration sim_time);
+  absl::Status RemoveNonRobotDetachableJoint(
+      gz::sim::EntityComponentManager& ecm);
+
+  struct RobotTipInfo {
+    gz::sim::Entity model = gz::sim::kNullEntity;
+    std::string link_name;
+    bool aabb_ensured = false;
+  };
 
   std::string name_;
-  gz::sim::components::AxisAlignedBox* self_aabb_component_ = nullptr;
+  gz::sim::Entity model_entity_ = gz::sim::kNullEntity;
   gz::sim::Link link_;
   std::vector<gz::sim::Entity> link_collision_entities_;
-  absl::flat_hash_map<gz::sim::Entity, gz::sim::components::AxisAlignedBox*>
-      robot_tip_aabb_components_;
-  absl::flat_hash_map<gz::sim::Entity, std::string> robot_tip_link_names_;
-  absl::flat_hash_map<gz::sim::Entity, gz::sim::Entity>
-      robot_tip_model_entities_;
+  absl::flat_hash_map<gz::sim::Entity, RobotTipInfo> robot_tips_;
   InteractionState interaction_state_ = InteractionState::kFree;
   gz::sim::Entity attached_to_link_ = gz::sim::kNullEntity;
   gz::sim::Entity non_robot_detachable_joint_ = gz::sim::kNullEntity;
+  // Surface joints whose removal this moderator requested but which the ECM has
+  // not yet removed (entity removal is processed after PostUpdate). Tracked so
+  // CheckAttachedToRobot does not misidentify them as external attachments on
+  // the same tick.
+  absl::flat_hash_set<gz::sim::Entity> removed_non_robot_detachable_joints_;
 
   static constexpr double kDefaultRobotTipProximityAABBScale = 1.1;
   static constexpr char kRobotTipProximityAABBScaleTag[] =
