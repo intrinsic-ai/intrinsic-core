@@ -48,7 +48,23 @@ service ContentAddressableStorageService {
       returns (StartResumableWriteResponse) {}
 
   // Stream data chunks to an active resumable upload session.
-  rpc WriteObject(stream WriteObjectRequest) returns (WriteObjectResponse) {}
+  //
+  // Clients may set `flush` to request durable persistence; the server may
+  // delay flushes to respect storage rate limits and responds with monotonic
+  // `persisted_size` values (not guaranteed 1:1 with flush requests). Clients
+  // must read responses concurrently with sending to avoid flow-control
+  // deadlock.
+  //
+  // Ending the stream:
+  //  - `finish_write = true`: finalizes the object and sends a final response
+  //    with `object_id` and `persisted_size`.
+  //  - Half-close without `finish_write`: persists received bytes, sends a
+  //    final `persisted_size`, and ends with OK (resumable from that offset).
+  //  - Error: the server may have persisted bytes beyond the last response;
+  //    call QueryWriteStatus (retrying ABORTED until the lease clears) to find
+  //    the resume offset.
+  rpc WriteObject(stream WriteObjectRequest)
+      returns (stream WriteObjectResponse) {}
 
   // Query the server's persisted byte offset and completion status for an
   // upload session.
@@ -140,8 +156,11 @@ message WriteObjectRequest {
   string upload_id = 1;
 
   // Required on the FIRST message of each WriteObject stream. Must equal the
-  // server's `persisted_size` (0 on the initial stream, or the value returned
-  // by QueryWriteStatus when resuming).
+  // server's `persisted_size`: 0 on the initial stream; when resuming, the
+  // value returned by QueryWriteStatus, or the `persisted_size` of the last
+  // response of a previous stream that ended with OK. After a stream ends with
+  // an error, the server may have persisted more bytes than the last
+  // acknowledged `persisted_size`; use QueryWriteStatus to find out.
   // For subsequent messages in the same stream, offsets are implicit (bytes
   // are appended sequentially).
   optional int64 write_offset = 2;
@@ -155,11 +174,24 @@ message WriteObjectRequest {
   // move/compose the object into its final CAS key, and return
   // `object_id`.
   bool finish_write = 4;
+
+  // If true, the server durably persists all bytes received on this stream so
+  // far (including this message's `checksummed_data`) and acknowledges them
+  // with a WriteObjectResponse carrying the updated `persisted_size`. Once
+  // acknowledged, these bytes never need to be resent. Ignored if
+  // `finish_write` is true.
+  bool flush = 5;
 }
 
 message WriteObjectResponse {
-  // Populated ONLY when `finish_write = true` succeeded.
+  // Populated ONLY in the final response after `finish_write = true`
+  // succeeded.
   string object_id = 1;
+
+  // Total number of contiguous bytes from offset 0 that the server has durably
+  // persisted for the upload session. Set in every response. Never decreases
+  // within a stream.
+  int64 persisted_size = 2;
 }
 
 message QueryWriteStatusRequest {
