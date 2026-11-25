@@ -170,7 +170,7 @@ common --@ffmpeg//:enable_libaom_av1_encoder=True
 # Disable OpenCV's DNN module by default so @opencv//:objdetect, :features, and :video
 # do not compile or link :dnn and its ONNX protobuf dependencies, enable Eigen
 # integration across OpenCV modules (:core, :calib, :geometry), and set the CPU
-# SIMD baseline to SSE4.2 (matching --copt=-mcrc32 while keeping 16-byte Eigen
+# SIMD baseline to SSE4.2 (matching --copt=-msse4.2 while keeping 16-byte Eigen
 # alignment until b/451846278 enables -mavx2 workspace-wide).
 common --@opencv//:with_dnn=False
 common --@opencv//:with_eigen=True
@@ -231,7 +231,7 @@ common:benchmark --features=-prefer_pic_for_opt_binaries
 
 # --config haswell for building for the Haswell architecture.
 common:haswell --cpu=haswell
-common:haswell --copt=-mcrc32
+common:haswell --copt=-msse4.2
 
 # Address sanitizer
 common:asan --strip=never

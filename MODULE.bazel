@@ -497,7 +497,7 @@ use_repo(js_rules, "intrinsic_js_rules")
 # Bazel dependencies #
 ######################
 
-bazel_dep(name = "abseil-cpp", version = "20250814.2")
+bazel_dep(name = "abseil-cpp", version = "20260107.1")
 bazel_dep(name = "abseil-py", version = "2.1.0", repo_name = "com_google_absl_py")
 bazel_dep(name = "aom", version = "3.13.3.bcr.1")  
 bazel_dep(name = "aravis", version = "0.9.3-20261012091930-45bea4098b23")  

@@ -95,9 +95,14 @@ platform(
     # Build for the Haswell architecture when this platform is the target
     # platform. The flags are set on the platform rather than in .bazelrc so
     # that they are not applied to other target platforms, e.g. linux_arm64.
+    #
+    # -msse4.2 (which includes CRC32) must be the baseline for every target:
+    # abseil's inline hashing picks a different algorithm depending on whether
+    # __SSE4_2__ is defined, so code built with e.g. -mavx2 and code built
+    # without SSE4.2 would hash the same keys differently.
     flags = [
         "--cpu=haswell",
-        "--copt=-mcrc32",
+        "--copt=-msse4.2",
     ],
     parents = ["@platforms//host"],
 )
