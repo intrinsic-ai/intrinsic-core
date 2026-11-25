@@ -38,33 +38,6 @@ Mesh& Mesh::operator=(Mesh&& other) noexcept {
 
 Mesh Mesh::Clone() const { return Mesh(vertices_, faces_); }
 
-bool Mesh::TriangleForFace(unsigned int face_index, Triangle* t) const {
-  if (face_index >= face_count()) {
-    return false;
-  }
-
-  const auto& f = face(face_index);
-  *t = Triangle{vertex(f(0)), vertex(f(1)), vertex(f(2))};
-  return true;
-}
-
-Triangle Mesh::TriangleForFace(unsigned int face_index) const {
-  CHECK_LT(face_index, face_count());
-
-  const auto& f = faces_[face_index];
-  return Triangle{vertex(f(0)), vertex(f(1)), vertex(f(2))};
-}
-
-Triangle Mesh::TriangleForFace(
-    unsigned int face_index,
-    const eigenmath::AffineTransform3d& ref_t_geo) const {
-  CHECK_LT(face_index, face_count());
-
-  const auto& f = face(face_index);
-  return Triangle{ref_t_geo * vertex(f(0)), ref_t_geo * vertex(f(1)),
-                  ref_t_geo * vertex(f(2))};
-}
-
 Mesh& Mesh::Append(const Mesh& other_mesh) {
   size_t offset = vertices_.size();
   vertices_.insert(vertices_.end(), other_mesh.vertices_.begin(),
@@ -73,12 +46,6 @@ Mesh& Mesh::Append(const Mesh& other_mesh) {
     faces_.push_back(
         Face(face[0] + offset, face[1] + offset, face[2] + offset));
   }
-  return *this;
-}
-
-Mesh& Mesh::AppendVertices(const Mesh& other_mesh) {
-  vertices_.insert(vertices_.end(), other_mesh.vertices_.begin(),
-                   other_mesh.vertices_.end());
   return *this;
 }
 

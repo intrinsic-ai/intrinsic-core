@@ -85,22 +85,6 @@ class Mesh {
     return faces_[index];
   }
 
-  // If face_index is a valid face, returns true and puts the vertices for that
-  // face in the output params.
-  bool TriangleForFace(unsigned int face_index, Triangle* t) const;
-
-  // If face_index is a valid face, returns triangle representing it.
-  Triangle TriangleForFace(unsigned int face_index) const;
-
-  // If face_index is a valid face, returns triangle representing it,
-  // transformed by ref_t_geo.
-  // This is equivalent to
-  // this->Transform(ref_t_geo).TriangleForFace(face_index), but significantly
-  // more performant for a single triangle.
-  //
-  Triangle TriangleForFace(unsigned int face_index,
-                           const eigenmath::AffineTransform3d& ref_t_geo) const;
-
   // Returns all faces as triangles.
   inline std::vector<Triangle> ExtractTriangles() const {
     std::vector<Triangle> result;
@@ -115,10 +99,6 @@ class Mesh {
   // Appends other_mesh's faces and vertices to this mesh
   // Returns a reference to this mesh to facilitate chaining calls
   Mesh& Append(const Mesh& other_mesh);
-
-  // Appends just the vertices of other_mesh to this mesh
-  // Returns a reference to this mesh to facilitate chaining calls
-  Mesh& AppendVertices(const Mesh& other_mesh);
 
   // Transforms this mesh's vertices by the given pose
   // Returns a reference to this mesh to facilitate chaining calls
