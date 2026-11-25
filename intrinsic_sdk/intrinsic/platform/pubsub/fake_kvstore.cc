@@ -15,13 +15,19 @@
 #include "intrinsic/platform/pubsub/fake_kvstore.h"
 
 #include <cstddef>
+#include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
 
+#include "absl/base/thread_annotations.h"
+#include "absl/cleanup/cleanup.h"
 #include "absl/container/flat_hash_map.h"
+#include "absl/log/check.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/match.h"
@@ -34,6 +40,10 @@
 #include "intrinsic_sdk/intrinsic/middleware/buffers/buffer_factory.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
+#include "intrinsic/platform/pubsub/pubsub_callbacks.h"
+#include "intrinsic/platform/pubsub/subscription.h"
+#include "intrinsic/platform/pubsub/topic_config.h"
+#include "intrinsic/platform/pubsub/zenoh_subscription_data.h"
 #include "intrinsic/platform/pubsub/zenoh_util/zenoh_helpers.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -113,12 +123,23 @@ bool MatchesSegments(const std::vector<absl::string_view>& p_segs, size_t p_idx,
 
 }  // namespace
 
+FakeKeyValueStore::FakeKeyValueStore()
+    : FakeKeyValueStore(/*prefix_override=*/std::nullopt) {}
+
+FakeKeyValueStore::FakeKeyValueStore(std::optional<std::string> prefix_override)
+    : KeyValueStore(std::move(prefix_override)),
+      subscriptions_(std::make_shared<SubscriptionRegistry>()) {}
+
 absl::Status FakeKeyValueStore::Set(absl::string_view key,
                                     const google::protobuf::Any& value) {
   INTR_RETURN_IF_ERROR(ValidZenohKey(key));
 
-  absl::MutexLock lock(&mutex_);
-  store_[std::string(key)] = value;
+  {
+    absl::MutexLock lock(&mutex_);
+    store_[std::string(key)] = value;
+  }
+
+  NotifySubscribers(key, value);
   return absl::OkStatus();
 }
 
@@ -145,8 +166,12 @@ absl::Status FakeKeyValueStore::SetRaw(absl::string_view key,
                           CopyToImmutableBuffer(value.data(), value.size()));
   }
 
-  absl::MutexLock lock(&mutex_);
-  store_[std::string(key)] = value;
+  {
+    absl::MutexLock lock(&mutex_);
+    store_[std::string(key)] = value;
+  }
+
+  NotifySubscribers(key, value);
   return absl::OkStatus();
 }
 
@@ -191,19 +216,170 @@ absl::StatusOr<KVQuery> FakeKeyValueStore::GetAllRaw(
 absl::Status FakeKeyValueStore::Delete(absl::string_view key) {
   INTR_RETURN_IF_ERROR(ValidZenohKey(key));
 
-  absl::MutexLock lock(&mutex_);
-  auto it = store_.find(key);
-  if (it == store_.end()) {
-    return absl::NotFoundError(absl::StrCat("Key not found: ", key));
+  {
+    absl::MutexLock lock(&mutex_);
+    auto it = store_.find(key);
+    if (it == store_.end()) {
+      return absl::NotFoundError(absl::StrCat("Key not found: ", key));
+    }
+    store_.erase(it);
   }
-  store_.erase(it);
+
+  DispatchMatchingSubscriptions<DeletionCallback>(
+      key,
+      [](const SubscriptionRecord& record) -> const DeletionCallback* {
+        return record.deletion_callback != nullptr ? &record.deletion_callback
+                                                   : nullptr;
+      },
+      [](const DeletionCallback& callback, absl::string_view prefixed_key) {
+        callback(prefixed_key);
+      });
+
   return absl::OkStatus();
+}
+
+absl::StatusOr<Subscription> FakeKeyValueStore::CreateSubscription(
+    absl::string_view key_expression, const TopicConfig& /*config*/,
+    SubscriptionOkExpandedCallback<google::protobuf::Any> value_callback,
+    DeletionCallback deletion_callback) const {
+  return RegisterSubscription(key_expression, std::move(value_callback),
+                              std::move(deletion_callback));
+}
+
+absl::StatusOr<Subscription> FakeKeyValueStore::CreateRawSubscription(
+    absl::string_view key_expression, const TopicConfig& /*config*/,
+    SubscriptionOkExpandedCallback<ImmutableBuffer> value_callback,
+    DeletionCallback deletion_callback) const {
+  return RegisterSubscription(key_expression, std::move(value_callback),
+                              std::move(deletion_callback));
 }
 
 absl::StatusOr<google::protobuf::Any> FakeKeyValueStore::GetAny(
     absl::string_view key, absl::Duration timeout) {
   return GetTyped<google::protobuf::Any>(
       key, timeout, "' stores raw bytes, not a Protobuf message");
+}
+
+absl::StatusOr<std::vector<std::string>> FakeKeyValueStore::ExecuteList(
+    absl::string_view keyexpr, absl::Duration timeout) {
+  if (timeout < absl::ZeroDuration()) {
+    return absl::InvalidArgumentError("Timeout must be zero or positive");
+  }
+  INTR_RETURN_IF_ERROR(ValidZenohKeyexpr(keyexpr));
+
+  const std::vector<absl::string_view> pattern_segments =
+      absl::StrSplit(keyexpr, '/');
+  std::vector<std::string> keys;
+  absl::MutexLock lock(&mutex_);
+  for (const auto& [entry_key, unused_val] : store_) {
+    std::string prefixed_key = absl::StrCat(key_prefix(), "/", entry_key);
+    if (MatchesSegments(pattern_segments, 0, absl::StrSplit(prefixed_key, '/'),
+                        0)) {
+      keys.push_back(std::move(prefixed_key));
+    }
+  }
+  return keys;
+}
+
+absl::StatusOr<KVQuery> FakeKeyValueStore::ExecuteGetAll(
+    absl::string_view keyexpr, KeyValueCallback callback,
+    OnDoneCallback on_done, std::optional<absl::Duration> timeout) {
+  if (timeout.has_value() && *timeout < absl::ZeroDuration()) {
+    return absl::InvalidArgumentError("Timeout must be zero or positive");
+  }
+  return GetAll(keyexpr, std::move(callback), std::move(on_done));
+}
+
+absl::StatusOr<KVQuery> FakeKeyValueStore::ExecuteGetAllRaw(
+    absl::string_view keyexpr, RawKeyValueCallback callback,
+    OnDoneCallback on_done, RawQueryErrorCallback on_error,
+    std::optional<absl::Duration> timeout) {
+  if (timeout.has_value() && *timeout < absl::ZeroDuration()) {
+    return absl::InvalidArgumentError("Timeout must be zero or positive");
+  }
+  return GetAllRaw(keyexpr, std::move(callback), std::move(on_done),
+                   std::move(on_error));
+}
+
+// Snapshots matching subscription IDs under the registry lock and invokes each
+// stored callback in place outside the lock so callbacks preserve stateful
+// functor captures and can safely perform non-blocking writes, deletes, create
+// subscriptions, or unsubscribe other handles without lock inversion. Tracks
+// active callbacks per (id, thread_id) to fail fast if a callback tries to
+// Unsubscribe itself (which deadlocks real Zenoh).
+template <typename CallbackT, typename ExtractCallbackFn,
+          typename DispatchCallbackFn>
+void FakeKeyValueStore::DispatchMatchingSubscriptions(
+    absl::string_view key, ExtractCallbackFn extract_callback,
+    DispatchCallbackFn dispatch_callback) const {
+  std::shared_ptr<SubscriptionRegistry> registry = subscriptions_;
+  std::vector<uint64_t> matching_ids;
+
+  {
+    absl::MutexLock lock(&registry->mutex);
+    if (registry->subscriptions.empty()) {
+      return;
+    }
+    const std::vector<absl::string_view> key_segments =
+        absl::StrSplit(key, '/');
+    for (const auto& [id, record] : registry->subscriptions) {
+      if (extract_callback(*record) != nullptr &&
+          MatchesSegments(absl::StrSplit(record->key_expression, '/'), 0,
+                          key_segments, 0)) {
+        matching_ids.push_back(id);
+      }
+    }
+  }
+
+  if (matching_ids.empty()) {
+    return;
+  }
+
+  const std::string prefixed_key = absl::StrCat(key_prefix(), "/", key);
+  const std::thread::id tid = std::this_thread::get_id();
+  for (const uint64_t id : matching_ids) {
+    const CallbackT* cb = nullptr;
+    {
+      absl::MutexLock lock(&registry->mutex);
+      auto it = registry->subscriptions.find(id);
+      cb = (it != registry->subscriptions.end()) ? extract_callback(*it->second)
+                                                 : nullptr;
+      if (cb == nullptr) {
+        continue;
+      }
+      ++registry->active_callbacks[{id, tid}];
+    }
+    absl::Cleanup exit_callback = [&registry, id, tid]() {
+      absl::MutexLock lock(&registry->mutex);
+      auto it = registry->active_callbacks.find({id, tid});
+      if (it != registry->active_callbacks.end() && --it->second == 0) {
+        registry->active_callbacks.erase(it);
+      }
+    };
+    // `cb` points inside the heap-allocated SubscriptionRecord owned by
+    // `registry->subscriptions` (pinned by `registry`) or moved into `removed`
+    // by `Unsubscribe()`, which blocks on `active_callbacks` before destroying
+    // it outside `registry->mutex`.
+    dispatch_callback(*cb, prefixed_key);
+  }
+}
+
+template <typename T>
+void FakeKeyValueStore::NotifySubscribers(absl::string_view key,
+                                          const T& value) {
+  // Notify matching subscriptions outside store mutex to prevent deadlocks.
+  DispatchMatchingSubscriptions<SubscriptionOkExpandedCallback<T>>(
+      key,
+      [](const SubscriptionRecord& record)
+          -> const SubscriptionOkExpandedCallback<T>* {
+        const auto* cb =
+            std::get_if<SubscriptionOkExpandedCallback<T>>(&record.callback);
+        return (cb != nullptr && *cb != nullptr) ? cb : nullptr;
+      },
+      [&value](const SubscriptionOkExpandedCallback<T>& callback,
+               absl::string_view prefixed_key) {
+        callback(prefixed_key, value);
+      });
 }
 
 template <typename T>
@@ -261,45 +437,64 @@ absl::StatusOr<KVQuery> FakeKeyValueStore::CollectMatches(
   return KVQuery();
 }
 
-absl::StatusOr<std::vector<std::string>> FakeKeyValueStore::ExecuteList(
-    absl::string_view keyexpr, absl::Duration timeout) {
-  if (timeout < absl::ZeroDuration()) {
-    return absl::InvalidArgumentError("Timeout must be zero or positive");
-  }
-  INTR_RETURN_IF_ERROR(ValidZenohKeyexpr(keyexpr));
+absl::StatusOr<Subscription> FakeKeyValueStore::RegisterSubscription(
+    absl::string_view key_expression, SubscriptionValueCallback value_callback,
+    DeletionCallback deletion_callback) const {
+  INTR_RETURN_IF_ERROR(ValidZenohKeyexpr(key_expression));
 
-  const std::vector<absl::string_view> pattern_segments =
-      absl::StrSplit(keyexpr, '/');
-  std::vector<std::string> keys;
-  absl::MutexLock lock(&mutex_);
-  for (const auto& [entry_key, unused_val] : store_) {
-    std::string prefixed_key = absl::StrCat(key_prefix(), "/", entry_key);
-    if (MatchesSegments(pattern_segments, 0, absl::StrSplit(prefixed_key, '/'),
-                        0)) {
-      keys.push_back(std::move(prefixed_key));
-    }
+  uint64_t id = 0;
+  {
+    absl::MutexLock lock(&subscriptions_->mutex);
+    id = subscriptions_->next_id++;
+    subscriptions_->subscriptions.emplace(
+        id, std::make_unique<SubscriptionRecord>(SubscriptionRecord{
+                .key_expression = std::string(key_expression),
+                .callback = std::move(value_callback),
+                .deletion_callback = std::move(deletion_callback),
+            }));
   }
-  return keys;
-}
 
-absl::StatusOr<KVQuery> FakeKeyValueStore::ExecuteGetAll(
-    absl::string_view keyexpr, KeyValueCallback callback,
-    OnDoneCallback on_done, std::optional<absl::Duration> timeout) {
-  if (timeout.has_value() && *timeout < absl::ZeroDuration()) {
-    return absl::InvalidArgumentError("Timeout must be zero or positive");
-  }
-  return GetAll(keyexpr, std::move(callback), std::move(on_done));
-}
+  std::string prefixed_name = absl::StrCat(key_prefix(), "/", key_expression);
+  auto subscription_data = std::make_unique<SubscriptionData>();
+  subscription_data->prefixed_name = prefixed_name;
 
-absl::StatusOr<KVQuery> FakeKeyValueStore::ExecuteGetAllRaw(
-    absl::string_view keyexpr, RawKeyValueCallback callback,
-    OnDoneCallback on_done, RawQueryErrorCallback on_error,
-    std::optional<absl::Duration> timeout) {
-  if (timeout.has_value() && *timeout < absl::ZeroDuration()) {
-    return absl::InvalidArgumentError("Timeout must be zero or positive");
-  }
-  return GetAllRaw(keyexpr, std::move(callback), std::move(on_done),
-                   std::move(on_error));
+  // Use a weak pointer to the registry so destroying FakeKeyValueStore
+  // before Subscription will not cause a use-after-free on Unsubscribe.
+  subscription_data->custom_unsubscribe =
+      [weak_reg = std::weak_ptr<SubscriptionRegistry>(subscriptions_), id]() {
+        auto reg = weak_reg.lock();
+        if (reg == nullptr) {
+          return;
+        }
+        // Keep the removed record alive across `Await` and destroy it after
+        // unlocking `reg->mutex` so in-flight dispatches can keep calling
+        // `*cb` safely and captured destructors run outside the lock.
+        std::unique_ptr<SubscriptionRecord> removed;
+        {
+          absl::MutexLock lock(&reg->mutex);
+          CHECK(
+              !reg->active_callbacks.contains({id, std::this_thread::get_id()}))
+              << "Cannot Unsubscribe or destroy a Subscription from inside "
+                 "its own callback (deadlocks real Zenoh subscriptions)";
+          if (auto it = reg->subscriptions.find(id);
+              it != reg->subscriptions.end()) {
+            removed = std::move(it->second);
+            reg->subscriptions.erase(it);
+          }
+          auto no_active_for_id =
+              [&reg, id]() ABSL_SHARED_LOCKS_REQUIRED(reg->mutex) {
+                for (const auto& [key, count] : reg->active_callbacks) {
+                  if (key.first == id && count > 0) {
+                    return false;
+                  }
+                }
+                return true;
+              };
+          reg->mutex.Await(absl::Condition(&no_active_for_id));
+        }
+      };
+
+  return Subscription(prefixed_name, std::move(subscription_data));
 }
 
 }  // namespace intrinsic

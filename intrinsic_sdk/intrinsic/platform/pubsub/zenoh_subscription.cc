@@ -12,6 +12,7 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
+#include <functional>
 #include <memory>
 #include <string>
 #include <utility>
@@ -49,7 +50,13 @@ Subscription::~Subscription() { Unsubscribe(); }
 
 void Subscription::Unsubscribe() {
   if (!topic_name_.empty() && subscription_data_ != nullptr) {
-    if (subscription_data_->message_callback_functor != nullptr) {
+    topic_name_.clear();
+    // Move out before invoking in case teardown destroys `*this` or
+    // `subscription_data_`.
+    if (std::function<void()> unsubscribe =
+            std::exchange(subscription_data_->custom_unsubscribe, nullptr)) {
+      unsubscribe();
+    } else if (subscription_data_->message_callback_functor != nullptr) {
       Zenoh().imw_destroy_message_subscription(
           subscription_data_->prefixed_name.c_str(),
           zenoh_static_message_callback,
@@ -59,7 +66,6 @@ void Subscription::Unsubscribe() {
           subscription_data_->prefixed_name.c_str(), zenoh_static_callback,
           subscription_data_->callback_functor.get());
     }
-    topic_name_.clear();
   }
 }
 

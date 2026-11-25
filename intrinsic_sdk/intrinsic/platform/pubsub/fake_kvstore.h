@@ -15,8 +15,11 @@
 #ifndef INTRINSIC_PLATFORM_PUBSUB_FAKE_KVSTORE_H_
 #define INTRINSIC_PLATFORM_PUBSUB_FAKE_KVSTORE_H_
 
+#include <cstdint>
+#include <memory>
 #include <optional>
 #include <string>
+#include <thread>
 #include <utility>
 #include <variant>
 #include <vector>
@@ -31,6 +34,9 @@
 #include "google/protobuf/any.pb.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/immutable_buffer.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
+#include "intrinsic/platform/pubsub/pubsub_callbacks.h"
+#include "intrinsic/platform/pubsub/subscription.h"
+#include "intrinsic/platform/pubsub/topic_config.h"
 
 namespace intrinsic {
 
@@ -47,11 +53,12 @@ namespace intrinsic {
 //   // Pass kv_store to the class under test.
 class FakeKeyValueStore : public KeyValueStore {
  public:
-  FakeKeyValueStore() : KeyValueStore(/*prefix_override=*/std::nullopt) {}
-  explicit FakeKeyValueStore(std::optional<std::string> prefix_override)
-      : KeyValueStore(std::move(prefix_override)) {}
+  FakeKeyValueStore();
+  explicit FakeKeyValueStore(std::optional<std::string> prefix_override);
   ~FakeKeyValueStore() override = default;
 
+  using KeyValueStore::CreateRawSubscription;
+  using KeyValueStore::CreateSubscription;
   using KeyValueStore::GetAll;
   using KeyValueStore::GetAllRaw;
   using KeyValueStore::GetRaw;
@@ -89,6 +96,16 @@ class FakeKeyValueStore : public KeyValueStore {
 
   absl::Status Delete(absl::string_view key) override;
 
+  absl::StatusOr<Subscription> CreateSubscription(
+      absl::string_view key_expression, const TopicConfig& config,
+      SubscriptionOkExpandedCallback<google::protobuf::Any> value_callback,
+      DeletionCallback deletion_callback) const override;
+
+  absl::StatusOr<Subscription> CreateRawSubscription(
+      absl::string_view key_expression, const TopicConfig& config,
+      SubscriptionOkExpandedCallback<ImmutableBuffer> value_callback,
+      DeletionCallback deletion_callback) const override;
+
  protected:
   absl::StatusOr<google::protobuf::Any> GetAny(absl::string_view key,
                                                absl::Duration timeout) override;
@@ -106,6 +123,34 @@ class FakeKeyValueStore : public KeyValueStore {
       std::optional<absl::Duration> timeout) override;
 
  private:
+  using SubscriptionValueCallback =
+      std::variant<SubscriptionOkExpandedCallback<google::protobuf::Any>,
+                   SubscriptionOkExpandedCallback<ImmutableBuffer>>;
+
+  struct SubscriptionRecord {
+    std::string key_expression;
+    SubscriptionValueCallback callback;
+    DeletionCallback deletion_callback;
+  };
+
+  struct SubscriptionRegistry {
+    absl::Mutex mutex;
+    uint64_t next_id ABSL_GUARDED_BY(mutex) = 1;
+    absl::flat_hash_map<uint64_t, std::unique_ptr<SubscriptionRecord>>
+        subscriptions ABSL_GUARDED_BY(mutex);
+    absl::flat_hash_map<std::pair<uint64_t, std::thread::id>, int>
+        active_callbacks ABSL_GUARDED_BY(mutex);
+  };
+
+  template <typename CallbackT, typename ExtractCallbackFn,
+            typename DispatchCallbackFn>
+  void DispatchMatchingSubscriptions(
+      absl::string_view key, ExtractCallbackFn extract_callback,
+      DispatchCallbackFn dispatch_callback) const;
+
+  template <typename T>
+  void NotifySubscribers(absl::string_view key, const T& value);
+
   template <typename T>
   absl::StatusOr<T> GetTyped(absl::string_view key, absl::Duration timeout,
                              absl::string_view mismatch_error);
@@ -115,10 +160,16 @@ class FakeKeyValueStore : public KeyValueStore {
                                          CallbackFn callback, EmitFn emit,
                                          OnDoneCallback on_done);
 
+  absl::StatusOr<Subscription> RegisterSubscription(
+      absl::string_view key_expression,
+      SubscriptionValueCallback value_callback,
+      DeletionCallback deletion_callback) const;
+
   absl::Mutex mutex_;
   absl::flat_hash_map<std::string,
                       std::variant<google::protobuf::Any, ImmutableBuffer>>
       store_ ABSL_GUARDED_BY(mutex_);
+  std::shared_ptr<SubscriptionRegistry> subscriptions_;
 };
 
 }  // namespace intrinsic

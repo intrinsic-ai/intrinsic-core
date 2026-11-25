@@ -15,6 +15,7 @@
 #ifndef INTRINSIC_PLATFORM_PUBSUB_ZENOH_SUBSCRIPTION_DATA_H_
 #define INTRINSIC_PLATFORM_PUBSUB_ZENOH_SUBSCRIPTION_DATA_H_
 
+#include <functional>
 #include <memory>
 #include <string>
 
@@ -25,6 +26,7 @@ namespace intrinsic {
 struct SubscriptionData {
   std::unique_ptr<imw_callback_functor_t> callback_functor;
   std::unique_ptr<imw_message_callback_functor_t> message_callback_functor;
+  std::function<void()> custom_unsubscribe;
   std::string prefixed_name;
 };
 
