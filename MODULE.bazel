@@ -608,7 +608,7 @@ bazel_dep(name = "opencensus-cpp", version = "0.0.0-20230502-50eb5de.bcr.3", rep
 bazel_dep(name = "opencv", version = "5.1.0.bcr.3")  
 bazel_dep(name = "opengl-registry", version = "0.0.0-20250707", repo_name = "opengl_registry")  
 bazel_dep(name = "openmesh", version = "11.0")  
-bazel_dep(name = "opentelemetry-cpp", version = "1.24.0", repo_name = "io_opentelemetry_cpp")  
+bazel_dep(name = "opentelemetry-cpp", version = "1.29.0", repo_name = "io_opentelemetry_cpp")  
 bazel_dep(name = "opentelemetry-proto", version = "1.8.0", repo_name = "opentelemetry_proto")  
 bazel_dep(name = "openusd", version = "25.11.bcr.3")
 bazel_dep(name = "or-tools", version = "9.15", repo_name = "or_tools")
