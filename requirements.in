@@ -63,6 +63,7 @@ beautifulsoup4==4.13.4
 blender-headless @ https://us-central1-python.pkg.dev/intrinsic-mirror/intrinsic-public-python/blender-headless/blender_headless-4.2.6-cp311-cp311-manylinux_2_28_x86_64.whl
 cachetools==5.5.2
 cadexchanger==3.20.0.17379
+crc32c==2.7.1
 cryptography==45.0.7
 chex==0.1.89
 clu==0.0.12
@@ -179,6 +180,7 @@ rich==14.2.0
 # NOTE later versions require libspatialindex: https://toblerity.org/rtree/install.html#nix
 rtree==1.0.1
 safetensors==0.6.2
+scalpl==0.4.2
 # TODO(b/465356132): Remove or use the public version of SERL once we contributed our changes.
 serl_launcher @ https://github.com/moritzknaust/serl/archive/4705fd6a8c4102ac534bbfa8febce2b1f11ee7b9.zip#subdirectory=serl_launcher
 scikit-learn==1.7.0

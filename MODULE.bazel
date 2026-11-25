@@ -874,12 +874,6 @@ oci.pull(
     image = "us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/zenohd:1.8.0",
     platforms = ["linux/amd64"],
 )
-oci.pull(
-    name = "storage_testbench",
-    digest = "sha256:06729d407e8bba055798707dccfffd1f792ea818937954c56a776811116ede5c",
-    image = "gcr.io/cloud-devrel-public-resources/storage-testbench",
-    platforms = ["linux/amd64"],
-)
 
 # NOTE: Bazel reports wrong usage of the repos as a warning
 # BUG: https://github.com/bazel-contrib/rules_oci/issues/727
@@ -904,8 +898,6 @@ use_repo(
     "python3_linux_amd64",  
     "ssh_certificate_provider_base",  
     "ssh_certificate_provider_base_linux_amd64",  
-    "storage_testbench",  
-    "storage_testbench_linux_amd64",  
     "tensorflow-gpu",  
     "tensorflow-gpu_linux_amd64",  
     "tensorflow_serving",  
