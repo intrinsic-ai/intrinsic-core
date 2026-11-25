@@ -45,7 +45,7 @@ spec:
             # conductor querying for execution_context via kv store may falsely return key_not_found error.
             - zenoh-router.app-intrinsic-base.svc.cluster.local:7447
             - --
-            - intrinsic/world/binary/world_binary
+            - /intrinsic_runtime/intrinsic/world/binary/world_binary
             - --port=8080
             - --cas_service_address=content-addressable-storage.app-intrinsic-base.svc.cluster.local:9747
             - --resource_registry_address=resource-registry.app-intrinsic-base.svc.cluster.local:8080

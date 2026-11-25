@@ -82,6 +82,11 @@ cc_oci_image(
     files = [
         "//intrinsic/kubernetes/waitforservices",
     ],
+
+    # TODO(b/477580650): Remove once waitforservices is migrated out of google3.
+    symlinks = {
+        "/intrinsic_runtime/intrinsic/kubernetes/waitforservices/waitforservices": "/google3/intrinsic/kubernetes/waitforservices/waitforservices",
+    },
     visibility = [
         "//intrinsic_runtime/kubernetes/intrinsic_base:__pkg__",
     ],
