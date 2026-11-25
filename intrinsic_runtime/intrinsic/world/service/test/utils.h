@@ -16,9 +16,11 @@
 #define INTRINSIC_WORLD_SERVICE_TEST_UTILS_H_
 
 #include <memory>
+#include <optional>
 #include <string>
 
 #include "absl/log/check.h"
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "absl/strings/string_view.h"
 #include "grpcpp/server_builder.h"
@@ -40,6 +42,17 @@ struct WorldServers {
 // with a world service.
 absl::StatusOr<WorldServers> InitializeWorldService(
     absl::string_view world_gzf_path);
+
+// Applies an ObjectWorldUpdates textproto (resolved into runfiles) to `world`.
+absl::Status ApplyObjectWorldUpdatesFromFile(
+    World& world, absl::string_view updates_pbtxt_path);
+
+// Initializes a FakeWorldService and geo::InMemoryGeometryService from a
+// SceneObject .gzf file added under the root object with `object_name` (or the
+// scene object's default name if std::nullopt).
+absl::StatusOr<WorldServers> InitializeWorldServiceFromSceneObject(
+    absl::string_view scene_object_gzf_path,
+    std::optional<absl::string_view> object_name = std::nullopt);
 
 // Initializes a FakeWorldService and geo::InMemoryGeometryService from a world
 // object. This method can be used for tests which require initializing ICON

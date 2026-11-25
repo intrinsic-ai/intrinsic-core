@@ -126,6 +126,31 @@ cc_library(
 )
 
 cc_library(
+    name = "world_from_gzf",
+    testonly = True,
+    srcs = ["world_from_gzf.cc"],
+    hdrs = ["world_from_gzf.h"],
+    deps = [
+        "//intrinsic/resources/proto:geometric_resource_data_cc_proto",
+        "//intrinsic/world",
+        "//intrinsic/world/objects:object_world",
+        "//intrinsic/world/proto:world_fragment_cc_proto",
+        "//intrinsic_sdk/intrinsic/geometry/storage:gzf_storage",
+        "//intrinsic_sdk/intrinsic/math:pose3",
+        "//intrinsic_sdk/intrinsic/scene/util:scene_object_gzf",
+        "//intrinsic_sdk/intrinsic/util/path_resolver",
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/world:entity_id",
+        "//intrinsic_sdk/intrinsic/world/gzfile",
+        "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@intrinsic_apis//intrinsic/scene/proto/v1:scene_object_cc_proto",
+    ],
+)
+
+cc_library(
     name = "tf_frame_util",
     srcs = ["tf_frame_util.cc"],
     hdrs = ["tf_frame_util.h"],

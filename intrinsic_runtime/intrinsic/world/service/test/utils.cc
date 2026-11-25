@@ -15,6 +15,7 @@
 #include "intrinsic/world/service/test/utils.h"
 
 #include <memory>
+#include <optional>
 #include <string>
 #include <utility>
 
@@ -33,10 +34,15 @@
 #include "intrinsic/geometry/storage/geometry_service_storage.h"
 #include "intrinsic/production/external/tsl/net.h"
 #include "intrinsic/util/path_resolver/path_resolver.h"
+#include "intrinsic/util/proto/get_text_proto.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/world/gzfile/gzfile.h"
 #include "intrinsic/world/hashing/hashing.h"
+#include "intrinsic/world/objects/object_world.h"
+#include "intrinsic/world/proto/object_world_updates.pb.h"
+#include "intrinsic/world/service/objects/object_world_updates_utils.h"
 #include "intrinsic/world/service/test/world_service_fake.h"
+#include "intrinsic/world/util/world_from_gzf.h"
 #include "intrinsic/world/world.h"
 
 namespace intrinsic {
@@ -86,6 +92,35 @@ absl::StatusOr<WorldServers> InitializeWorldService(
   INTR_ASSIGN_OR_RETURN(std::unique_ptr<intrinsic::GZFile> gzf,
                         intrinsic::GZFile::Open(full_path));
   INTR_ASSIGN_OR_RETURN(World world, World::FromFile(*gzf));
+  return InitializeWorldService(std::move(world));
+}
+
+absl::Status ApplyObjectWorldUpdatesFromFile(
+    World& world, absl::string_view updates_pbtxt_path) {
+  std::string full_path =
+      absl::StartsWith(updates_pbtxt_path, "/")
+          ? std::string(updates_pbtxt_path)
+          : PathResolver::ResolveRunfilesPathForTest(updates_pbtxt_path);
+  intrinsic_proto::world::ObjectWorldUpdates updates;
+  INTR_RETURN_IF_ERROR(GetTextProto(full_path, updates));
+  INTR_ASSIGN_OR_RETURN(auto object_world,
+                        object_world::ObjectWorld::CreateView(world));
+  return object_world::HandleObjectWorldUpdates(*object_world, updates);
+}
+
+absl::StatusOr<WorldServers> InitializeWorldServiceFromSceneObject(
+    absl::string_view scene_object_gzf_path,
+    std::optional<absl::string_view> object_name) {
+  std::string full_path;
+  if (absl::StartsWith(scene_object_gzf_path, "/")) {
+    full_path = scene_object_gzf_path;
+  } else {
+    full_path = PathResolver::ResolveRunfilesPathForTest(scene_object_gzf_path);
+  }
+  INTR_ASSIGN_OR_RETURN(
+      World world,
+      testing::GetWorldForTestWithResolvedPath(
+          full_path, testing::ExpectedWorldType::SceneObject, object_name));
   return InitializeWorldService(std::move(world));
 }
 

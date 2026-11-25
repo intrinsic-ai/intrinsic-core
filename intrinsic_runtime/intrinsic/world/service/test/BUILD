@@ -29,6 +29,7 @@ cc_library(
     deps = [
         "//intrinsic/geometry/storage:proxy_storage",
         "//intrinsic/world",
+        "//intrinsic/world/util:world_from_gzf",
         "//intrinsic_runtime/intrinsic/world/service:object_world_service",
         "//intrinsic_runtime/intrinsic/world/service:world_mutex",
         "//intrinsic_runtime/intrinsic/world/service:world_service_cc_grpc_proto",
@@ -63,8 +64,12 @@ cc_library(
         "//intrinsic/geometry/storage:geometry_service_storage",
         "//intrinsic/production/external/tsl:net",
         "//intrinsic/world",
+        "//intrinsic/world/objects:object_world",
+        "//intrinsic/world/util:world_from_gzf",
+        "//intrinsic_runtime/intrinsic/world/service/objects:object_world_updates_utils",
         "//intrinsic_sdk/intrinsic/geometry/proto:geometry_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/util/path_resolver",
+        "//intrinsic_sdk/intrinsic/util/proto:get_text_proto",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/world/gzfile",
         "//intrinsic_sdk/intrinsic/world/hashing",
@@ -74,5 +79,6 @@ cc_library(
         "@abseil-cpp//absl/strings",
         "@com_github_grpc_grpc//:grpc++",
         "@com_github_grpc_grpc//:grpc_security_base",
+        "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
     ],
 )
