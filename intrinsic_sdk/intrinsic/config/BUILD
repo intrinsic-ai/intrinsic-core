@@ -56,7 +56,6 @@ go_library(
         "//intrinsic_sdk/intrinsic/tools/inctl/auth:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/auth:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/cluster:__pkg__",
-        "//intrinsic_sdk/intrinsic/tools/inctl/cmd/solution_version:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd/vm:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/util:__pkg__",
         "//intrinsic_sdk/intrinsic/tools/inctl/util/accounts:__pkg__",
