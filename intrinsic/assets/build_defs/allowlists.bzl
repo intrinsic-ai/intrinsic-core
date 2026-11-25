@@ -27,13 +27,13 @@ _LISTS = {
         # keep-sorted start
         "//intrinsic/manipulation/skills/force:move_to_contact_manifest",
         "//intrinsic/skills/apps/icon2:homing_manifest",
-        "//intrinsic/skills/examples:adder_skill_manifest",
         "//intrinsic_control/intrinsic/icon/skills:enable_realtime_control_manifest",
         "//intrinsic_control/intrinsic/icon/skills:move_gripper_joints_manifest_cc",
         "//intrinsic_control/intrinsic/icon/skills:set_payload_manifest",
         "//intrinsic_control/intrinsic/icon/skills:update_robot_joint_positions_manifest",
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:move_robot_manifest",
         "//intrinsic_motion_planning/intrinsic/motion_planning/skills:preplan_motion_manifest",
+        "//intrinsic_sdk/intrinsic/skills/examples:adder_skill_manifest",
         # keep-sorted end
     ],
 }

@@ -22,7 +22,7 @@ intrinsic_solution(
         "//intrinsic/resources/catalog/resourcedata/product/building_block",
         "//intrinsic/simulation/gazebo/asset:gazebo_simulator_type",
         "//intrinsic_sdk/intrinsic/assets/services/examples/calcserver:calculator_service",
-        "//intrinsic/skills/examples:adder_skill",
+        "//intrinsic_sdk/intrinsic/skills/examples:adder_skill",
     ],
     instances = [
         ":building_block",

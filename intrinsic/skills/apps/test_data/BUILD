@@ -42,7 +42,6 @@ package_group(
         "//intrinsic/skills/apps",
         "//intrinsic/skills/apps/icon2",
         "//intrinsic/skills/apps/testing",
-        "//intrinsic/skills/examples",
         "//intrinsic/world",
         "//intrinsic_control/intrinsic/icon/skills",
         "//intrinsic_kinematics/intrinsic/kinematics/utils",
@@ -55,6 +54,7 @@ package_group(
         "//intrinsic_perception/intrinsic/perception/skills/multi_view",
         "//intrinsic_runtime/intrinsic/world/service/robot_calibration",
         "//incode/ml/rl/skills",
+        "//incode/skills/examples",
     ],
 )
 
