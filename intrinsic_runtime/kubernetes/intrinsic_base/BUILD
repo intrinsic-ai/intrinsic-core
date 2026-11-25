@@ -24,7 +24,7 @@ helm_chart(
     name = "intrinsic-app-chart",
     images = {
         # keep-sorted start
-        "code_execution_service": "//intrinsic/executive/code:code-execution-service-image.tar",  # b/527851591
+        "code_execution_service": "//intrinsic_runtime/intrinsic/executive/code:code-execution-service-image.tar",  # b/527851591
         "executive": "//intrinsic/executive:executive-image.tar",  # b/527852616
         "proto_registry": "//intrinsic_runtime/intrinsic/proto_tools/registry:proto-registry-image.tar",
         # keep-sorted end

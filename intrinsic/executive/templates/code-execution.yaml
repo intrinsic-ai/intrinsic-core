@@ -37,7 +37,7 @@ spec:
         - name: code-execution-service
           image: {{ .Values.registry }}{{ .Values.images.code_execution_service }}
           args:
-            - /intrinsic/executive/code/code_execution_service
+            - /intrinsic_runtime/intrinsic/executive/code/code_execution_service
             - --port=8080
             - --jupyter_server_host=localhost:8888
             - --world_service_address=world.app-intrinsic-base.svc.cluster.local:8080

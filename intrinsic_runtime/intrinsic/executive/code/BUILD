@@ -37,7 +37,7 @@ go_library(
         "websocket_client.go",
     ],
     importpath = "intrinsic/executive/code/jupyterclient",
-    visibility = ["//intrinsic/executive/code:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/executive/code:__subpackages__"],
     deps = [
         ":jupyter",
         "//intrinsic_sdk/intrinsic/util/status:extstatus",
@@ -52,7 +52,7 @@ go_library(
     name = "codeexecutionworker",
     srcs = ["code_execution_worker.go"],
     importpath = "intrinsic/executive/code/codeexecutionworker",
-    visibility = ["//intrinsic/executive/code:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/executive/code:__subpackages__"],
     deps = [
         ":jupyterclient",
         ":pycode",
@@ -67,9 +67,7 @@ go_library(
 
 go_library(
     name = "codeexecutionservice",
-    srcs = [
-        "code_execution_service.go",
-    ],
+    srcs = ["code_execution_service.go"],
     importpath = "intrinsic/executive/code/codeexecutionservice",
     deps = [
         ":codeexecutionworker",
@@ -93,7 +91,7 @@ go_library(
     name = "jupyter",
     srcs = ["jupyter.go"],
     importpath = "intrinsic/executive/code/jupyter",
-    visibility = ["//intrinsic/executive/code:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/executive/code:__subpackages__"],
 )
 
 go_library(
@@ -105,7 +103,7 @@ go_library(
         "templates/seed_code.py.template",  # keep
     ],
     importpath = "intrinsic/executive/code/pycode",
-    visibility = ["//intrinsic/executive/code:__subpackages__"],
+    visibility = ["//intrinsic_runtime/intrinsic/executive/code:__subpackages__"],
     deps = [
         "@com_github_golang_glog//:go_default_library",
         "@org_golang_google_protobuf//proto",
