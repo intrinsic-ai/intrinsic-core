@@ -115,7 +115,6 @@ cc_library(
     srcs = ["object_world_service.cc"],
     hdrs = ["object_world_service.h"],
     deps = [
-        ":world_compatibility_service_cc_proto",
         ":world_mutex",
         ":world_storage",
         "//intrinsic/resources/proto:geometric_resource_data_cc_proto",
@@ -169,6 +168,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/world/objects:object_world_ids",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_grpc_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_cc_proto",
+        "//intrinsic_sdk/intrinsic/world/proto:world_state_cc_proto",
         "//intrinsic_sdk/intrinsic/world/robot_payload",
         "@abseil-cpp//absl/algorithm:container",
         "@abseil-cpp//absl/base",
@@ -202,7 +202,6 @@ proto_library(
     deps = [
         "//intrinsic/world/proto:world_entity_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_proto",
-        "@intrinsic_apis//intrinsic/math/proto:pose_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_proto",
     ],
 )
@@ -221,7 +220,6 @@ go_proto_library(
     deps = [
         "//intrinsic/world/proto:world_entity_go_proto",
         "//intrinsic_sdk/intrinsic/world/proto:object_world_service_go_proto",
-        "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:collision_settings_go_proto",
     ],
 )

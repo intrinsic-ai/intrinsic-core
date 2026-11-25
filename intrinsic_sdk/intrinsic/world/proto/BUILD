@@ -112,3 +112,32 @@ py_grpc_library(
     visibility = ["//intrinsic:public_api_users"],
     deps = [":object_world_service_py_pb2"],
 )
+
+proto_library(
+    name = "world_state_proto",
+    srcs = ["world_state.proto"],
+    deps = [
+        ":object_world_service_proto",
+        "@intrinsic_apis//intrinsic/math/proto:pose_proto",
+    ],
+)
+
+cc_proto_library(
+    name = "world_state_cc_proto",
+    deps = [":world_state_proto"],
+)
+
+go_proto_library(
+    name = "world_state_go_proto",
+    importpath = "intrinsic/world/proto/world_state_go_proto",
+    protos = [":world_state_proto"],
+    deps = [
+        ":object_world_service_go_proto",
+        "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
+    ],
+)
+
+py_proto_library(
+    name = "world_state_py_pb2",
+    deps = [":world_state_proto"],
+)

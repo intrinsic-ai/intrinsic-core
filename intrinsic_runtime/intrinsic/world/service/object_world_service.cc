@@ -116,11 +116,11 @@
 #include "intrinsic/world/proto/object_world_service.pb.h"
 #include "intrinsic/world/proto/object_world_updates.pb.h"
 #include "intrinsic/world/proto/world_entity.pb.h"
+#include "intrinsic/world/proto/world_state.pb.h"
 #include "intrinsic/world/robot_payload/robot_payload.h"
 #include "intrinsic/world/service/objects/object_world_converter.h"
 #include "intrinsic/world/service/objects/object_world_updates_utils.h"
 #include "intrinsic/world/service/objects/world_comparator.h"
-#include "intrinsic/world/service/world_compatibility_service.pb.h"
 #include "intrinsic/world/service/world_mutex.h"
 #include "intrinsic/world/service/world_storage.h"
 #include "intrinsic/world/util/compose_world_util.h"
@@ -2720,9 +2720,8 @@ absl::StatusOr<intrinsic_proto::world::World> BuildWorldProto(
   }
 }
 
-absl::Status PopulateGetWorldStateResponseExceptMetadata(
-    const World& world,
-    intrinsic_proto::world::GetWorldStateResponse* response) {
+absl::Status PopulateWorldStateUpdateExceptMetadata(
+    const World& world, intrinsic_proto::world::WorldStateUpdate* response) {
   // Go through the robots and add the relevant dof values
   for (const RobotCollectionsEntityId& robot_collection_entity_id :
        world.GetTypedEntityIds<RobotCollectionsEntityId>()) {
@@ -3622,9 +3621,9 @@ absl::Status ObjectWorldService::PublishWorldStateOnce(
     INTR_RETURN_IF_ERROR(CreatePublisherForWorld(world_id, world_ptr));
   }
 
-  intrinsic_proto::world::GetWorldStateResponse msg;
+  intrinsic_proto::world::WorldStateUpdate msg;
   INTR_RETURN_IF_ERROR(
-      PopulateGetWorldStateResponseExceptMetadata(world_ptr->world, &msg));
+      PopulateWorldStateUpdateExceptMetadata(world_ptr->world, &msg));
 
   INTR_ASSIGN_OR_RETURN(*msg.mutable_world_metadata(),
                         ToProtoLocked(*world_ptr, world_id));

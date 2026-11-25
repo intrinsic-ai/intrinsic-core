@@ -16,7 +16,6 @@ syntax = "proto3";
 
 package intrinsic_proto.world;
 
-import "intrinsic/math/proto/pose.proto";
 import "intrinsic/world/proto/world_entity.proto";
 import "intrinsic/world/proto/collision_settings.proto";
 import "intrinsic/world/proto/object_world_service.proto";
@@ -43,34 +42,4 @@ message WorldWithEntities {
 
   // The set of collision rules in use with this world.
   CollisionSettings collision_settings = 4;
-}
-
-message EntityPose {
-  // The id for this entity
-  uint32 entity_id = 1;
-
-  // Pose of this Entity in the parent's space.
-  intrinsic_proto.Pose parent_t_this = 5;
-}
-
-message KinematicObjectJoints {
-  // The id of the kinematic object.
-  string object_id = 1;
-
-  // Joint positions in radians (for revolute joints) or meters (for prismatic
-  // joints).
-  repeated double joint_positions = 2;
-}
-
-// World state payload retained for LogItem and
-// ObjectWorldService::PublishWorldStateOnce.
-message GetWorldStateResponse {
-  // Additional world-level metadata.
-  WorldMetadata world_metadata = 1;
-
-  // The poses of entities in the world.
-  repeated EntityPose entity_poses = 2;
-
-  // The joint values for the kinematic objects in the world.
-  repeated KinematicObjectJoints kinematic_object_joints = 3;
 }
