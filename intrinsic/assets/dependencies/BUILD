@@ -46,10 +46,10 @@ cc_library(
     name = "resolver_cc",
     srcs = ["resolver.cc"],
     hdrs = ["resolver.h"],
-    visibility = ["//intrinsic/executive/engine:__pkg__"],
+    visibility = ["//intrinsic_runtime/intrinsic/executive/engine:__pkg__"],
     deps = [
-        "//intrinsic/executive/engine:skill_action",
         "//intrinsic/util/proto:walk_messages",
+        "//intrinsic_runtime/intrinsic/executive/engine:skill_action",
         "//intrinsic_sdk/intrinsic/assets:id_utils",
         "//intrinsic_sdk/intrinsic/assets:interface_utils",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",

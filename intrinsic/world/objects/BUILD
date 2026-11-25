@@ -17,7 +17,6 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 package(default_visibility = [
-    "//intrinsic/executive:__subpackages__",
     "//intrinsic/simulation:__subpackages__",
     "//intrinsic/skills:__subpackages__",
     "//intrinsic/world:__subpackages__",

@@ -20,7 +20,6 @@ load("//bazel:cc_macros.bzl", "cc_library")
 load("//bazel:python.bzl", "py_library")
 
 package(default_visibility = [
-    "//intrinsic/executive:__subpackages__",
     "//intrinsic/manipulation:__subpackages__",
     "//intrinsic/resources:__subpackages__",
     "//intrinsic/skills:__subpackages__",
@@ -178,7 +177,6 @@ cc_library(
     hdrs = ["execute_context_view.h"],
     visibility = [
         "//intrinsic/apps:__subpackages__",
-        "//intrinsic/executive:__subpackages__",
         "//intrinsic/frontend:__subpackages__",
         "//intrinsic/manipulation:__subpackages__",
         "//intrinsic/resources:__subpackages__",
@@ -211,7 +209,6 @@ cc_library(
     hdrs = ["preview_context_impl.h"],
     visibility = [
         "//intrinsic/apps:__subpackages__",
-        "//intrinsic/executive:__subpackages__",
         "//intrinsic/frontend:__subpackages__",
         "//intrinsic/manipulation:__subpackages__",
         "//intrinsic/resources:__subpackages__",
@@ -589,7 +586,6 @@ cc_library(
     hdrs = ["skill_registry_client_interface.h"],
     visibility = [
         "//intrinsic/apps:__subpackages__",
-        "//intrinsic/executive:__subpackages__",
         "//intrinsic/frontend:__subpackages__",
         "//intrinsic/manipulation:__subpackages__",
         "//intrinsic/resources:__subpackages__",

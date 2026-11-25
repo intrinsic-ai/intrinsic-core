@@ -117,7 +117,7 @@ go_proto_library(
 cc_proto_library(
     name = "resource_set_service_cc_proto",
     visibility = [
-        "//intrinsic/executive/engine:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive/engine:__subpackages__",
     ],
     deps = [":resource_set_service_proto"],
 )
@@ -129,8 +129,8 @@ cc_grpc_library(
     grpc_only = True,
     visibility = [
         "//intrinsic/conductor:__subpackages__",
-        "//intrinsic/executive/engine:__subpackages__",
         "//intrinsic/storage/hot_shared_state:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive/engine:__subpackages__",
     ],
     deps = [":resource_set_service_cc_proto"],
 )

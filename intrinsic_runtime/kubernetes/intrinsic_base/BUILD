@@ -25,7 +25,7 @@ helm_chart(
     images = {
         # keep-sorted start
         "code_execution_service": "//intrinsic_runtime/intrinsic/executive/code:code-execution-service-image.tar",  # b/527851591
-        "executive": "//intrinsic/executive:executive-image.tar",  # b/527852616
+        "executive": "//intrinsic_runtime/intrinsic/executive:executive-image.tar",  # b/527852616
         "proto_registry": "//intrinsic_runtime/intrinsic/proto_tools/registry:proto-registry-image.tar",
         # keep-sorted end
     } | {
@@ -33,8 +33,8 @@ helm_chart(
     } | {},
     templates = [
         # keep-sorted start
-        "//intrinsic/executive/templates:code-execution-template",
-        "//intrinsic/executive/templates:executive-template",
+        "//intrinsic_runtime/intrinsic/executive/templates:code-execution-template",
+        "//intrinsic_runtime/intrinsic/executive/templates:executive-template",
         "//intrinsic_runtime/intrinsic/proto_tools/templates:proto-registry-template",
         # keep-sorted end
     ] + [

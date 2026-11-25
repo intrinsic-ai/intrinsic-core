@@ -14,10 +14,7 @@
 
 load("//bazel:cc_macros.bzl", "cc_library")
 
-package(default_visibility = [
-    "//intrinsic/executive:__subpackages__",
-    "//intrinsic_runtime/intrinsic/executive:__subpackages__",
-])
+package(default_visibility = ["//intrinsic_runtime/intrinsic/executive:__subpackages__"])
 
 cc_library(
     name = "behavior_tree_visitor",
@@ -27,7 +24,6 @@ cc_library(
         "behavior_tree_visitor.inc",
     ],
     visibility = [
-        "//intrinsic/executive:__subpackages__",
         "//intrinsic_runtime/intrinsic/executive:__subpackages__",
         "//intrinsic_runtime/intrinsic/proto_tools/registry:__pkg__",
     ],

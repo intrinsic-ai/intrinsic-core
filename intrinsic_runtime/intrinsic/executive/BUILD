@@ -20,7 +20,7 @@ package(default_visibility = ["//visibility:public"])
 
 proto_data(
     name = "status_specs_message",
-    src = "//intrinsic/executive:executive.status_specs.pbtxt",
+    src = "executive.status_specs.pbtxt",
     proto_deps = [
         "@intrinsic_apis//intrinsic/assets/proto:status_spec_proto",
     ],
@@ -36,11 +36,11 @@ cc_binary(
         "//intrinsic_sdk/intrinsic/executive/proto:world_query_proto_descriptor_set",
     ],
     deps = [
-        "//intrinsic/executive/engine:clips_executive_service",
-        "//intrinsic/executive/engine:clips_metrics",
-        "//intrinsic/executive/engine:extended_status_codes",
         "//intrinsic/stats:opencensus",
         "//intrinsic_control/intrinsic/icon/release/portable:init_intrinsic",
+        "//intrinsic_runtime/intrinsic/executive/engine:clips_executive_service",
+        "//intrinsic_runtime/intrinsic/executive/engine:clips_metrics",
+        "//intrinsic_runtime/intrinsic/executive/engine:extended_status_codes",
         "//intrinsic_runtime/intrinsic/executive/proto:process_tree_cc_proto",  # fixdeps: keep
         "//intrinsic_sdk/intrinsic/util/path_resolver",
         "//intrinsic_sdk/intrinsic/util/status:return",

@@ -15,7 +15,6 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 package(default_visibility = [
-    "//intrinsic/executive:__subpackages__",
     "//intrinsic_runtime/intrinsic/executive:__subpackages__",
 ])
 
@@ -165,7 +164,7 @@ cc_library(
     hdrs = ["skill_action.h"],
     visibility = [
         "//intrinsic/assets/dependencies:__pkg__",
-        "//intrinsic/executive/engine:__subpackages__",
+        "//intrinsic_runtime/intrinsic/executive/engine:__subpackages__",
     ],
 )
 

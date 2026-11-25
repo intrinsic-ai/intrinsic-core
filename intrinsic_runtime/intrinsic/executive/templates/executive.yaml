@@ -46,7 +46,7 @@ spec:
           securityContext:
             readOnlyRootFilesystem: true
           args:
-            - /intrinsic/executive/executive
+            - /intrinsic_runtime/intrinsic/executive/executive
             {{ if .Values.app_deployment_id }}
             - --deployment_id={{ .Values.app_deployment_id }}
             - --loop_time=25ms

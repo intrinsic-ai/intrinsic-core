@@ -21,7 +21,6 @@ load("//intrinsic_sdk/bazel:go_macros.bzl", "go_library")
 
 package(default_visibility = [
     "//intrinsic/assets/services:__subpackages__",
-    "//intrinsic/executive:__subpackages__",
     "//intrinsic/frontend:__subpackages__",
     "//intrinsic/resources:__subpackages__",
     "//intrinsic/skills:__subpackages__",

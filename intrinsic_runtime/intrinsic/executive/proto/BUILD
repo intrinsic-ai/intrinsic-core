@@ -76,10 +76,7 @@ go_proto_library(
 proto_library(
     name = "executive_debug_service_proto",
     srcs = ["executive_debug_service.proto"],
-    visibility = [
-        "//intrinsic/executive:__subpackages__",
-        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
-    ],
+    visibility = ["//intrinsic_runtime/intrinsic/executive:__subpackages__"],
     deps = [
         "@opentelemetry_proto//:trace_proto",
     ],
@@ -87,10 +84,7 @@ proto_library(
 
 cc_proto_library(
     name = "executive_debug_service_cc_proto",
-    visibility = [
-        "//intrinsic/executive:__subpackages__",
-        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
-    ],
+    visibility = ["//intrinsic_runtime/intrinsic/executive:__subpackages__"],
     deps = [":executive_debug_service_proto"],
 )
 
@@ -99,10 +93,7 @@ cc_grpc_library(
     srcs = [":executive_debug_service_proto"],
     generate_mocks = True,
     grpc_only = True,
-    visibility = [
-        "//intrinsic/executive:__subpackages__",
-        "//intrinsic_runtime/intrinsic/executive:__subpackages__",
-    ],
+    visibility = ["//intrinsic_runtime/intrinsic/executive:__subpackages__"],
     deps = [":executive_debug_service_cc_proto"],
 )
 
@@ -115,7 +106,6 @@ go_proto_library(
     importpath = "intrinsic/executive/proto/executive_debug_service_go_proto",
     proto = ":executive_debug_service_proto",
     visibility = [
-        "//intrinsic/executive:__subpackages__",
         "//intrinsic/tools/inctl/cmd:__pkg__",
         "//intrinsic_runtime/intrinsic/executive:__subpackages__",
         "//intrinsic_sdk/intrinsic/tools/inctl/cmd:__pkg__",

@@ -15,21 +15,18 @@
 load("//bazel:cc_macros.bzl", "cc_library")
 
 # Validation functionalities for behavior trees
-package(default_visibility = [
-    "//intrinsic/executive:__subpackages__",
-    "//intrinsic_runtime/intrinsic/executive:__subpackages__",
-])
+package(default_visibility = ["//intrinsic_runtime/intrinsic/executive:__subpackages__"])
 
 cc_library(
     name = "validate_behavior_tree",
     srcs = ["validate_behavior_tree.cc"],
     hdrs = ["validate_behavior_tree.h"],
     deps = [
-        "//intrinsic/executive/engine:skill_client_generator",
         "//intrinsic_runtime/intrinsic/executive/cc:behavior_tree_visitor",
         "//intrinsic_runtime/intrinsic/executive/clips/cc:skill_info",
         "//intrinsic_runtime/intrinsic/executive/clips_cpp",
         "//intrinsic_runtime/intrinsic/executive/clips_cpp:clips_protobuf",
+        "//intrinsic_runtime/intrinsic/executive/engine:skill_client_generator",
         "//intrinsic_runtime/intrinsic/proto_tools/compatibility:proto_compat",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
         "//intrinsic_sdk/intrinsic/util/status:status_specs",
