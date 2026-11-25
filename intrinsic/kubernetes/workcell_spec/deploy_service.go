@@ -1116,7 +1116,7 @@ func (s *DeployService) UpdateSolutionDeployment(ctx context.Context, req *solut
 		req.View = view
 	}
 
-	rule, err := severityRule(req.GetValidationPolicy(), svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_RECOVERABLE)
+	rule, err := severityRule(req.GetValidationPolicy(), svpb.SolutionValidationPolicy_SOLUTION_VALIDATION_POLICY_STRICT)
 	if err != nil {
 		return nil, err
 	}

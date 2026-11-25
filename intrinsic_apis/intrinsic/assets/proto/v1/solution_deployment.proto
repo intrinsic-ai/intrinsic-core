@@ -176,10 +176,10 @@ message UpdateSolutionDeploymentRequest {
   // changes. Issues treated as errors fail the request. Issues treated as
   // warnings are returned in `UpdateSolutionDeploymentMetadata.warnings`.
   //
-  // Use `SOLUTION_VALIDATION_POLICY_STRICT` to catch any validation errors
-  // before the changes are deployed, rather than discovering them at runtime.
+  // Use `SOLUTION_VALIDATION_POLICY_RECOVERABLE` to deploy the changes despite
+  // validation issues that don't prevent the Solution from being deployed.
   //
-  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_RECOVERABLE`.
+  // If unspecified, defaults to `SOLUTION_VALIDATION_POLICY_STRICT`.
   intrinsic_proto.assets.v1.SolutionValidationPolicy validation_policy = 5;
 }
 
