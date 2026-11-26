@@ -192,7 +192,7 @@ cc_library(
     srcs = ["simplify_preserving_appearance_memoize.cc"],
     hdrs = ["simplify_preserving_appearance_memoize.h"],
     deps = [
-        "//intrinsic/geometry/internal/mesh_simplification/appearance:glb_appearance_simplifier",
+        "//intrinsic_runtime/intrinsic/geometry/internal/mesh_simplification/appearance:glb_appearance_simplifier",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:renderable",
@@ -218,8 +218,8 @@ cc_library(
     srcs = ["simplify_mesh_strict_memoize.cc"],
     hdrs = ["simplify_mesh_strict_memoize.h"],
     deps = [
-        "//intrinsic/geometry/internal/mesh_simplification:meshopt_locality_simplifier",
         "//intrinsic_runtime/intrinsic/geometry/internal/conversion_utils:mesh_conversion",
+        "//intrinsic_runtime/intrinsic/geometry/internal/mesh_simplification:meshopt_locality_simplifier",
         "//intrinsic_runtime/intrinsic/geometry/internal/util:timeout_predicate",
         "//intrinsic_sdk/intrinsic/geometry/api:exact_geometry",
         "//intrinsic_sdk/intrinsic/geometry/api:geometry",

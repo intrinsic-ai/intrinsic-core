@@ -22,7 +22,10 @@ cc_library(
     name = "glb_appearance_simplifier",
     srcs = ["glb_appearance_simplifier.cc"],
     hdrs = ["glb_appearance_simplifier.h"],
-    visibility = ["//intrinsic/geometry:__subpackages__"],
+    visibility = [
+        "//intrinsic/geometry:__subpackages__",
+        "//intrinsic_runtime/intrinsic/geometry:__subpackages__",
+    ],
     deps = [
         ":remapped_triangles",
         ":uv_seams",
