@@ -38,6 +38,7 @@
 namespace intrinsic::skills {
 namespace {
 
+// LINT.IfChange(attach_entity_filters)
 // Returns the entity filter to use when attaching an object to `gripper`.
 // If `gripper` is a robot arm (indicated by having an ISO flange frame),
 // attach to its final entity (the flange) rather than the stationary base.
@@ -67,6 +68,9 @@ world::ObjectEntityFilter GetCollisionExclusionEntityFilter(
   }
   return world::ObjectEntityFilter().IncludeAllEntities();
 }
+// LINT.ThenChange(
+//     //intrinsic/manipulation/skills/plan_grasp_world_changes.py:attachment_entity_filters
+// )
 
 }  // namespace
 
@@ -99,6 +103,7 @@ AttachObjectToRobotSkill::GetFootprint(const GetFootprintRequest& request,
   return out;
 }
 
+// LINT.IfChange(attach_world_changes)
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 AttachObjectToRobotSkill::ExecuteImpl(
     const intrinsic_proto::skills::AttachObjectToRobotParams& params,
@@ -123,6 +128,9 @@ AttachObjectToRobotSkill::ExecuteImpl(
 
   return nullptr;
 }
+// LINT.ThenChange(
+//     //intrinsic/manipulation/skills/plan_grasp_world_changes.py:attach_object_to_robot
+// )
 
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 AttachObjectToRobotSkill::Execute(const ExecuteRequest& request,
