@@ -20,6 +20,7 @@
 #include <cstdint>
 #include <cstring>
 #include <limits>
+#include <memory>
 #include <optional>
 #include <string>
 #include <type_traits>
@@ -888,20 +889,28 @@ absl::StatusOr<UnencodedImageMetadata> ValidateUnencodedImageMetadata(
 
 template <typename ImageTrait>
 absl::StatusOr<intrinsic::perception::Image<ImageTrait>>
-CreateImageFromUnencodedExternalSpan(const UnencodedImageMetadata& metadata,
-                                     absl::Span<const uint8_t> external_data) {
-  if (external_data.size() != metadata.expected_size) {
+CreateImageFromUnencodedExternalBuffer(
+    const UnencodedImageMetadata& metadata,
+    intrinsic::ImmutableBuffer&& external_buffer) {
+  if (external_buffer.size() != metadata.expected_size) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "External image buffer size mismatch: got ", external_data.size(),
+        "External image buffer size mismatch: got ", external_buffer.size(),
         " bytes, expected ", metadata.expected_size));
   }
-  intrinsic::perception::Image<ImageTrait> image(metadata.dimensions);
-  // `Image<ImageTrait>` enforces standard-layout packed `ScalarType` pixel
-  // storage; cast to `void*` to avoid `-Wnontrivial-memcall` on `Eigen::Matrix`
-  // pixel types while preserving alignment-safe byte copies from `raw_buffer`.
-  std::memcpy(static_cast<void*>(image.data()), external_data.data(),
-              metadata.expected_size);
-  return image;
+  INTR_ASSIGN_OR_RETURN(intrinsic::MutableBuffer mutable_buffer,
+                        intrinsic::UnfreezeOrCopy(std::move(external_buffer)));
+  static_assert(alignof(typename ImageTrait::PixelType) <=
+                    intrinsic::MutableBuffer::kAlignment,
+                "PixelType alignment must not exceed MutableBuffer alignment.");
+  auto owner =
+      std::make_shared<intrinsic::MutableBuffer>(std::move(mutable_buffer));
+  auto* pixel_ptr =
+      reinterpret_cast<typename ImageTrait::PixelType*>(owner->data());
+  return intrinsic::perception::Image<ImageTrait>(
+      metadata.dimensions, pixel_ptr,
+      [owner = std::move(owner)](typename ImageTrait::PixelType*) mutable {
+        owner.reset();
+      });
 }
 
 template <typename ImageTrait>
@@ -958,20 +967,20 @@ absl::StatusOr<intrinsic::perception::Image<ImageTrait>> FromProto(
           ValidateUnencodedImageMetadata<ImageTrait>(image_buffer));
     }
     INTR_ASSIGN_OR_RETURN(
-        const intrinsic::ImmutableBuffer raw_buffer,
+        intrinsic::ImmutableBuffer raw_buffer,
         intrinsic::perception::GetRawBufferWithRetry(
             image_buffer.buffer_storage_location(), kvstore_options));
-    const absl::Span<const uint8_t> raw_span(raw_buffer.data(),
-                                             raw_buffer.size());
-    if (raw_span.empty()) {
+    if (raw_buffer.empty()) {
       return absl::InvalidArgumentError(
           "External image buffer in KeyValueStore is empty");
     }
     if (unencoded_metadata.has_value()) {
-      return CreateImageFromUnencodedExternalSpan<ImageTrait>(
-          *unencoded_metadata, raw_span);
+      return CreateImageFromUnencodedExternalBuffer<ImageTrait>(
+          *unencoded_metadata, std::move(raw_buffer));
     }
-    return DecodeEncodedImageFromSpan<ImageTrait>(image_buffer, raw_span);
+    return DecodeEncodedImageFromSpan<ImageTrait>(
+        image_buffer,
+        absl::Span<const uint8_t>(raw_buffer.data(), raw_buffer.size()));
   }
   if (image_buffer.data().empty()) {
     return absl::InvalidArgumentError("data field in image_buffer is empty");
