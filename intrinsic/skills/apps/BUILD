@@ -51,6 +51,7 @@ go_proto_library(
     name = "detach_object_go_proto",
     importpath = "intrinsic/skills/apps/detach_object_go_proto",
     protos = [":detach_object_proto"],
+    visibility = ["//intrinsic/manipulation/skills:__pkg__"],
     deps = ["@intrinsic_apis//intrinsic/world/proto:object_world_refs_go_proto"],
 )
 
@@ -172,6 +173,7 @@ go_proto_library(
     name = "attach_object_to_robot_go_proto",
     importpath = "intrinsic/skills/apps/attach_object_to_robot_go_proto",
     protos = [":attach_object_to_robot_proto"],
+    visibility = ["//intrinsic/manipulation/skills:__pkg__"],
     deps = [
         "@intrinsic_apis//intrinsic/math/proto:pose_go_proto",
         "@intrinsic_apis//intrinsic/world/proto:object_world_refs_go_proto",
@@ -231,6 +233,7 @@ go_proto_library(
     name = "update_world_go_proto",
     importpath = "intrinsic/skills/apps/update_world_go_proto",
     protos = [":update_world_proto"],
+    visibility = ["//intrinsic/manipulation/skills:__pkg__"],
     deps = [
         "@intrinsic_apis//intrinsic/world/proto:object_world_updates_go_proto",
     ],
