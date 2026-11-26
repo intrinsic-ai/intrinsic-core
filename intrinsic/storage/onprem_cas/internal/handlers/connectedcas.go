@@ -129,6 +129,40 @@ func (h *ConnectedCASHandler) Create(stream caspb.ContentAddressableStorageServi
 	return stream.SendAndClose(rec.resp)
 }
 
+// StartResumableWrite delegates to the LocalCAS handler.
+func (h *ConnectedCASHandler) StartResumableWrite(ctx context.Context, req *caspb.StartResumableWriteRequest) (*caspb.StartResumableWriteResponse, error) {
+	return h.LocalCAS.StartResumableWrite(ctx, req)
+}
+
+// QueryWriteStatus delegates to the LocalCAS handler. An upload session is finalized only after
+// the upstream upload succeeded, so it doesn't report an object ID before that.
+func (h *ConnectedCASHandler) QueryWriteStatus(ctx context.Context, req *caspb.QueryWriteStatusRequest) (*caspb.QueryWriteStatusResponse, error) {
+	return h.LocalCAS.QueryWriteStatus(ctx, req)
+}
+
+// WriteObject delegates to the LocalCAS handler. If Upstream supports upload, finalizing an upload
+// also uploads the object to upstream, like Create, and the upload session is marked as
+// finalized only after the upstream upload succeeded. If the upstream upload fails, the session
+// keeps all bytes persisted, and the client can finalize it again, which retries the upstream
+// upload.
+func (h *ConnectedCASHandler) WriteObject(stream caspb.ContentAddressableStorageService_WriteObjectServer) error {
+	if h.Upstream == nil || !h.Upstream.ImplementsUpload() {
+		return h.LocalCAS.WriteObject(stream)
+	}
+	return h.LocalCAS.writeObject(stream, func(ctx context.Context, digest string) error {
+		slog.Info("ConnectedCAS: Object finalized locally, uploading to upstream", slog.String("digest", digest))
+		if err := h.Upstream.Upload(ctx, digest); err != nil {
+			slog.Warn("ConnectedCAS: Upstream upload failed", slog.String("digest", digest), slog.Any("error", err))
+			if ctx.Err() != nil {
+				return status.FromContextError(ctx.Err()).Err()
+			}
+			return err
+		}
+		slog.Info("ConnectedCAS: Upstream upload completed", slog.String("digest", digest))
+		return nil
+	})
+}
+
 // Delete deletes an object from local CAS if AllowLocalDelete is true.
 // Otherwise, it returns unimplemented as ConnectedCAS does not support deletion by default.
 func (h *ConnectedCASHandler) Delete(ctx context.Context, req *caspb.DeleteRequest) (*caspb.DeleteResponse, error) {

@@ -121,6 +121,18 @@ func (h *LocalCASHandler) QueryWriteStatus(ctx context.Context, req *caspb.Query
 // and finalizes the object when a WriteObjectRequest sets finish_write = true.
 // See WriteObject in cas_service.proto for the full protocol contract.
 func (h *LocalCASHandler) WriteObject(stream caspb.ContentAddressableStorageService_WriteObjectServer) error {
+	return h.writeObject(stream, nil)
+}
+
+// afterCommitFunc is a hook used by ConnectedCASHandler to upload the file to the upstream CAS
+// once the upload to local CAS is finished (after the object is committed to objectsDir, and
+// before FinalObjectID is written to session metadata). Running it before marking the session
+// finalized ensures QueryWriteStatus does not report an object ID if the upstream upload fails:
+// the session stays committed with all bytes persisted, and the client can retry with an empty
+// finish_write, which invokes afterCommit again.
+type afterCommitFunc func(ctx context.Context, digest string) error
+
+func (h *LocalCASHandler) writeObject(stream caspb.ContentAddressableStorageService_WriteObjectServer, afterCommit afterCommitFunc) error {
 	ctx := stream.Context()
 	req, err := stream.Recv()
 	if errors.Is(err, io.EOF) {
@@ -160,7 +172,7 @@ func (h *LocalCASHandler) WriteObject(stream caspb.ContentAddressableStorageServ
 	}
 	defer u.close()
 
-	err = h.receive(stream, u, req)
+	err = h.receive(stream, u, req, afterCommit)
 	if !u.finalized {
 		// Persist all bytes received on this stream, also if it failed, so that the client can
 		// resume from there.
@@ -172,13 +184,13 @@ func (h *LocalCASHandler) WriteObject(stream caspb.ContentAddressableStorageServ
 }
 
 // receive processes req and all following requests of the stream.
-func (h *LocalCASHandler) receive(stream caspb.ContentAddressableStorageService_WriteObjectServer, u *upload, req *caspb.WriteObjectRequest) error {
+func (h *LocalCASHandler) receive(stream caspb.ContentAddressableStorageService_WriteObjectServer, u *upload, req *caspb.WriteObjectRequest, afterCommit afterCommitFunc) error {
 	for {
 		if err := u.write(req.GetChecksummedData()); err != nil {
 			return err
 		}
 		if req.GetFinishWrite() {
-			return h.finalize(stream, u)
+			return h.finalize(stream, u, afterCommit)
 		}
 		if req.GetFlush() {
 			if err := u.persist(); err != nil {
@@ -212,8 +224,9 @@ func (h *LocalCASHandler) receive(stream caspb.ContentAddressableStorageService_
 //
 // Before the data file is linked to the object, the session is marked as committed. A committed
 // session accepts no more data, because the data file may be the object itself. If finalizing
-// fails after that, finalizing again only repeats the steps after marking.
-func (h *LocalCASHandler) finalize(stream caspb.ContentAddressableStorageService_WriteObjectServer, u *upload) error {
+// fails after that, e.g. because afterCommit failed, finalizing again only repeats the steps after
+// marking.
+func (h *LocalCASHandler) finalize(stream caspb.ContentAddressableStorageService_WriteObjectServer, u *upload, afterCommit afterCommitFunc) error {
 	if size := u.meta.ObjectSize; size != nil && u.written != *size {
 		return statusErrorf(codes.InvalidArgument, "object size %d doesn't match expected size %d", u.written, *size)
 	}
@@ -239,6 +252,11 @@ func (h *LocalCASHandler) finalize(stream caspb.ContentAddressableStorageService
 	finalPath, existed, err := h.commitSession(dataPath, digest, u.written)
 	if err != nil {
 		return err
+	}
+	if afterCommit != nil {
+		if err := afterCommit(stream.Context(), digest); err != nil {
+			return err
+		}
 	}
 	objectID, err := idhandling.AddSchema(digest)
 	if err != nil {
