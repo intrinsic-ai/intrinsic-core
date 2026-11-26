@@ -81,6 +81,7 @@ DetachObjectSkill::GetFootprint(const GetFootprintRequest& request,
   return out;
 }
 
+// LINT.IfChange(detach_world_changes)
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 DetachObjectSkill::ExecuteImpl(
     const intrinsic_proto::skills::DetachObjectParams& params,
@@ -112,6 +113,9 @@ DetachObjectSkill::ExecuteImpl(
 
   return nullptr;
 }
+// LINT.ThenChange(
+//     //intrinsic/manipulation/skills/plan_grasp_world_changes.py:detach_object
+// )
 
 absl::StatusOr<std::unique_ptr<google::protobuf::Message>>
 DetachObjectSkill::Execute(const ExecuteRequest& request,
