@@ -19,7 +19,7 @@ Exec Properties used for executors.
 # @unsorted-dict-items
 DEFAULT = {
     # LINT.IfChange
-    "container-image": "docker://us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/bazel-rbe-executor@sha256:c2d50e5f5a3bbea4c47ffcdc1b2755168d1c682ec2b3ba620fb3134eca4bab0d",
+    "container-image": "docker://us-central1-docker.pkg.dev/intrinsic-mirror/intrinsic-build-images/bazel-rbe-executor@sha256:d65e14cff14c8e81a759b3cea05a6ab48e8d35231cab240a46e1566d023f576f",
     # LINT.ThenChange(//.bazelrc)
     "OSFamily": "Linux",
     "Pool": "default_pool",  
