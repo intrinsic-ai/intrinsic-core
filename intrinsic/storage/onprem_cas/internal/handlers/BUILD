@@ -21,6 +21,7 @@ go_library(
         "localcas.go",
         "lrop.go",
         "preload.go",
+        "resumable.go",
         "sessions.go",
     ],
     importpath = "intrinsic/storage/onprem_cas/internal/handlers",
