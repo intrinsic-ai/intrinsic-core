@@ -26,8 +26,8 @@ import (
 	"os"
 	"path/filepath"
 	"syscall"
+	"uuid"
 
-	"github.com/google/uuid"
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 	"google.golang.org/protobuf/proto"
@@ -51,6 +51,8 @@ type LocalCASHandler struct {
 	partialDir string
 	uuidNew    func() string // for unit-testing
 	chunkSize  int           // for unit-testing
+	// sessions holds the resumable upload sessions in partialDir/internal.SessionsSubdir.
+	sessions *sessionStore
 }
 
 // NewLocalCASHandler creates a new LocalCASHandler.
@@ -58,8 +60,9 @@ func NewLocalCASHandler(objectsDir, partialDir string) *LocalCASHandler {
 	return &LocalCASHandler{
 		objectsDir: objectsDir,
 		partialDir: partialDir,
-		uuidNew:    uuid.NewString,
+		uuidNew:    func() string { return uuid.New().String() },
 		chunkSize:  defaultChunkSize,
+		sessions:   newSessionStore(filepath.Join(partialDir, internal.SessionsSubdir)),
 	}
 }
 
@@ -175,7 +178,6 @@ func (h *LocalCASHandler) Create(stream caspb.ContentAddressableStorageService_C
 	}
 
 	digest := hex.EncodeToString(hasher.Sum(nil))
-	finalPath := filepath.Join(h.objectsDir, digest)
 
 	// commit the changes to disk and close the file handler
 	if err := f.Sync(); err != nil {
@@ -185,26 +187,12 @@ func (h *LocalCASHandler) Create(stream caspb.ContentAddressableStorageService_C
 		return toGRPCError(err, "failed to close partial file")
 	}
 
-	slog.Debug("Linking partial file to final destination", slog.String("digest", digest),
-		slog.String("path_partial", partialPath), slog.String("path", finalPath))
-
-	// Link to final destination. If it already exists, check if it is corrupt or size-mismatched.
-	err = os.Link(partialPath, finalPath)
-	if errors.Is(err, fs.ErrExist) {
-		existingFi, statErr := os.Stat(finalPath)
-		if statErr != nil || existingFi.Size() != int64(totalSize) || idhandling.ValidateObjectSize(digest, existingFi.Size()) != nil {
-			slog.Warn("Existing object is corrupt or size mismatch; replacing with newly written file",
-				slog.String("digest", digest),
-				slog.Uint64("new_size", totalSize))
-			if renameErr := os.Rename(partialPath, finalPath); renameErr != nil {
-				return toGRPCError(renameErr, "failed to replace corrupt existing file")
-			}
-		}
-	} else if err != nil {
-		return toGRPCError(err, "failed to link partial file to final destination")
+	finalPath, existed, err := h.commitObject(partialPath, digest, totalSize)
+	if err != nil {
+		return err
 	}
 	slog.Info("Local CAS: Create", slog.String("digest", digest), slog.Uint64("size", totalSize),
-		slog.String("path", finalPath), slog.Bool("existed", errors.Is(err, fs.ErrExist)))
+		slog.String("path", finalPath), slog.Bool("existed", existed))
 
 	objectID, err := idhandling.AddSchema(digest)
 	if err != nil {
@@ -216,6 +204,34 @@ func (h *LocalCASHandler) Create(stream caspb.ContentAddressableStorageService_C
 		return statusErrorf(status.Code(err), "failed to send response: %v", err)
 	}
 	return nil
+}
+
+// commitObject makes the complete and synced partial file the object with the given digest by
+// linking it to its final destination in objectsDir. If the object already exists but is corrupt
+// or has a different size, the partial file replaces it (and no longer exists under its name).
+// It returns the path of the object and whether it already existed.
+func (h *LocalCASHandler) commitObject(partialPath, digest string, size uint64) (string, bool, error) {
+	finalPath := filepath.Join(h.objectsDir, digest)
+	slog.Debug("Linking partial file to final destination", slog.String("digest", digest),
+		slog.String("path_partial", partialPath), slog.String("path", finalPath))
+
+	// Link to final destination. If it already exists, check if it is corrupt or size-mismatched.
+	err := os.Link(partialPath, finalPath)
+	if errors.Is(err, fs.ErrExist) {
+		existingFi, statErr := os.Stat(finalPath)
+		if statErr != nil || existingFi.Size() != int64(size) || idhandling.ValidateObjectSize(digest, existingFi.Size()) != nil {
+			slog.Warn("Existing object is corrupt or size mismatch; replacing with newly written file",
+				slog.String("digest", digest),
+				slog.Uint64("new_size", size))
+			if renameErr := os.Rename(partialPath, finalPath); renameErr != nil {
+				return "", false, toGRPCError(renameErr, "failed to replace corrupt existing file")
+			}
+		}
+		return finalPath, true, nil
+	} else if err != nil {
+		return "", false, toGRPCError(err, "failed to link partial file to final destination")
+	}
+	return finalPath, false, nil
 }
 
 // Delete removes a local CAS object.

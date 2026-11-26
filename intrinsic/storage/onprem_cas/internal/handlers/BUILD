@@ -21,6 +21,7 @@ go_library(
         "localcas.go",
         "lrop.go",
         "preload.go",
+        "sessions.go",
     ],
     importpath = "intrinsic/storage/onprem_cas/internal/handlers",
     visibility = ["//intrinsic/storage/onprem_cas:__subpackages__"],
@@ -30,7 +31,6 @@ go_library(
         "//intrinsic/storage/onprem_cas/internal/syncset",
         "//intrinsic/storage/onprem_cas_preload/proto/v1:ocp_service_go_proto",
         "//intrinsic/storage/onprem_cas_preload/proto/v1:preload_set_go_proto",
-        "@com_github_google_uuid//:go_default_library",
         "@com_google_cloud_go_longrunning//autogen/longrunningpb",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
         "@org_golang_google_genproto_googleapis_rpc//status:go_default_library",
@@ -41,5 +41,6 @@ go_library(
         "@org_golang_google_protobuf//types/known/durationpb:go_default_library",
         "@org_golang_google_protobuf//types/known/emptypb:go_default_library",
         "@org_golang_google_protobuf//types/known/timestamppb:go_default_library",
+        "@org_golang_x_sys//unix:go_default_library",
     ],
 )

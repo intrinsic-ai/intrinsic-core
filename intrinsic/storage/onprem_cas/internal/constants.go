@@ -18,4 +18,13 @@ package internal
 const (
 	// PartialExt is the extension used for partial files during upload.
 	PartialExt = ".partial"
+
+	// SessionsSubdir is the subdirectory of the partial directory that stores resumable upload
+	// sessions. The startup cleanup of partial files only scans the top level of the partial
+	// directory, so sessions survive a restart.
+	SessionsSubdir = "sessions"
+	// SessionMetadataExt is the extension of the metadata file of a resumable upload session.
+	SessionMetadataExt = ".metadata.json"
+	// SessionTmpExt is appended to a session file name while the file is being replaced.
+	SessionTmpExt = ".tmp"
 )
