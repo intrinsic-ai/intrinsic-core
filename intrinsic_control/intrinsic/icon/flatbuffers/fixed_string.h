@@ -17,8 +17,10 @@
 
 #include <sys/types.h>
 
+#include <algorithm>
 #include <cerrno>
 #include <concepts>
+#include <cstddef>
 #include <cstdint>
 #include <cstring>
 #include <type_traits>
@@ -181,8 +183,10 @@ absl::string_view StringView(const T* source) {
   if (source == nullptr) {
     return absl::string_view();
   }
+  const size_t length =
+      std::min<size_t>(source->size(), static_cast<size_t>(MaxSize));
   return absl::string_view(
-      reinterpret_cast<const char*>(source->data()->data()), source->size());
+      reinterpret_cast<const char*>(source->data()->data()), length);
 }
 
 }  // namespace intrinsic_fbs

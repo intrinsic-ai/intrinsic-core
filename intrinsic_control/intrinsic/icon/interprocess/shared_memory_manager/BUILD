@@ -51,7 +51,9 @@ cc_library(
         ":segment_info_fbs_cc",
         "//intrinsic_control/intrinsic/icon/flatbuffers:fixed_string",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
     ],
 )
 

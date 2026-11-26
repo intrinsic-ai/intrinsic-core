@@ -14,6 +14,8 @@
 
 #include "intrinsic/icon/hal/interfaces/hardware_module_state_utils.h"
 
+#include <algorithm>
+#include <cstddef>
 #include <cstring>
 #include <string_view>
 
@@ -33,11 +35,20 @@ flatbuffers::DetachedBuffer BuildHardwareModuleState() {
 
 void SetState(HardwareModuleState* hardware_module_state, StateCode code,
               std::string_view message) {
-  size_t max_length = hardware_module_state->message()->size();
-  max_length = message.size() < max_length ? message.size() : max_length;
+  if (hardware_module_state == nullptr ||
+      hardware_module_state->mutable_message() == nullptr) {
+    return;
+  }
   hardware_module_state->mutate_code(code);
-  std::memcpy(hardware_module_state->mutable_message()->Data(), message.data(),
-              max_length);
+  const size_t capacity = hardware_module_state->message()->size();
+  if (capacity == 0) {
+    return;
+  }
+  const size_t max_length = std::min(message.size(), capacity - 1);
+  if (max_length > 0) {
+    std::memcpy(hardware_module_state->mutable_message()->Data(),
+                message.data(), max_length);
+  }
   hardware_module_state->mutable_message()->Data()[max_length] = '\0';
 }
 
@@ -46,7 +57,14 @@ std::string_view GetMessage(const HardwareModuleState* hardware_module_state) {
       hardware_module_state->message() == nullptr) {
     return "";
   }
-  return reinterpret_cast<const char*>(
-      hardware_module_state->message()->Data());
+  const char* data =
+      reinterpret_cast<const char*>(hardware_module_state->message()->Data());
+  const size_t capacity = hardware_module_state->message()->size();
+  const void* nul = std::memchr(data, '\0', capacity);
+  const size_t length =
+      nul == nullptr
+          ? capacity
+          : static_cast<size_t>(static_cast<const char*>(nul) - data);
+  return std::string_view(data, length);
 }
 }  // namespace intrinsic_fbs

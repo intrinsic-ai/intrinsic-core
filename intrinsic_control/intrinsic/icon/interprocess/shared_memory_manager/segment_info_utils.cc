@@ -20,7 +20,9 @@
 #include <string>
 #include <vector>
 
+#include "absl/status/status.h"
 #include "absl/status/statusor.h"
+#include "absl/strings/str_cat.h"
 #include "intrinsic/icon/flatbuffers/fixed_string.h"
 #include "intrinsic/icon/interprocess/shared_memory_manager/segment_info.fbs.h"
 #include "intrinsic/util/status/status_macros.h"
@@ -42,6 +44,12 @@ inline static absl::StatusOr<std::string> InterfaceNameFromSegment(
 
 absl::StatusOr<std::vector<std::string>> GetNamesFromSegmentInfo(
     const intrinsic_fbs::SegmentInfo& segment_info) {
+  if (segment_info.names() == nullptr ||
+      segment_info.size() > segment_info.names()->size()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "SegmentInfo size ", segment_info.size(), " exceeds capacity ",
+        segment_info.names() == nullptr ? 0 : segment_info.names()->size()));
+  }
   std::vector<std::string> names;
   names.reserve(segment_info.size());
 
@@ -56,6 +64,15 @@ absl::StatusOr<std::vector<std::string>> GetNamesFromSegmentInfo(
 
 absl::StatusOr<std::vector<std::string>> GetNamesFromFileDescriptorNames(
     const intrinsic_fbs::FileDescriptorNames& file_descriptor_names) {
+  if (file_descriptor_names.names() == nullptr ||
+      file_descriptor_names.size() > file_descriptor_names.names()->size()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("FileDescriptorNames size ", file_descriptor_names.size(),
+                     " exceeds capacity ",
+                     file_descriptor_names.names() == nullptr
+                         ? 0
+                         : file_descriptor_names.names()->size()));
+  }
   std::vector<std::string> names;
   names.reserve(file_descriptor_names.size());
 
@@ -72,6 +89,12 @@ absl::StatusOr<std::vector<std::string>> GetNamesFromFileDescriptorNames(
 absl::StatusOr<std::vector<std::string>>
 GetRequiredInterfaceNamesFromSegmentInfo(
     const intrinsic_fbs::SegmentInfo& segment_info) {
+  if (segment_info.names() == nullptr ||
+      segment_info.size() > segment_info.names()->size()) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "SegmentInfo size ", segment_info.size(), " exceeds capacity ",
+        segment_info.names() == nullptr ? 0 : segment_info.names()->size()));
+  }
   std::vector<std::string> names;
   names.reserve(segment_info.size());
 

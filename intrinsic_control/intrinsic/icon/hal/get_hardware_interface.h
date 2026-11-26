@@ -60,11 +60,19 @@ absl::Status SegmentHeaderIsValid(const SegmentHeader& segment_header,
         SegmentHeader::ExpectedVersion(), "'"));
   }
 
-  if (segment_header.Type().TypeID() !=
+  const SegmentHeader::TypeInfo type_info = segment_header.Type();
+  if (!type_info.IsValid()) {
+    return absl::InvalidArgumentError(
+        absl::StrCat("Invalid type ID size: Interface '", interface_name,
+                     "' has corrupted type header exceeding max size ",
+                     SegmentHeader::TypeInfo::kMaxSize));
+  }
+
+  if (type_info.TypeID() !=
       hardware_interface_traits::TypeID<HardwareInterfaceT>::kTypeString) {
     return absl::InvalidArgumentError(absl::StrCat(
         "Type mismatch: Interface '", interface_name, "' has type '",
-        segment_header.Type().TypeID(), "' but expected type '",
+        type_info.TypeID(), "' but expected type '",
         hardware_interface_traits::TypeID<HardwareInterfaceT>::kTypeString,
         "'"));
   }

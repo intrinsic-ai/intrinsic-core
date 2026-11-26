@@ -18,6 +18,7 @@
 #include <semaphore.h>
 #include <stddef.h>
 
+#include <algorithm>
 #include <bitset>
 #include <cstdint>
 #include <cstring>
@@ -65,14 +66,18 @@ class alignas(64) SegmentHeader final {
       type_id_size_ = string_size;
     }
 
-    // Returns the type id string.
+    // Returns true if the stored size does not exceed kMaxSize.
+    bool IsValid() const { return type_id_size_ <= kMaxSize; }
+
+    // Returns the type id string, clamped to kMaxSize in case shared memory
+    // was corrupted.
     absl::string_view TypeID() const {
-      return absl::string_view(type_id_, type_id_size_);
+      return absl::string_view(type_id_, std::min(type_id_size_, kMaxSize));
     }
 
     // Comparison operators.
     bool operator==(const TypeInfo& rhs) const {
-      return type_id_size_ == rhs.type_id_size_ &&
+      return IsValid() && rhs.IsValid() && type_id_size_ == rhs.type_id_size_ &&
              std::strncmp(type_id_, rhs.type_id_, type_id_size_) == 0;
     }
     bool operator!=(const TypeInfo& rhs) const { return !(*this == rhs); }

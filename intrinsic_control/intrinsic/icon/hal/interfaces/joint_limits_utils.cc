@@ -87,6 +87,15 @@ RealtimeStatus ToFlatbufferWithSizeCheck(absl::Span<const double> field,
 
 RealtimeStatus CopyTo(const JointLimits& limits,
                       intrinsic_fbs::JointLimits& fb_limits) {
+  if (fb_limits.mutable_min_position() == nullptr ||
+      fb_limits.mutable_max_position() == nullptr ||
+      fb_limits.mutable_max_velocity() == nullptr ||
+      fb_limits.mutable_max_acceleration() == nullptr ||
+      fb_limits.mutable_max_jerk() == nullptr ||
+      fb_limits.mutable_max_effort() == nullptr) {
+    return InvalidArgumentError(
+        "JointLimits Flatbuffer is missing one or more required vectors.");
+  }
   INTRINSIC_RT_RETURN_IF_ERROR(ToFlatbufferWithSizeCheck(
       limits.min_position, *fb_limits.mutable_min_position(), "min_position"));
   INTRINSIC_RT_RETURN_IF_ERROR(ToFlatbufferWithSizeCheck(
@@ -111,9 +120,45 @@ RealtimeStatus CopyTo(const JointLimits& limits,
 
 RealtimeStatus CopyTo(const intrinsic_fbs::JointLimits& fb_limits,
                       JointLimits& limits) {
+  if (fb_limits.min_position() == nullptr ||
+      fb_limits.max_position() == nullptr) {
+    return InvalidArgumentError(
+        "JointLimits Flatbuffer is missing min_position or max_position.");
+  }
   const size_t num_joints = fb_limits.min_position()->size();
+  if (fb_limits.max_position()->size() != num_joints) {
+    return InvalidArgumentError(
+        "JointLimits Flatbuffer max_position size does not match "
+        "min_position.");
+  }
+  if (fb_limits.has_velocity_limits() &&
+      (fb_limits.max_velocity() == nullptr ||
+       fb_limits.max_velocity()->size() != num_joints)) {
+    return InvalidArgumentError(
+        "JointLimits Flatbuffer max_velocity is missing or has mismatched "
+        "size.");
+  }
+  if (fb_limits.has_acceleration_limits() &&
+      (fb_limits.max_acceleration() == nullptr ||
+       fb_limits.max_acceleration()->size() != num_joints)) {
+    return InvalidArgumentError(
+        "JointLimits Flatbuffer max_acceleration is missing or has mismatched "
+        "size.");
+  }
+  if (fb_limits.has_jerk_limits() &&
+      (fb_limits.max_jerk() == nullptr ||
+       fb_limits.max_jerk()->size() != num_joints)) {
+    return InvalidArgumentError(
+        "JointLimits Flatbuffer max_jerk is missing or has mismatched size.");
+  }
+  if (fb_limits.has_effort_limits() &&
+      (fb_limits.max_effort() == nullptr ||
+       fb_limits.max_effort()->size() != num_joints)) {
+    return InvalidArgumentError(
+        "JointLimits Flatbuffer max_effort is missing or has mismatched size.");
+  }
   INTRINSIC_RT_RETURN_IF_ERROR(limits.SetSize(num_joints));
-  for (int i = 0; i < num_joints; ++i) {
+  for (size_t i = 0; i < num_joints; ++i) {
     limits.min_position[i] = fb_limits.min_position()->Get(i);
     limits.max_position[i] = fb_limits.max_position()->Get(i);
     if (fb_limits.has_velocity_limits()) {

@@ -445,5 +445,18 @@ TEST(FixedStringTest, WhenArrayIsNullptr2) {
   EXPECT_EQ(null_string_view, "");
 }
 
+TEST(FixedStringTest, StringViewClampsCorruptedSizeToCapacity) {
+  // Regression test for b/587206918: corrupted size fields exceeding the
+  // backing array length must be clamped to array capacity.
+  TestMessageWithUnsignedArray unsigned_message;
+  unsigned_message.mutate_size(65535);
+  EXPECT_EQ(StringView(&unsigned_message).size(),
+            unsigned_message.data()->size());
+
+  TestMessageWithSignedArray signed_message;
+  signed_message.mutate_size(65535);
+  EXPECT_EQ(StringView(&signed_message).size(), signed_message.data()->size());
+}
+
 }  // namespace
 }  // namespace intrinsic_fbs
