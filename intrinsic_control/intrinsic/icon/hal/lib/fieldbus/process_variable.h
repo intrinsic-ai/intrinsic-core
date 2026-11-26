@@ -169,18 +169,21 @@ class ProcessVariable {
 
     // Shift the raw value if it has an offset.
     if (bit_offset_ > 0) {
-      // The value might have consumed a few `high` bits in the adjacent memory.
-      uint64_t high_raw_value = MemCast<uint64_t>(data_ + byte_size_, 1);
-      // Shift these `high` bits back to where they belong.
-      high_raw_value = high_raw_value << (byte_size_ * 8 - bit_offset_);
+      // Correct the offset of the `low` bits.
+      low_raw_value >>= bit_offset_;
 
-      // Correct the offset of the `low` bits and merge with the `high` bits.
-      low_raw_value = (low_raw_value >> bit_offset_) | high_raw_value;
+      // Only read the adjacent `high` byte if the variable actually spills past
+      // `byte_size_` bytes.
+      if (bit_size_ + bit_offset_ > byte_size_ * 8) {
+        uint64_t high_raw_value = MemCast<uint64_t>(data_ + byte_size_, 1);
+        // Shift these `high` bits back to where they belong and merge.
+        low_raw_value |= high_raw_value << (byte_size_ * 8 - bit_offset_);
+      }
     }
 
     // Clear any bits beyond bit_size_.
-    const uint64_t bit_size_ones = (uint64_t{1} << (bit_size_ - 1)) +
-                                   ((uint64_t{1} << (bit_size_ - 1))) - 1;
+    const uint64_t bit_size_ones =
+        bit_size_ >= 64 ? ~uint64_t{0} : (uint64_t{1} << bit_size_) - 1;
     low_raw_value &= bit_size_ones;
     return low_raw_value;
   }
@@ -225,45 +228,52 @@ class ProcessVariable {
     // potential `bit_offset_`). Finally, we write the low and high memory
     // locations by performing an OR with the target memory locations.
 
+    if (bit_size_ == 0) {
+      return;
+    }
+
     // Take a copy of the target memory.
     uint64_t low_raw_value = MemCast<uint64_t>(data_, byte_size_);
 
     // Clear the target bits.
-    const uint64_t bit_size_ones = (uint64_t{1} << (bit_size_ - 1)) +
-                                   ((uint64_t{1} << (bit_size_ - 1))) - 1;
+    const uint64_t bit_size_ones =
+        bit_size_ >= 64 ? ~uint64_t{0} : (uint64_t{1} << bit_size_) - 1;
 
-    uint64_t low_raw_mask = std::numeric_limits<uint64_t>::max();
-    low_raw_mask = low_raw_mask - (bit_size_ones << bit_offset_);
-
-    low_raw_value = low_raw_value & low_raw_mask;
+    const uint64_t low_raw_mask = ~(bit_size_ones << bit_offset_);
+    low_raw_value &= low_raw_mask;
 
     // Align the target value.
-    uint64_t target_raw_value = 0;
-    memcpy(&target_raw_value, &value, sizeof(value));
-    target_raw_value &= bit_size_ones;
-    uint64_t low_target_raw_value = target_raw_value << bit_offset_;
+    const uint64_t target_raw_value = value & bit_size_ones;
+    const uint64_t low_target_raw_value = target_raw_value << bit_offset_;
 
-    // Write the value.
-    low_raw_value = low_raw_value | low_target_raw_value;
+    // Write the low bytes.
+    low_raw_value |= low_target_raw_value;
     memcpy(data_, &low_raw_value, byte_size_);
 
-    // Handle the high bits, if necessary.
-    if (bit_offset_ > 0 && (bit_size_ + bit_offset_) > 8) {
-      // Take a copy of the target memory.
+    // Handle the high bits only when the variable spills past `byte_size_`
+    // bytes.
+    const std::size_t total_bits = bit_size_ + bit_offset_;
+    const std::size_t low_capacity_bits = byte_size_ * 8;
+    if (total_bits > low_capacity_bits) {
+      const std::size_t high_bit_count = total_bits - low_capacity_bits;
+      const std::size_t low_bit_count = low_capacity_bits - bit_offset_;
+
+      // Take a copy of the adjacent high byte.
       uint8_t high_raw_value =
           MemCast<uint8_t>(data_ + byte_size_, sizeof(high_raw_value));
 
-      // Clear the target bits
-      uint8_t high_raw_mask = std::numeric_limits<uint8_t>::max();
-      high_raw_mask = high_raw_mask << bit_offset_;
-      high_raw_value = high_raw_value & high_raw_mask;
+      // Clear only the `high_bit_count` least significant bits occupied by the
+      // spilled portion of this variable, preserving all higher adjacent bits.
+      const uint8_t high_raw_mask =
+          static_cast<uint8_t>(~((1u << high_bit_count) - 1u));
+      high_raw_value &= high_raw_mask;
 
-      // Align the target value.
-      uint8_t high_target_raw_value = 0;
-      high_target_raw_value = (target_raw_value >> (bit_size_ - bit_offset_));
-      high_raw_value = high_raw_value | high_target_raw_value;
+      // Align the spilled bits of the target value.
+      const uint8_t high_target_raw_value =
+          static_cast<uint8_t>(target_raw_value >> low_bit_count);
+      high_raw_value |= high_target_raw_value;
 
-      // Write the value.
+      // Write the high byte.
       memcpy(data_ + byte_size_, &high_raw_value, sizeof(high_raw_value));
     }
   }
