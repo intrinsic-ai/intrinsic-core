@@ -1,0 +1,44 @@
+// Copyright 2026 Intrinsic Innovation LLC
+//
+// Licensed under the Apache License, Version 2.0 (the "License");
+// you may not use this file except in compliance with the License.
+// You may obtain a copy of the License at
+//
+//     https://www.apache.org/licenses/LICENSE-2.0
+//
+// Unless required by applicable law or agreed to in writing, software
+// distributed under the License is distributed on an "AS IS" BASIS,
+// WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+// See the License for the specific language governing permissions and
+// limitations under the License.
+
+syntax = "proto3";
+
+package intrinsic_proto.simulation;
+
+import "intrinsic/math/proto/vector3.proto";
+
+option go_package = "intrinsic/simulation/resources/outfeed_server_go_proto";
+
+message ProcessOutfeedRequest {
+  // The world-space position from which we'd like to outfeed objects.
+  intrinsic_proto.Vector3 position = 1;
+
+  // The extents of the bounding box centered at the outfeed_position within
+  // which we search for objects to outfeed. Defaults to (1, 1, 1).
+  intrinsic_proto.Vector3 bounds = 2;
+
+  // The world object name prefix that we will remove from the bounds specified
+  // by this outfeed request.
+  string prefix = 3;
+}
+
+message ProcessOutfeedResponse {}
+
+// This service removes objects in simulation based on the configured outfeed in
+// the world.
+service Outfeed {
+  // Communicates with the simulator to remove objects from an outfeed. This has
+  // no effect if we are running on a real workcell.
+  rpc ProcessOutfeed(ProcessOutfeedRequest) returns (ProcessOutfeedResponse) {}
+}
