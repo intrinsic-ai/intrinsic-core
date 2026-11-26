@@ -48,6 +48,31 @@ absl::StatusOr<ImmutableBuffer> CopyToImmutableBuffer(
 // unmodified.
 absl::StatusOr<ImmutableBuffer> FreezeMutableBuffer(MutableBuffer&& buffer);
 
+// Converts a valid `ImmutableBuffer` into a writable 256-byte-aligned
+// `MutableBuffer`. Transfers ownership in O(1) without copying or allocating
+// when `buffer` is uniquely owned (`ref_count == 1`), writable, non-SHM, and
+// 256-byte-aligned; otherwise allocates a fresh buffer using `allocator`
+// (defaulting to `HeapBufferAllocator::Instance()`) and copies
+// `[buffer.data(), buffer.data() + buffer.size())`. Resets `buffer` to the
+// empty, invalid state on success. Returns `absl::StatusCode::kInvalidArgument`
+// if `!buffer.valid()`, or forwards the allocation error if
+// `allocator.Allocate(buffer.size())` fails, leaving `buffer` unmodified on
+// error.
+//
+// Lifetime: `allocator` only needs to remain alive for the duration of this
+// call; the returned `MutableBuffer` can safely outlive `allocator`. Reclaiming
+// a 256-byte-aligned `Slice` in place keeps the full parent allocation alive
+// until the returned `MutableBuffer` (or anything later frozen from it) is
+// destroyed.
+absl::StatusOr<MutableBuffer> UnfreezeOrCopy(
+    ImmutableBuffer&& buffer,
+    const BufferAllocator& allocator = HeapBufferAllocator::Instance());
+// Disallow temporary allocators (for example a stateful pooled allocator) so
+// callers cannot accidentally create and immediately destroy a pool on every
+// call, which would silently disable caching.
+absl::StatusOr<MutableBuffer> UnfreezeOrCopy(
+    ImmutableBuffer&& buffer, const BufferAllocator&& allocator) = delete;
+
 }  // namespace intrinsic
 
 #endif  // INTRINSIC_MIDDLEWARE_BUFFERS_BUFFER_FACTORY_H_

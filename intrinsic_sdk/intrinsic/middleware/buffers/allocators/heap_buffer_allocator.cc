@@ -45,6 +45,8 @@ class HeapBufferControlBlock final : public BufferControlBlock {
   explicit HeapBufferControlBlock(AlignedBytePtr storage) noexcept
       : storage_(std::move(storage)) {}
 
+  [[nodiscard]] bool IsWritable() const noexcept override { return true; }
+
  private:
   AlignedBytePtr storage_;
 };

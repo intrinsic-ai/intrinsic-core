@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 #include <utility>
 
 #include "intrinsic_sdk/intrinsic/middleware/buffers/buffer_internal.h"
@@ -112,6 +113,22 @@ ImmutableBuffer PrivateAccessor::Freeze(MutableBuffer&& buffer) noexcept {
   const bool is_shm = buffer.is_shm_;
   BufferControlBlock* const impl = buffer.ReleaseImpl();
   return ImmutableBuffer(data, size, impl, is_shm);
+}
+
+std::optional<MutableBuffer> PrivateAccessor::TryUnfreeze(
+    ImmutableBuffer& buffer) noexcept {
+  if (!buffer.valid() || buffer.is_shm_ ||
+      buffer.alignment() < MutableBuffer::kAlignment ||
+      !buffer.impl_->IsWritable() || !buffer.impl_->IsUnique()) {
+    return std::nullopt;
+  }
+  uint8_t* const data =
+      const_cast<uint8_t*>(std::exchange(buffer.data_, nullptr));
+  const size_t size = std::exchange(buffer.size_, 0);
+  BufferControlBlock* const impl = std::exchange(buffer.impl_, nullptr);
+  buffer.is_shm_ = false;
+  return PrivateAccessor::CreateMutableBuffer(data, size, impl,
+                                              /*is_shm=*/false);
 }
 
 }  // namespace buffer_internal

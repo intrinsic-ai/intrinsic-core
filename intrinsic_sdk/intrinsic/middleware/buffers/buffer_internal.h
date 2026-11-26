@@ -18,6 +18,7 @@
 #include <atomic>
 #include <cstddef>
 #include <cstdint>
+#include <optional>
 
 namespace intrinsic {
 
@@ -48,6 +49,20 @@ struct BufferControlBlock {
     }
   }
 
+  // Returns true if this control block currently has a single owner. Uses
+  // `memory_order_acquire` to synchronize with any other thread's prior
+  // `Release()` (`memory_order_acq_rel`) before reclaiming mutable ownership.
+  [[nodiscard]] bool IsUnique() const noexcept {
+    return ref_count_.load(std::memory_order_acquire) == 1;
+  }
+
+  // Returns true if the underlying storage is writable and may be reclaimed as
+  // a `MutableBuffer` via `PrivateAccessor::TryUnfreeze()`. Pure virtual so
+  // every concrete subclass explicitly declares writability (for example, true
+  // for heap/pooled allocators and false for read-only adopted `const void*`
+  // storage so `TryUnfreeze()` never casts away constness).
+  [[nodiscard]] virtual bool IsWritable() const noexcept = 0;
+
  protected:
   constexpr BufferControlBlock() noexcept = default;
 
@@ -69,6 +84,14 @@ struct PrivateAccessor {
   // resetting `buffer` to the empty, invalid state.
   // REQUIRES: `buffer.valid() == true`.
   static ImmutableBuffer Freeze(MutableBuffer&& buffer) noexcept;
+
+  // Transfers ownership of a uniquely-owned, writable, non-SHM,
+  // 256-byte-aligned `ImmutableBuffer` back into a writable `MutableBuffer` in
+  // O(1) without copying payload bytes. Resets `buffer` to the empty, invalid
+  // state on success; returns `std::nullopt` leaving `buffer` unmodified
+  // otherwise.
+  [[nodiscard]] static std::optional<MutableBuffer> TryUnfreeze(
+      ImmutableBuffer& buffer) noexcept;
 };
 
 }  // namespace buffer_internal

@@ -16,6 +16,7 @@
 
 #include <cstddef>
 #include <cstring>
+#include <optional>
 #include <utility>
 
 #include "absl/status/status.h"
@@ -52,6 +53,26 @@ absl::StatusOr<ImmutableBuffer> FreezeMutableBuffer(MutableBuffer&& buffer) {
     return absl::InvalidArgumentError("Cannot freeze an invalid MutableBuffer");
   }
   return buffer_internal::PrivateAccessor::Freeze(std::move(buffer));
+}
+
+absl::StatusOr<MutableBuffer> UnfreezeOrCopy(ImmutableBuffer&& buffer,
+                                             const BufferAllocator& allocator) {
+  if (!buffer.valid()) {
+    return absl::InvalidArgumentError(
+        "Cannot unfreeze or copy an invalid ImmutableBuffer");
+  }
+  if (std::optional<MutableBuffer> unfrozen =
+          buffer_internal::PrivateAccessor::TryUnfreeze(buffer);
+      unfrozen.has_value()) {
+    return *std::move(unfrozen);
+  }
+  INTR_ASSIGN_OR_RETURN(MutableBuffer copy,
+                        AllocateMutableBuffer(buffer.size(), allocator));
+  if (buffer.size() > 0) {
+    std::memcpy(copy.data(), buffer.data(), buffer.size());
+  }
+  buffer = ImmutableBuffer();
+  return copy;
 }
 
 }  // namespace intrinsic
