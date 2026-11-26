@@ -138,6 +138,9 @@ message MotionPlannerServiceConfig {
   // set. If false, such `PlanTrajectory`/`PlanPath` requests fail with
   // FAILED_PRECONDITION.
   bool enable_motion_planner_service_swept_volumes = 15;
+  // If true (or unset), the compute-heavy gRPC handler threads (and their child
+  // worker threads) get pinned to performance cores on hybrid CPUs.
+  optional bool pin_to_performance_cores = 18;
 }
 
 message MotionPlanningRequest {

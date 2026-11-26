@@ -95,6 +95,7 @@
 #include "intrinsic/motion_planning/service/motion_planner_service_utils.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache.h"
 #include "intrinsic/motion_planning/service/nonvolatile_cache/motion_planner_nonvolatile_cache_utils.h"
+#include "intrinsic/motion_planning/service/performance_core_affinity.h"
 #include "intrinsic/platform/pubsub/pubsub.h"
 #include "intrinsic/skills/internal/world_service_utils.h"
 #include "intrinsic/stats/scoped_span.h"
@@ -516,6 +517,9 @@ void FromProto(
       proto_config.enable_motion_planner_service_swept_volumes();
   config.max_diff_in_rad_for_starting_robot_configuration_threshold =
       proto_config.joint_tolerance_in_rad();
+  if (proto_config.has_pin_to_performance_cores()) {
+    config.pin_to_performance_cores = proto_config.pin_to_performance_cores();
+  }
 }
 
 absl::StatusOr<WorldAndProto>
@@ -717,10 +721,24 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
   return absl::OkStatus();
 }
 
+void MotionPlannerService::ConditionallyPinCurrentThreadToPerformanceCores()
+    const {
+  if (!mps_config_.pin_to_performance_cores) {
+    return;
+  }
+  thread_local bool has_attempted_pinning = false;
+  if (has_attempted_pinning) {
+    return;
+  }
+  has_attempted_pinning = true;
+  TryPinCurrentThreadToPerformanceCores();
+}
+
 ::grpc::Status MotionPlannerService::PlanTrajectoryInternal(
     grpc::ServerContext* context, const MotionPlanningRequest* request,
     intrinsic_proto::motion_planning::v1::TrajectoryPlanningResponse* response,
     std::optional<RunTimeMotionPlannerFlags> run_time_flags) {
+  ConditionallyPinCurrentThreadToPerformanceCores();
   INTR_RETURN_IF_ERROR_GRPC(CheckSweptVolumeRequestAllowed(
       *request, mps_config_.enable_motion_planner_service_swept_volumes));
   TimingDebugLogger logger("PlanTrajectoryInternal");
@@ -922,6 +940,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
 ::grpc::Status MotionPlannerService::PlanPath(
     ::grpc::ServerContext* context, const MotionPlanningRequest* request,
     intrinsic_proto::motion_planning::v1::PathPlanningResponse* response) {
+  ConditionallyPinCurrentThreadToPerformanceCores();
   const stats::ScopedSpan span("MotionPlannerService/PlanPath", context);
   INTR_RETURN_IF_ERROR_GRPC(CheckSweptVolumeRequestAllowed(
       *request, mps_config_.enable_motion_planner_service_swept_volumes));
@@ -1004,6 +1023,7 @@ MotionPlannerService::ConvertPlanTrajectoryResultToTrajectoryPlanningResponse(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::IkRequest* request,
     intrinsic_proto::motion_planning::v1::IkResponse* response) {
+  ConditionallyPinCurrentThreadToPerformanceCores();
   const stats::ScopedSpan span("MotionPlannerService/ComputeIk", context);
   const absl::Status status = ComputeIkInternal(
       *request,
@@ -1100,6 +1120,7 @@ absl::Status MotionPlannerService::ComputeIkInternal(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::FkRequest* request,
     intrinsic_proto::motion_planning::v1::FkResponse* response) {
+  ConditionallyPinCurrentThreadToPerformanceCores();
   const stats::ScopedSpan span("MotionPlannerService/ComputeFk", context);
   // Download the world from the world service.
   INTR_ASSIGN_OR_RETURN_GRPC(
@@ -1143,6 +1164,7 @@ absl::Status MotionPlannerService::ComputeIkInternal(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::CheckCollisionsRequest* request,
     intrinsic_proto::motion_planning::v1::CheckCollisionsResponse* response) {
+  ConditionallyPinCurrentThreadToPerformanceCores();
   const stats::ScopedSpan span("MotionPlannerService/CheckCollisions", context);
   // Download the world from the world service.
   INTR_ASSIGN_OR_RETURN_GRPC(
@@ -1205,6 +1227,7 @@ absl::Status MotionPlannerService::ComputeIkInternal(
     ::grpc::ServerContext* context,
     const intrinsic_proto::motion_planning::v1::BatchCheckRequest* request,
     intrinsic_proto::motion_planning::v1::BatchCheckResponse* response) {
+  ConditionallyPinCurrentThreadToPerformanceCores();
   const stats::ScopedSpan span("MotionPlannerService/BatchCheck", context);
 
   INTR_RETURN_IF_ERROR_GRPC(ValidateBatchCheckRequest(*request));

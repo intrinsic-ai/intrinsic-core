@@ -160,6 +160,7 @@ TEST(MotionPlannerServiceConfigProtoTest, FromProto) {
   proto_config.set_enable_motion_planner_service_caching_fuzzy_check(true);
   proto_config.set_enable_motion_planner_service_swept_volumes(true);
   proto_config.set_joint_tolerance_in_rad(0.005);
+  proto_config.set_pin_to_performance_cores(false);
   proto_config.set_log_all_recordings(true);
   MotionPlannerServiceConfig config;
   FromProto(proto_config, config);
@@ -171,6 +172,18 @@ TEST(MotionPlannerServiceConfigProtoTest, FromProto) {
   EXPECT_TRUE(config.enable_motion_planner_service_swept_volumes);
   EXPECT_DOUBLE_EQ(
       config.max_diff_in_rad_for_starting_robot_configuration_threshold, 0.005);
+  EXPECT_FALSE(config.pin_to_performance_cores);
+}
+
+TEST(MotionPlannerServiceConfigProtoTest,
+     FromProtoDefaultsPinToPerformanceCoresToTrueWhenUnset) {
+  const intrinsic_proto::motion_planning::v1::MotionPlannerServiceConfig
+      proto_config;
+  MotionPlannerServiceConfig config;
+
+  FromProto(proto_config, config);
+
+  EXPECT_TRUE(config.pin_to_performance_cores);
 }
 
 class MotionPlannerServiceWithSweptVolumesDisabledTest

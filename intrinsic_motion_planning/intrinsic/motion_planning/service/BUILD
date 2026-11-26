@@ -39,6 +39,7 @@ cc_library(
     deps = [
         ":motion_planner_service_asset_utils",
         ":motion_planner_service_utils",
+        ":performance_core_affinity",
         "//intrinsic/logging:log_item_builder",
         "//intrinsic/skills/internal:world_service_utils",
         "//intrinsic/stats:scoped_span",
@@ -143,6 +144,24 @@ cc_library(
         "@intrinsic_apis//intrinsic/world/proto:object_world_updates_cc_proto",
         "@io_opentelemetry_cpp//api",
     ] + [],
+)
+
+cc_library(
+    name = "performance_core_affinity",
+    srcs = ["performance_core_affinity.cc"],
+    hdrs = ["performance_core_affinity.h"],
+    deps = [
+        "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/thread:thread_options",
+        "//intrinsic_sdk/intrinsic/util/thread:thread_utils",
+        "//intrinsic_sdk/intrinsic/util/thread:util",
+        "@abseil-cpp//absl/container:flat_hash_set",
+        "@abseil-cpp//absl/log",
+        "@abseil-cpp//absl/status",
+        "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
+    ],
 )
 
 cc_binary(

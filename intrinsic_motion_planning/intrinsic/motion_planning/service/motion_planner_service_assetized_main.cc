@@ -79,6 +79,11 @@ ABSL_FLAG(std::string, runtime_context_file, "/etc/intrinsic/runtime_config.pb",
           "The path to the runtime context file containing "
           "intrinsic_proto.config.RuntimeContext binary proto.");
 
+ABSL_FLAG(bool, pin_to_performance_cores, true,
+          "If true, on hybrid CPUs (e.g. Intel P/E cores), pin gRPC compute "
+          "handler threads (and their child worker threads) to allowed non-RT "
+          "performance cores.");
+
 namespace intrinsic {
 
 int MainImpl() {
@@ -183,6 +188,7 @@ int MainImpl() {
   MotionPlannerServiceConfig mps_config{
       .workcell_name = absl::GetFlag(FLAGS_workcell_name),
       .organization_id = absl::GetFlag(FLAGS_organization_id),
+      .pin_to_performance_cores = absl::GetFlag(FLAGS_pin_to_performance_cores),
   };
 
   FromProto(proto_config, mps_config);

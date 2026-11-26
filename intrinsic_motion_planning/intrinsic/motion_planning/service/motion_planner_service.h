@@ -102,6 +102,10 @@ struct MotionPlannerServiceConfig {
   // of the flags therein contained.
   MotionPlannerFlags flags = {};
 
+  // If true, on hybrid CPUs, pin gRPC compute handler threads (and their child
+  // worker threads) to allowed non-RT performance cores.
+  bool pin_to_performance_cores = true;
+
 };
 
 // Assigns the configuration fields of C++ `MotionPlannerServiceConfig` from
@@ -203,6 +207,11 @@ class MotionPlannerService : public intrinsic_proto::motion_planning::v1::
       std::optional<std::string> mps_asset_version = std::nullopt,
       const StructuredLoggingClient* logger_client = nullptr
   );
+
+  // If `mps_config_.pin_to_performance_cores` is true, pins the calling gRPC
+  // handler thread (and any child worker threads it subsequently spawns) to
+  // allowed non-RT performance cores once per thread.
+  void ConditionallyPinCurrentThreadToPerformanceCores() const;
 
   // Returns both the initial World and its proto from the World Service with
   // ID `world_id`.
