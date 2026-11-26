@@ -18,7 +18,7 @@ load("//bazel:cc_macros.bzl", "cc_test")
 load("//intrinsic_sdk/intrinsic/util/proto/build_defs:descriptor_set.bzl", "proto_source_code_info_transitive_descriptor_set")
 
 def _cc_test_for_srcs(name, srcs, message, tags, transitive_descriptor_set_name, **kwargs):
-    srcs_locations = ["$(location %s)" % src for src in srcs]
+    srcs_locations = ["$(rootpath %s)" % src for src in srcs]
     cc_test(
         name = name,
         data = srcs + [transitive_descriptor_set_name],
@@ -26,7 +26,7 @@ def _cc_test_for_srcs(name, srcs, message, tags, transitive_descriptor_set_name,
         args = [
             "--message_full_name=" + message,
             "--text_proto_files=" + ",".join(srcs_locations),
-            "--transitive_descriptor_set_file=$(location %s)" % transitive_descriptor_set_name,
+            "--transitive_descriptor_set_file=$(rootpath %s)" % transitive_descriptor_set_name,
         ],
         tags = tags,
         **kwargs

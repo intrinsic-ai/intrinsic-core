@@ -110,7 +110,7 @@ def basler_hardware_device(
                 "basler_%s_collision.glb" % model,
                 "basler_%s_visual.glb" % model,
             ],
-            cmd = "$(location //intrinsic_perception/intrinsic/perception/cameras/hardware_devices:generate_basler_camera) --model %s --output-visual $(location basler_%s_visual.glb) --output-collision $(location basler_%s_collision.glb)" % (model, model, model),
+            cmd = "$(execpath //intrinsic_perception/intrinsic/perception/cameras/hardware_devices:generate_basler_camera) --model %s --output-visual $(execpath basler_%s_visual.glb) --output-collision $(execpath basler_%s_collision.glb)" % (model, model, model),
             tools = ["//intrinsic_perception/intrinsic/perception/cameras/hardware_devices:generate_basler_camera"],
         )
 

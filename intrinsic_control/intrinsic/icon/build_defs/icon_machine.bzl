@@ -176,13 +176,13 @@ def icon_config_init_test(
       visibility: Visibility attribute to use for all generated targets.
     """
     args = [
-        (("--world_gzf_path=$(location %s)" % init_test_world_gzf_path) if init_test_world_gzf_path else ""),
+        (("--world_gzf_path=$(rootpath %s)" % init_test_world_gzf_path) if init_test_world_gzf_path else ""),
         "--resource_id=\"%s\"" % init_test_resource_id,
-        "--fake_hwm_configs=%s" % ",".join(["$(location %s)" % config_file for config_file in fake_hwm_configs]),
+        "--fake_hwm_configs=%s" % ",".join(["$(rootpath %s)" % config_file for config_file in fake_hwm_configs]),
     ]
     data = fake_hwm_configs + ([init_test_world_gzf_path] if init_test_world_gzf_path else [])
     args.append(
-        "--config_pbtxt_file=$(location %s)" % cfg,
+        "--config_pbtxt_file=$(rootpath %s)" % cfg,
     )
     data.append(cfg)
     cc_test(

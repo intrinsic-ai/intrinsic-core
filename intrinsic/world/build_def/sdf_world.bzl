@@ -237,7 +237,7 @@ def sdf_world(
                 name,
             ],
             args = [
-                "--world_gzf_filename=$(location %s)" % name,
+                "--world_gzf_filename=$(rootpath %s)" % name,
                 "--additional_check_objects_args='--sdf_to_object_world_authoring_hints'",
             ],
             compatible_with = compatible_with,

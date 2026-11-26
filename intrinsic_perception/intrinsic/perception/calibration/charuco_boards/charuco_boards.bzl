@@ -76,11 +76,11 @@ def charuco_board(
             "%s_texture.png" % name,
         ],
         cmd = (
-            "$(location //intrinsic_perception/intrinsic/perception/calibration/charuco_boards:generate_charuco_board) " +
+            "$(execpath //intrinsic_perception/intrinsic/perception/calibration/charuco_boards:generate_charuco_board) " +
             "--name %s --rows %d --cols %d --checker_mm %s --marker_mm %s --dict_id %s " +
             "--board_width_mm %s --board_height_mm %s " +
-            "--sdf_template $(location //intrinsic_perception/intrinsic/perception/calibration/charuco_boards:model.sdf.template) " +
-            "--config_template $(location //intrinsic_perception/intrinsic/perception/calibration/charuco_boards:model.config.template) " +
+            "--sdf_template $(execpath //intrinsic_perception/intrinsic/perception/calibration/charuco_boards:model.sdf.template) " +
+            "--config_template $(execpath //intrinsic_perception/intrinsic/perception/calibration/charuco_boards:model.config.template) " +
             "--uri_prefix model://intrinsic/perception/calibration/charuco_boards " +
             "--out_dir $(RULEDIR)"
         ) % (

@@ -26,7 +26,7 @@ genrule(
     outs = [
         "arv_fake_camera_resources.c",
     ],
-    cmd = "$(location @glib//gio:glib_compile_resources) --manual-register --sourcedir=$$(dirname $(location arv_fake_camera.gresource.xml)) --generate-source --target=$@ $(location arv_fake_camera.gresource.xml)",
+    cmd = "$(execpath @glib//gio:glib_compile_resources) --manual-register --sourcedir=$$(dirname $(execpath arv_fake_camera.gresource.xml)) --generate-source --target=$@ $(execpath arv_fake_camera.gresource.xml)",
     tools = ["@glib//gio:glib_compile_resources"],
 )
 

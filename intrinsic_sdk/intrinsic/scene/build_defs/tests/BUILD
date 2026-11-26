@@ -76,8 +76,8 @@ sh_test(
     name = "failing_invalid_mesh_test",
     srcs = ["test_sdf_validation.sh"],
     args = [
-        "$(location //intrinsic_sdk/intrinsic/scene/sdf:sdf_to_scene_object)",
-        "$(location invalid_visual.sdf)",
+        "$(rootpath //intrinsic_sdk/intrinsic/scene/sdf:sdf_to_scene_object)",
+        "$(rootpath invalid_visual.sdf)",
         "true",
     ],
     data = [
@@ -91,8 +91,8 @@ sh_test(
     name = "passing_invalid_visual_test",
     srcs = ["test_sdf_validation.sh"],
     args = [
-        "$(location //intrinsic_sdk/intrinsic/scene/sdf:sdf_to_scene_object)",
-        "$(location invalid_visual.sdf)",
+        "$(rootpath //intrinsic_sdk/intrinsic/scene/sdf:sdf_to_scene_object)",
+        "$(rootpath invalid_visual.sdf)",
         "false",
     ],
     data = [
