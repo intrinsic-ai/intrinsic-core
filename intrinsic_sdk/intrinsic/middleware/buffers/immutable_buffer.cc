@@ -45,13 +45,14 @@ ImmutableBuffer& ImmutableBuffer::operator=(
   if (other.impl_ != nullptr) {
     other.impl_->Retain();
   }
-  if (impl_ != nullptr) {
-    impl_->Release();
-  }
+  buffer_internal::BufferControlBlock* const old_impl = impl_;
   data_ = other.data_;
   size_ = other.size_;
   impl_ = other.impl_;
   is_shm_ = other.is_shm_;
+  if (old_impl != nullptr) {
+    old_impl->Release();
+  }
   return *this;
 }
 
@@ -65,13 +66,14 @@ ImmutableBuffer& ImmutableBuffer::operator=(ImmutableBuffer&& other) noexcept {
   if (this == &other) {
     return *this;
   }
-  if (impl_ != nullptr) {
-    impl_->Release();
-  }
+  buffer_internal::BufferControlBlock* const old_impl = impl_;
   data_ = std::exchange(other.data_, nullptr);
   size_ = std::exchange(other.size_, 0);
   impl_ = std::exchange(other.impl_, nullptr);
   is_shm_ = std::exchange(other.is_shm_, false);
+  if (old_impl != nullptr) {
+    old_impl->Release();
+  }
   return *this;
 }
 
@@ -129,6 +131,11 @@ std::optional<MutableBuffer> PrivateAccessor::TryUnfreeze(
   buffer.is_shm_ = false;
   return PrivateAccessor::CreateMutableBuffer(data, size, impl,
                                               /*is_shm=*/false);
+}
+
+ImmutableBuffer PrivateAccessor::CreateAdoptedImmutableBuffer(
+    const uint8_t* data, size_t size, BufferControlBlock* impl) noexcept {
+  return ImmutableBuffer(data, size, impl, /*is_shm=*/false);
 }
 
 }  // namespace buffer_internal

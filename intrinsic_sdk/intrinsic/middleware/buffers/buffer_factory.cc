@@ -15,10 +15,13 @@
 #include "intrinsic_sdk/intrinsic/middleware/buffers/buffer_factory.h"
 
 #include <cstddef>
+#include <cstdint>
 #include <cstring>
+#include <new>
 #include <optional>
 #include <utility>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/status.h"
 #include "absl/status/statusor.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/allocators/buffer_allocator.h"
@@ -73,6 +76,62 @@ absl::StatusOr<MutableBuffer> UnfreezeOrCopy(ImmutableBuffer&& buffer,
   }
   buffer = ImmutableBuffer();
   return copy;
+}
+
+namespace {
+
+// Shared 256-byte-aligned dummy byte used as the non-null `data()` address for
+// valid zero-length (`size() == 0`) adopted buffers.
+alignas(ImmutableBuffer::kAlignment) constexpr uint8_t kEmptyAdoptedByte = 0;
+
+class AdoptedImmutableControlBlock final
+    : public buffer_internal::BufferControlBlock {
+ public:
+  AdoptedImmutableControlBlock() noexcept = default;
+
+  ~AdoptedImmutableControlBlock() override {
+    if (deleter_) {
+      std::move(deleter_)();
+    }
+  }
+
+  void SetDeleter(absl::AnyInvocable<void() &&> deleter) noexcept {
+    deleter_ = std::move(deleter);
+  }
+
+  // Adopted `const void*` storage may reside in read-only memory or be backed
+  // by a caller container that expects immutable access; never allow
+  // `TryUnfreeze()` to `const_cast` it into a writable `MutableBuffer`.
+  [[nodiscard]] bool IsWritable() const noexcept override { return false; }
+
+ private:
+  absl::AnyInvocable<void() &&> deleter_;
+};
+
+}  // namespace
+
+absl::StatusOr<ImmutableBuffer> AdoptImmutableBuffer(
+    const void* data, size_t size, absl::AnyInvocable<void() &&> deleter) {
+  if (size > 0 && data == nullptr) {
+    if (deleter) {
+      std::move(deleter)();
+    }
+    return absl::InvalidArgumentError(
+        "Cannot adopt non-empty ImmutableBuffer from null data pointer");
+  }
+  auto* impl = new (std::nothrow) AdoptedImmutableControlBlock();
+  if (impl == nullptr) {
+    if (deleter) {
+      std::move(deleter)();
+    }
+    return absl::ResourceExhaustedError(
+        "Failed to allocate ImmutableBuffer control block");
+  }
+  impl->SetDeleter(std::move(deleter));
+  const uint8_t* const ptr =
+      (size > 0) ? static_cast<const uint8_t*>(data) : &kEmptyAdoptedByte;
+  return buffer_internal::PrivateAccessor::CreateAdoptedImmutableBuffer(
+      ptr, size, impl);
 }
 
 }  // namespace intrinsic

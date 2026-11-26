@@ -32,9 +32,9 @@ inline constexpr size_t kBufferAlignment = 256;
 // Refcounted polymorphic backing-storage control block shared by
 // `MutableBuffer` (`ref_count_ == 1` while uniquely owned) and
 // `ImmutableBuffer` (shared via atomic `Retain()` / `Release()`). Concrete
-// backing subclasses (such as the host heap control block or future Zenoh
-// shared-memory and adopted-buffer control blocks) override the virtual
-// destructor so `Release()` frees backing-specific resources without
+// backing subclasses (such as the host heap control block, the adopted-buffer
+// control block, or future Zenoh shared-memory control blocks) override the
+// virtual destructor so `Release()` frees backing-specific resources without
 // reallocating a control block on freeze or exposing backend headers here.
 struct BufferControlBlock {
   BufferControlBlock(const BufferControlBlock&) = delete;
@@ -92,6 +92,12 @@ struct PrivateAccessor {
   // otherwise.
   [[nodiscard]] static std::optional<MutableBuffer> TryUnfreeze(
       ImmutableBuffer& buffer) noexcept;
+
+  // Constructs a non-SHM `ImmutableBuffer` owning `impl` and viewing `[data,
+  // data + size)` without requiring `ImmutableBuffer::kAlignment` alignment.
+  // REQUIRES: `impl != nullptr` and `data != nullptr`.
+  static ImmutableBuffer CreateAdoptedImmutableBuffer(
+      const uint8_t* data, size_t size, BufferControlBlock* impl) noexcept;
 };
 
 }  // namespace buffer_internal

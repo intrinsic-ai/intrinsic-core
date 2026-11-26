@@ -17,6 +17,7 @@
 
 #include <cstddef>
 
+#include "absl/functional/any_invocable.h"
 #include "absl/status/statusor.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/allocators/buffer_allocator.h"
 #include "intrinsic_sdk/intrinsic/middleware/buffers/allocators/heap_buffer_allocator.h"
@@ -72,6 +73,41 @@ absl::StatusOr<MutableBuffer> UnfreezeOrCopy(
 // call, which would silently disable caching.
 absl::StatusOr<MutableBuffer> UnfreezeOrCopy(
     ImmutableBuffer&& buffer, const BufferAllocator&& allocator) = delete;
+
+// Adopts caller-owned read-only host storage `[data, data + size)` into a
+// non-SHM `ImmutableBuffer` without copying payload bytes. `data` does not need
+// to be `ImmutableBuffer::kAlignment`-aligned: when `size > 0`, the returned
+// buffer preserves `data` and reports its effective alignment (capped at
+// `ImmutableBuffer::kAlignment`) via `alignment()`. When `size == 0`, `data`
+// may be `nullptr` and the returned buffer points to a 256-byte-aligned
+// non-null static dummy byte.
+//
+// Ownership and `deleter`:
+//   `deleter` (if non-null) is invoked exactly once when the final
+//   `ImmutableBuffer` reference (including copies and `Slice()` views) drops,
+//   or immediately before returning an error on validation or control-block
+//   allocation failure so caller-owned storage never leaks. `deleter` may be
+//   invoked from any thread that drops the final reference, must not throw,
+//   and must not assume the caller holds the Python GIL or that middleware
+//   sessions or subscriptions are still alive (matching `ImmutableBuffer`'s
+//   destruction guarantees). Adopted buffers are read-only, so
+//   `UnfreezeOrCopy()` always copies into a newly allocated writable
+//   `MutableBuffer`.
+//
+// Caller pitfalls:
+//   Because C++ function-argument evaluation order is unspecified, do not pass
+//   `container.data()` / `container.size()` in the same call expression that
+//   moves `container` into `deleter` (moving first can silently adopt 0 bytes).
+//   Bind `data` and `size` to local variables before calling
+//   `AdoptImmutableBuffer()`, and only adopt move-stable storage (wrap
+//   containers with inline/SSO storage, such as `std::string`, in a
+//   heap-allocated holder like `std::unique_ptr`).
+//
+// Returns `absl::StatusCode::kInvalidArgument` if `size > 0` and
+// `data == nullptr`, or `absl::StatusCode::kResourceExhausted` if control-block
+// allocation fails.
+absl::StatusOr<ImmutableBuffer> AdoptImmutableBuffer(
+    const void* data, size_t size, absl::AnyInvocable<void() &&> deleter);
 
 }  // namespace intrinsic
 

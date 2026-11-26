@@ -26,16 +26,21 @@ struct PrivateAccessor;
 }  // namespace buffer_internal
 
 // Atomic-refcounted handle to a read-only, CPU-accessible byte buffer backed
-// by Zenoh shared memory or an aligned heap buffer.
+// by Zenoh shared memory, an aligned heap buffer, or adopted external host
+// storage.
 //
 // Immutability and alignment:
 //   Payload bytes are read-only through this API. When `valid()` is true,
 //   `data()` is non-null (even when `size() == 0`) and contiguous. Root
-//   buffers are aligned to `kAlignment` (256 bytes) for CPU SIMD and DLPack
-//   views; sub-buffers created with `Slice()` preserve `kAlignment` when the
-//   source buffer is `kAlignment`-aligned and the slice offset is a multiple
-//   of `kAlignment`, and report their effective alignment via `alignment()`.
-//   When `valid()` is false, `data()` is `nullptr`.
+//   buffers created from a `BufferAllocator` or `FreezeMutableBuffer()` are
+//   aligned to `kAlignment` (256 bytes) for CPU SIMD and DLPack views;
+//   non-empty external host buffers adopted via `AdoptImmutableBuffer()`
+//   preserve the caller's pointer and may have alignment less than
+//   `kAlignment`. Sub-buffers created with `Slice()` preserve `kAlignment` when
+//   the source buffer is `kAlignment`-aligned and the slice offset is a
+//   multiple of `kAlignment`. All valid buffers report their effective
+//   alignment (capped at `kAlignment`) via `alignment()`. When `valid()` is
+//   false, `data()` is `nullptr`.
 //
 // Lifetime, copy, and move semantics:
 //   Copying increments an atomic refcount in O(1) without copying bytes;
@@ -57,8 +62,10 @@ class ImmutableBuffer {
   using iterator = const uint8_t*;
   using const_iterator = const uint8_t*;
 
-  // Guaranteed byte alignment (256 bytes) for any valid root buffer's `data()`
-  // pointer, matching `MutableBuffer::kAlignment`.
+  // Guaranteed byte alignment (256 bytes) for valid allocator-backed or
+  // frozen root buffers (and upper cap reported by `alignment()`), matching
+  // `MutableBuffer::kAlignment`. Adopted buffers created via
+  // `AdoptImmutableBuffer()` may have smaller effective alignment.
   static constexpr size_t kAlignment = 256;
 
   // Constructs an empty, invalid buffer (`valid() == false`).
@@ -88,9 +95,10 @@ class ImmutableBuffer {
   [[nodiscard]] const uint8_t* data() const noexcept { return data_; }
 
   // Byte alignment of `data()`, capped at `kAlignment` (256 bytes), or `0` when
-  // `valid() == false`. Root buffers always return `kAlignment`; buffers
-  // created via `Slice()` return the largest power of two (up to `kAlignment`)
-  // that divides the address `data()`.
+  // `valid() == false`. Allocator-backed and frozen root buffers always return
+  // `kAlignment`; adopted buffers and buffers created via `Slice()` return the
+  // largest power of two (up to `kAlignment`) that divides the address
+  // `data()`.
   [[nodiscard]] size_t alignment() const noexcept;
 
   // Contiguous range iterators over `[data(), data() + size())`, enabling

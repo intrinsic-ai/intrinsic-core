@@ -31,6 +31,7 @@ cc_library(
         "//intrinsic_sdk/intrinsic/middleware/buffers/allocators:buffer_allocator",
         "//intrinsic_sdk/intrinsic/middleware/buffers/allocators:heap_buffer_allocator",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "@abseil-cpp//absl/functional:any_invocable",
         "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
     ],

@@ -35,13 +35,14 @@ MutableBuffer& MutableBuffer::operator=(MutableBuffer&& other) noexcept {
   if (this == &other) {
     return *this;
   }
-  if (impl_ != nullptr) {
-    impl_->Release();
-  }
+  buffer_internal::BufferControlBlock* const old_impl = impl_;
   data_ = std::exchange(other.data_, nullptr);
   size_ = std::exchange(other.size_, 0);
   impl_ = std::exchange(other.impl_, nullptr);
   is_shm_ = std::exchange(other.is_shm_, false);
+  if (old_impl != nullptr) {
+    old_impl->Release();
+  }
   return *this;
 }
 
