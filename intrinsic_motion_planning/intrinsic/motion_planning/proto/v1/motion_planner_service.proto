@@ -131,8 +131,9 @@ message MotionPlannerServiceConfig {
   int32 geometry_service_cache_size = 10;
   // If true, creates a recording for all motion planning calls, including
   // successful calls and routine failures (e.g. unreachable or in-collision IK
-  // targets), instead of only unexpected failures.
-  optional bool log_all_recordings = 13;
+  // targets), instead of only unexpected failures. Deprecated and ignored if
+  // `recording_trigger_policy` is set.
+  optional bool log_all_recordings = 13 [deprecated = true];
   // Whether MotionPlannerService accepts requests with `compute_swept_volume`
   // set. If false, such `PlanTrajectory`/`PlanPath` requests fail with
   // FAILED_PRECONDITION.
