@@ -469,8 +469,10 @@ runtime versions to use an older or newer build.
 Warning: Depending on the mode of the cluster (inctl cluster upgrade mode),
 the update will:
 
--   mode=automatic: be ignored, as the cluster will automatically return to the
-    latest available version.
+-   mode=automatic / automatic+accept: switch to mode=on / on+accept when
+    specific --os or --runtime versions differing from the release target (or
+    --rollback) are provided, and execute the update (or await approval in
+    on+accept).
 -   mode=on: execute right away. Make sure the cluster is safe and ready to
     upgrade. It might reboot in the process.
 -   mode=on+accept: not execute until approved by the operator or with
