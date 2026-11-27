@@ -976,6 +976,7 @@
   "Recursively reset behavior tree condition to UNKNOWN satisfaction."
   (do-for-fact ((?condition behavior-tree-condition))
       (eq ?condition:id ?condition-id)
+    (debug-loop-reset-inc-conditions)
 
     (pb-remove ?condition:extended-status-proto-id)
 
@@ -1013,8 +1014,10 @@
 (deffunction behavior-tree-node-reset-internal (?node ?reset-child-nodes ?operation-name ?keep-counters)
   "Recursively reset a node (and its children) to ACCEPTED state."
   (if (eq (fact-slot-value ?node state) ACCEPTED) then
+    (debug-loop-reset-inc-nodes-skipped)
     (return)
   )
+  (debug-loop-reset-inc-nodes)
 
   (bind ?node-id (fact-slot-value ?node id))
   (bind ?node-type (fact-slot-value ?node type))
@@ -1048,6 +1051,7 @@
   )
 
   (if (eq ?node-type TASK) then
+    (debug-loop-reset-inc-task-nodes)
     (if (neq ?run-metadata-proto-path "") then
         (bind ?s-task-path (proto-path-join ?run-metadata-proto-path "task.state"))
         (run-metadata-proto-update-field ?s-task-path ACCEPTED ?operation-name)
@@ -1112,8 +1116,10 @@
   ; Reset the tree itself
   (do-for-fact ((?tree behavior-tree)) (eq ?tree:id ?tree-id)
     (if (eq ?tree:state ACCEPTED) then
+      (debug-loop-reset-inc-trees-skipped)
       (return)
     )
+    (debug-loop-reset-inc-trees)
 
     (bind ?operation-name ?tree:operation-name)
     (modify ?tree (state ACCEPTED))

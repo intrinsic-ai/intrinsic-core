@@ -96,6 +96,7 @@
       (eq ?cei:operation-name ?operation-name)
       (eq ?cei:tree-id ?tree-id)
       (eq ?cei:node-id ?node-id))
+    (debug-loop-reset-inc-code-execution-instances)
     (pb-remove ?cei:parameters-instance-proto)
     (pb-remove ?cei:extended-status-proto)
     (if (<> ?cei:span-reference-id ?*TRACING-INVALID-SPAN-ID*) then

@@ -125,6 +125,7 @@
 ;   ?uid: UID of a behavior-call-instance
 (deffunction behavior-call-instance-reset (?uid ?keep-counters)
   (do-for-fact ((?bci behavior-call-instance)) (eq ?bci:uid ?uid)
+    (debug-loop-reset-inc-behavior-call-instances)
     (pb-remove ?bci:behavior-call-instance-proto)
     (pb-remove ?bci:extended-status-proto-id)
     (if (neq ?bci:parameterizable-tree-id nil) then

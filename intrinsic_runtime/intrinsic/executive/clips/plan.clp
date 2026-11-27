@@ -348,6 +348,7 @@
     (retract ?dep)
   )
   (do-for-fact ((?pa plan-action)) (eq ?pa:uid ?uid)
+    (debug-loop-reset-inc-plan-actions)
     (if (neq ?pa:behavior-call-proto-id 0) then
       (pb-remove ?pa:behavior-call-proto-id))
     (if (neq ?pa:footprint-proto 0) then (pb-remove ?pa:footprint-proto))

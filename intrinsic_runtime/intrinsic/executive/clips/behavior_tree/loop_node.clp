@@ -80,13 +80,20 @@
   (modify ?node (loop-num-times ?counter-value))
 )
 
-; Reset a loop node's child, optionally emitting a debug trace span attached to
-; the loop node's span.
-(deffunction behavior-tree-loop-node-reset-child
-    (?child ?op-name ?loop-node-span)
+; Reset a loop node's child, optionally emitting debug trace spans attached to
+; the loop node's span and/or logging reset statistics.
+(deffunction behavior-tree-loop-node-reset-child (?loop-node ?child ?op-name)
+  (bind ?loop-node-span (fact-slot-value ?loop-node span-reference-id))
   (bind ?debug-spans (debug-loop-reset-start-spans ?loop-node-span))
+  (bind ?debug-stats-start (debug-loop-reset-stats-start))
   (behavior-tree-node-reset ?child ?op-name)
   (debug-loop-reset-end-spans ?debug-spans)
+  (if (> (length$ ?debug-stats-start) 0) then
+    (debug-loop-reset-stats-end
+      ?loop-node
+      ?debug-stats-start
+      (length$ (find-all-facts ((?n behavior-tree-node)) TRUE)))
+  )
 )
 
 ; ----------------------------------- RULES -----------------------------------
@@ -260,18 +267,17 @@
 (defrule behavior-tree-loop-node-reset-before-continuing-satisfied-while
   "The loop while condition is satisfied, reset the child node for the next iteration."
   (behavior-tree (id ?tree-id) (state RUNNING) (operation-name ?op-name))
-  (behavior-tree-node (id ?node-id) (tree-id ?tree-id)
-                      (type LOOP) (loop-mode WHILE) (state RUNNING)
-                      (loop-while-id ?while-condition-id&~nil)
-                      (loop-do-id ?loop-do-id)
-                      (span-reference-id ?node-span))
+  ?node <- (behavior-tree-node (id ?node-id) (tree-id ?tree-id)
+                               (type LOOP) (loop-mode WHILE) (state RUNNING)
+                               (loop-while-id ?while-condition-id&~nil)
+                               (loop-do-id ?loop-do-id))
   (behavior-tree-condition (id ?while-condition-id) (state FINISHED)
                            (node-id ?node-id) (tree-id ?tree-id)
                            (satisfied TRUE))
   ?child <- (behavior-tree-node (id ?loop-do-id) (tree-id ?tree-id)
                                 (state SUCCEEDED))
  =>
-  (behavior-tree-loop-node-reset-child ?child ?op-name ?node-span)
+  (behavior-tree-loop-node-reset-child ?node ?child ?op-name)
 )
 
 (defrule behavior-tree-loop-node-condition-satisfied
@@ -347,7 +353,6 @@
                                (loop-num-times ?num-times)
                                (loop-while-id ?while-condition-id)
                                (loop-counter-blackboard-key ?key)
-                               (span-reference-id ?node-span)
                                (iteration-span-reference-id ?iteration-span))
   ?do-node <- (behavior-tree-node (id ?loop-do-id) (tree-id ?tree-id)
                                   (state SUCCEEDED))
@@ -363,7 +368,7 @@
     ; rule behavior-tree-loop-node-reset-before-continuing-satisfied-while
     ; after the condition succeeded and before the do node gets activated
     ; again.
-      (behavior-tree-loop-node-reset-child ?do-node ?op-name ?node-span)
+      (behavior-tree-loop-node-reset-child ?node ?do-node ?op-name)
     )
     (modify ?node (state READY)
       (iteration-span-reference-id ?*TRACING-INVALID-SPAN-ID*))
@@ -388,7 +393,6 @@
                                (loop-for-each-value-blackboard-key
                                  ?current-value-key)
                                (loop-counter-blackboard-key ?key)
-                               (span-reference-id ?node-span)
                                (iteration-span-reference-id ?iteration-span))
   ?do-node <- (behavior-tree-node (id ?loop-do-id) (tree-id ?tree-id)
                                   (state SUCCEEDED))
@@ -397,7 +401,7 @@
   (if (< ?num-times (length$ ?loop-protos))
    then
     ; there are still potentially more loop runs to be done
-    (behavior-tree-loop-node-reset-child ?do-node ?op-name ?node-span)
+    (behavior-tree-loop-node-reset-child ?node ?do-node ?op-name)
     (modify ?node (state READY)
       (iteration-span-reference-id ?*TRACING-INVALID-SPAN-ID*))
    else ; number of runs exhausted
