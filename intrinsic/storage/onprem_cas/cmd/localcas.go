@@ -43,6 +43,8 @@ var (
 	flagObjectsDir           = flag.String("objects_dir", "/tmp/onprem-cas", "Where the CAS objects are stored.")
 	flagPartialDir           = flag.String("partial_dir", "/tmp/onprem-cas-partial", "Where the partial CAS objects are stored during upload.")
 	flagSyncSetRetentionDays = flag.Int("syncset_retention_days", 30, "Age in days after which outdated completed SyncSets (and their long running operation results) are deleted from disk. Set to 0 to always delete older completed SyncSets immediately.")
+	flagSessionTTL           = flag.Duration("resumable_upload_session_ttl", 48*time.Hour, "Resumable upload sessions (finalized or not) without activity for longer than this are deleted from <partial_dir>/sessions.")
+	flagSessionGCInterval    = flag.Duration("resumable_upload_gc_interval", time.Hour, "Interval between cleanups of expired resumable upload sessions.")
 )
 
 // maxGCDuration specifies the maximum duration we run the garbage collection
@@ -53,6 +55,10 @@ const maxGCDuration = 10 * time.Minute
 func mainImpl() error {
 	slog.SetDefault(slog.New(slog.NewTextHandler(os.Stdout, nil)))
 	intrinsic.Init()
+
+	if *flagSessionTTL <= 0 || *flagSessionGCInterval <= 0 {
+		return fmt.Errorf("--resumable_upload_session_ttl (%v) and --resumable_upload_gc_interval (%v) must be positive", *flagSessionTTL, *flagSessionGCInterval)
+	}
 
 	if err := os.MkdirAll(*flagObjectsDir, 0755); err != nil {
 		return fmt.Errorf("failed to create objects directory %q: %w", *flagObjectsDir, err)
@@ -107,6 +113,9 @@ func mainImpl() error {
 	slog.Info("Running in local-only mode. Sync API is disabled.")
 
 	casHandler := handlers.NewLocalCASHandler(*flagObjectsDir, *flagPartialDir)
+
+	// Delete expired resumable upload sessions now and periodically.
+	wg.Go(func() { casHandler.RunSessionCleanup(ctx, *flagSessionTTL, *flagSessionGCInterval) })
 
 	grpcServer := grpc.NewServer(grpc.StatsHandler(new(ocgrpc.ServerHandler)))
 	caspb.RegisterContentAddressableStorageServiceServer(grpcServer, casHandler)

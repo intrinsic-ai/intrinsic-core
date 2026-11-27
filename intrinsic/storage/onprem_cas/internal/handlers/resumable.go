@@ -26,11 +26,13 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
+	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"intrinsic/storage/content_addressable_storage/pkg/idhandling"
+	"intrinsic/storage/onprem_cas/internal/gc"
 
 	caspb "intrinsic/storage/content_addressable_storage/proto/cas_service_go_proto"
 )
@@ -482,5 +484,53 @@ func (u *upload) close() {
 	}
 	if err := u.f.Close(); err != nil {
 		slog.Warn("Failed to close upload session file", slog.String("session", u.id), slog.Any("error", err))
+	}
+}
+
+// cleanupSessions deletes the upload sessions whose last activity is older than ttl, whether they
+// were finalized or not. Sessions that an RPC is working on are skipped.
+func (h *LocalCASHandler) cleanupSessions(ctx context.Context, ttl time.Duration) error {
+	ids, err := gc.IdentifyExpiredSessions(h.sessions.dir, ttl)
+	if err != nil {
+		return err
+	}
+	deleted := 0
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		release, ok := h.sessions.tryAcquire(id)
+		if !ok {
+			continue
+		}
+		// Check again under the lock: an RPC may have used the session after it was identified.
+		files, lastActivity, err := gc.SessionFiles(h.sessions.dir, id)
+		if err == nil && len(files) > 0 && time.Since(lastActivity) > ttl {
+			h.sessions.remove(id)
+			deleted++
+			slog.Info("GC: Deleted expired upload session", slog.String("session", id), slog.Time("last_activity", lastActivity))
+		}
+		release()
+	}
+	if len(ids) > 0 {
+		slog.Info("GC: Upload session cleanup finished", slog.Int("expired_count", len(ids)), slog.Int("deleted_count", deleted))
+	}
+	return nil
+}
+
+// RunSessionCleanup calls cleanupSessions right away and then every interval until ctx is done.
+// ttl and interval must be positive.
+func (h *LocalCASHandler) RunSessionCleanup(ctx context.Context, ttl, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		if err := h.cleanupSessions(ctx, ttl); err != nil && ctx.Err() == nil {
+			slog.Error("GC: Upload session cleanup failed", slog.Any("error", err))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
 	}
 }

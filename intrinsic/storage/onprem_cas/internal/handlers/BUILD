@@ -29,6 +29,7 @@ go_library(
     deps = [
         "//intrinsic/storage/content_addressable_storage/pkg/idhandling",
         "//intrinsic/storage/onprem_cas/internal",
+        "//intrinsic/storage/onprem_cas/internal/gc",
         "//intrinsic/storage/onprem_cas/internal/syncset",
         "//intrinsic/storage/onprem_cas_preload/proto/v1:ocp_service_go_proto",
         "//intrinsic/storage/onprem_cas_preload/proto/v1:preload_set_go_proto",

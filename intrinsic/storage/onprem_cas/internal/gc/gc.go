@@ -17,9 +17,13 @@ package gc
 
 import (
 	"context"
+	"errors"
+	"io/fs"
 	"log/slog"
 	"os"
 	"path/filepath"
+	"slices"
+	"strings"
 	"time"
 
 	"intrinsic/storage/content_addressable_storage/pkg/idhandling"
@@ -28,6 +32,9 @@ import (
 
 // IdentifyPartialFiles reads the directory and returns a list of files with .partial extension.
 // This should be called before starting the server to identify stale partial files.
+//
+// Subdirectories are not scanned on purpose: resumable upload sessions in
+// internal.SessionsSubdir must survive a restart and are cleaned up by IdentifyExpiredSessions.
 func IdentifyPartialFiles(dir string) ([]string, error) {
 	files, err := os.ReadDir(dir)
 	if err != nil {
@@ -40,6 +47,84 @@ func IdentifyPartialFiles(dir string) ([]string, error) {
 		}
 	}
 	return partials, nil
+}
+
+// sessionID returns the ID of the resumable upload session that the file belongs to, or "" if the
+// file doesn't belong to a session.
+func sessionID(name string) string {
+	name = strings.TrimSuffix(name, internal.SessionTmpExt)
+	for _, ext := range []string{internal.SessionMetadataExt, internal.PartialExt} {
+		if id, ok := strings.CutSuffix(name, ext); ok && id != "" {
+			return id
+		}
+	}
+	return ""
+}
+
+// SessionFiles returns the paths of all files of the resumable upload session id in dir and the
+// time of the last activity, i.e. the newest modification time of these files.
+func SessionFiles(dir, id string) ([]string, time.Time, error) {
+	var paths []string
+	var lastActivity time.Time
+	for _, name := range []string{
+		id + internal.PartialExt,
+		id + internal.SessionMetadataExt,
+		id + internal.SessionMetadataExt + internal.SessionTmpExt,
+	} {
+		path := filepath.Join(dir, name)
+		info, err := os.Stat(path)
+		if errors.Is(err, fs.ErrNotExist) {
+			continue
+		}
+		if err != nil {
+			return nil, time.Time{}, err
+		}
+		paths = append(paths, path)
+		if info.ModTime().After(lastActivity) {
+			lastActivity = info.ModTime()
+		}
+	}
+	return paths, lastActivity, nil
+}
+
+// IdentifyExpiredSessions scans the sessions directory and returns the IDs of resumable upload
+// sessions whose last activity (the newest modification time of their files) is older than ttl.
+// A missing directory has no sessions.
+func IdentifyExpiredSessions(dir string, ttl time.Duration) ([]string, error) {
+	files, err := os.ReadDir(dir)
+	if errors.Is(err, fs.ErrNotExist) {
+		return nil, nil
+	}
+	if err != nil {
+		return nil, err
+	}
+	lastActivity := make(map[string]time.Time)
+	for _, entry := range files {
+		if !entry.Type().IsRegular() {
+			continue
+		}
+		id := sessionID(entry.Name())
+		if id == "" {
+			continue
+		}
+		info, err := entry.Info()
+		if err != nil {
+			slog.Warn("GC: Failed to get file info for upload session file; skipping", slog.String("file", entry.Name()), slog.Any("error", err))
+			continue
+		}
+		if t, ok := lastActivity[id]; !ok || info.ModTime().After(t) {
+			lastActivity[id] = info.ModTime()
+		}
+	}
+	var expired []string
+	now := time.Now()
+	for id, t := range lastActivity {
+		if now.Sub(t) > ttl {
+			expired = append(expired, id)
+		}
+	}
+	slices.Sort(expired)
+	return expired, nil
 }
 
 // IdentifyCorruptObjects scans the objects directory and returns paths of all files
