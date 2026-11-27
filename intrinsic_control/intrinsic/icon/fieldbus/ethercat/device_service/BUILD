@@ -41,7 +41,10 @@ go_library(
 
 go_test(
     name = "deviceservice_test",
-    srcs = ["device_service_test.go"],
+    srcs = [
+        "device_service_test.go",
+        "esi_handler_fuzz_test.go",
+    ],
     embed = [":deviceservice"],
     importpath = "intrinsic/icon/fieldbus/ethercat/device_service/deviceservice_test",
     deps = [

@@ -2245,3 +2245,105 @@ func TestFetchESIBundle_NativeGrpcRetry_Exhausted(t *testing.T) {
 		t.Errorf("Expected exactly 5 calls to GetDataAsset (all attempts exhausted), got %d", got)
 	}
 }
+
+func TestPaddingEntryDoesNotPanicOrPolluteIndex(t *testing.T) {
+	esiXML := makeTestEsiXml(
+		nil,
+		[]string{
+			makeEsiObjectXml(testEsiObject{Index: "#x6041", ObjName: "Status word", ObjType: "UINT", ObjBitSize: 16, ObjPdoMapping: "T"}),
+		},
+		[]string{
+			makeEsiPdoXml("Tx", "#x1A00", "TxPdo1", true, 3,
+				testPdoEntry{Index: "#x0000", SubIndex: 0, BitLen: 16, EntryName: "Padding"},
+				testPdoEntry{Index: "#x6041", SubIndex: 0, BitLen: 16, EntryName: "Status word"},
+			),
+		},
+	)
+	bundle := &esipb.EsiBundle{
+		Files: map[string]*esipb.Esi{"device.xml": {Data: esiXML}},
+	}
+	cfg := &dscpb.DeviceServiceConfig{
+		DeviceIdentifier: &dscpb.DeviceIdentifier{VendorId: 1, ProductCode: 2, Revision: 3},
+		InterfaceMappings: []*dscpb.InterfaceMapping{
+			{
+				DeviceData: &dscpb.DeviceData{
+					Data: &dscpb.DeviceData_AdioDeviceData{
+						AdioDeviceData: &dscpb.AdioDeviceData{
+							AdioVariable: &dscpb.AdioDeviceData_DigitalInput{
+								DigitalInput: &dscpb.DigitalVariableReference{
+									VariableReference: &dscpb.VariableReference{
+										Pdo:    "#x1A00",
+										Object: "Padding",
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s := &DeviceService{config: cfg, esiBundle: bundle}
+	ctx := context.Background()
+	if err := s.loadAndIndexESI(ctx, bundle, 1, 2, 3); err != nil {
+		t.Fatalf("loadAndIndexESI failed: %v", err)
+	}
+	meta := s.pdoIndex[0x1A00]
+	if meta == nil {
+		t.Fatal("expected PDO #x1A00 in pdoIndex")
+	}
+	if _, exists := meta.NameToAddr["Padding"]; exists {
+		t.Errorf("PDO #x1A00 NameToAddr should not index padding entry #x0000")
+	}
+	if err := s.computeResolvedConfiguration(ctx); err == nil {
+		t.Errorf("expected error resolving padding entry, got nil")
+	}
+}
+
+func TestBusVariableWriteNilReferenceReturnsError(t *testing.T) {
+	esiXML := makeTestEsiXml(
+		nil,
+		[]string{
+			makeEsiObjectXml(testEsiObject{Index: "#x6040", ObjName: "Control word", ObjType: "UINT", ObjBitSize: 16, ObjPdoMapping: "R"}),
+		},
+		[]string{
+			makeEsiPdoXml("Rx", "#x1600", "RxPdo1", true, 2,
+				testPdoEntry{Index: "#x6040", SubIndex: 0, BitLen: 16, EntryName: "Control word"},
+			),
+		},
+	)
+	bundle := &esipb.EsiBundle{
+		Files: map[string]*esipb.Esi{"device.xml": {Data: esiXML}},
+	}
+	cfg := &dscpb.DeviceServiceConfig{
+		DeviceIdentifier: &dscpb.DeviceIdentifier{VendorId: 1, ProductCode: 2, Revision: 3},
+		InterfaceMappings: []*dscpb.InterfaceMapping{
+			{
+				DeviceData: &dscpb.DeviceData{
+					Data: &dscpb.DeviceData_BusVariableDeviceData{
+						BusVariableDeviceData: &dscpb.ProcessVariableDeviceData{
+							BusVariableWrites: []*dscpb.BusVariableWrite{
+								{
+									VariableReference: nil,
+									Value: &dscpb.BusVariableValue{
+										Value: &dscpb.BusVariableValue_Uint32Value{Uint32Value: 1},
+									},
+								},
+							},
+						},
+					},
+				},
+			},
+		},
+	}
+
+	s := &DeviceService{config: cfg, esiBundle: bundle}
+	ctx := context.Background()
+	if err := s.loadAndIndexESI(ctx, bundle, 1, 2, 3); err != nil {
+		t.Fatalf("loadAndIndexESI failed: %v", err)
+	}
+	if err := s.computeResolvedConfiguration(ctx); err == nil {
+		t.Errorf("expected error for BusVariableWrite with nil VariableReference, got nil")
+	}
+}

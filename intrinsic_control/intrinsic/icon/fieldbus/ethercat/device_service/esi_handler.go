@@ -398,7 +398,10 @@ func (s *DeviceService) loadAndIndexESI(ctx context.Context, bundle *esipb.EsiBu
 //   - pdoMapping: The default mapping flag ("T" or "R") to apply if the entry is missing one.
 func (s *DeviceService) indexPdoEntries(pdos []esiPdo, pdoMapping string) {
 	for _, pdo := range pdos {
-		pdoIdx, _ := parseUint32(pdo.Index)
+		pdoIdx, err := parseUint32(pdo.Index)
+		if err != nil {
+			continue
+		}
 		// pdoIndex must be pre-populated by a prior call to indexPdos.
 		// If a PDO index is not found, we skip its entries because we cannot safely associate
 		// them with a Sync Manager or Direction without the underlying PDO definition metadata.
@@ -592,8 +595,11 @@ func (s *DeviceService) indexPdos(pdos []esiPdo, dir PdoDirection) {
 
 		var entries []objectAddress
 		for _, e := range p.Entries {
-			eIdx, _ := parseUint32(e.Index)
-			eSub, _ := parseUint32(e.SubIndex)
+			eIdx, errIdx := parseUint32(e.Index)
+			eSub, errSub := parseUint32(e.SubIndex)
+			if errIdx != nil || errSub != nil || eIdx == 0 {
+				continue
+			}
 			entries = append(entries, objectAddress{Index: eIdx, SubIndex: eSub})
 		}
 
@@ -607,14 +613,6 @@ func (s *DeviceService) indexPdos(pdos []esiPdo, dir PdoDirection) {
 			Excludes:       excludes,
 			DefaultEntries: entries,
 			NameToAddr:     make(map[string]objectAddress),
-		}
-
-		// Pre-populate contextual index from default entries
-		for i, addr := range entries {
-			entryName := pickName(p.Entries[i].Names)
-			if entryName != "" {
-				meta.NameToAddr[entryName] = addr
-			}
 		}
 
 		s.pdoIndex[idx] = meta
@@ -702,10 +700,12 @@ func (s *DeviceService) resolveObjectByName(ctx context.Context, name string, pd
 	// 1. Contextual Search: Look inside requested PDO first.
 	if pdoContext != nil {
 		if addr, ok := pdoContext.NameToAddr[name]; ok {
-			if tracingEnabled {
-				log.InfoContextf(ctx, "Found %q inside PDO context #x%04X", name, pdoContext.Index)
+			if meta, exists := s.objectIndex[addr]; exists && meta != nil {
+				if tracingEnabled {
+					log.InfoContextf(ctx, "Found %q inside PDO context #x%04X", name, pdoContext.Index)
+				}
+				return addr, meta, nil
 			}
-			return addr, s.objectIndex[addr], nil
 		}
 	}
 
@@ -822,35 +822,38 @@ func (s *DeviceService) findPdo(ctx context.Context, pdo string, addr objectAddr
 		return 0, nil, fmt.Errorf("PDO %q not found", pdo)
 	}
 
-	// Implicit Resolution Pass 1: Look in already active PDOs that contain this object.
-	// This is the most efficient choice as it requires zero EBI changes.
-	if tracingEnabled {
-		log.InfoContextf(ctx, "Pass 1: Searching currently active PDOs for reuse...")
-	}
-	for pdoIdx := range s.activePdos {
-		meta := s.pdoIndex[pdoIdx]
-		for _, entry := range meta.DefaultEntries {
-			if entry == addr {
-				if tracingEnabled {
-					log.InfoContextf(ctx, "Match found! Reusing already active PDO #x%04X", pdoIdx)
-				}
-				return pdoIdx, meta, nil
-			}
+	// Implicit Resolution Pass 1 & 2 require a concrete non-zero object address.
+	if addr.Index != 0 {
+		// Implicit Resolution Pass 1: Look in already active PDOs that contain this object.
+		// This is the most efficient choice as it requires zero EBI changes.
+		if tracingEnabled {
+			log.InfoContextf(ctx, "Pass 1: Searching currently active PDOs for reuse...")
 		}
-	}
-
-	// Pass 2: Look in default-active fixed PDOs that contain this object.
-	if tracingEnabled {
-		log.InfoContextf(ctx, "Pass 2: Searching default-active fixed PDOs...")
-	}
-	for _, meta := range s.pdoIndex {
-		if meta.DefaultSm != 0 && meta.Fixed {
+		for pdoIdx := range s.activePdos {
+			meta := s.pdoIndex[pdoIdx]
 			for _, entry := range meta.DefaultEntries {
 				if entry == addr {
 					if tracingEnabled {
-						log.InfoContextf(ctx, "Match found in default-active fixed PDO #x%04X", meta.Index)
+						log.InfoContextf(ctx, "Match found! Reusing already active PDO #x%04X", pdoIdx)
 					}
-					return meta.Index, meta, nil
+					return pdoIdx, meta, nil
+				}
+			}
+		}
+
+		// Pass 2: Look in default-active fixed PDOs that contain this object.
+		if tracingEnabled {
+			log.InfoContextf(ctx, "Pass 2: Searching default-active fixed PDOs...")
+		}
+		for _, meta := range s.pdoIndex {
+			if meta.DefaultSm != 0 && meta.Fixed {
+				for _, entry := range meta.DefaultEntries {
+					if entry == addr {
+						if tracingEnabled {
+							log.InfoContextf(ctx, "Match found in default-active fixed PDO #x%04X", meta.Index)
+						}
+						return meta.Index, meta, nil
+					}
 				}
 			}
 		}

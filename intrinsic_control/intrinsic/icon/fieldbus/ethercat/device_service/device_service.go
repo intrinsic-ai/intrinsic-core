@@ -475,6 +475,9 @@ func (s *DeviceService) resolveVariable(ctx context.Context, ref *dscpb.Variable
 	if err != nil {
 		return fmt.Errorf("variable %q could not be resolved. Please check if the name or address matches the ESI file: %w", ref.GetObject(), err)
 	}
+	if meta == nil {
+		return fmt.Errorf("variable %q resolved to address #x%04X.%d without object metadata", ref.GetObject(), addr.Index, addr.SubIndex)
+	}
 
 	if tracingEnabled {
 		log.InfoContextf(ctx, "Resolved Object: %q (#x%04X.%d, Mapping=%q)", meta.Name, addr.Index, addr.SubIndex, meta.PdoMapping)
@@ -492,6 +495,9 @@ func (s *DeviceService) resolveVariable(ctx context.Context, ref *dscpb.Variable
 		if tracingEnabled {
 			log.InfoContextf(ctx, "Implicit PDO choice: %q (#x%04X)", pdoMeta.Name, pdoIdx)
 		}
+	}
+	if pdoMeta == nil {
+		return fmt.Errorf("could not resolve PDO metadata for variable %q", ref.GetObject())
 	}
 
 	// 4. EBI Instruction Generation.
@@ -580,13 +586,22 @@ func (s *DeviceService) resolveActiveOpMode(ctx context.Context) (string, error)
 func (s *DeviceService) resolveBusVariableWrite(ctx context.Context, procVar *dscpb.ProcessVariableDeviceData) error {
 	for _, write := range procVar.GetBusVariableWrites() {
 		ref := write.GetVariableReference()
+		if ref == nil {
+			return fmt.Errorf("bus variable write is missing variable_reference")
+		}
 		if err := s.resolveVariable(ctx, ref, PdoDirectionRx); err != nil {
 			return err
 		}
 		key := ref.GetPdo() + variableReferenceSeparator + ref.GetObject()
-		resolved := s.pdoMappings[key]
+		resolved, ok := s.pdoMappings[key]
+		if !ok || resolved == nil {
+			return fmt.Errorf("resolved PDO mapping not found for bus variable write %q", key)
+		}
 		addr := objectAddress{Index: resolved.Index, SubIndex: resolved.SubIndex}
-		meta := s.objectIndex[addr]
+		meta, ok := s.objectIndex[addr]
+		if !ok || meta == nil {
+			return fmt.Errorf("object metadata not found for bus variable write %q (#x%04X.%d)", ref.GetObject(), addr.Index, addr.SubIndex)
+		}
 
 		if err := verifyProcessVariableType(write.GetValue(), meta.DataType, meta.BitSize); err != nil {
 			return fmt.Errorf("type mismatch for variable %q (ESI type %s, %d bits): %w", ref.GetObject(), meta.DataType, meta.BitSize, err)
