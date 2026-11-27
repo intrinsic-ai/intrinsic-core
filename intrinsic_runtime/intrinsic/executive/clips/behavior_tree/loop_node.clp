@@ -83,8 +83,10 @@
 ; Reset a loop node's child, optionally emitting debug trace spans attached to
 ; the loop node's span and/or logging reset statistics.
 (deffunction behavior-tree-loop-node-reset-child (?loop-node ?child ?op-name)
+  (bind ?experiment-label (debug-active-experiments-label))
   (bind ?loop-node-span (fact-slot-value ?loop-node span-reference-id))
-  (bind ?debug-spans (debug-loop-reset-start-spans ?loop-node-span))
+  (bind ?debug-spans
+    (debug-loop-reset-start-spans ?loop-node-span ?experiment-label))
   (bind ?debug-stats-start (debug-loop-reset-stats-start))
   (behavior-tree-node-reset ?child ?op-name)
   (debug-loop-reset-end-spans ?debug-spans)
@@ -92,7 +94,8 @@
     (debug-loop-reset-stats-end
       ?loop-node
       ?debug-stats-start
-      (length$ (find-all-facts ((?n behavior-tree-node)) TRUE)))
+      (length$ (find-all-facts ((?n behavior-tree-node)) TRUE))
+      ?experiment-label)
   )
 )
 

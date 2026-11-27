@@ -12,14 +12,48 @@
 ; See the License for the specific language governing permissions and
 ; limitations under the License.
 
-; Runtime debug settings configured via ExecutiveDebug.SetDebugSettings.
-; All settings default to off/unset. For executive developer debugging only.
+; Runtime debug settings and developer experiments.
+; All settings and experiments default to off/unset. For executive developer
+; debugging only.
+
+; =============================================================================
+; SETUP: Debug Settings & Experiments
+; =============================================================================
+;
+; Adding an experiment:
+;   1. Add an uppercase symbol constant (e.g. EXP_MY_EXPERIMENT) to
+;      ?*DEBUG-EXPERIMENTS* below.
+;   2. Guard experimental code with:
+;        (if (debug-experiment-active EXP_MY_EXPERIMENT) then ...)
+;   3. Activate it explicitly via DebugSettings.enabled_experiments or from
+;      anywhere via:
+;        (debug-experiment-enable EXP_MY_EXPERIMENT)
+;        (debug-experiment-disable EXP_MY_EXPERIMENT)
 
 (defglobal
+  ; Runtime settings configured via ExecutiveDebug.SetDebugSettings.
   ?*DEBUG-TEXT-LOGGING-LOOP-NODE-RESET* = FALSE
   ?*DEBUG-EXTRA-TRACES-LOOP-NODE-RESET* = FALSE
   ?*DEBUG-EXTRA-TRACES-STRUCTURED-LOGGING* = FALSE
   ?*DEBUG-EXTRA-TRACES-EMBED-SKILL-TRACES* = UNSET
+
+  ; Defined debug experiment constants.
+  ?*DEBUG-EXPERIMENTS* = (create$
+    ; Skip writing RunMetadata state proto fields while still marking updates
+    ; done in CLIPS facts so state_proto_update rules run normally.
+    EXP_LOOP_RESET_SKIP_STATE_PROTO_UPDATE
+    ; Skip building/recording/publishing executive OperationEvents.
+    EXP_LOOP_RESET_SKIP_OPERATION_EVENTS
+  )
+)
+
+; =============================================================================
+; IMPLEMENTATION: Internal State & Helpers
+; =============================================================================
+
+(defglobal
+  ; Set of currently active experiment symbols.
+  ?*DEBUG-ACTIVE-EXPERIMENTS* = (create$)
 
   ; Internal counters populated during a loop node reset when
   ; ?*DEBUG-TEXT-LOGGING-LOOP-NODE-RESET* is TRUE.
@@ -117,11 +151,16 @@
 )
 
 ; Stops loop-reset statistics collection and prints the summary line.
-(deffunction debug-loop-reset-stats-end (?loop-node ?start-time ?total-bt-nodes)
+(deffunction debug-loop-reset-stats-end
+    (?loop-node ?start-time ?total-bt-nodes ?experiment-label)
   (bind ?*DEBUG-LOOP-RESET-ACTIVE* FALSE)
   (bind ?duration-ms (* (time-diff-sec (now) ?start-time) 1000.0))
+  (bind ?experiment-suffix "")
+  (if (neq ?experiment-label "") then
+    (bind ?experiment-suffix (str-cat " | experiment=" ?experiment-label))
+  )
   (printout t (format nil
-    "Loop node reset (%s:%d, loop_num_times=%d): %.3f ms | nodes=%d (skipped=%d, task=%d, total_in_env=%d) | trees=%d (skipped=%d) | conditions=%d | plan_actions=%d | behavior_calls=%d | code_executions=%d%n"
+    "Loop node reset (%s:%d, loop_num_times=%d): %.3f ms | nodes=%d (skipped=%d, task=%d, total_in_env=%d) | trees=%d (skipped=%d) | conditions=%d | plan_actions=%d | behavior_calls=%d | code_executions=%d%s%n"
     (fact-slot-value ?loop-node tree-id)
     (fact-slot-value ?loop-node id)
     (fact-slot-value ?loop-node loop-num-times)
@@ -135,9 +174,53 @@
     ?*DEBUG-LOOP-RESET-CONDITIONS*
     ?*DEBUG-LOOP-RESET-PLAN-ACTIONS*
     ?*DEBUG-LOOP-RESET-BEHAVIOR-CALL-INSTANCES*
-    ?*DEBUG-LOOP-RESET-CODE-EXECUTION-INSTANCES*))
+    ?*DEBUG-LOOP-RESET-CODE-EXECUTION-INSTANCES*
+    ?experiment-suffix))
 )
 
+; --- General experiment activation (usable from anywhere) ---
+
+(deffunction debug-experiment-enable (?experiment)
+  (if (eq ?experiment NONE) then
+    (return TRUE)
+  )
+  (if (eq (member$ ?experiment ?*DEBUG-EXPERIMENTS*) FALSE) then
+    (printout error "Unknown debug experiment: " ?experiment crlf)
+    (return FALSE)
+  )
+  (if (eq (member$ ?experiment ?*DEBUG-ACTIVE-EXPERIMENTS*) FALSE) then
+    (bind ?*DEBUG-ACTIVE-EXPERIMENTS*
+      (create$ ?*DEBUG-ACTIVE-EXPERIMENTS* ?experiment))
+  )
+  (return TRUE)
+)
+
+(deffunction debug-experiment-disable (?experiment)
+  (bind ?idx (member$ ?experiment ?*DEBUG-ACTIVE-EXPERIMENTS*))
+  (if (neq ?idx FALSE) then
+    (bind ?*DEBUG-ACTIVE-EXPERIMENTS*
+      (delete$ ?*DEBUG-ACTIVE-EXPERIMENTS* ?idx ?idx))
+  )
+)
+
+(deffunction debug-experiments-clear ()
+  (if (> (length$ ?*DEBUG-ACTIVE-EXPERIMENTS*) 0) then
+    (bind ?*DEBUG-ACTIVE-EXPERIMENTS* (create$))
+  )
+)
+
+(deffunction debug-experiment-active (?experiment)
+  (neq (member$ ?experiment ?*DEBUG-ACTIVE-EXPERIMENTS*) FALSE)
+)
+
+; Format the active experiment label for loop-reset spans and logs, or "" if
+; no experiment is active.
+(deffunction debug-active-experiments-label ()
+  (if (> (length$ ?*DEBUG-ACTIVE-EXPERIMENTS*) 0) then
+    (return (implode$ ?*DEBUG-ACTIVE-EXPERIMENTS*))
+  )
+  (return "")
+)
 ; Pending post-reset cleanup asserted only when a loop reset opens a full-reset
 ; span.
 (deftemplate debug-loop-reset-pending
@@ -145,8 +228,9 @@
 )
 
 ; Starts the optional "Loop node reset (full)" and "Loop node reset" debug
-; spans attached to ?loop-node-span. Returns (create$ ?full-reset-span ?reset-span).
-(deffunction debug-loop-reset-start-spans (?loop-node-span)
+; spans attached to ?loop-node-span, tagging them with ?experiment-label when
+; non-empty. Returns (create$ ?full-reset-span ?reset-span).
+(deffunction debug-loop-reset-start-spans (?loop-node-span ?experiment-label)
   (bind ?full-reset-span ?*TRACING-INVALID-SPAN-ID*)
   (bind ?reset-span ?*TRACING-INVALID-SPAN-ID*)
   (if (and (eq ?*DEBUG-EXTRA-TRACES-LOOP-NODE-RESET* TRUE)
@@ -154,8 +238,18 @@
     (bind ?full-reset-span
       (span-start "Loop node reset (full)" ?loop-node-span
                   "loop-node-reset-full"))
+    (if (and (neq ?experiment-label "")
+             (<> ?full-reset-span ?*TRACING-INVALID-SPAN-ID*)) then
+      (span-add-attribute ?full-reset-span "loop_reset_experiment"
+                          ?experiment-label)
+    )
     (bind ?reset-span
       (span-start "Loop node reset" ?loop-node-span "loop-node-reset"))
+    (if (and (neq ?experiment-label "")
+             (<> ?reset-span ?*TRACING-INVALID-SPAN-ID*)) then
+      (span-add-attribute ?reset-span "loop_reset_experiment"
+                          ?experiment-label)
+    )
   )
   (return (create$ ?full-reset-span ?reset-span))
 )

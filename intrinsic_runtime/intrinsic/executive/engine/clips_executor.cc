@@ -2612,6 +2612,16 @@ absl::Status ClipsExecutor::SetDebugSettings(
     const intrinsic_proto::executive::DebugSettings& settings)
     ABSL_LOCKS_EXCLUDED(clips_->mutex()) {
   absl::MutexLock lock(*clips_->mutex());
+  for (int exp_val : settings.enabled_experiments()) {
+    if (!intrinsic_proto::executive::DebugSettings::Experiment_IsValid(
+            exp_val) ||
+        exp_val ==
+            intrinsic_proto::executive::DebugSettings::EXPERIMENT_UNSPECIFIED) {
+      return absl::InvalidArgumentError(
+          absl::StrFormat("Invalid debug experiment enum value: %d", exp_val));
+    }
+  }
+
   INTR_RETURN_IF_ERROR(clips_->SetGlobal(
       "DEBUG-TEXT-LOGGING-LOOP-NODE-RESET",
       settings.text_logging().loop_node_reset() ? clips::Symbol::True()
@@ -2632,6 +2642,17 @@ absl::Status ClipsExecutor::SetDebugSettings(
   }
   INTR_RETURN_IF_ERROR(clips_->SetGlobal(
       "DEBUG-EXTRA-TRACES-EMBED-SKILL-TRACES", embed_skill_traces));
+  INTR_RETURN_IF_ERROR(clips_->Evaluate("(debug-experiments-clear)").status());
+  for (int exp_val : settings.enabled_experiments()) {
+    const std::string& exp_name =
+        intrinsic_proto::executive::DebugSettings::Experiment_Name(
+            static_cast<intrinsic_proto::executive::DebugSettings::Experiment>(
+                exp_val));
+    INTR_RETURN_IF_ERROR(clips_
+                             ->Evaluate(absl::StrFormat(
+                                 "(debug-experiment-enable %s)", exp_name))
+                             .status());
+  }
   return absl::OkStatus();
 }
 

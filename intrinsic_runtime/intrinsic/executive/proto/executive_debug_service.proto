@@ -119,8 +119,17 @@ message DebugSettings {
     optional bool embed_skill_traces = 3;
   }
 
+  enum Experiment {
+    EXPERIMENT_UNSPECIFIED = 0;
+    EXP_LOOP_RESET_SKIP_STATE_PROTO_UPDATE = 1;
+    EXP_LOOP_RESET_SKIP_OPERATION_EVENTS = 2;
+  }
+
   TextLogging text_logging = 1;
   Tracing extra_traces = 2;
+  // Explicitly enable debug experiments. Replaces any previously active
+  // experiments on every SetDebugSettings call.
+  repeated Experiment enabled_experiments = 3;
 }
 
 message SetDebugSettingsRequest {
