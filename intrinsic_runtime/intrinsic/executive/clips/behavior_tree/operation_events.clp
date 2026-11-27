@@ -58,6 +58,9 @@
 (deffunction operation-events-add-tree-state-change-event (?operation-name
                ?proto-state ?run-metadata-proto-path)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
 
@@ -77,6 +80,9 @@
                ?proto-state ?was-recovered ?failure-reason
                ?run-metadata-proto-path)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
 
@@ -99,6 +105,9 @@
 (deffunction operation-events-add-condition-state-change-event (?operation-name
                ?proto-state ?satisfied ?run-metadata-proto-path)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
 
@@ -120,6 +129,9 @@
 (deffunction operation-events-add-task-node-state-change-event (?operation-name
                ?proto-state ?run-metadata-proto-path)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
 
@@ -138,6 +150,9 @@
 (deffunction operation-events-add-task-node-execute-code-stdout-event
                (?operation-name ?stdout ?run-metadata-proto-path)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
 
@@ -156,6 +171,9 @@
 (deffunction operation-events-add-counter-change-event (?operation-name
                ?counter ?run-metadata-proto-path)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
 
@@ -173,6 +191,9 @@
 (deffunction operation-events-add-operation-state-change-event (?operation-name
                ?proto-state)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
   (pb-set-field ?event-proto "operation_state.operation_state" ?proto-state)
@@ -183,6 +204,9 @@
 (deffunction operation-events-add-operation-result-change-event (?operation-name
                ?operation-proto)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
   (pb-set-field ?event-proto "operation_result.done"
@@ -204,6 +228,9 @@
 (deffunction operation-events-add-breakpoint-change-event (?operation-name
                ?tree-id ?node-id ?breakpoint-type)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
   (pb-set-field ?event-proto "breakpoint.breakpoint.tree_id" ?tree-id)
@@ -218,6 +245,9 @@
 (deffunction operation-events-add-node-execution-settings-change-event
                (?operation-name ?mode ?result-state ?run-metadata-proto-path)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (bind ?event-proto
     (pb-create "intrinsic_proto.executive.OperationEvent"))
 
@@ -251,6 +281,9 @@
 ;   ?operation-name: Name of the operation for this event
 (deffunction operation-events-add-run-metadata-change-event (?operation-name)
 
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_OPERATION_EVENTS) then
+    (return)
+  )
   (do-for-fact ((?op operation-envelope)) (eq ?op:name ?operation-name)
     (bind ?rmd-proto ?op:run-metadata-proto)
     (if (= ?rmd-proto 0) then

@@ -24,6 +24,9 @@
 ; --------------------------------- FUNCTIONS ---------------------------------
 
 (deffunction run-metadata-proto-update-field (?run-metadata-proto-path ?value ?operation-name)
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_STATE_PROTO_UPDATE) then
+    (return)
+  )
   (do-for-fact ((?op operation-envelope)) (eq ?op:name ?operation-name)
     (if (<> ?op:run-metadata-proto 0) then
       (pb-set-field ?op:run-metadata-proto
@@ -34,6 +37,9 @@
 )
 
 (deffunction run-metadata-proto-clear-field (?run-metadata-proto-path ?operation-name)
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_STATE_PROTO_UPDATE) then
+    (return)
+  )
   (do-for-fact ((?op operation-envelope)) (eq ?op:name ?operation-name)
     (if (<> ?op:run-metadata-proto 0) then
       (pb-clear-field ?op:run-metadata-proto
@@ -44,6 +50,9 @@
 
 (deffunction run-metadata-proto-set-map-value
     (?run-metadata-proto-path ?key ?value ?operation-name)
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_STATE_PROTO_UPDATE) then
+    (return)
+  )
   (do-for-fact ((?op operation-envelope)) (eq ?op:name ?operation-name)
     (if (<> ?op:run-metadata-proto 0) then
       (pb-set-map-value ?op:run-metadata-proto
@@ -98,6 +107,9 @@
 ;   ?state-proto: associate tree's state proto
 ;   ?operation-name: Name of the operation
 (deffunction run-metadata-proto-clear-unused-decorators (?node ?operation-name)
+  (if (debug-experiment-active EXP_LOOP_RESET_SKIP_STATE_PROTO_UPDATE) then
+    (return)
+  )
   (bind ?run-metadata-proto-path (fact-slot-value ?node run-metadata-proto-path))
   (if (neq ?run-metadata-proto-path "") then
     (do-for-fact ((?op operation-envelope)) (eq ?op:name ?operation-name)
