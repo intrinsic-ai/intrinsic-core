@@ -80,6 +80,20 @@
   (modify ?node (loop-num-times ?counter-value))
 )
 
+; Reset a loop node's child, optionally emitting a debug trace span attached to
+; the loop node's span.
+(deffunction behavior-tree-loop-node-reset-child
+    (?child ?op-name ?loop-node-span)
+  (bind ?reset-span ?*TRACING-INVALID-SPAN-ID*)
+  (if (and (eq ?*DEBUG-EXTRA-TRACES-LOOP-NODE-RESET* TRUE)
+           (<> ?loop-node-span ?*TRACING-INVALID-SPAN-ID*)) then
+    (bind ?reset-span
+      (span-start "Loop node reset" ?loop-node-span "loop-node-reset"))
+  )
+  (behavior-tree-node-reset ?child ?op-name)
+  (span-end ?reset-span)
+)
+
 ; ----------------------------------- RULES -----------------------------------
 
 (defrule behavior-tree-loop-node-start
@@ -254,14 +268,15 @@
   (behavior-tree-node (id ?node-id) (tree-id ?tree-id)
                       (type LOOP) (loop-mode WHILE) (state RUNNING)
                       (loop-while-id ?while-condition-id&~nil)
-                      (loop-do-id ?loop-do-id))
+                      (loop-do-id ?loop-do-id)
+                      (span-reference-id ?node-span))
   (behavior-tree-condition (id ?while-condition-id) (state FINISHED)
                            (node-id ?node-id) (tree-id ?tree-id)
                            (satisfied TRUE))
   ?child <- (behavior-tree-node (id ?loop-do-id) (tree-id ?tree-id)
                                 (state SUCCEEDED))
  =>
-  (behavior-tree-node-reset ?child ?op-name)
+  (behavior-tree-loop-node-reset-child ?child ?op-name ?node-span)
 )
 
 (defrule behavior-tree-loop-node-condition-satisfied
@@ -337,6 +352,7 @@
                                (loop-num-times ?num-times)
                                (loop-while-id ?while-condition-id)
                                (loop-counter-blackboard-key ?key)
+                               (span-reference-id ?node-span)
                                (iteration-span-reference-id ?iteration-span))
   ?do-node <- (behavior-tree-node (id ?loop-do-id) (tree-id ?tree-id)
                                   (state SUCCEEDED))
@@ -352,7 +368,7 @@
     ; rule behavior-tree-loop-node-reset-before-continuing-satisfied-while
     ; after the condition succeeded and before the do node gets activated
     ; again.
-      (behavior-tree-node-reset ?do-node ?op-name)
+      (behavior-tree-loop-node-reset-child ?do-node ?op-name ?node-span)
     )
     (modify ?node (state READY)
       (iteration-span-reference-id ?*TRACING-INVALID-SPAN-ID*))
@@ -377,6 +393,7 @@
                                (loop-for-each-value-blackboard-key
                                  ?current-value-key)
                                (loop-counter-blackboard-key ?key)
+                               (span-reference-id ?node-span)
                                (iteration-span-reference-id ?iteration-span))
   ?do-node <- (behavior-tree-node (id ?loop-do-id) (tree-id ?tree-id)
                                   (state SUCCEEDED))
@@ -385,7 +402,7 @@
   (if (< ?num-times (length$ ?loop-protos))
    then
     ; there are still potentially more loop runs to be done
-    (behavior-tree-node-reset ?do-node ?op-name)
+    (behavior-tree-loop-node-reset-child ?do-node ?op-name ?node-span)
     (modify ?node (state READY)
       (iteration-span-reference-id ?*TRACING-INVALID-SPAN-ID*))
    else ; number of runs exhausted
