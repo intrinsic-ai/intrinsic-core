@@ -101,6 +101,34 @@ message GetClipsTraceResponse {
   string trace_log = 1;
 }
 
+message DebugSettings {
+  message TextLogging {
+    // Log additional details when resetting loop nodes.
+    bool loop_node_reset = 1;
+  }
+
+  message Tracing {
+    // Emit extra trace spans when resetting loop nodes.
+    bool loop_node_reset = 1;
+    // Emit extra trace spans for structured logging.
+    bool structured_logging = 2;
+    // Overrides StartOperationRequest.skill_trace_handling when set:
+    // true forces SKILL_TRACES_EMBED, false forces SKILL_TRACES_LINK.
+    // When unset, falls back to what user set in
+    // StartOperationRequest.skill_trace_handling.
+    optional bool embed_skill_traces = 3;
+  }
+
+  TextLogging text_logging = 1;
+  Tracing extra_traces = 2;
+}
+
+message SetDebugSettingsRequest {
+  DebugSettings settings = 1;
+}
+
+message SetDebugSettingsResponse {}
+
 // Executive service with functionality that is available for live debugging
 // requests. This enables Intrinsic developers to retrieve detailed information
 // about the current state of the executive that executive developers can use
@@ -135,4 +163,11 @@ service ExecutiveDebug {
 
   // Returns data of the current state of the CLIPS system in the executive.
   rpc GetClipsData(GetClipsDataRequest) returns (GetClipsDataResponse) {}
+
+  // Configures on-the-fly debug settings for the executive.
+  // Replaces the current debug settings: unset bool fields default to
+  // false/off, while unset optional override fields (such as
+  // embed_skill_traces) fall back to what user set in StartOperationRequest.
+  rpc SetDebugSettings(SetDebugSettingsRequest)
+      returns (SetDebugSettingsResponse) {}
 }

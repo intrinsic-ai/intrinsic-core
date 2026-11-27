@@ -267,6 +267,11 @@ class ExecutiveDebugService
       const intrinsic_proto::executive::GetClipsDataRequest* request,
       intrinsic_proto::executive::GetClipsDataResponse* response) override;
 
+  grpc::Status SetDebugSettings(
+      grpc::ServerContext* context,
+      const intrinsic_proto::executive::SetDebugSettingsRequest* request,
+      intrinsic_proto::executive::SetDebugSettingsResponse* response) override;
+
  private:
   explicit ExecutiveDebugService(ClipsExecutiveService* clips_executive_service)
       : clips_executive_service_(clips_executive_service) {}

@@ -407,6 +407,10 @@ class ClipsExecutor {
   virtual absl::StatusOr<intrinsic_proto::executive::GetClipsDataResponse>
   GetClipsData() ABSL_LOCKS_EXCLUDED(clips_->mutex());
 
+  virtual absl::Status SetDebugSettings(
+      const intrinsic_proto::executive::DebugSettings& settings)
+      ABSL_LOCKS_EXCLUDED(clips_->mutex());
+
   virtual absl::StatusOr<std::string> GetSceneId(
       absl::string_view operation_name) ABSL_LOCKS_EXCLUDED(clips_->mutex());
 

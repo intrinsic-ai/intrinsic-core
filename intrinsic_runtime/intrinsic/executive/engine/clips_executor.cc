@@ -2608,6 +2608,12 @@ ClipsExecutor::GetClipsData() ABSL_LOCKS_EXCLUDED(clips_->mutex()) {
   return internal_data;
 }
 
+absl::Status ClipsExecutor::SetDebugSettings(
+    const intrinsic_proto::executive::DebugSettings& settings)
+    ABSL_LOCKS_EXCLUDED(clips_->mutex()) {
+  return absl::OkStatus();
+}
+
 absl::StatusOr<std::string> ClipsExecutor::GetSceneId(
     absl::string_view operation_name) {
   absl::MutexLock lock(*clips_->mutex());

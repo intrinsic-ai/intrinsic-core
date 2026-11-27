@@ -1579,6 +1579,18 @@ grpc::Status ExecutiveDebugService::GetClipsData(
   return grpc::Status::OK;
 }
 
+grpc::Status ExecutiveDebugService::SetDebugSettings(
+    grpc::ServerContext* context,
+    const intrinsic_proto::executive::SetDebugSettingsRequest* request,
+    intrinsic_proto::executive::SetDebugSettingsResponse* response) {
+  LOG(INFO) << "SetDebugSettings called: "
+            << request->settings().ShortDebugString();
+  absl::MutexLock lock_executor(clips_executive_service_->executor_mutex_);
+
+  return ToGrpcStatus(clips_executive_service_->executor_->SetDebugSettings(
+      request->settings()));
+}
+
 absl::StatusOr<std::unique_ptr<ExecutiveBlackboardService>>
 ExecutiveBlackboardService::CreateService(
     ClipsExecutiveService* clips_executive_service) {
