@@ -84,14 +84,9 @@
 ; the loop node's span.
 (deffunction behavior-tree-loop-node-reset-child
     (?child ?op-name ?loop-node-span)
-  (bind ?reset-span ?*TRACING-INVALID-SPAN-ID*)
-  (if (and (eq ?*DEBUG-EXTRA-TRACES-LOOP-NODE-RESET* TRUE)
-           (<> ?loop-node-span ?*TRACING-INVALID-SPAN-ID*)) then
-    (bind ?reset-span
-      (span-start "Loop node reset" ?loop-node-span "loop-node-reset"))
-  )
+  (bind ?debug-spans (debug-loop-reset-start-spans ?loop-node-span))
   (behavior-tree-node-reset ?child ?op-name)
-  (span-end ?reset-span)
+  (debug-loop-reset-end-spans ?debug-spans)
 )
 
 ; ----------------------------------- RULES -----------------------------------
