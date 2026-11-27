@@ -191,6 +191,18 @@ class Pose3Test(parameterized.TestCase, math_test.TestCase):
         pose3.Pose3.from_matrix4x4(np.identity(4)), pose3.Pose3.identity()
     )
 
+  def test_from_matrix4x4_reflection(self):
+    reflection = np.diag([-1.0, 1.0, 1.0, 1.0])
+    reflection[:3, 3] = [1.0, 2.0, 3.0]
+    with self.assertRaisesRegex(ValueError, 'caller context'):
+      pose3.Pose3.from_matrix4x4(reflection, err_msg='caller context')
+    self.assertRaisesRegex(
+        ValueError,
+        rotation3.MATRIX_NOT_PROPER_ROTATION_MESSAGE,
+        pose3.Pose3.from_matrix4x4,
+        reflection,
+    )
+
   def test_from_matrix4x4_errors(self):
     self.assertRaisesRegex(
         ValueError,
