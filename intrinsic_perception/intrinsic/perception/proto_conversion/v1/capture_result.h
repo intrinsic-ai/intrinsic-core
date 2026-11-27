@@ -19,18 +19,29 @@
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/proto/v1/capture_result.pb.h"
+#include "intrinsic/perception/storage/kvstore_options.h"
 
 namespace intrinsic_proto::perception::v1 {
 
 absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
-    const CaptureResult& capture_result);
+    const CaptureResult& capture_result,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options =
+        {});
 
 absl::StatusOr<intrinsic::perception::CaptureResult> FromProto(
-    CaptureResult&& capture_result);
+    CaptureResult&& capture_result,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options =
+        {});
 
+// Converts `capture_result` to its v1 proto representation. When
+// `kvstore_options.storage_location` is set, its `key` must contain only the
+// base key prefix (`<base_key>`); each non-empty sensor buffer is stored at
+// `<base_key>/<sensor_id>`, and `InvalidArgumentError` is returned if
+// `capture_result` contains duplicate sensor IDs.
 absl::StatusOr<CaptureResult> ToProto(
     const intrinsic::perception::CaptureResult& capture_result,
-    const intrinsic::perception::EncodingBySensorId& encoding_by_sensor_id =
+    const intrinsic::perception::EncodingBySensorId& encoding_by_sensor_id = {},
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options =
         {});
 
 }  // namespace intrinsic_proto::perception::v1

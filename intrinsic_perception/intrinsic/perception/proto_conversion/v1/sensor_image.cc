@@ -32,6 +32,8 @@
 #include "intrinsic/perception/proto/v1/sensor_image.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/camera_params.h"
 #include "intrinsic/perception/proto_conversion/v1/image_buffer.h"
+#include "intrinsic/perception/storage/kvstore_options.h"
+#include "intrinsic/platform/pubsub/storage_location.pb.h"
 #include "intrinsic/util/proto_time.h"
 #include "intrinsic/util/status/status_macros.h"
 
@@ -44,10 +46,12 @@ absl::StatusOr<intrinsic::perception::SensorImage> CreateSensorImage(
     const SensorImage& sensor_image, absl::Time acquisition_time,
     const std::optional<intrinsic::perception::CameraParams>& camera_params,
     const std::optional<intrinsic::Pose3d>& camera_t_sensor,
-    ImageBufferRef&& image_buffer) {
+    ImageBufferRef&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options) {
   INTR_ASSIGN_OR_RETURN(
       intrinsic::perception::Image<ImageTrait> image,
-      FromProto<ImageTrait>(std::forward<ImageBufferRef>(image_buffer)));
+      FromProto<ImageTrait>(std::forward<ImageBufferRef>(image_buffer),
+                            kvstore_options));
   return intrinsic::perception::SensorImage(sensor_image.sensor_config().id(),
                                             acquisition_time, camera_params,
                                             camera_t_sensor, std::move(image));
@@ -55,7 +59,8 @@ absl::StatusOr<intrinsic::perception::SensorImage> CreateSensorImage(
 
 template <typename ImageBufferRef>
 absl::StatusOr<intrinsic::perception::SensorImage> FromProtoImpl(
-    const SensorImage& sensor_image, ImageBufferRef&& image_buffer) {
+    const SensorImage& sensor_image, ImageBufferRef&& image_buffer,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options) {
   if (image_buffer.packing_type() == PACKING_TYPE_UNSPECIFIED) {
     return absl::InvalidArgumentError("Invalid packing type");
   }
@@ -81,11 +86,11 @@ absl::StatusOr<intrinsic::perception::SensorImage> FromProtoImpl(
     if (image_buffer.num_channels() == 3) {
       return CreateSensorImage<intrinsic::perception::Rgb8u>(
           sensor_image, acquisition_time, camera_params, camera_t_sensor,
-          std::forward<ImageBufferRef>(image_buffer));
+          std::forward<ImageBufferRef>(image_buffer), kvstore_options);
     } else if (image_buffer.num_channels() == 1) {
       return CreateSensorImage<intrinsic::perception::Gray8u>(
           sensor_image, acquisition_time, camera_params, camera_t_sensor,
-          std::forward<ImageBufferRef>(image_buffer));
+          std::forward<ImageBufferRef>(image_buffer), kvstore_options);
     } else {
       return absl::InvalidArgumentError("8U image must have 1 or 3 channels");
     }
@@ -94,22 +99,22 @@ absl::StatusOr<intrinsic::perception::SensorImage> FromProtoImpl(
         image_buffer.num_channels() == 1) {
       return CreateSensorImage<intrinsic::perception::Gray32f>(
           sensor_image, acquisition_time, camera_params, camera_t_sensor,
-          std::forward<ImageBufferRef>(image_buffer));
+          std::forward<ImageBufferRef>(image_buffer), kvstore_options);
     } else if (image_buffer.pixel_type() == PIXEL_NORMAL &&
                image_buffer.num_channels() == 3) {
       return CreateSensorImage<intrinsic::perception::Normal32f>(
           sensor_image, acquisition_time, camera_params, camera_t_sensor,
-          std::forward<ImageBufferRef>(image_buffer));
+          std::forward<ImageBufferRef>(image_buffer), kvstore_options);
     } else if (image_buffer.pixel_type() == PixelType::PIXEL_DEPTH &&
                image_buffer.num_channels() == 1) {
       return CreateSensorImage<intrinsic::perception::Depth32f>(
           sensor_image, acquisition_time, camera_params, camera_t_sensor,
-          std::forward<ImageBufferRef>(image_buffer));
+          std::forward<ImageBufferRef>(image_buffer), kvstore_options);
     } else if (image_buffer.pixel_type() == PixelType::PIXEL_POINT &&
                image_buffer.num_channels() == 3) {
       return CreateSensorImage<intrinsic::perception::Point32f>(
           sensor_image, acquisition_time, camera_params, camera_t_sensor,
-          std::forward<ImageBufferRef>(image_buffer));
+          std::forward<ImageBufferRef>(image_buffer), kvstore_options);
     } else {
       return absl::InvalidArgumentError(
           "Invalid pixel type/channel combination");
@@ -119,21 +124,8 @@ absl::StatusOr<intrinsic::perception::SensorImage> FromProtoImpl(
   }
 }
 
-}  // namespace
-
-absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
-    const SensorImage& sensor_image) {
-  return FromProtoImpl(sensor_image, sensor_image.buffer());
-}
-
-absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
-    SensorImage&& sensor_image) {
-  return FromProtoImpl(sensor_image, std::move(*sensor_image.mutable_buffer()));
-}
-
-absl::StatusOr<SensorImage> ToProto(
-    const intrinsic::perception::SensorImage& sensor_image,
-    intrinsic::perception::Encoding encoding) {
+absl::StatusOr<SensorImage> CreateSensorImageMetadataProto(
+    const intrinsic::perception::SensorImage& sensor_image) {
   SensorConfig sensor_config_proto;
   sensor_config_proto.set_id(sensor_image.sensor_id());
   if (sensor_image.camera_params().has_value()) {
@@ -152,40 +144,73 @@ absl::StatusOr<SensorImage> ToProto(
   SensorImage sensor_image_proto;
   *sensor_image_proto.mutable_sensor_config() = std::move(sensor_config_proto);
   *sensor_image_proto.mutable_acquisition_time() = std::move(acquisition_time);
+  return sensor_image_proto;
+}
+
+template <typename ExportImageFn>
+absl::StatusOr<ImageBuffer> ExportSensorImageBuffer(
+    const intrinsic::perception::SensorImage& sensor_image,
+    ExportImageFn&& export_fn) {
+  if (sensor_image.rgb8u().has_value()) {
+    return export_fn(sensor_image.rgb8u().value());
+  }
+  if (sensor_image.gray8u().has_value()) {
+    return export_fn(sensor_image.gray8u().value());
+  }
+  if (sensor_image.gray32f().has_value()) {
+    return export_fn(sensor_image.gray32f().value());
+  }
+  if (sensor_image.depth32f().has_value()) {
+    return export_fn(sensor_image.depth32f().value());
+  }
+  if (sensor_image.point32f().has_value()) {
+    return export_fn(sensor_image.point32f().value());
+  }
+  if (sensor_image.normal32f().has_value()) {
+    return export_fn(sensor_image.normal32f().value());
+  }
+  return absl::InvalidArgumentError("No image to export!");
+}
+
+}  // namespace
+
+absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
+    const SensorImage& sensor_image,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options) {
+  return FromProtoImpl(sensor_image, sensor_image.buffer(), kvstore_options);
+}
+
+absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
+    SensorImage&& sensor_image,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options) {
+  return FromProtoImpl(sensor_image, std::move(*sensor_image.mutable_buffer()),
+                       kvstore_options);
+}
+
+absl::StatusOr<SensorImage> ToProto(
+    const intrinsic::perception::SensorImage& sensor_image,
+    intrinsic::perception::Encoding encoding,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options) {
+  if (kvstore_options.storage_location.has_value() &&
+      kvstore_options.storage_location->key().empty()) {
+    return absl::InvalidArgumentError(
+        "SensorImage storage_location.key is empty.");
+  }
+
+  INTR_ASSIGN_OR_RETURN(SensorImage sensor_image_proto,
+                        CreateSensorImageMetadataProto(sensor_image));
   if (sensor_image.IsEmpty()) {
     return sensor_image_proto;
   }
 
-  ImageBuffer buffer;
-  if (sensor_image.rgb8u().has_value()) {
-    INTR_ASSIGN_OR_RETURN(buffer, ToProto<intrinsic::perception::Rgb8u>(
-                                      sensor_image.rgb8u().value(), encoding));
-  } else if (sensor_image.gray8u().has_value()) {
-    INTR_ASSIGN_OR_RETURN(buffer, ToProto<intrinsic::perception::Gray8u>(
-                                      sensor_image.gray8u().value(), encoding));
-  } else if (sensor_image.gray32f().has_value()) {
-    INTR_ASSIGN_OR_RETURN(buffer,
-                          ToProto<intrinsic::perception::Gray32f>(
-                              sensor_image.gray32f().value(), encoding));
-  } else if (sensor_image.depth32f().has_value()) {
-    INTR_ASSIGN_OR_RETURN(buffer,
-                          ToProto<intrinsic::perception::Depth32f>(
-                              sensor_image.depth32f().value(), encoding));
-  } else if (sensor_image.point32f().has_value()) {
-    INTR_ASSIGN_OR_RETURN(buffer,
-                          ToProto<intrinsic::perception::Point32f>(
-                              sensor_image.point32f().value(), encoding));
-  } else if (sensor_image.normal32f().has_value()) {
-    INTR_ASSIGN_OR_RETURN(buffer,
-                          ToProto<intrinsic::perception::Normal32f>(
-                              sensor_image.normal32f().value(), encoding));
-  } else {
-    return absl::InvalidArgumentError("No image to export!");
-  }
-
+  INTR_ASSIGN_OR_RETURN(
+      ImageBuffer buffer,
+      ExportSensorImageBuffer(sensor_image, [&](const auto& image) {
+        return ToProto(image, encoding, /*compression_effort=*/std::nullopt,
+                       kvstore_options);
+      }));
   buffer.set_packing_type(PACKING_TYPE_INTERLEAVED);
   *sensor_image_proto.mutable_buffer() = std::move(buffer);
-
   return sensor_image_proto;
 }
 

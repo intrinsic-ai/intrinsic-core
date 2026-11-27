@@ -19,19 +19,26 @@
 #include "intrinsic/perception/cameras/sensor_image.h"
 #include "intrinsic/perception/core/encoding.h"
 #include "intrinsic/perception/proto/v1/sensor_image.pb.h"
+#include "intrinsic/perception/storage/kvstore_options.h"
 
 namespace intrinsic_proto::perception::v1 {
 
 absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
-    const SensorImage& sensor_image);
+    const SensorImage& sensor_image,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options =
+        {});
 
 absl::StatusOr<intrinsic::perception::SensorImage> FromProto(
-    SensorImage&& sensor_image);
+    SensorImage&& sensor_image,
+    const intrinsic::perception::KeyValueStoreReadOptions& kvstore_options =
+        {});
 
 absl::StatusOr<SensorImage> ToProto(
     const intrinsic::perception::SensorImage& sensor_image,
     intrinsic::perception::Encoding encoding =
-        intrinsic::perception::Encoding::kUnspecified);
+        intrinsic::perception::Encoding::kUnspecified,
+    const intrinsic::perception::KeyValueStoreWriteOptions& kvstore_options =
+        {});
 
 }  // namespace intrinsic_proto::perception::v1
 

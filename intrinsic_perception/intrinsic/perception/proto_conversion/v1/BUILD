@@ -127,12 +127,22 @@ cc_library(
         "//intrinsic_perception/intrinsic/perception/cameras:capture_result",
         "//intrinsic_perception/intrinsic/perception/cameras:sensor_image",
         "//intrinsic_perception/intrinsic/perception/core:encoding",
+        "//intrinsic_perception/intrinsic/perception/core:parallel",
+        "//intrinsic_perception/intrinsic/perception/core:range_tools",
+        "//intrinsic_perception/intrinsic/perception/storage:kvstore_options",
+        "//intrinsic_perception/intrinsic/perception/storage:kvstore_utils",
+        "//intrinsic_sdk/intrinsic/platform/pubsub:kvstore",
         "//intrinsic_sdk/intrinsic/util:proto_time",
         "//intrinsic_sdk/intrinsic/util/status:status_macros",
+        "//intrinsic_sdk/intrinsic/util/time:deadline_timeout",
+        "@abseil-cpp//absl/status",
         "@abseil-cpp//absl/status:statusor",
+        "@abseil-cpp//absl/strings",
+        "@abseil-cpp//absl/strings:string_view",
         "@abseil-cpp//absl/time",
         "@intrinsic_apis//intrinsic/perception/proto/v1:capture_result_cc_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:sensor_image_cc_proto",
+        "@intrinsic_apis//intrinsic/platform/pubsub:storage_location_cc_proto",
     ],
 )
 
@@ -256,6 +266,7 @@ cc_library(
         "//intrinsic_perception/intrinsic/perception/core:encoding",
         "//intrinsic_perception/intrinsic/perception/core:image",
         "//intrinsic_perception/intrinsic/perception/core:image_traits",
+        "//intrinsic_perception/intrinsic/perception/storage:kvstore_options",
         "//intrinsic_sdk/intrinsic/math:pose3",
         "//intrinsic_sdk/intrinsic/math:proto_conversion",
         "//intrinsic_sdk/intrinsic/util:proto_time",
@@ -266,6 +277,7 @@ cc_library(
         "@intrinsic_apis//intrinsic/perception/proto/v1:image_buffer_cc_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:sensor_config_cc_proto",
         "@intrinsic_apis//intrinsic/perception/proto/v1:sensor_image_cc_proto",
+        "@intrinsic_apis//intrinsic/platform/pubsub:storage_location_cc_proto",
     ],
 )
 
