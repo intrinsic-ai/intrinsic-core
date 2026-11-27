@@ -15,9 +15,9 @@
 load("@com_google_protobuf//bazel:cc_proto_library.bzl", "cc_proto_library")
 load("@com_google_protobuf//bazel:py_proto_library.bzl", "py_proto_library")
 load("//bazel:protos.bzl", "proto_library")
-load("//bazel:python.bzl", "py_library")
-load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "py_skill", "skill_manifest")
+load("//bazel:python.bzl", "py_library", "py_test")
 load("//intrinsic_sdk/bazel:go_macros.bzl", "go_proto_library")
+load("//intrinsic_sdk/intrinsic/skills/build_defs:skill.bzl", "py_skill", "skill_manifest")
 
 package(default_visibility = ["//visibility:public"])
 
@@ -104,6 +104,19 @@ py_library(
         "//intrinsic_sdk/intrinsic/world/python:object_world_resources",
         "@ai_intrinsic_sdks_pip_deps//numpy",
         "@intrinsic_apis//intrinsic/skills/proto:footprint_py_pb2",
+    ],
+)
+
+py_test(
+    name = "move_to_contact_test",
+    size = "small",
+    srcs = ["move_to_contact_test.py"],
+    deps = [
+        ":move_to_contact",
+        ":move_to_contact_proto_py_pb2",
+        "//intrinsic_sdk/intrinsic/math/python:data_types",
+        "@ai_intrinsic_sdks_pip_deps//numpy",
+        "@com_google_absl_py//absl/testing:absltest",
     ],
 )
 
