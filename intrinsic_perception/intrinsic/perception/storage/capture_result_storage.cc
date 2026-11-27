@@ -14,64 +14,53 @@
 
 #include "intrinsic/perception/storage/capture_result_storage.h"
 
-#include <algorithm>
 #include <memory>
 #include <utility>
 
-#include "absl/log/log.h"
-#include "absl/status/status.h"
 #include "absl/status/statusor.h"
-#include "absl/time/clock.h"
+#include "absl/strings/string_view.h"
 #include "absl/time/time.h"
 #include "intrinsic/perception/cameras/capture_result.h"
 #include "intrinsic/perception/proto/v1/capture_result.pb.h"
 #include "intrinsic/perception/proto_conversion/v1/capture_result.h"
 #include "intrinsic/perception/storage/kvstore_factory.h"
+#include "intrinsic/perception/storage/kvstore_options.h"
+#include "intrinsic/perception/storage/kvstore_utils.h"
 #include "intrinsic/platform/pubsub/kvstore.h"
 #include "intrinsic/platform/pubsub/storage_location.pb.h"
 #include "intrinsic/util/status/status_macros.h"
 #include "intrinsic/util/time/deadline_timeout.h"
 
 namespace intrinsic::perception {
-namespace {
-
-// The capture images skill writes a capture result with verification before it
-// returns the storage location. A NotFound reply shortly after is a transient
-// Zenoh routing race in a freshly opened session (b/577138515), so it is
-// retried for a short, bounded window.
-constexpr absl::Duration kNotFoundRetryWindow = absl::Seconds(2);
-constexpr absl::Duration kNotFoundRetryDelayMin = absl::Milliseconds(10);
-constexpr absl::Duration kNotFoundRetryDelayMax = absl::Milliseconds(250);
-constexpr double kNotFoundRetryDelayFactor = 2.0;
-
-}  // namespace
 
 absl::StatusOr<perception::CaptureResult> GetCaptureResult(
     const intrinsic_proto::kvstore::StorageLocation& capture_result_location,
     KeyValueStoreFactoryRef kvstore_factory, absl::Duration timeout) {
   const absl::Time deadline = ToDeadline(timeout);
-  const absl::Time retry_deadline =
-      std::min(deadline, absl::Now() + kNotFoundRetryWindow);
-  INTR_ASSIGN_OR_RETURN(std::shared_ptr<KeyValueStore> kvstore,
-                        kvstore_factory(capture_result_location.store()));
-  absl::Duration delay = kNotFoundRetryDelayMin;
-  while (true) {
-    absl::StatusOr<intrinsic_proto::perception::v1::CaptureResult>
-        capture_result_proto =
-            kvstore->Get<intrinsic_proto::perception::v1::CaptureResult>(
-                capture_result_location.key(), ToTimeout(deadline));
-    if (!absl::IsNotFound(capture_result_proto.status()) ||
-        absl::Now() + delay > retry_deadline) {
-      INTR_RETURN_IF_ERROR(capture_result_proto.status()).EmitStackTrace()
-          << "Failed to get capture result '" << capture_result_location.key()
-          << "'.";
-      return FromProto(*std::move(capture_result_proto));
+  INTR_ASSIGN_OR_RETURN(
+      std::shared_ptr<KeyValueStore> kvstore,
+      ResolveKeyValueStore(capture_result_location.store(), kvstore_factory));
+  INTR_ASSIGN_OR_RETURN(
+      intrinsic_proto::perception::v1::CaptureResult capture_result_proto,
+      GetWithTransientKeyNotFoundRetry<
+          intrinsic_proto::perception::v1::CaptureResult>(
+          capture_result_location.key(), deadline,
+          [&](absl::Duration remaining_timeout) {
+            return kvstore->Get<intrinsic_proto::perception::v1::CaptureResult>(
+                capture_result_location.key(), remaining_timeout);
+          }));
+
+  auto single_store_factory = [&](absl::string_view store)
+      -> absl::StatusOr<std::shared_ptr<KeyValueStore>> {
+    if (store == capture_result_location.store()) {
+      return kvstore;
     }
-    LOG(WARNING) << "Capture result '" << capture_result_location.key()
-                 << "' not found yet, retrying in " << delay << ".";
-    absl::SleepFor(delay);
-    delay = std::min(delay * kNotFoundRetryDelayFactor, kNotFoundRetryDelayMax);
-  }
+    return ResolveKeyValueStore(store, kvstore_factory);
+  };
+
+  return intrinsic_proto::perception::v1::FromProto(
+      std::move(capture_result_proto), {.kvstore_factory = single_store_factory,
+                                        .timeout = ToTimeout(deadline)});
 }
 
 }  // namespace intrinsic::perception
