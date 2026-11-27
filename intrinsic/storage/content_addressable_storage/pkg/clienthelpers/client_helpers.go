@@ -93,13 +93,36 @@ func Get(ctx context.Context, casClient casgrpcpb.ContentAddressableStorageServi
 	return nil
 }
 
-type downloadOptions struct {
+// DownloadOption configures GetResumableReader.
+type DownloadOption interface {
+	applyDownloadOption(*downloadOptions)
+}
+
+// Option configures resumable CAS client helpers.
+type Option interface {
+	DownloadOption
+}
+
+type downloadOptionFunc func(*downloadOptions)
+
+func (f downloadOptionFunc) applyDownloadOption(o *downloadOptions) { f(o) }
+
+type commonOptionFunc func(*commonOptions)
+
+func (f commonOptionFunc) applyDownloadOption(o *downloadOptions) { f(&o.commonOptions) }
+
+// commonOptions are shared by resumable CAS client helpers.
+type commonOptions struct {
 	casClient       casgrpcpb.ContentAddressableStorageServiceClient
-	offset          int64
 	maxRetries      uint64
 	infiniteRetries bool
 	initialBackoff  time.Duration
 	maxBackoff      time.Duration
+}
+
+type downloadOptions struct {
+	commonOptions
+	offset int64
 }
 
 func defaultDownloadOptions() *downloadOptions {
@@ -110,51 +133,48 @@ func defaultDownloadOptions() *downloadOptions {
 	}
 }
 
-// DownloadOption configures GetResumableReader.
-type DownloadOption func(*downloadOptions)
-
-// WithCASClient configures the CAS service client used for the download.
-func WithCASClient(casClient casgrpcpb.ContentAddressableStorageServiceClient) DownloadOption {
-	return func(o *downloadOptions) {
+// WithCASClient configures the CAS service client. It is required.
+func WithCASClient(casClient casgrpcpb.ContentAddressableStorageServiceClient) Option {
+	return commonOptionFunc(func(o *commonOptions) {
 		o.casClient = casClient
-	}
+	})
 }
 
 // WithOffset configures the starting byte offset for the download.
 // Defaults to 0 if not specified.
 func WithOffset(offset int64) DownloadOption {
-	return func(o *downloadOptions) {
+	return downloadOptionFunc(func(o *downloadOptions) {
 		o.offset = offset
-	}
+	})
 }
 
-// WithMaxRetries configures the maximum number of resume retries upon transient errors.
-// The retries are set per chunk of downloaded data.
-func WithMaxRetries(retries uint64) DownloadOption {
-	return func(o *downloadOptions) {
+// WithMaxRetries configures the maximum number of consecutive retries upon transient errors.
+// For downloads, the retry budget is reset after every received chunk of data.
+func WithMaxRetries(retries uint64) Option {
+	return commonOptionFunc(func(o *commonOptions) {
 		o.maxRetries = retries
 		o.infiniteRetries = false
-	}
+	})
 }
 
-// WithInfiniteRetries configures GetResumableReader to retry upon transient errors
-// indefinitely until the caller's context is done.
-func WithInfiniteRetries() DownloadOption {
-	return func(o *downloadOptions) {
+// WithInfiniteRetries configures retrying upon transient errors indefinitely until the caller's
+// context is done.
+func WithInfiniteRetries() Option {
+	return commonOptionFunc(func(o *commonOptions) {
 		o.infiniteRetries = true
 		o.maxRetries = 0
-	}
+	})
 }
 
 // WithRetryBackoff configures the initial and maximum exponential backoff duration.
-func WithRetryBackoff(initial, max time.Duration) DownloadOption {
-	return func(o *downloadOptions) {
+func WithRetryBackoff(initial, max time.Duration) Option {
+	return commonOptionFunc(func(o *commonOptions) {
 		o.initialBackoff = initial
 		o.maxBackoff = max
-	}
+	})
 }
 
-func (o *downloadOptions) backoff(ctx context.Context) backoff.BackOff {
+func (o *commonOptions) backoff(ctx context.Context) backoff.BackOff {
 	b := backoff.NewExponentialBackOff(
 		backoff.WithInitialInterval(o.initialBackoff),
 		backoff.WithMaxInterval(o.maxBackoff),
@@ -433,7 +453,7 @@ func GetResumableReader(
 ) (*ResumableReader, error) {
 	defaultOpts := defaultDownloadOptions()
 	for _, o := range opts {
-		o(defaultOpts)
+		o.applyDownloadOption(defaultOpts)
 	}
 
 	if defaultOpts.casClient == nil {
