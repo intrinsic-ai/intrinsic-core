@@ -26,13 +26,12 @@ import (
 	"log/slog"
 	"os"
 	"path/filepath"
-	"time"
 
 	"google.golang.org/grpc/codes"
 	"google.golang.org/grpc/status"
 
 	"intrinsic/storage/content_addressable_storage/pkg/idhandling"
-	"intrinsic/storage/onprem_cas/internal/gc"
+	"intrinsic/storage/onprem_cas/internal/sessions"
 
 	caspb "intrinsic/storage/content_addressable_storage/proto/cas_service_go_proto"
 )
@@ -40,7 +39,7 @@ import (
 // The resumable upload API (StartResumableWrite, WriteObject, QueryWriteStatus) follows the same
 // contract as the cloud CAS, see cas_service.proto. Differences in the implementation:
 //   - A session is a single partial file plus a metadata file in the sessions directory (see
-//     sessionStore). On finalize, the session is first marked as committed, then the partial file
+//     sessions.Store). On finalize, the session is first marked as committed, then the partial file
 //     is linked to its final destination, like in Create. A committed session accepts no more
 //     data, because the partial file and the object may be the same file.
 //   - A flush syncs the partial file and then atomically replaces the metadata file.
@@ -54,12 +53,12 @@ func (h *LocalCASHandler) StartResumableWrite(ctx context.Context, req *caspb.St
 	if req.ObjectSize != nil && req.GetObjectSize() < 0 {
 		return nil, statusErrorf(codes.InvalidArgument, "object size must be non-negative, got %d", req.GetObjectSize())
 	}
-	if err := os.MkdirAll(h.sessions.dir, 0755); err != nil {
+	if err := os.MkdirAll(h.sessions.Dir(), 0755); err != nil {
 		return nil, toGRPCError(err, "failed to create upload sessions directory")
 	}
 
 	uploadID := h.uuidNew()
-	id := serverID(uploadID)
+	id := sessions.ServerID(uploadID)
 	if err := h.createSession(id, req.ObjectSize); err != nil {
 		return nil, err
 	}
@@ -72,17 +71,17 @@ func (h *LocalCASHandler) StartResumableWrite(ctx context.Context, req *caspb.St
 }
 
 func (h *LocalCASHandler) createSession(id string, objectSize *int64) (err error) {
-	f, err := os.OpenFile(h.sessions.dataPath(id), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
+	f, err := os.OpenFile(h.sessions.DataPath(id), os.O_WRONLY|os.O_CREATE|os.O_EXCL, 0644)
 	if err != nil {
 		return toGRPCError(err, "failed to create upload session file")
 	}
 	defer func() {
 		if err != nil {
-			h.sessions.remove(id)
+			h.sessions.Remove(id)
 		}
 	}()
 	if objectSize != nil && *objectSize > 0 {
-		if err := preallocate(f, *objectSize); err != nil {
+		if err := sessions.Preallocate(f, *objectSize); err != nil {
 			_ = f.Close()
 			return toGRPCError(err, "failed to reserve %d bytes of disk space", *objectSize)
 		}
@@ -90,7 +89,39 @@ func (h *LocalCASHandler) createSession(id string, objectSize *int64) (err error
 	if err := f.Close(); err != nil {
 		return toGRPCError(err, "failed to close upload session file")
 	}
-	return h.sessions.writeMeta(id, &sessionMeta{ObjectSize: objectSize})
+	return writeSessionMeta(h.sessions, id, &sessions.Meta{ObjectSize: objectSize})
+}
+
+func (h *LocalCASHandler) acquireSession(ctx context.Context, id string) (func(), error) {
+	release, err := h.sessions.Acquire(ctx, id)
+	if err == nil {
+		return release, nil
+	}
+	if errors.Is(err, sessions.ErrBusy) {
+		return nil, statusErrorf(codes.Aborted, "%v", err)
+	}
+	if errors.Is(err, context.Canceled) || errors.Is(err, context.DeadlineExceeded) {
+		return nil, status.FromContextError(err).Err()
+	}
+	return nil, toGRPCError(err, "failed to acquire upload session")
+}
+
+func readSessionMeta(store *sessions.Store, id string) (*sessions.Meta, error) {
+	m, err := store.ReadMeta(id)
+	if err == nil {
+		return m, nil
+	}
+	if errors.Is(err, sessions.ErrNotFound) {
+		return nil, status.Error(codes.NotFound, "upload session not found or expired, call StartResumableWrite first")
+	}
+	return nil, toGRPCError(err, "failed to read upload session")
+}
+
+func writeSessionMeta(store *sessions.Store, id string, m *sessions.Meta) error {
+	if err := store.WriteMeta(id, m); err != nil {
+		return toGRPCError(err, "failed to save upload session")
+	}
+	return nil
 }
 
 // QueryWriteStatus returns the persisted size of an upload session and, if it was finalized, the
@@ -100,16 +131,16 @@ func (h *LocalCASHandler) QueryWriteStatus(ctx context.Context, req *caspb.Query
 	if uploadID == "" {
 		return nil, statusErrorf(codes.InvalidArgument, "upload_id must be provided")
 	}
-	id := serverID(uploadID)
+	id := sessions.ServerID(uploadID)
 	// Waiting for the lock makes sure that a stream that is still persisting the received bytes
 	// has finished, so that the returned size is final.
-	release, err := h.sessions.acquire(ctx, id)
+	release, err := h.acquireSession(ctx, id)
 	if err != nil {
 		return nil, err
 	}
 	defer release()
 
-	m, err := h.sessions.readMeta(id)
+	m, err := readSessionMeta(h.sessions, id)
 	if err != nil {
 		return nil, err
 	}
@@ -155,8 +186,8 @@ func (h *LocalCASHandler) writeObject(stream caspb.ContentAddressableStorageServ
 		return statusErrorf(codes.InvalidArgument, "write_offset must be non-negative, got %d", offset)
 	}
 
-	id := serverID(uploadID)
-	release, err := h.sessions.acquire(ctx, id)
+	id := sessions.ServerID(uploadID)
+	release, err := h.acquireSession(ctx, id)
 	if err != nil {
 		return err
 	}
@@ -244,13 +275,13 @@ func (h *LocalCASHandler) finalize(stream caspb.ContentAddressableStorageService
 	}
 	if u.meta.CommittedDigest == "" {
 		digest := hex.EncodeToString(u.hasher.Sum(nil))
-		if err := u.updateMeta(func(m *sessionMeta) { m.CommittedDigest = digest }); err != nil {
+		if err := u.updateMeta(func(m *sessions.Meta) { m.CommittedDigest = digest }); err != nil {
 			return err
 		}
 	}
 
 	digest := u.meta.CommittedDigest
-	dataPath := h.sessions.dataPath(u.id)
+	dataPath := h.sessions.DataPath(u.id)
 	finalPath, existed, err := h.commitSession(dataPath, digest, u.written)
 	if err != nil {
 		return err
@@ -265,7 +296,7 @@ func (h *LocalCASHandler) finalize(stream caspb.ContentAddressableStorageService
 		return statusErrorf(codes.Internal, "invalid result digest: %v", err)
 	}
 
-	if err := u.updateMeta(func(m *sessionMeta) { m.FinalObjectID = objectID }); err != nil {
+	if err := u.updateMeta(func(m *sessions.Meta) { m.FinalObjectID = objectID }); err != nil {
 		return err
 	}
 	u.finalized = true
@@ -310,7 +341,7 @@ func (h *LocalCASHandler) commitSession(dataPath, digest string, size int64) (st
 	} else {
 		return "", false, toGRPCError(err, "failed to stat upload session file")
 	}
-	if err := syncDir(h.objectsDir); err != nil {
+	if err := sessions.SyncDir(h.objectsDir); err != nil {
 		return "", false, toGRPCError(err, "failed to sync objects directory")
 	}
 	return finalPath, existed, nil
@@ -318,9 +349,9 @@ func (h *LocalCASHandler) commitSession(dataPath, digest string, size int64) (st
 
 // upload is the state of an upload session while a WriteObject stream works on it.
 type upload struct {
-	store  *sessionStore
+	store  *sessions.Store
 	id     string
-	meta   *sessionMeta
+	meta   *sessions.Meta
 	f      *os.File
 	hasher hash.Hash
 	// written is the number of bytes in the data file that were received successfully.
@@ -330,7 +361,7 @@ type upload struct {
 
 // openUpload opens the session id for a stream that starts writing at offset.
 func (h *LocalCASHandler) openUpload(ctx context.Context, id string, offset int64) (*upload, error) {
-	m, err := h.sessions.readMeta(id)
+	m, err := readSessionMeta(h.sessions, id)
 	if err != nil {
 		return nil, err
 	}
@@ -346,7 +377,7 @@ func (h *LocalCASHandler) openUpload(ctx context.Context, id string, offset int6
 		return &upload{store: h.sessions, id: id, meta: m, written: m.PersistedSize}, nil
 	}
 
-	f, err := os.OpenFile(h.sessions.dataPath(id), os.O_RDWR, 0)
+	f, err := os.OpenFile(h.sessions.DataPath(id), os.O_RDWR, 0)
 	if errors.Is(err, fs.ErrNotExist) {
 		return nil, statusErrorf(codes.NotFound, "data of upload session %s is missing", id)
 	}
@@ -377,7 +408,7 @@ func (u *upload) prepare(ctx context.Context) error {
 			return toGRPCError(err, "failed to truncate upload session file")
 		}
 		if size := u.meta.ObjectSize; size != nil && *size > 0 {
-			if err := preallocate(u.f, *size); err != nil {
+			if err := sessions.Preallocate(u.f, *size); err != nil {
 				return toGRPCError(err, "failed to reserve %d bytes of disk space", *size)
 			}
 		}
@@ -460,7 +491,7 @@ func (u *upload) persist() error {
 	if err != nil {
 		return statusErrorf(codes.Internal, "failed to save hash state: %v", err)
 	}
-	return u.updateMeta(func(m *sessionMeta) {
+	return u.updateMeta(func(m *sessions.Meta) {
 		m.PersistedSize = u.written
 		m.SHA512State = state
 	})
@@ -468,10 +499,10 @@ func (u *upload) persist() error {
 
 // updateMeta applies fn to a copy of u.meta and writes it to disk, updating u.meta only on
 // success so failed writes leave the in-memory state unchanged.
-func (u *upload) updateMeta(fn func(*sessionMeta)) error {
+func (u *upload) updateMeta(fn func(*sessions.Meta)) error {
 	m := *u.meta
 	fn(&m)
-	if err := u.store.writeMeta(u.id, &m); err != nil {
+	if err := writeSessionMeta(u.store, u.id, &m); err != nil {
 		return err
 	}
 	u.meta = &m
@@ -484,53 +515,5 @@ func (u *upload) close() {
 	}
 	if err := u.f.Close(); err != nil {
 		slog.Warn("Failed to close upload session file", slog.String("session", u.id), slog.Any("error", err))
-	}
-}
-
-// cleanupSessions deletes the upload sessions whose last activity is older than ttl, whether they
-// were finalized or not. Sessions that an RPC is working on are skipped.
-func (h *LocalCASHandler) cleanupSessions(ctx context.Context, ttl time.Duration) error {
-	ids, err := gc.IdentifyExpiredSessions(h.sessions.dir, ttl)
-	if err != nil {
-		return err
-	}
-	deleted := 0
-	for _, id := range ids {
-		if err := ctx.Err(); err != nil {
-			return err
-		}
-		release, ok := h.sessions.tryAcquire(id)
-		if !ok {
-			continue
-		}
-		// Check again under the lock: an RPC may have used the session after it was identified.
-		files, lastActivity, err := gc.SessionFiles(h.sessions.dir, id)
-		if err == nil && len(files) > 0 && time.Since(lastActivity) > ttl {
-			h.sessions.remove(id)
-			deleted++
-			slog.Info("GC: Deleted expired upload session", slog.String("session", id), slog.Time("last_activity", lastActivity))
-		}
-		release()
-	}
-	if len(ids) > 0 {
-		slog.Info("GC: Upload session cleanup finished", slog.Int("expired_count", len(ids)), slog.Int("deleted_count", deleted))
-	}
-	return nil
-}
-
-// RunSessionCleanup calls cleanupSessions right away and then every interval until ctx is done.
-// ttl and interval must be positive.
-func (h *LocalCASHandler) RunSessionCleanup(ctx context.Context, ttl, interval time.Duration) {
-	t := time.NewTicker(interval)
-	defer t.Stop()
-	for {
-		if err := h.cleanupSessions(ctx, ttl); err != nil && ctx.Err() == nil {
-			slog.Error("GC: Upload session cleanup failed", slog.Any("error", err))
-		}
-		select {
-		case <-ctx.Done():
-			return
-		case <-t.C:
-		}
 	}
 }

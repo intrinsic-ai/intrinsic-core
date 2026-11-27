@@ -21,8 +21,10 @@ go_binary(
     visibility = ["//intrinsic/storage/onprem_cas:__pkg__"],
     deps = [
         "//intrinsic/kubernetes:intrinsic",
+        "//intrinsic/storage/onprem_cas/internal",
         "//intrinsic/storage/onprem_cas/internal/gc",
         "//intrinsic/storage/onprem_cas/internal/handlers",
+        "//intrinsic/storage/onprem_cas/internal/sessions",
         "@intrinsic_apis//intrinsic/storage/content_addressable_storage/proto:cas_service_go_proto",
         "@io_opencensus_go//plugin/ocgrpc:go_default_library",
         "@org_golang_google_grpc//:go_default_library",

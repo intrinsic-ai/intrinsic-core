@@ -127,6 +127,64 @@ func IdentifyExpiredSessions(dir string, ttl time.Duration) ([]string, error) {
 	return expired, nil
 }
 
+// SessionStore provides access to resumable upload sessions for garbage collection.
+type SessionStore interface {
+	// Dir returns the directory where session files are stored.
+	Dir() string
+	// TryAcquire locks the session id if no caller is currently working on it.
+	TryAcquire(id string) (release func(), ok bool)
+	// Remove deletes all files of the session id.
+	Remove(id string)
+}
+
+// CleanupSessions deletes the upload sessions whose last activity is older than ttl, whether they
+// were finalized or not. Sessions that another caller is working on are skipped.
+func CleanupSessions(ctx context.Context, store SessionStore, ttl time.Duration) error {
+	ids, err := IdentifyExpiredSessions(store.Dir(), ttl)
+	if err != nil {
+		return err
+	}
+	deleted := 0
+	for _, id := range ids {
+		if err := ctx.Err(); err != nil {
+			return err
+		}
+		release, ok := store.TryAcquire(id)
+		if !ok {
+			continue
+		}
+		// Check again under the lock: a caller may have used the session after it was identified.
+		files, lastActivity, err := SessionFiles(store.Dir(), id)
+		if err == nil && len(files) > 0 && time.Since(lastActivity) > ttl {
+			store.Remove(id)
+			deleted++
+			slog.Info("GC: Deleted expired upload session", slog.String("session", id), slog.Time("last_activity", lastActivity))
+		}
+		release()
+	}
+	if len(ids) > 0 {
+		slog.Info("GC: Upload session cleanup finished", slog.Int("expired_count", len(ids)), slog.Int("deleted_count", deleted))
+	}
+	return nil
+}
+
+// RunSessionCleanup calls CleanupSessions right away and then every interval until ctx is done.
+// ttl and interval must be positive.
+func RunSessionCleanup(ctx context.Context, store SessionStore, ttl, interval time.Duration) {
+	t := time.NewTicker(interval)
+	defer t.Stop()
+	for {
+		if err := CleanupSessions(ctx, store, ttl); err != nil && ctx.Err() == nil {
+			slog.Error("GC: Upload session cleanup failed", slog.Any("error", err))
+		}
+		select {
+		case <-ctx.Done():
+			return
+		case <-t.C:
+		}
+	}
+}
+
 // IdentifyCorruptObjects scans the objects directory and returns paths of all files
 // whose size does not match the expectations for their digest (filename), e.g. 0-byte files for non-empty digests.
 func IdentifyCorruptObjects(dir string) ([]string, error) {

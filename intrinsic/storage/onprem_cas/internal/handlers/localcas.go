@@ -34,6 +34,7 @@ import (
 
 	"intrinsic/storage/content_addressable_storage/pkg/idhandling"
 	"intrinsic/storage/onprem_cas/internal"
+	"intrinsic/storage/onprem_cas/internal/sessions"
 
 	caspb "intrinsic/storage/content_addressable_storage/proto/cas_service_go_proto"
 )
@@ -51,18 +52,17 @@ type LocalCASHandler struct {
 	partialDir string
 	uuidNew    func() string // for unit-testing
 	chunkSize  int           // for unit-testing
-	// sessions holds the resumable upload sessions in partialDir/internal.SessionsSubdir.
-	sessions *sessionStore
+	sessions   *sessions.Store
 }
 
 // NewLocalCASHandler creates a new LocalCASHandler.
-func NewLocalCASHandler(objectsDir, partialDir string) *LocalCASHandler {
+func NewLocalCASHandler(objectsDir, partialDir string, sessionStore *sessions.Store) *LocalCASHandler {
 	return &LocalCASHandler{
 		objectsDir: objectsDir,
 		partialDir: partialDir,
 		uuidNew:    func() string { return uuid.New().String() },
 		chunkSize:  defaultChunkSize,
-		sessions:   newSessionStore(filepath.Join(partialDir, internal.SessionsSubdir)),
+		sessions:   sessionStore,
 	}
 }
 

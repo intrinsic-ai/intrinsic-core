@@ -21,13 +21,16 @@ import (
 	"net"
 	"os"
 	"os/signal"
+	"path/filepath"
 	"sync"
 	"syscall"
 	"time"
 
 	"intrinsic/kubernetes/intrinsic"
+	"intrinsic/storage/onprem_cas/internal"
 	"intrinsic/storage/onprem_cas/internal/gc"
 	"intrinsic/storage/onprem_cas/internal/handlers"
+	"intrinsic/storage/onprem_cas/internal/sessions"
 
 	"log/slog"
 
@@ -112,10 +115,11 @@ func mainImpl() error {
 
 	slog.Info("Running in local-only mode. Sync API is disabled.")
 
-	casHandler := handlers.NewLocalCASHandler(*flagObjectsDir, *flagPartialDir)
+	sessionStore := sessions.NewStore(filepath.Join(*flagPartialDir, internal.SessionsSubdir))
+	casHandler := handlers.NewLocalCASHandler(*flagObjectsDir, *flagPartialDir, sessionStore)
 
 	// Delete expired resumable upload sessions now and periodically.
-	wg.Go(func() { casHandler.RunSessionCleanup(ctx, *flagSessionTTL, *flagSessionGCInterval) })
+	wg.Go(func() { gc.RunSessionCleanup(ctx, sessionStore, *flagSessionTTL, *flagSessionGCInterval) })
 
 	grpcServer := grpc.NewServer(grpc.StatsHandler(new(ocgrpc.ServerHandler)))
 	caspb.RegisterContentAddressableStorageServiceServer(grpcServer, casHandler)

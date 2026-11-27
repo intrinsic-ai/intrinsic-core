@@ -22,14 +22,13 @@ go_library(
         "lrop.go",
         "preload.go",
         "resumable.go",
-        "sessions.go",
     ],
     importpath = "intrinsic/storage/onprem_cas/internal/handlers",
     visibility = ["//intrinsic/storage/onprem_cas:__subpackages__"],
     deps = [
         "//intrinsic/storage/content_addressable_storage/pkg/idhandling",
         "//intrinsic/storage/onprem_cas/internal",
-        "//intrinsic/storage/onprem_cas/internal/gc",
+        "//intrinsic/storage/onprem_cas/internal/sessions",
         "//intrinsic/storage/onprem_cas/internal/syncset",
         "//intrinsic/storage/onprem_cas_preload/proto/v1:ocp_service_go_proto",
         "//intrinsic/storage/onprem_cas_preload/proto/v1:preload_set_go_proto",
@@ -43,6 +42,5 @@ go_library(
         "@org_golang_google_protobuf//types/known/durationpb:go_default_library",
         "@org_golang_google_protobuf//types/known/emptypb:go_default_library",
         "@org_golang_google_protobuf//types/known/timestamppb:go_default_library",
-        "@org_golang_x_sys//unix:go_default_library",
     ],
 )

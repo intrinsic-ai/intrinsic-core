@@ -12,7 +12,8 @@
 // See the License for the specific language governing permissions and
 // limitations under the License.
 
-package handlers
+// Package sessions manages on-disk state and in-process locking for resumable upload sessions.
+package sessions
 
 import (
 	"context"
@@ -29,20 +30,25 @@ import (
 	"time"
 
 	"golang.org/x/sys/unix"
-	"google.golang.org/grpc/codes"
-	"google.golang.org/grpc/status"
 
 	"intrinsic/storage/onprem_cas/internal"
 )
 
-// defaultSessionLockWait is how long an RPC waits for another stream of the same upload session
-// to finish before it fails with Aborted. When a client cancels a stream, the handler of that
-// stream persists the received bytes and releases the session within milliseconds, so waiting
-// lets QueryWriteStatus return the final persisted size instead of Aborted.
-const defaultSessionLockWait = 10 * time.Second
+// defaultLockWait is how long an RPC waits for another stream of the same upload session to finish
+// before Acquire fails with ErrBusy. When a client cancels a stream, the handler of that stream
+// persists the received bytes and releases the session within milliseconds, so waiting lets
+// QueryWriteStatus return the final persisted size instead of failing with Aborted.
+const defaultLockWait = 10 * time.Second
 
-// sessionMeta is the content of the metadata file of a resumable upload session.
-type sessionMeta struct {
+var (
+	// ErrNotFound is returned by ReadMeta when a session does not exist on disk.
+	ErrNotFound = errors.New("upload session not found or expired")
+	// ErrBusy is returned by Acquire when another caller holds the session longer than lockWait.
+	ErrBusy = errors.New("upload session has an active stream")
+)
+
+// Meta is the content of the metadata file of a resumable upload session.
+type Meta struct {
 	// ObjectSize is the expected size of the object, if the client provided it.
 	ObjectSize *int64 `json:"object_size,omitempty"`
 	// PersistedSize is the number of bytes at the start of the data file that were synced to disk.
@@ -57,16 +63,16 @@ type sessionMeta struct {
 	FinalObjectID string `json:"final_object_id,omitempty"`
 }
 
-// sessionStore stores resumable upload sessions in a directory and makes sure that at most one
-// RPC at a time works on a session. The on-prem CAS runs as a single process, so in-process locks
-// are sufficient.
+// Store stores resumable upload sessions in a directory and makes sure that at most one caller at
+// a time works on a session. The on-prem CAS runs as a single process, so in-process locks are
+// sufficient.
 //
 // For each session, the directory contains:
 //   - <server_id>.partial: the uploaded data,
-//   - <server_id>.metadata.json: the sessionMeta, replaced atomically,
+//   - <server_id>.metadata.json: the Meta, replaced atomically,
 //
-// where server_id is derived from the upload ID (see serverID).
-type sessionStore struct {
+// where server_id is derived from the upload ID (see ServerID).
+type Store struct {
 	dir      string
 	lockWait time.Duration
 
@@ -75,31 +81,52 @@ type sessionStore struct {
 	active map[string]chan struct{}
 }
 
-func newSessionStore(dir string) *sessionStore {
-	return &sessionStore{
-		dir:      dir,
-		lockWait: defaultSessionLockWait,
-		active:   make(map[string]chan struct{}),
+// Option configures a Store created by NewStore.
+type Option func(*Store)
+
+// WithLockWait sets the maximum duration Acquire waits for a busy session before returning ErrBusy.
+func WithLockWait(d time.Duration) Option {
+	return func(s *Store) {
+		s.lockWait = d
 	}
 }
 
-// serverID returns the ID under which the session with the given upload ID is stored. Like in
+// NewStore creates a Store backed by dir.
+func NewStore(dir string, opts ...Option) *Store {
+	s := &Store{
+		dir:      dir,
+		lockWait: defaultLockWait,
+		active:   make(map[string]chan struct{}),
+	}
+	for _, opt := range opts {
+		opt(s)
+	}
+	return s
+}
+
+// ServerID returns the ID under which the session with the given upload ID is stored. Like in
 // the cloud CAS, it is a hash of the upload ID, which makes any upload ID a safe file name. There
 // is no caller identity on-prem, so unlike the cloud, the hash doesn't include an email.
-func serverID(uploadID string) string {
+func ServerID(uploadID string) string {
 	sum := sha512.Sum512([]byte(uploadID))
 	return hex.EncodeToString(sum[:])
 }
 
-func (s *sessionStore) dataPath(id string) string {
+// Dir returns the directory where session files are stored.
+func (s *Store) Dir() string {
+	return s.dir
+}
+
+// DataPath returns the path to the partial data file for the session id.
+func (s *Store) DataPath(id string) string {
 	return filepath.Join(s.dir, id+internal.PartialExt)
 }
 
-func (s *sessionStore) metaPath(id string) string {
+func (s *Store) metaPath(id string) string {
 	return filepath.Join(s.dir, id+internal.SessionMetadataExt)
 }
 
-func (s *sessionStore) releaser(id string, ch chan struct{}) func() {
+func (s *Store) releaser(id string, ch chan struct{}) func() {
 	return sync.OnceFunc(func() {
 		s.mu.Lock()
 		delete(s.active, id)
@@ -108,14 +135,14 @@ func (s *sessionStore) releaser(id string, ch chan struct{}) func() {
 	})
 }
 
-// acquire locks the session id. If another RPC holds it, acquire waits up to lockWait and then
-// fails with Aborted. The returned function releases the session and is safe to call more than
-// once.
-func (s *sessionStore) acquire(ctx context.Context, id string) (func(), error) {
+// Acquire locks the session id. If another caller holds it, Acquire waits up to lockWait and then
+// fails with ErrBusy (or ctx.Err() if ctx is cancelled first). The returned function releases the
+// session and is safe to call more than once.
+func (s *Store) Acquire(ctx context.Context, id string) (func(), error) {
 	var timer *time.Timer
 	for {
 		if err := ctx.Err(); err != nil {
-			return nil, status.FromContextError(err).Err()
+			return nil, err
 		}
 		s.mu.Lock()
 		done, busy := s.active[id]
@@ -135,16 +162,16 @@ func (s *sessionStore) acquire(ctx context.Context, id string) (func(), error) {
 		case <-done:
 			// Current holder released; retry acquiring.
 		case <-ctx.Done():
-			return nil, status.FromContextError(ctx.Err()).Err()
+			return nil, ctx.Err()
 		case <-timer.C:
-			return nil, statusErrorf(codes.Aborted, "upload session has an active stream")
+			return nil, ErrBusy
 		}
 	}
 }
 
-// tryAcquire locks the session id if no other RPC holds it. The returned function releases the
+// TryAcquire locks the session id if no other caller holds it. The returned function releases the
 // session and is safe to call more than once.
-func (s *sessionStore) tryAcquire(id string) (func(), bool) {
+func (s *Store) TryAcquire(id string) (func(), bool) {
 	s.mu.Lock()
 	defer s.mu.Unlock()
 	if _, busy := s.active[id]; busy {
@@ -155,41 +182,41 @@ func (s *sessionStore) tryAcquire(id string) (func(), bool) {
 	return s.releaser(id, ch), true
 }
 
-// readMeta reads the metadata of the session id. It fails with NotFound if the session doesn't
+// ReadMeta reads the metadata of the session id. It returns ErrNotFound if the session doesn't
 // exist.
-func (s *sessionStore) readMeta(id string) (*sessionMeta, error) {
+func (s *Store) ReadMeta(id string) (*Meta, error) {
 	b, err := os.ReadFile(s.metaPath(id))
 	if errors.Is(err, fs.ErrNotExist) {
-		return nil, status.Error(codes.NotFound, "upload session not found or expired, call StartResumableWrite first")
+		return nil, ErrNotFound
 	}
 	if err != nil {
-		return nil, toGRPCError(err, "failed to read upload session metadata")
+		return nil, fmt.Errorf("read metadata: %w", err)
 	}
-	var m sessionMeta
+	var m Meta
 	if err := json.Unmarshal(b, &m); err != nil {
-		return nil, statusErrorf(codes.Internal, "failed to decode upload session metadata: %v", err)
+		return nil, fmt.Errorf("decode metadata: %w", err)
 	}
 	return &m, nil
 }
 
-// writeMeta atomically replaces the metadata of the session id and syncs it to disk.
-func (s *sessionStore) writeMeta(id string, m *sessionMeta) error {
+// WriteMeta atomically replaces the metadata of the session id and syncs it to disk.
+func (s *Store) WriteMeta(id string, m *Meta) error {
 	b, err := json.Marshal(m)
 	if err != nil {
-		return statusErrorf(codes.Internal, "failed to encode upload session metadata: %v", err)
+		return fmt.Errorf("encode metadata: %w", err)
 	}
 	path := s.metaPath(id)
 	if err := writeFileAtomicSync(path, path+internal.SessionTmpExt, b); err != nil {
-		return toGRPCError(err, "failed to save upload session metadata")
+		return fmt.Errorf("save metadata: %w", err)
 	}
 	return nil
 }
 
-// remove deletes all files of the session id. The metadata file is removed first so that a crash
+// Remove deletes all files of the session id. The metadata file is removed first so that a crash
 // mid-removal doesn't leave a session that QueryWriteStatus reports as active while its data is
 // already gone.
-func (s *sessionStore) remove(id string) {
-	for _, path := range []string{s.metaPath(id), s.metaPath(id) + internal.SessionTmpExt, s.dataPath(id)} {
+func (s *Store) Remove(id string) {
+	for _, path := range []string{s.metaPath(id), s.metaPath(id) + internal.SessionTmpExt, s.DataPath(id)} {
 		if err := os.Remove(path); err != nil && !errors.Is(err, fs.ErrNotExist) {
 			slog.Warn("Failed to remove upload session file", slog.String("path", path), slog.Any("error", err))
 		}
@@ -224,16 +251,16 @@ func writeFileAtomicSync(path, tmpPath string, b []byte) error {
 		return fmt.Errorf("rename temp file: %w", err)
 	}
 	renamed = true
-	if err := syncDir(filepath.Dir(path)); err != nil {
+	if err := SyncDir(filepath.Dir(path)); err != nil {
 		return fmt.Errorf("sync directory: %w", err)
 	}
 	return nil
 }
 
-// syncDir fsyncs dir so that directory entry changes (such as os.Rename or os.Link) are durable
+// SyncDir fsyncs dir so that directory entry changes (such as os.Rename or os.Link) are durable
 // on disk before acknowledging an RPC. Syncing a file alone only flushes the file's data and
 // inode, not its name entry in the parent directory.
-func syncDir(dir string) error {
+func SyncDir(dir string) error {
 	d, err := os.Open(dir)
 	if err != nil {
 		return err
@@ -245,10 +272,10 @@ func syncDir(dir string) error {
 	return d.Close()
 }
 
-// preallocate reserves disk space for size bytes of f without changing its length, so that a
+// Preallocate reserves disk space for size bytes of f without changing its length, so that a
 // full disk is detected before the upload starts. File systems that don't support it are
 // ignored.
-func preallocate(f *os.File, size int64) error {
+func Preallocate(f *os.File, size int64) error {
 	if size <= 0 {
 		return nil
 	}
