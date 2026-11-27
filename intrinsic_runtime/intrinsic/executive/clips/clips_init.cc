@@ -69,15 +69,25 @@ std::vector<std::string> DefaultClipsBaseFiles() {
   // include.
   //
   // Ordering of the files matters (dependencies across files)
-  return {"utils.clp",       "file.clp",
-          "saliences.clp",   "flags.clp",
-          "time.clp",        "errors.clp",
-          "log_context.clp", "tracing.clp",
-          "operation.clp",   "state.clp",
-          "world.clp",       "code_execution_state_update.clp",
-          "skill_info.clp",  "noop_action_info.clp",
-          "plan.clp",        "extended_status.clp",
-          "blackboard.clp",  "skill_info_check.clp",
+  return {"utils.clp",
+          "file.clp",
+          "saliences.clp",
+          "flags.clp",
+          "debug_settings.clp",
+          "time.clp",
+          "errors.clp",
+          "log_context.clp",
+          "tracing.clp",
+          "operation.clp",
+          "state.clp",
+          "world.clp",
+          "code_execution_state_update.clp",
+          "skill_info.clp",
+          "noop_action_info.clp",
+          "plan.clp",
+          "extended_status.clp",
+          "blackboard.clp",
+          "skill_info_check.clp",
           "inflow.clp"};
 }
 

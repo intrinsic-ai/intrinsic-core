@@ -2611,6 +2611,27 @@ ClipsExecutor::GetClipsData() ABSL_LOCKS_EXCLUDED(clips_->mutex()) {
 absl::Status ClipsExecutor::SetDebugSettings(
     const intrinsic_proto::executive::DebugSettings& settings)
     ABSL_LOCKS_EXCLUDED(clips_->mutex()) {
+  absl::MutexLock lock(*clips_->mutex());
+  INTR_RETURN_IF_ERROR(clips_->SetGlobal(
+      "DEBUG-TEXT-LOGGING-LOOP-NODE-RESET",
+      settings.text_logging().loop_node_reset() ? clips::Symbol::True()
+                                                : clips::Symbol::False()));
+  INTR_RETURN_IF_ERROR(clips_->SetGlobal(
+      "DEBUG-EXTRA-TRACES-LOOP-NODE-RESET",
+      settings.extra_traces().loop_node_reset() ? clips::Symbol::True()
+                                                : clips::Symbol::False()));
+  INTR_RETURN_IF_ERROR(clips_->SetGlobal(
+      "DEBUG-EXTRA-TRACES-STRUCTURED-LOGGING",
+      settings.extra_traces().structured_logging() ? clips::Symbol::True()
+                                                   : clips::Symbol::False()));
+  clips::Symbol embed_skill_traces("UNSET");
+  if (settings.extra_traces().has_embed_skill_traces()) {
+    embed_skill_traces = settings.extra_traces().embed_skill_traces()
+                             ? clips::Symbol::True()
+                             : clips::Symbol::False();
+  }
+  INTR_RETURN_IF_ERROR(clips_->SetGlobal(
+      "DEBUG-EXTRA-TRACES-EMBED-SKILL-TRACES", embed_skill_traces));
   return absl::OkStatus();
 }
 
