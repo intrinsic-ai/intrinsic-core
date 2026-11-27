@@ -1,6 +1,6 @@
 # MoveIt Grasp Planning
 
-The purpose of this tutorial is to showcase an integration of Intrinsic Core with *MoveIt* through [OMTS](../glossary/intrinsic_terms.md#open-machine-tending-solution-omts). We will first set up a ROS colcon workspace to build [*intrinsic-moveit*](https://github.com/intrinsic-ai/intrinsic-moveit). After deploying the OMTS [solution](../glossary/intrinsic_terms.md#solution), we will launch the *moveit_planning_service*. When the planning [scene](../glossary/intrinsic_terms.md#scene) on Rviz has been initialized, we can plan grasps for objects in the scene using *MoveIt*, first standalone, and then as the grasp planner of the full OMTS machine tending cycle.
+The purpose of this tutorial is to showcase an integration of Intrinsic Core with *MoveIt* through [OMTS](../glossary/intrinsic_terms.md#open-machine-tending-solution-omts). Deploying the OMTS [solution](../glossary/intrinsic_terms.md#solution) automatically starts the *moveit_planning_service* and installs *moveit_plan_grasp_skill* inside the cluster. We will connect a local RViz window to inspect the MoveIt planning [scene](../glossary/intrinsic_terms.md#scene) and candidate grasps, and then plan grasps for objects in the scene using *MoveIt*—first standalone, and then as the grasp planner of the full OMTS machine tending cycle.
 
 > [!NOTE]
 > Note that this integration is only showing cuboid grasp planning using MoveIt, verified by IK and collision checks, but the motion planning and execution will still be relying on Intrinsic Core capabilities.
@@ -9,57 +9,111 @@ The purpose of this tutorial is to showcase an integration of Intrinsic Core wit
 
 ## 1. Prerequisites and Environment Setup
 
-Users will need to have installed [ROS lyrical](https://docs.ros.org/en/lyrical/Get-Started/Installation/Ubuntu-Install-Debs.html).
-
-Users will first need to build the colcon workspace for *intrinsic-moveit*.
-
-```bash
-# Set up the workspace and clone the repository
-mkdir -p ~/ws_intrinsic_moveit/src && cd ~/ws_intrinsic_moveit/src
-gh repo clone intrinsic-ai/intrinsic-moveit
-# Prepare and install the dependencies
-source /opt/ros/lyrical/setup.bash
-vcs import . < intrinsic-moveit/lyrical.repos
-cd ~/ws_intrinsic_moveit
-rosdep install --from-paths . --ignore-src -r -y
-sudo apt update && sudo apt install -y ros-lyrical-rmw-zenoh-cpp
-# Build, this will take a while, time for another cup of coffee
-colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
-  --symlink-install --packages-up-to moveit_planning_service
-```
-
-Users will then need to start the OMTS [simulation](../glossary/general_terms.md#simulation).
+First, start the OMTS [simulation](../glossary/general_terms.md#simulation) (both the default `omts` UR5e cell shown in the screenshots below and `--config=lab_bb_01` for the UR3e cell are supported):
 
 ```bash
 cd ~/intrinsic-omts
-# The MoveIt integration is not part of the 20260922.0 release yet
-git fetch origin && git checkout 48be90d563602d39d9f87f0c3a3074678dd28d49
+# Check out main if you cloned an earlier release tag that predates intrinsic-moveit v0.1.0
+git fetch origin && git checkout origin/main
 bazel run //:omts_solution -c opt -- \
   --address localhost:17080 --operation_mode=sim
+# Or, for the Lab BB-01 (UR3e) setup:
+# bazel run //:omts_solution -c opt --config=lab_bb_01 -- \
+#   --address localhost:17080 --operation_mode=sim
 ```
 
-Once the solution is up and running, verify with Rviz that it should look like this.
+The deployed solution automatically installs and starts everything this integration needs on the Intrinsic Core side, so there is nothing to sideload or reconfigure by hand:
+
+- The *moveit_planning_service* [service](../glossary/intrinsic_terms.md#service) (`rs-moveit-planning-service-0` in `app-resources`) runs in the cluster and automatically loads the `omts` or `lab_bb_01` MoveIt configuration matching the deployed cell.
+- The *moveit_plan_grasp_skill* [skill](../glossary/intrinsic_terms.md#skill), which OMTS calls to obtain pre-grasps and grasps from *moveit_planning_service*, is installed with every deployment.
+- The *flowstate_ros_bridge* [service](../glossary/intrinsic_terms.md#service) runs with a default configuration that streams the `/tf` and `/joint_states` topics MoveIt needs.
+
+Verify that `rs-moveit-planning-service-0` and `rs-flowstate-ros-bridge-0` are `Running`:
+
+```bash
+kubectl get pods -n app-resources
+```
+
+If you have already set up Intrinsic Core's standard RViz view (from [Visualize the robot](visualize_the_robot.md)), the initial belief world looks like this:
 
 ![MoveIt Initial RViz](../../img/learn/tutorials/moveit_rviz_initial.png)
 
-The deployed solution already includes everything this integration needs on the Intrinsic Core side, so there is nothing to install or reconfigure by hand:
+### Visualizing the MoveIt planning scene in RViz
 
-- The *moveit_plan_grasp_skill* [skill](../glossary/intrinsic_terms.md#skill), which OMTS calls to obtain pre-grasps and grasps from the *moveit_planning_service*, is installed with every deployment.
-- The *flowstate_ros_bridge* [service](../glossary/intrinsic_terms.md#service) runs with a default configuration that already streams the `/tf` and `/joint_states` topics MoveIt needs.
-
-We can now start the *moveit_planning_service*.
+Because *moveit_planning_service* is already running inside the cluster, you can run Sections 3 and 4 directly without ROS 2 installed locally. To inspect the MoveIt planning scene and MoveIt Task Constructor (MTC) grasp candidates visually in RViz, install [ROS lyrical](https://docs.ros.org/en/lyrical/Get-Started/Installation/Ubuntu-Install-Debs.html) and build only the lightweight hardware description and MoveIt config packages from [*intrinsic-moveit*](https://github.com/intrinsic-ai/intrinsic-moveit):
 
 ```bash
-# These commands are generally required for all terminals running ROS
+# Set up a lightweight colcon workspace for the robot meshes and MoveIt RViz config
+mkdir -p ~/ws_intrinsic_moveit/src && cd ~/ws_intrinsic_moveit/src
+gh repo clone intrinsic-ai/intrinsic-moveit -- --revision=v0.1.0
+source /opt/ros/lyrical/setup.bash
+cd ~/ws_intrinsic_moveit
+sudo apt update && sudo apt install -y \
+  ros-lyrical-rmw-zenoh-cpp \
+  ros-lyrical-moveit-ros-visualization \
+  ros-lyrical-moveit-task-constructor-visualization
+rosdep install --from-paths \
+  src/intrinsic-moveit/robot_hardware_descriptions \
+  src/intrinsic-moveit/third_party \
+  --ignore-src -r -y
+colcon build --symlink-install \
+  --packages-up-to omts_moveit_config lab_bb_01_moveit_config
+```
+
+Now connect standalone RViz to the cluster's Zenoh Router exposed on port `7447`:
+
+```bash
+# These commands are required for all terminals running ROS against Intrinsic Core
 source ~/ws_intrinsic_moveit/install/setup.bash
 export RMW_IMPLEMENTATION=rmw_zenoh_cpp
 export ZENOH_CONFIG_OVERRIDE='mode="client";connect/endpoints=["tcp/127.0.0.1:7447"]'
-# Start the service
-ros2 launch moveit_planning_service service.launch.py headless:=false \
-  start_service_status_monitor:=false
+
+# Launch RViz for the default OMTS cell (UR5e):
+ros2 launch omts_moveit_config moveit_rviz.launch.py \
+  rviz_config:=$HOME/ws_intrinsic_moveit/src/intrinsic-moveit/moveit_planning_service/rviz/motion_planning_service.rviz
+
+# Or, if //:omts_solution was deployed with --config=lab_bb_01 (UR3e):
+# ros2 launch lab_bb_01_moveit_config moveit_rviz.launch.py \
+#   rviz_config:=$HOME/ws_intrinsic_moveit/src/intrinsic-moveit/moveit_planning_service/rviz/motion_planning_service.rviz
 ```
 
-Once the planning service launches, verify that the additional Rviz window should look like below. The [robot](../glossary/general_terms.md#robot) is represented by its meshes, while all other objects in the scene are propagated as collision objects and represented as green meshes.
+<details>
+  <summary>Optional: Build and run <code>moveit_planning_service</code> from source (for development)</summary>
+
+  If you are modifying *intrinsic-moveit* itself and want to run *moveit_planning_service* locally from source instead of using the in-cluster pod:
+
+  1. Import `lyrical.repos` and build `moveit_planning_service` (this compiles the C++ SDK dependencies and takes several minutes):
+
+     ```bash
+     cd ~/ws_intrinsic_moveit/src
+     source /opt/ros/lyrical/setup.bash
+     vcs import . < intrinsic-moveit/lyrical.repos --recursive
+     cd ~/ws_intrinsic_moveit
+     rosdep install --from-paths . --ignore-src -r -y
+     colcon build --cmake-args -DCMAKE_BUILD_TYPE=Release -DBUILD_TESTING=OFF \
+       --symlink-install --packages-up-to moveit_planning_service
+     ```
+
+  2. Stop the in-cluster `moveit_planning_service` instance first so two planning nodes do not compete on `/grasp_planning/plan_grasps` (or comment out `":moveit_planning_service",` in `omts_solution.instances` in `~/intrinsic-omts/BUILD` before deploying):
+
+     ```bash
+     inctl service delete --address=localhost:17080 moveit_planning_service
+     ```
+
+  3. Launch the local service connected to the cluster Zenoh Router (`7447`), passing `robot_config:=lab_bb_01` if running against `--config=lab_bb_01`:
+
+     ```bash
+     source ~/ws_intrinsic_moveit/install/setup.bash
+     export RMW_IMPLEMENTATION=rmw_zenoh_cpp
+     export ZENOH_CONFIG_OVERRIDE='mode="client";connect/endpoints=["tcp/127.0.0.1:7447"]'
+     ros2 launch moveit_planning_service service.launch.py \
+       robot_config:=omts \
+       headless:=false \
+       start_service_status_monitor:=false
+     ```
+</details>
+
+Once MoveIt RViz opens, verify that the window looks like below. The [robot](../glossary/general_terms.md#robot) is represented by its meshes, while all other objects in the scene are propagated as collision objects and represented as green meshes.
 
 ![MoveIt RViz Planning Service](../../img/learn/tutorials/moveit_rviz_planning_service.png)
 
@@ -74,7 +128,7 @@ bazel run //tools/jogging:jog_interactive -- \
   --host=localhost \
   --port=17080 \
   --instance=icon
-# Updating the scene, see tutorial "Cell customization"
+# Updating the scene (default OMTS cell only; skip on --config=lab_bb_01, which has no CNC vise), see tutorial "Cell customization"
 bazel run //tools/world:apply_scene_updates -- \
   --address localhost:17080 \
   --files configs/omts/raw_stock_in_vise.updates.pbtxt
@@ -108,11 +162,11 @@ bazel run //third_party/intrinsic_moveit/tools:moveit_plan_grasp_and_move -- \
   --surfaces=0,1,4,5
 # Optionally, reset the scene such that the trajectory to the CNC Vice is shorter
 # inctl world reset --address localhost:17080
-# Relocate Workpiece to the CNC Vice
+# Relocate Workpiece to the CNC Vice (default OMTS cell only; skip on --config=lab_bb_01)
 bazel run //tools/world:apply_scene_updates -- \
   --address=localhost:17080 \
   --files configs/omts/raw_stock_in_vise.updates.pbtxt
-# Plan again to grasp the workpiece that is in the vice now
+# Plan again to grasp the workpiece that is in the vice now (default OMTS cell only)
 # This planning step may take longer due to the length of the trajectory if the
 # world has not been reset
 bazel run //third_party/intrinsic_moveit/tools:moveit_plan_grasp_and_move -- \
@@ -140,6 +194,7 @@ cd ~/intrinsic-omts
 # Reset the scene to its initial state
 inctl world reset --address localhost:17080
 # Run the machine tending cycle, with MoveIt planning the grasp
+# (use --config=configs/lab_bb_01/app_config.yaml if deployed with --config=lab_bb_01)
 bazel run //src:omts_app -- \
   --address=localhost:17080 \
   --config=configs/omts/app_config.yaml \
@@ -171,8 +226,8 @@ The architecture diagram can be found [here](https://github.com/intrinsic-ai/int
 
 | Issue | Potential fix |
 | --- | --- |
-| Planning scene is not synced with OMTS, e.g. arm [joint](../glossary/general_terms.md#joint) angles are wrong, collisions are missing, etc | Verify that the icon, ur_module and flowstate_ros_bridge service are running with `kubectl get pods --all-namespaces`, or check that joint states are being published, `ros2 topic echo /joint_states --once`. Redeploying the solution restarts *flowstate_ros_bridge* with its default configuration. |
-| `Grasp skill 'ai.intrinsic.moveit_plan_grasp_skill' is not available` when running `omts_app --grasp_planner=moveit` | The deployed solution predates the MoveIt integration. Update `~/intrinsic-omts` to `main` and redeploy the solution. |
+| Grasp planning fails to connect / times out, or the MoveIt RViz planning scene is empty or not synced with OMTS (e.g. arm [joint](../glossary/general_terms.md#joint) angles are wrong, collisions are missing) | Verify that `rs-moveit-planning-service-0`, `rs-flowstate-ros-bridge-0`, `rs-icon-0`, and `rs-ur-module-0` are `Running` with `kubectl get pods -n app-resources` (or `kubectl get pods --all-namespaces`), and inspect the planning service logs with `kubectl logs -n app-resources rs-moveit-planning-service-0`. In your ROS terminal, ensure `RMW_IMPLEMENTATION=rmw_zenoh_cpp` and `ZENOH_CONFIG_OVERRIDE='mode="client";connect/endpoints=["tcp/127.0.0.1:7447"]'` are set, and check that joint states are streaming with `ros2 topic echo /joint_states --once`. |
+| `Grasp skill 'ai.intrinsic.moveit_plan_grasp_skill' is not available` or `rs-moveit-planning-service-0` is absent from `kubectl get pods -n app-resources` | The deployed solution predates `intrinsic-moveit` `v0.1.0`. Update `~/intrinsic-omts` to `main` and redeploy `//:omts_solution`. |
 | Grasp plan not found | This generally occurs when the motion distance is large, or the object is quite occluded (e.g. in the CNC enclosure). Since the default planner uses a sampling based planner, we can increase the planning timeout with `--timeout_ms` on *moveit_plan_grasp_and_move*, or `moveit_timeout_ms` in `app_config.yaml` for the OMTS cycle. More configurations to choose planners or configure the planners will be in future releases. |
 | Grasp plan not found for different objects | The gripper opening maxes out at 50mm, if the object has widths on all sides that are larger than 50mm, no valid grasp approach plans will be found. Try a smaller object, e.g. building_block. |
-| After changing out the hardware (e.g. arm, enclosure, gripper) in Intrinsic Core, the MoveIt planning scene does not match the setup | Intrinsic-moveit currently only supports the hardware setup of OMTS. We will next work on abstracting the base hardware description layer such that users can more easily set up their own hardware description and MoveIt config. |
+| MoveIt RViz shows the wrong robot model (e.g. UR5e on a `lab_bb_01` deployment), or custom hardware does not match the MoveIt planning scene | Both `omts` (UR5e, default) and `lab_bb_01` (UR3e, `--config=lab_bb_01`) are supported out of the box. Verify `RuntimeContext configured robot_config` in `kubectl logs -n app-resources rs-moveit-planning-service-0`, ensure `moveit_rviz.launch.py` is launched from the matching `<cell>_moveit_config` package (`omts_moveit_config` vs `lab_bb_01_moveit_config`), or pass `robot_config:=lab_bb_01` when launching `service.launch.py` from source. Custom robot cells require adding a hardware description and MoveIt config package to *intrinsic-moveit*. |
