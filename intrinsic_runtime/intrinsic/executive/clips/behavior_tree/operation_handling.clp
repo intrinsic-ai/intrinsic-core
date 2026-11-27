@@ -272,10 +272,17 @@
 ;   ?tree-id: Id of any behavior tree. This need not be a top-level tree.
 ;
 ; Returns:
-;   The skill-trace-handling symbol as specified in operation-envelope.
+;   The skill-trace-handling symbol as specified in operation-envelope, or the
+;   debug override if ?*DEBUG-EXTRA-TRACES-EMBED-SKILL-TRACES* is set.
 (deffunction operation-get-skill-trace-handling-by-tree (?tree-id)
   (do-for-fact ((?bt behavior-tree) (?op operation-envelope))
       (and (eq ?bt:id ?tree-id) (eq ?bt:operation-name ?op:name))
+    (if (eq ?*DEBUG-EXTRA-TRACES-EMBED-SKILL-TRACES* TRUE) then
+      (return EMBED)
+    )
+    (if (eq ?*DEBUG-EXTRA-TRACES-EMBED-SKILL-TRACES* FALSE) then
+      (return LINK)
+    )
     (return ?op:skill-trace-handling)
   )
   (return UNSPECIFIED)
