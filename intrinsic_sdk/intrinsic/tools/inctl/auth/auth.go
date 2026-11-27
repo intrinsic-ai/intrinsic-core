@@ -47,9 +47,8 @@ const (
 
 	// LINT.ThenChange(//intrinsic_sdk/intrinsic/util/grpc/auth.py, //intrinsic_sdk/intrinsic/util/grpc/auth.cc)
 
-	directoryMode  os.FileMode = 0o700
-	fileMode       os.FileMode = 0o600
-	writeFileFlags             = os.O_WRONLY | os.O_CREATE | os.O_TRUNC
+	directoryMode os.FileMode = 0o700
+	fileMode      os.FileMode = 0o600
 
 	// tokenExchangeServer is the address of the token exchange server.
 	// Points to the GRPC gateway.
@@ -381,32 +380,51 @@ func (s *Store) WriteConfiguration(config *ProjectConfiguration) error {
 	return nil
 }
 
-func writeConfigToFile(config *ProjectConfiguration, filename string) error {
-	// we make sure we have whole directory structure before we create file.
-	// os.MkdirAll() calls os.Stat() on path, so there is no point to do it here.
-	if err := os.MkdirAll(filepath.Dir(filename), directoryMode); err != nil {
-		return fmt.Errorf("cannot create target directory: %w", err)
+// writeJSONFile atomically writes v as indented JSON to filename (0600) by
+// writing and syncing a temporary file in the same directory before renaming.
+func writeJSONFile(filename string, v any) (err error) {
+	dir := filepath.Dir(filename)
+	if err := os.MkdirAll(dir, directoryMode); err != nil {
+		return fmt.Errorf("create target directory: %w", err)
 	}
 
-	file, err := os.OpenFile(filename, writeFileFlags, fileMode)
+	tmp, err := os.CreateTemp(dir, ".tmp-*")
 	if err != nil {
-		return fmt.Errorf("cannot open configuration file: %w", err)
+		return fmt.Errorf("create temp file: %w", err)
 	}
+	tmpPath := tmp.Name()
+	defer func() {
+		if err != nil {
+			_ = tmp.Close()
+			_ = os.Remove(tmpPath)
+		}
+	}()
 
-	defer file.Close()
+	if err = tmp.Chmod(fileMode); err != nil {
+		return fmt.Errorf("chmod temp file: %w", err)
+	}
+	encoder := json.NewEncoder(tmp)
+	encoder.SetIndent("", "  ")
+	if err = encoder.Encode(v); err != nil {
+		return fmt.Errorf("serialize json: %w", err)
+	}
+	if err = tmp.Sync(); err != nil {
+		return fmt.Errorf("sync temp file: %w", err)
+	}
+	if err = tmp.Close(); err != nil {
+		return fmt.Errorf("close temp file: %w", err)
+	}
+	if err = os.Rename(tmpPath, filename); err != nil {
+		return fmt.Errorf("rename temp file: %w", err)
+	}
+	return nil
+}
 
+func writeConfigToFile(config *ProjectConfiguration, filename string) error {
 	// update last modified in UTC time
 	now := RFC3339Time(time.Now().UTC())
 	config.LastUpdated = &now
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(config); err != nil {
-		return fmt.Errorf("cannot serialize configuration: %w", err)
-	}
-
-	// if sync fails, we did not write into store.
-	return file.Sync()
+	return writeJSONFile(filename, config)
 }
 
 // ListConfigurations gives a list of known configurations. It works on
@@ -503,28 +521,7 @@ func (s *Store) WriteOrgInfo(o *OrgInfo) error {
 	if err != nil {
 		return err
 	}
-
-	// we make sure we have whole directory structure before we create file.
-	// os.MkdirAll() calls os.Stat() on path, so there is no point to do it here.
-	if err = os.MkdirAll(filepath.Dir(filename), directoryMode); err != nil {
-		return fmt.Errorf("create target directory: %w", err)
-	}
-
-	file, err := os.OpenFile(filename, writeFileFlags, fileMode)
-	if err != nil {
-		return fmt.Errorf("open configuration file: %w", err)
-	}
-
-	defer file.Close()
-
-	encoder := json.NewEncoder(file)
-	encoder.SetIndent("", "  ")
-	if err := encoder.Encode(o); err != nil {
-		return fmt.Errorf("serialize configuration: %w", err)
-	}
-
-	// if sync fails, we did not write into store.
-	return file.Sync()
+	return writeJSONFile(filename, o)
 }
 
 // ReadOrgInfo reads the information about an organization previously written to the auth store.
