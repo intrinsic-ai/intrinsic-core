@@ -152,6 +152,10 @@ RealtimeStatus CheckInputContinuity(
   }
   eigenmath::VectorNd velocity_fd =
       (target_position - previous_setpoint.position()) * control_frequency_hz;
+  if (!velocity_fd.allFinite()) {
+    return InvalidArgumentError(
+        "Queried command produced non-finite position continuity velocity.");
+  }
   if ((velocity_fd.array() > (1.0 + velocity_input_margin) *
                                  maximum_joint_limits.max_velocity.array())
           .any() ||
@@ -189,6 +193,9 @@ icon::RealtimeStatusOr<bool> IsStopPositionWithinLimits(
     return InvalidArgumentError(
         "The size of the stop_position does not match the size of the "
         "joint_limits.");
+  }
+  if (!stop_position.allFinite()) {
+    return false;
   }
   eigenmath::VectorNd position_max_limit_overshoot =
       (stop_position - joint_limits.max_position).cwiseMax(0);
@@ -402,9 +409,9 @@ icon::RealtimeStatus MoveChecker::CheckSetpoint(
         JointLimitsInterface::JointAccelerationLimitsFromDynamics>
         joint_acceleration_limits_from_dynamics,
     const MoveCheckerExtraConfig& extra_config) {
-  if (extra_config.max_limit_violation_tolerance < 0.0 ||
-      extra_config.max_limit_violation_tolerance >
-          kMaxLimitViolationTolerance) {
+  if (!(extra_config.max_limit_violation_tolerance >= 0.0 &&
+        extra_config.max_limit_violation_tolerance <=
+            kMaxLimitViolationTolerance)) {
     return icon::InvalidArgumentError(RealtimeStatus::StrCat(
         "'max_limit_violation_tolerance' out of bound, got ",
         extra_config.max_limit_violation_tolerance,
@@ -431,6 +438,19 @@ icon::RealtimeStatus MoveChecker::CheckSetpoint(
         "The size of the setpoint does not match the num_dofs_ for the "
         "MoveChecker.");
   }
+  if (!setpoint.position().allFinite()) {
+    return InvalidArgumentError("Setpoint position must be finite.");
+  }
+  if (setpoint.velocity_feedforward().has_value() &&
+      !setpoint.velocity_feedforward()->allFinite()) {
+    return InvalidArgumentError(
+        "Setpoint velocity_feedforward must be finite.");
+  }
+  if (setpoint.acceleration_feedforward().has_value() &&
+      !setpoint.acceleration_feedforward()->allFinite()) {
+    return InvalidArgumentError(
+        "Setpoint acceleration_feedforward must be finite.");
+  }
 
   if (joint_acceleration_limits_from_dynamics.has_value()) {
     if (joint_acceleration_limits_from_dynamics
@@ -451,6 +471,14 @@ icon::RealtimeStatus MoveChecker::CheckSetpoint(
       const JointStatePVAJ setpoint_state,
       AddMissingDerivativesToCommand(setpoint, previous_setpoint_.value(),
                                      control_frequency_hz_));
+  if (!setpoint_state.position.allFinite() ||
+      !setpoint_state.velocity.allFinite() ||
+      !setpoint_state.acceleration.allFinite() ||
+      (extra_config.error_on_jerk_system_limit_violation &&
+       !setpoint_state.jerk.allFinite())) {
+    return InvalidArgumentError(
+        "Computed setpoint state contains non-finite values.");
+  }
 
   // We check against a slightly relaxed variant of maximum_joint_limits to
   // allow for small numerical deviations from the system limits.

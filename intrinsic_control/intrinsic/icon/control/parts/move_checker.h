@@ -51,6 +51,14 @@ class MoveChecker {
   // respect to limits when a stop position is beyond the limits.
   static constexpr double kDirectionViolationTolerance = 1e-9;
 
+  // Maximum tolerance that we allow velocity, acceleration and jerk to
+  // overshoot the system limits before we return an error status.
+  static constexpr double kMaxLimitViolationTolerance = 1e-2;
+
+  // Allowable margin above the maximum velocity when
+  // checking for position continuity between setpoints.
+  static constexpr double kVelocityInputMargin = 0.2;
+
   //  Factory which creates a MoveChecker where self collision checking is
   //  only performed when the optional `collision_checker` is provided.
   static absl::StatusOr<std::unique_ptr<MoveChecker>> Create(
@@ -89,14 +97,6 @@ class MoveChecker {
       const MoveCheckerExtraConfig& extra_config = MoveCheckerExtraConfig());
 
  private:
-  // Maximum tolerance that we allow velocity, acceleration and jerk to
-  // overshoot the system limits before we return an error status.
-  static constexpr double kMaxLimitViolationTolerance = 1e-2;
-
-  // Allowable margin above the maximum velocity when
-  // checking for position continuity between setpoints.
-  static constexpr double kVelocityInputMargin = 0.2;
-
   size_t num_dofs_;
   double control_frequency_hz_;
   std::optional<JointPositionCommand> previous_setpoint_;

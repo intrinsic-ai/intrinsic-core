@@ -26,6 +26,7 @@
 #include "absl/strings/str_cat.h"
 #include "absl/strings/string_view.h"
 #include "cppitertools/enumerate.hpp"
+#include "intrinsic/eigenmath/so3.h"
 #include "intrinsic/eigenmath/types.h"
 #include "intrinsic/icon/common/part_properties.h"
 #include "intrinsic/icon/control/parts/part_property_registry.h"
@@ -81,6 +82,23 @@ RealtimeStatusOr<double> RobotPayloadById(const RobotPayloadBase& payload,
 
 RealtimeStatusOr<RealtimeRobotPayload> FromArray(
     const std::array<double, kNumPayloadProperties>& array) {
+  eigenmath::Quaterniond quaternion(array[7], array[4], array[5], array[6]);
+  if (!quaternion.coeffs().allFinite()) {
+    return FailedPreconditionError(
+        "Payload quaternion must have finite coefficients.");
+  }
+  const double max_coeff = quaternion.coeffs().cwiseAbs().maxCoeff();
+  if (!(max_coeff > 0.0)) {
+    return FailedPreconditionError(
+        "Payload quaternion must have non-zero norm.");
+  }
+  quaternion.coeffs() /= max_coeff;
+  quaternion.normalize();
+  if (!eigenmath::SO3d::IsNormalizedQuaternion(quaternion)) {
+    return FailedPreconditionError(
+        "Payload quaternion could not be normalized.");
+  }
+
   eigenmath::Matrix3d inertia;
   inertia << array[8], array[11], array[12],  // line 1
       array[11], array[9], array[13],         // line 2
@@ -88,8 +106,8 @@ RealtimeStatusOr<RealtimeRobotPayload> FromArray(
 
   return RealtimeRobotPayload::Create(
       /*mass_kg=*/array[0],
-      Pose3d(eigenmath::Quaterniond(array[7], array[4], array[5], array[6]),
-             eigenmath::Vector3d(array[1], array[2], array[3])),
+      Pose3d(quaternion, eigenmath::Vector3d(array[1], array[2], array[3]),
+             eigenmath::kDoNotNormalize),
       inertia);
 }
 
