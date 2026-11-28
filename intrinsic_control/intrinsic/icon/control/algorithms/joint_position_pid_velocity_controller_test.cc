@@ -17,6 +17,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 
 #include "absl/status/status.h"
@@ -201,6 +202,115 @@ TEST(CreateControllerTest, InvalidCutoffFrequencyNyquist) {
               StatusIs(absl::StatusCode::kInvalidArgument,
                        AllOf(HasSubstr("position_filter_cuttoff_frequency_hz"),
                              HasSubstr("0.5"))));
+}
+
+TEST(CreateControllerTest, RejectsTooManyJoints) {
+  auto config =
+      CreateConfig(kDefaultKp, kDefaultKi, kDefaultKd, kDefaultKff,
+                   kDefaultMaxIntegralControl, kDefaultMaxVelocityCommand,
+                   kDefaultCycleTime, eigenmath::MAX_EIGEN_VECTOR_SIZE + 1);
+  EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+              StatusIs(absl::StatusCode::kInvalidArgument));
+}
+
+TEST(CreateControllerTest, RejectsNonFiniteParameters) {
+  const double kNaN = std::numeric_limits<double>::quiet_NaN();
+  const double kInf = std::numeric_limits<double>::infinity();
+
+  {
+    auto config = CreateDefaultConfig();
+    config.set_k_p(0, kNaN);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_k_ff(0, kNaN);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_max_velocity_command(0, kInf);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_cycle_time_seconds(kNaN);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_position_filter_cuttoff_frequency_hz(kNaN);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_velocity_filter_cuttoff_frequency_hz(kInf);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+}
+
+TEST(CreateControllerTest, RejectsFilterFrequencyOverflowAndUnderflow) {
+  {
+    // Reciprocal 1.0 / cycle_time_seconds overflows to +Inf.
+    auto config = CreateDefaultConfig();
+    config.set_cycle_time_seconds(1e-320);
+    config.set_position_filter_cuttoff_frequency_hz(1.0);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    // cutoff < 0.5 / cycle_time_seconds holds, but cutoff * 2 * pi overflows.
+    auto config = CreateDefaultConfig();
+    config.set_cycle_time_seconds(1e-308);
+    config.set_position_filter_cuttoff_frequency_hz(4e307);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_cycle_time_seconds(1e-308);
+    config.set_velocity_filter_cuttoff_frequency_hz(4e307);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    // Sampling frequency == double epsilon triggers prewarp CHECK_GT.
+    constexpr double kEps = std::numeric_limits<double>::epsilon();
+    auto config = CreateDefaultConfig();
+    config.set_cycle_time_seconds(1.0 / kEps);
+    config.set_position_filter_cuttoff_frequency_hz(0.25 * kEps);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    constexpr double kEps = std::numeric_limits<double>::epsilon();
+    auto config = CreateDefaultConfig();
+    config.set_cycle_time_seconds(1.0 / kEps);
+    config.set_velocity_filter_cuttoff_frequency_hz(0.25 * kEps);
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    // Exact Nyquist boundary (cutoff == 0.5 / cycle_time_seconds) is rejected.
+    auto config = CreateDefaultConfig();
+    config.set_position_filter_cuttoff_frequency_hz(
+        0.5 / config.cycle_time_seconds());
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("0.5")));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_velocity_filter_cuttoff_frequency_hz(
+        0.5 / config.cycle_time_seconds());
+    EXPECT_THAT(JointPositionPIDVelocityController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("0.5")));
+  }
 }
 
 // Test fixture for testing feedback control of PID joint position controller.

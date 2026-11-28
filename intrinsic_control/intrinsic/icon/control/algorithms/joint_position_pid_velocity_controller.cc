@@ -15,6 +15,8 @@
 #include "intrinsic/icon/control/algorithms/joint_position_pid_velocity_controller.h"
 
 #include <algorithm>
+#include <cmath>
+#include <limits>
 #include <memory>
 #include <optional>
 #include <utility>
@@ -35,6 +37,10 @@ namespace icon {
 absl::StatusOr<std::unique_ptr<JointPositionPIDVelocityController>>
 JointPositionPIDVelocityController::Create(
     intrinsic_proto::icon::JointPositionPidVelocityControllerConfig config) {
+  if (config.k_p_size() > eigenmath::MAX_EIGEN_VECTOR_SIZE) {
+    return InvalidArgumentError(
+        "Number of joints exceeds maximum supported vector size.");
+  }
   if (config.k_i_size() != config.k_p_size()) {
     return InvalidArgumentError("There is a mismatch in k_i and k_p size.");
   }
@@ -45,21 +51,22 @@ JointPositionPIDVelocityController::Create(
     return InvalidArgumentError("There is a mismatch in k_ff and k_p size.");
   }
   if (std::any_of(config.k_p().cbegin(), config.k_p().cend(),
-                  [](double k) { return k < 0; })) {
-    return InvalidArgumentError("All values in k_p should be >= 0");
+                  [](double k) { return !std::isfinite(k) || k < 0; })) {
+    return InvalidArgumentError("All values in k_p should be finite and >= 0");
   }
   if (std::any_of(config.k_i().cbegin(), config.k_i().cend(),
-                  [](double k) { return k < 0; })) {
-    return InvalidArgumentError("All values in k_i should be >= 0");
+                  [](double k) { return !std::isfinite(k) || k < 0; })) {
+    return InvalidArgumentError("All values in k_i should be finite and >= 0");
   }
   if (std::any_of(config.k_d().cbegin(), config.k_d().cend(),
-                  [](double k) { return k < 0; })) {
-    return InvalidArgumentError("All values in k_d should be >= 0");
+                  [](double k) { return !std::isfinite(k) || k < 0; })) {
+    return InvalidArgumentError("All values in k_d should be finite and >= 0");
   }
-  if (std::any_of(config.k_ff().cbegin(), config.k_ff().cend(),
-                  [](double k) { return k < 0 || k > 1; })) {
+  if (std::any_of(config.k_ff().cbegin(), config.k_ff().cend(), [](double k) {
+        return !std::isfinite(k) || k < 0 || k > 1;
+      })) {
     return InvalidArgumentError(
-        "All values in k_ff should be between 0 and 1.");
+        "All values in k_ff should be finite and between 0 and 1.");
   }
   for (int i = 0; i < config.k_p_size(); ++i) {
     if (config.k_p().at(i) == 0 && config.k_i().at(i) > 0) {
@@ -68,32 +75,39 @@ JointPositionPIDVelocityController::Create(
           "0");
     }
   }
-  if (config.cycle_time_seconds() <= 0) {
-    return InvalidArgumentError("cycle_time_seconds should be > 0");
+  if (!std::isfinite(config.cycle_time_seconds()) ||
+      config.cycle_time_seconds() <= 0 ||
+      !std::isfinite(1.0 / config.cycle_time_seconds())) {
+    return InvalidArgumentError("cycle_time_seconds should be finite and > 0");
   }
-  if (config.has_position_filter_cuttoff_frequency_hz() &&
-      config.position_filter_cuttoff_frequency_hz() <= 0) {
-    return InvalidArgumentError(
-        "position_filter_cuttoff_frequency_hz should be > 0");
+  const double sampling_frequency_hz = 1.0 / config.cycle_time_seconds();
+  if (config.has_position_filter_cuttoff_frequency_hz()) {
+    const double cutoff = config.position_filter_cuttoff_frequency_hz();
+    if (!std::isfinite(cutoff) || cutoff <= 0 ||
+        !std::isfinite(cutoff * 2.0 * M_PI)) {
+      return InvalidArgumentError(
+          "position_filter_cuttoff_frequency_hz should be finite and > 0");
+    }
+    if (!(sampling_frequency_hz > std::numeric_limits<double>::epsilon()) ||
+        !(cutoff < 0.5 * sampling_frequency_hz)) {
+      return InvalidArgumentError(
+          "position_filter_cuttoff_frequency_hz should be < "
+          "(0.5/cycle_time_seconds).");
+    }
   }
-  if (config.has_position_filter_cuttoff_frequency_hz() &&
-      config.position_filter_cuttoff_frequency_hz() >=
-          0.5 / config.cycle_time_seconds()) {
-    return InvalidArgumentError(
-        "position_filter_cuttoff_frequency_hz should be < "
-        "(0.5/cycle_time_seconds).");
-  }
-  if (config.has_velocity_filter_cuttoff_frequency_hz() &&
-      config.velocity_filter_cuttoff_frequency_hz() <= 0) {
-    return InvalidArgumentError(
-        "velocity_filter_cuttoff_frequency_hz should be > 0");
-  }
-  if (config.has_velocity_filter_cuttoff_frequency_hz() &&
-      config.velocity_filter_cuttoff_frequency_hz() >=
-          0.5 / config.cycle_time_seconds()) {
-    return InvalidArgumentError(
-        "velocity_filter_cuttoff_frequency_hz should be < "
-        "(0.5/cycle_time_seconds).");
+  if (config.has_velocity_filter_cuttoff_frequency_hz()) {
+    const double cutoff = config.velocity_filter_cuttoff_frequency_hz();
+    if (!std::isfinite(cutoff) || cutoff <= 0 ||
+        !std::isfinite(cutoff * 2.0 * M_PI)) {
+      return InvalidArgumentError(
+          "velocity_filter_cuttoff_frequency_hz should be finite and > 0");
+    }
+    if (!(sampling_frequency_hz > std::numeric_limits<double>::epsilon()) ||
+        !(cutoff < 0.5 * sampling_frequency_hz)) {
+      return InvalidArgumentError(
+          "velocity_filter_cuttoff_frequency_hz should be < "
+          "(0.5/cycle_time_seconds).");
+    }
   }
   eigenmath::VectorNd k_p = eigenmath::VectorNd::Zero(config.k_p_size());
   eigenmath::VectorNd k_i = eigenmath::VectorNd::Zero(config.k_p_size());
@@ -115,9 +129,9 @@ JointPositionPIDVelocityController::Create(
     }
     if (std::any_of(config.max_integral_control().cbegin(),
                     config.max_integral_control().cend(),
-                    [](double m) { return m < 0; })) {
+                    [](double m) { return !std::isfinite(m) || m < 0; })) {
       return InvalidArgumentError(
-          "All values in max_integral_control should be >= 0");
+          "All values in max_integral_control should be finite and >= 0");
     }
     for (int i = 0; i < config.max_integral_control_size(); ++i) {
       max_integral_control[i] = config.max_integral_control().at(i);
@@ -130,9 +144,9 @@ JointPositionPIDVelocityController::Create(
   }
   if (std::any_of(config.max_velocity_command().cbegin(),
                   config.max_velocity_command().cend(),
-                  [](double k) { return k < 0; })) {
+                  [](double k) { return !std::isfinite(k) || k < 0; })) {
     return InvalidArgumentError(
-        "All values in max_velocity_command should be greater >= 0.");
+        "All values in max_velocity_command should be finite and >= 0.");
   }
   eigenmath::VectorNd max_velocity_command =
       eigenmath::VectorNd::Zero(config.k_p_size());

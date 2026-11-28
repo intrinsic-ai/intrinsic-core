@@ -17,6 +17,7 @@
 #include <gmock/gmock.h>
 #include <gtest/gtest.h>
 
+#include <limits>
 #include <memory>
 
 #include "absl/status/status.h"
@@ -159,6 +160,44 @@ TEST(CreateControllerTest, InvalidTimestep) {
   EXPECT_THAT(
       JointPositionPidTorqueController::Create(config),
       StatusIs(absl::StatusCode::kInvalidArgument, HasSubstr("timestep")));
+}
+
+TEST(CreateControllerTest, RejectsNonFiniteAndExcessiveWindowConfigs) {
+  const double kNaN = std::numeric_limits<double>::quiet_NaN();
+  const double kInf = std::numeric_limits<double>::infinity();
+
+  {
+    auto config = CreateDefaultConfig();
+    config.set_integration_window_seconds(kNaN);
+    EXPECT_THAT(JointPositionPidTorqueController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_integration_window_seconds(1e12);
+    config.set_timestep(1e-3);
+    EXPECT_THAT(JointPositionPidTorqueController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_kp(kNaN);
+    EXPECT_THAT(JointPositionPidTorqueController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_alpha(kNaN);
+    EXPECT_THAT(JointPositionPidTorqueController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
+  {
+    auto config = CreateDefaultConfig();
+    config.set_timestep(kInf);
+    config.set_integration_window_seconds(kInf);
+    EXPECT_THAT(JointPositionPidTorqueController::Create(config),
+                StatusIs(absl::StatusCode::kInvalidArgument));
+  }
 }
 
 // Test fixture for testing feedback control of PID joint position controller.

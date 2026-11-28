@@ -38,54 +38,69 @@ absl::StatusOr<std::unique_ptr<JointPositionPidTorqueController>>
 JointPositionPidTorqueController::Create(
     intrinsic_proto::icon::JointPositionPidTorqueControllerConfig config) {
   // Basic sanity checks on the config parameters.
-  if (config.kp() < 0) {
+  if (!std::isfinite(config.kp()) || config.kp() < 0) {
     return absl::InvalidArgumentError(
-        absl::StrCat("kp must be >= 0 but is: ", config.kp()));
+        absl::StrCat("kp must be finite and >= 0 but is: ", config.kp()));
   }
-  if (config.ki() < 0) {
+  if (!std::isfinite(config.ki()) || config.ki() < 0) {
     return absl::InvalidArgumentError(
-        absl::StrCat("ki must be >= 0 but is: ", config.ki()));
+        absl::StrCat("ki must be finite and >= 0 but is: ", config.ki()));
   }
-  if (config.kd() < 0) {
+  if (!std::isfinite(config.kd()) || config.kd() < 0) {
     return absl::InvalidArgumentError(
-        absl::StrCat("kd must be >= 0 but is: ", config.kd()));
+        absl::StrCat("kd must be finite and >= 0 but is: ", config.kd()));
   }
-  if (config.max_torque() < 0) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("max_torque must be >= 0 but is: ", config.max_torque()));
-  }
-  if (config.alpha() < 0 || config.alpha() > 1) {
+  if (!std::isfinite(config.max_torque()) || config.max_torque() < 0) {
     return absl::InvalidArgumentError(absl::StrCat(
-        "alpha must be in the interval [0,1] but is: ", config.alpha()));
+        "max_torque must be finite and >= 0 but is: ", config.max_torque()));
   }
-  if (config.max_torque_delta_per_timestep() < 0) {
+  if (!std::isfinite(config.alpha()) || config.alpha() < 0 ||
+      config.alpha() > 1) {
     return absl::InvalidArgumentError(
-        absl::StrCat("max_torque_delta_per_timestep must be >= 0 but is: ",
-                     config.max_torque_delta_per_timestep()));
+        absl::StrCat("alpha must be finite and in the interval [0,1] but is: ",
+                     config.alpha()));
   }
-  if (config.max_integral_torque() < 0) {
+  if (!std::isfinite(config.max_torque_delta_per_timestep()) ||
+      config.max_torque_delta_per_timestep() < 0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "max_torque_delta_per_timestep must be finite and >= 0 but is: ",
+        config.max_torque_delta_per_timestep()));
+  }
+  if (!std::isfinite(config.max_integral_torque()) ||
+      config.max_integral_torque() < 0) {
     return absl::InvalidArgumentError(
-        absl::StrCat("max_integral_torque must be >= 0 but is: ",
+        absl::StrCat("max_integral_torque must be finite and >= 0 but is: ",
                      config.max_integral_torque()));
   }
-  if (config.integration_window_seconds() < 0) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("integration_window_seconds must be >= 0 but is: ",
-                     config.integration_window_seconds()));
+  if (!std::isfinite(config.integration_enable_range()) ||
+      config.integration_enable_range() < 0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "integration_enable_range must be finite and >= 0 but is: ",
+        config.integration_enable_range()));
+  }
+  if (!std::isfinite(config.timestep()) || config.timestep() <= 0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "timestep must be finite and > 0 but is: ", config.timestep()));
+  }
+  if (!std::isfinite(config.integration_window_seconds()) ||
+      config.integration_window_seconds() < 0) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "integration_window_seconds must be finite and >= 0 but is: ",
+        config.integration_window_seconds()));
   }
   if (config.integration_window_seconds() < config.timestep()) {
     return absl::InvalidArgumentError(
         absl::StrCat("integration_window_seconds must be >= timestep but is: ",
                      config.integration_window_seconds()));
   }
-  if (config.integration_enable_range() < 0) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("integration_enable_range must be >= 0 but is: ",
-                     config.integration_enable_range()));
-  }
-  if (config.timestep() <= 0) {
-    return absl::InvalidArgumentError(
-        absl::StrCat("timestep must be > 0 but is: ", config.timestep()));
+  constexpr int kMaxIntegrationWindowSteps = 1'000'000;
+  const double window_steps =
+      config.integration_window_seconds() / config.timestep();
+  if (!std::isfinite(window_steps) || window_steps < 1.0 ||
+      window_steps > static_cast<double>(kMaxIntegrationWindowSteps)) {
+    return absl::InvalidArgumentError(absl::StrCat(
+        "integration_window_seconds / timestep must be finite and in [1, ",
+        kMaxIntegrationWindowSteps, "] but is: ", window_steps));
   }
   return absl::WrapUnique(new JointPositionPidTorqueController(Params(
       {.kp = config.kp(),
